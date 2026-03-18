@@ -1,0 +1,96 @@
+import * as pg from 'drizzle-orm/pg-core';
+export * from './finance.schema';
+export * from './shop.schema';
+export * from './users.schema';
+export * from './utils.schema';
+// export * from "./relations";
+import { UserRole } from '../types/types';
+import { user } from './users.schema';
+
+export const company = pg.pgTable('company', {
+  id: pg.uuid('id').primaryKey().defaultRandom(),
+  companyName: pg.text('company_name').notNull(),
+  company_domain: pg.text('company_domain').notNull(),
+  company_status: pg.text('company_status').notNull(),
+  created_at: pg
+    .timestamp('created_at')
+    .$default(() => new Date())
+    .notNull(),
+  updated_at: pg
+    .timestamp('updated_at')
+    .$onUpdate(() => new Date())
+    .notNull(),
+});
+export const UserRoleEnum = pg.pgEnum('user_role_enum', [
+  UserRole.ADMIN,
+  UserRole.VENDOR,
+  UserRole.CUSTOMER,
+]);
+export const user_roles = pg.pgTable('user_roles', {
+  id: pg.uuid('id').primaryKey().defaultRandom(),
+  role_name: UserRoleEnum().notNull(),
+  created_at: pg
+    .timestamp('created_at')
+    .$default(() => new Date())
+    .notNull(),
+  updated_at: pg
+    .timestamp('updated_at')
+    .$onUpdate(() => new Date())
+    .notNull(),
+});
+
+export const permissions = pg.pgTable('user_permissions', {
+  id: pg.uuid('id').primaryKey().defaultRandom(),
+  permission_name: pg.text('permission_name').notNull(),
+  created_at: pg
+    .timestamp('created_at')
+    .$default(() => new Date())
+    .notNull(),
+  updated_at: pg
+    .timestamp('updated_at')
+    .$onUpdate(() => new Date())
+    .notNull(),
+});
+export const role_permissions = pg.pgTable('role_permissions', {
+  id: pg.uuid('id').primaryKey().defaultRandom(),
+  role_id: pg.uuid('role_id').references(() => user_roles.id),
+  permission_id: pg.uuid('permission_id').references(() => permissions.id),
+  created_at: pg
+    .timestamp('created_at')
+    .$default(() => new Date())
+    .notNull(),
+  updated_at: pg
+    .timestamp('updated_at')
+    .$onUpdate(() => new Date())
+    .notNull(),
+});
+export const cms_pages = pg.pgTable('cms_pages', {
+  id: pg.uuid('id').primaryKey().defaultRandom(),
+  title: pg.text('title').notNull(),
+  content: pg.text('content').notNull(),
+  page_content_type: pg.text('page_content_type').notNull(),
+  seo_meta: pg.jsonb('seo_meta').notNull(),
+  created_at: pg
+    .timestamp('created_at')
+    .$default(() => new Date())
+    .notNull(),
+  updated_at: pg
+    .timestamp('updated_at')
+    .$onUpdate(() => new Date())
+    .notNull(),
+  company_id: pg.uuid('company_id').references(() => company.id),
+});
+
+export const refresh_tokens = pg.pgTable('refresh_tokens', {
+  id: pg.uuid('id').primaryKey().defaultRandom(),
+  user_id: pg
+    .uuid('user_id')
+    .references(() => user.id, { onDelete: 'cascade' }),
+  token_hash: pg.text('token_hash').notNull(),
+  is_revoked: pg.boolean('is_revoked').default(false).notNull(),
+  expires_at: pg.timestamp('expires_at').notNull(),
+  created_at: pg
+    .timestamp('created_at')
+    .$default(() => new Date())
+    .notNull(),
+});
