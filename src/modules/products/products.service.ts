@@ -245,6 +245,16 @@ export class ProductsService {
       status: 200,
     };
   }
+  async deleteSelectedProductVariants(variantIds: string[]) {
+    const deletePromises = variantIds.map((id) =>
+      this.db.delete(product_variants).where(eq(product_variants.id, id)),
+    );
+    await Promise.all(deletePromises);
+    return {
+      message: 'Product variant deleted successfully',
+      status: 200,
+    };
+  }
   async deleteProductImage(imageId: string) {
     await this.db.delete(product_images).where(eq(product_images.id, imageId));
     return {
@@ -253,8 +263,8 @@ export class ProductsService {
     };
   }
 
-  qtyUpdate(productId: string, quantity: number) {
-    return this.db
+  async qtyUpdate(productId: string, quantity: number) {
+    return await this.db
       .update(products)
       .set({
         stock_quantity: quantity,

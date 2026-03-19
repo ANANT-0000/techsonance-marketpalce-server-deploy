@@ -5,23 +5,23 @@ import { CreateCategoryDto } from './dto/CreateCategory.dto';
 @Controller('category')
 export class CategoryController {
   constructor(private readonly categoryService: CategoryService) {}
-  @Post('/create')
+  @Post('create-category')
   create(@Body() createCategoryDto: CreateCategoryDto) {
     return this.categoryService.create(createCategoryDto);
   }
-  @Get('/all')
-  findAll() {
-    return this.categoryService.findAll();
+  @Post('create-many-categories')
+  createMany(@Body() createCategoryDtos: CreateCategoryDto[]) {
+    return this.categoryService.createMany(createCategoryDtos);
   }
-  @Get('/:id')
+  @Get(':id')
   findOne(id: string) {
     return this.categoryService.findOne(id);
   }
-  @Patch('/:id')
+  @Patch(':id')
   update(id: string, @Body() updateCategoryDto: CreateCategoryDto) {
     return this.categoryService.update(id, updateCategoryDto);
   }
-  @Delete('/:id')
+  @Delete(':id')
   delete(id: string) {
     return this.categoryService.delete(id);
   }

@@ -11,8 +11,9 @@ import {
   user,
   user_roles,
   vendor,
+  vendor_document,
 } from 'src/drizzle/schema';
-import { eq } from 'drizzle-orm';
+import { eq, or } from 'drizzle-orm';
 import { UserRole, UserStatus } from 'src/drizzle/types/types';
 import bcrypt from 'bcryptjs';
 import express from 'express';
@@ -287,5 +288,116 @@ export class VendorsService {
         message: 'All profiles updated successfully',
       };
     });
+  }
+  async vendorApplications() {
+    try {
+      const applications = await this.db
+        .select()
+        .from(vendor)
+        .where(
+          or(
+            eq(vendor.vendor_status, UserStatus.PENDING),
+            eq(vendor.is_verified, false),
+          ),
+        );
+      return {
+        message: 'Vendor applications retrieved successfully',
+        data: applications,
+      };
+    } catch (error) {
+      throw new Error('Failed to retrieve vendor applications', {
+        cause: error,
+      });
+    }
+  }
+  async updateVendorStatus(vendorId: string, status: UserStatus) {
+    try {
+      const [existingVendor] = await this.db
+        .select()
+        .from(vendor)
+        .where(eq(vendor.id, vendorId))
+        .limit(1);
+      if (!existingVendor) {
+        throw new Error('Vendor not found');
+      }
+      await this.db
+        .update(vendor)
+        .set({ vendor_status: status })
+        .where(eq(vendor.id, vendorId));
+      return {
+        message: 'Vendor status updated successfully',
+      };
+    } catch (error) {
+      throw new Error('Failed to update vendor status', {
+        cause: error,
+      });
+    }
+  }
+  async getAllVendors() {
+    try {
+      const vendors = await this.db.select().from(vendor);
+      return {
+        message: 'Vendors retrieved successfully',
+        data: vendors,
+      };
+    } catch (error) {
+      throw new Error('Failed to retrieve vendors', {
+        cause: error,
+      });
+    }
+  }
+  async getUnverifiedVendors() {
+    try {
+      const vendors = await this.db
+        .select()
+        .from(vendor)
+        .where(eq(vendor.is_verified, false));
+      return {
+        message: 'Unverified vendors retrieved successfully',
+        data: vendors,
+      };
+    } catch (error) {
+      throw new Error('Failed to retrieve unverified vendors', {
+        cause: error,
+      });
+    }
+  }
+  async getVerifiedVendors() {
+    try {
+      const vendors = await this.db
+        .select()
+        .from(vendor)
+        .where(eq(vendor.is_verified, true));
+      return {
+        message: 'Verified vendors retrieved successfully',
+        data: vendors,
+      };
+    } catch (error) {
+      throw new Error('Failed to retrieve verified vendors', {
+        cause: error,
+      });
+    }
+  }
+  async getVendorById(vendorId: string) {
+    try {
+      const [existingVendor] = await this.db
+        .select()
+        .from(vendor)
+        .innerJoin(user, eq(vendor.user_id, user.id))
+        .innerJoin(vendor_document, eq(vendor.id, vendor_document.vendor_id))
+        .where(eq(vendor.id, vendorId))
+        .limit(1);
+      if (!existingVendor) {
+        throw new Error('Vendor not found');
+      }
+      return {
+        message: 'Vendor retrieved successfully',
+        data: existingVendor,
+      };
+    } catch (error) {
+      throw new Error('Failed to retrieve vendor', {
+        cause: error,
+      });
+    }
   }
 }

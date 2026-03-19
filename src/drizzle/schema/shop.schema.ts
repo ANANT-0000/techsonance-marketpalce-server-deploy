@@ -246,7 +246,7 @@ export const cart_items = pg.pgTable('cart_items', {
 export const product_reviews = pg.pgTable('product_reviews', {
   id: pg.uuid('id').primaryKey().defaultRandom(),
   rating: pg.integer('rating').notNull(),
-  review: pg.text('review').notNull(),
+  review: pg.text('review'),
   created_at: pg
     .timestamp('created_at')
     .$default(() => new Date())

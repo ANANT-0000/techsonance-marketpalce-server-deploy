@@ -4,7 +4,6 @@ import { VendorsController } from './vendors.controller';
 import { DrizzleModule } from 'src/drizzle/drizzle.module';
 import { JwtModule } from '@nestjs/jwt';
 import { MailModule } from 'src/common/services/mail/mail.module';
-
 @Module({
   imports: [DrizzleModule, JwtModule, MailModule],
   controllers: [VendorsController],

@@ -21,6 +21,7 @@ import { CategoryModule } from './modules/category/category.module';
 
 import { CloudinaryModule } from './utils/cloudinary/cloudinary.module';
 import { UploadMediaModule } from './utils/upload-media/upload-media.module';
+import { ProductReviewModule } from './modules/product-review/product-review.module';
 @Module({
   imports: [
     DrizzleModule,
@@ -40,6 +41,7 @@ import { UploadMediaModule } from './utils/upload-media/upload-media.module';
     CategoryModule,
     CloudinaryModule,
     UploadMediaModule,
+    ProductReviewModule,
     // ThrottlerModule.forRoot([
     //   {
     //     name: "short",

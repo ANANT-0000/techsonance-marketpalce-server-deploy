@@ -16,10 +16,14 @@ export class CategoryService {
     });
     return { message: 'Category created successfully', status: 201 };
   }
-
-  async findAll() {
-    const allCategories = await this.db.select().from(categories);
-    return allCategories;
+  async createMany(createCategoryDtos: CreateCategoryDto[]) {
+    const categoryValues = createCategoryDtos.map((dto) => ({
+      name: dto.name,
+      description: dto.description,
+      parent_id: dto.parent_id || null,
+    }));
+    await this.db.insert(categories).values(categoryValues);
+    return { message: 'Categories created successfully', status: 201 };
   }
   async findOne(id: string) {
     const category = await this.db

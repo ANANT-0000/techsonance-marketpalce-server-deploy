@@ -1,10 +1,10 @@
 import { Body, Controller, Post, Res } from '@nestjs/common';
 import { AuthService } from './auth.service';
 import { VendorsService } from '../vendors/vendors.service';
-import { type VendorObject } from 'types/vendor.type';
 import { UsersService } from '../users/users.service';
 import express from 'express';
 import { CreateUserDtoTs, LoginDtoTs } from '../users/dto/userAuth.dto.ts';
+import { type VendorObject } from 'src/drizzle/types/types';
 @Controller({ version: '1', path: 'auth' })
 export class AuthController {
   constructor(
