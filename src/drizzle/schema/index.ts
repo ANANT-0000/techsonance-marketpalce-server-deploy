@@ -9,17 +9,15 @@ import { user } from './users.schema';
 
 export const company = pg.pgTable('company', {
   id: pg.uuid('id').primaryKey().defaultRandom(),
-  companyName: pg.text('company_name').notNull(),
+  company_name: pg.text('company_name').notNull(),
   company_domain: pg.text('company_domain').notNull(),
   company_status: pg.text('company_status').notNull(),
-  created_at: pg
-    .timestamp('created_at')
-    .$default(() => new Date())
-    .notNull(),
+  created_at: pg.timestamp('created_at').notNull().defaultNow(),
   updated_at: pg
     .timestamp('updated_at')
-    .$onUpdate(() => new Date())
-    .notNull(),
+    .notNull()
+    .defaultNow()
+    .$onUpdate(() => new Date()),
 });
 export const UserRoleEnum = pg.pgEnum('user_role_enum', [
   UserRole.ADMIN,
@@ -29,40 +27,34 @@ export const UserRoleEnum = pg.pgEnum('user_role_enum', [
 export const user_roles = pg.pgTable('user_roles', {
   id: pg.uuid('id').primaryKey().defaultRandom(),
   role_name: UserRoleEnum().notNull(),
-  created_at: pg
-    .timestamp('created_at')
-    .$default(() => new Date())
-    .notNull(),
+  created_at: pg.timestamp('created_at').notNull().defaultNow(),
   updated_at: pg
     .timestamp('updated_at')
-    .$onUpdate(() => new Date())
-    .notNull(),
+    .notNull()
+    .defaultNow()
+    .$onUpdate(() => new Date()),
 });
 
 export const permissions = pg.pgTable('user_permissions', {
   id: pg.uuid('id').primaryKey().defaultRandom(),
   permission_name: pg.text('permission_name').notNull(),
-  created_at: pg
-    .timestamp('created_at')
-    .$default(() => new Date())
-    .notNull(),
+  created_at: pg.timestamp('created_at').notNull().defaultNow(),
   updated_at: pg
     .timestamp('updated_at')
-    .$onUpdate(() => new Date())
-    .notNull(),
+    .notNull()
+    .defaultNow()
+    .$onUpdate(() => new Date()),
 });
 export const role_permissions = pg.pgTable('role_permissions', {
   id: pg.uuid('id').primaryKey().defaultRandom(),
   role_id: pg.uuid('role_id').references(() => user_roles.id),
   permission_id: pg.uuid('permission_id').references(() => permissions.id),
-  created_at: pg
-    .timestamp('created_at')
-    .$default(() => new Date())
-    .notNull(),
+  created_at: pg.timestamp('created_at').notNull().defaultNow(),
   updated_at: pg
     .timestamp('updated_at')
-    .$onUpdate(() => new Date())
-    .notNull(),
+    .notNull()
+    .defaultNow()
+    .$onUpdate(() => new Date()),
 });
 export const cms_pages = pg.pgTable('cms_pages', {
   id: pg.uuid('id').primaryKey().defaultRandom(),
@@ -70,14 +62,12 @@ export const cms_pages = pg.pgTable('cms_pages', {
   content: pg.text('content').notNull(),
   page_content_type: pg.text('page_content_type').notNull(),
   seo_meta: pg.jsonb('seo_meta').notNull(),
-  created_at: pg
-    .timestamp('created_at')
-    .$default(() => new Date())
-    .notNull(),
+  created_at: pg.timestamp('created_at').notNull().defaultNow(),
   updated_at: pg
     .timestamp('updated_at')
-    .$onUpdate(() => new Date())
-    .notNull(),
+    .notNull()
+    .defaultNow()
+    .$onUpdate(() => new Date()),
   company_id: pg.uuid('company_id').references(() => company.id),
 });
 

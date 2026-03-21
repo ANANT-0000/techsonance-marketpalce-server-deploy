@@ -7,7 +7,15 @@ import { UsersModule } from '../users/users.module';
 import { VendorsModule } from '../vendors/vendors.module';
 
 @Module({
-  imports: [DrizzleModule, JwtModule, UsersModule, VendorsModule],
+  imports: [
+    DrizzleModule,
+    JwtModule.register({
+      secret: process.env.JWT_SECRET || 'default_secret_key',
+      signOptions: { expiresIn: '1h' },
+    }),
+    UsersModule,
+    VendorsModule,
+  ],
   controllers: [AdminController],
   providers: [AdminService],
   exports: [AdminService],

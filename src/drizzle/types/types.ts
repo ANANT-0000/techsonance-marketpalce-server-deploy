@@ -1,3 +1,5 @@
+import { Role } from 'src/enums/role.enum';
+
 export enum UserRole {
   ADMIN = 'admin',
   VENDOR = 'vendor',
@@ -68,14 +70,15 @@ export enum VendorDocumentType {
   BusinessContinuityPlan = 'business_continuity_plan',
 }
 export interface VendorObject {
-  business_name: string;
-  business_number: string;
-  business_owner_full_name: string;
-  category: string;
-  country_code: string;
+  user_role: Role;
+  store_name: string;
   phone_number: string;
-  vendor_admin_email: string;
-  vendor_admin_full_name: string;
-  password: string;
-  hashed_password?: string | undefined;
+  store_owner_first_name: string;
+  store_owner_last_name: string;
+  category: string;
+  email: string;
+  first_name: string;
+  last_name: string;
+  hash_password: string;
+  country_code: string;
 }

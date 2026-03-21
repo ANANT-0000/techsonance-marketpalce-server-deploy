@@ -1,7 +1,10 @@
 import * as pg from 'drizzle-orm/pg-core';
 import { address, company, product_variants, user, vendor } from '.';
-import { SupportTicketPriority, SupportTicketStatus } from '../types/types';
-import { VendorDocumentType } from 'types/vendor.type';
+import {
+  SupportTicketPriority,
+  SupportTicketStatus,
+  VendorDocumentType,
+} from '../types/types';
 
 export const support_tickets_status_enum = pg.pgEnum(
   'support_tickets_status_enum',
@@ -11,7 +14,7 @@ export const support_tickets_priority_enum = pg.pgEnum(
   'support_tickets_priority_enum',
   SupportTicketPriority,
 );
-const documentTypeEnum = pg.pgEnum(
+export const documentTypeEnum = pg.pgEnum(
   'vendor_document_type_enum',
   VendorDocumentType,
 );
@@ -20,14 +23,12 @@ export const vendor_document = pg.pgTable('vendor_document', {
   document_type: documentTypeEnum('document_type').notNull(),
   document_url: pg.text('document_url'),
   document_status: pg.text('document_status'),
-  created_at: pg
-    .timestamp('created_at')
-    .$default(() => new Date())
-    .notNull(),
+  created_at: pg.timestamp('created_at').notNull().defaultNow(),
   updated_at: pg
     .timestamp('updated_at')
-    .$onUpdate(() => new Date())
-    .notNull(),
+    .notNull()
+    .defaultNow()
+    .$onUpdate(() => new Date()),
   vendor_id: pg
     .uuid('vendor_id')
     .references(() => vendor.id, { onDelete: 'cascade' })
@@ -36,14 +37,12 @@ export const vendor_document = pg.pgTable('vendor_document', {
 export const warehouse = pg.pgTable('warehouse', {
   id: pg.uuid('id').primaryKey().defaultRandom(),
   warehouse_name: pg.text('warehouse_name').notNull(),
-  created_at: pg
-    .timestamp('created_at')
-    .$default(() => new Date())
-    .notNull(),
+  created_at: pg.timestamp('created_at').notNull().defaultNow(),
   updated_at: pg
     .timestamp('updated_at')
-    .$onUpdate(() => new Date())
-    .notNull(),
+    .notNull()
+    .defaultNow()
+    .$onUpdate(() => new Date()),
   address_id: pg
     .uuid('address_id')
     .references(() => address.id)
@@ -88,14 +87,12 @@ export const support_tickets = pg.pgTable('support_tickets', {
   description: pg.text('description').notNull(),
   status: support_tickets_status_enum().notNull(),
   priority: support_tickets_priority_enum().notNull(),
-  created_at: pg
-    .timestamp('created_at')
-    .$default(() => new Date())
-    .notNull(),
+  created_at: pg.timestamp('created_at').notNull().defaultNow(),
   updated_at: pg
     .timestamp('updated_at')
-    .$onUpdate(() => new Date())
-    .notNull(),
+    .notNull()
+    .defaultNow()
+    .$onUpdate(() => new Date()),
   company_id: pg.uuid('company_id').references(() => company.id),
 });
 export const notifications = pg.pgTable(

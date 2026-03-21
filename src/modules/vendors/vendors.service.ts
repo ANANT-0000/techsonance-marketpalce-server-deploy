@@ -30,31 +30,29 @@ export class VendorsService {
     try {
       console.log('vendorData', vendorData);
       return await this.db.transaction(async (tx) => {
-        const hashedPassword = await bcrypt.hash(vendorData.password, 10);
+        const hashedPassword = await bcrypt.hash(vendorData.hash_password, 10);
         const [vendorRole] = await tx
-          .select()
+          .select({ id: user_roles.id })
           .from(user_roles)
           .where(eq(user_roles.role_name, UserRole.VENDOR))
           .limit(1);
         const [newUser] = await tx
           .insert(user)
           .values({
-            first_name: vendorData.vendor_admin_full_name.split(' ')[0],
-            last_name: vendorData.vendor_admin_full_name
-              .split(' ')
-              .slice(1)
-              .join(' '),
-            email: vendorData.vendor_admin_email,
+            first_name: vendorData.first_name,
+            last_name: vendorData.last_name,
+            email: vendorData.email,
             country_code: vendorData.country_code,
-            phone_number: vendorData.business_number,
+            phone_number: vendorData.phone_number,
             password_hash: hashedPassword,
             role_id: vendorRole.id,
           })
           .returning({ id: user.id, email: user.email });
         console.log(newUser);
         await tx.insert(vendor).values({
-          store_owner_full_name: vendorData.vendor_admin_full_name,
-          store_name: vendorData.business_name,
+          store_owner_first_name: vendorData.first_name,
+          store_owner_last_name: vendorData.last_name,
+          store_name: vendorData.store_name,
           store_description: vendorData.category,
           category: vendorData.category,
           user_id: newUser.id,
@@ -77,7 +75,7 @@ export class VendorsService {
     }
   }
   async vendorLogin(
-    loginDto: { email: string; password: string },
+    loginDto: { email: string; hash_password: string },
     res: express.Response,
   ) {
     try {
@@ -90,7 +88,7 @@ export class VendorsService {
         throw new Error('Vendor not found');
       }
       const isPasswordValid: boolean = await bcrypt.compare(
-        loginDto.password,
+        loginDto.hash_password,
         existingUser.password_hash,
       );
       if (!isPasswordValid) {

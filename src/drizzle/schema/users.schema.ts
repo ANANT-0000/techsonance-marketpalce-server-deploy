@@ -8,17 +8,14 @@ export const user = pg.pgTable(
   {
     id: pg.uuid('id').primaryKey().defaultRandom(),
     profile_picture_url: pg.text('profile_picture_url'),
-    first_name: pg.text('first_name').notNull(),
-    last_name: pg.text('last_name').notNull(),
+    first_name: pg.text('first_name'),
+    last_name: pg.text('last_name'),
     email: pg.text('email').notNull(),
     country_code: pg.text('country_code'),
     phone_number: pg.text('phone_number'),
     password_hash: pg.text('password_hash').notNull(),
     user_status: UserStatusEnum().default(UserStatus.PENDING),
-    created_at: pg
-      .timestamp('created_at')
-      .notNull()
-      .$default(() => new Date()),
+    created_at: pg.timestamp('created_at').notNull().defaultNow(),
     updated_at: pg
       .timestamp('updated_at')
       .notNull()
@@ -38,16 +35,14 @@ export const user = pg.pgTable(
 );
 export const vendor = pg.pgTable('vendor', {
   id: pg.uuid('id').primaryKey().defaultRandom(),
-  store_owner_full_name: pg.text('store_owner_full_name').notNull(),
+  store_owner_first_name: pg.text('store_owner_first_name').notNull(),
+  store_owner_last_name: pg.text('store_owner_last_name').notNull(),
   store_name: pg.text('store_name').notNull(),
   store_description: pg.text('store_description'),
   category: pg.text('category').notNull(),
   vendor_status: UserStatusEnum().default(UserStatus.PENDING),
   is_verified: pg.boolean('is_verified').notNull().default(false),
-  created_at: pg
-    .timestamp('created_at')
-    .notNull()
-    .$default(() => new Date()),
+  created_at: pg.timestamp('created_at').notNull().defaultNow(),
   updated_at: pg
     .timestamp('updated_at')
     .notNull()
@@ -71,10 +66,7 @@ export const address = pg.pgTable('address', {
   postal_code: pg.text('postal_code').notNull(),
   country: pg.text('country').notNull(),
   is_default: pg.boolean('is_default').notNull().default(false),
-  created_at: pg
-    .timestamp('created_at')
-    .notNull()
-    .$default(() => new Date()),
+  created_at: pg.timestamp('created_at').notNull().defaultNow(),
   updated_at: pg
     .timestamp('updated_at')
     .notNull()

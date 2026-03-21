@@ -14,7 +14,7 @@ import { FileInterceptor } from '@nestjs/platform-express';
 @Controller()
 export class AppController {
   constructor(private readonly appService: AppService) {}
-  @Get('/')
+  @Get('/test')
   getHello() {
     return this.appService.getHello();
   }

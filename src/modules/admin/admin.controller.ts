@@ -1,8 +1,8 @@
-import { Body, Controller, Get, Post } from '@nestjs/common';
+import { Body, Controller, Get, Post, Res } from '@nestjs/common';
 import { AdminService } from './admin.service';
 import { UserStatus } from 'src/drizzle/types/types';
 import { VendorsService } from '../vendors/vendors.service';
-
+import express from 'express';
 @Controller({
   version: '1',
   path: 'admin',
@@ -12,10 +12,21 @@ export class AdminController {
     private readonly adminService: AdminService,
     private readonly vendorService: VendorsService,
   ) {}
+  @Get('test')
+  test() {
+    return { message: 'Admin controller is working' };
+  }
+
   @Post('login')
-  async adminLogin(@Body() body: { email: string; password: string }) {
+  async adminLogin(
+    @Body() body: { email: string; password: string },
+    @Res({ passthrough: true }) res: express.Response,
+  ) {
     const { email, password } = body;
-    return this.adminService.adminLogin(email, password);
+
+    const result = await this.adminService.adminLogin(email, password, res);
+    // console.log('res', result);
+    return result;
   }
   @Get('vendor-applications')
   async getVendorApplications() {

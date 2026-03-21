@@ -1,4 +1,4 @@
-import { Body, Controller, Post, Res } from '@nestjs/common';
+import { Body, Controller, Get, Post, Res } from '@nestjs/common';
 import { AuthService } from './auth.service';
 import { VendorsService } from '../vendors/vendors.service';
 import { UsersService } from '../users/users.service';
@@ -12,13 +12,18 @@ export class AuthController {
     private readonly vendorService: VendorsService,
     private readonly userService: UsersService,
   ) {}
+  @Get('test')
+  test() {
+    return { message: 'Auth controller is working' };
+  }
   @Post('register-vendor')
   async signUpVendor(@Body() body: VendorObject) {
     console.log(body);
     if (
-      body.vendor_admin_full_name === undefined ||
-      body.vendor_admin_email === undefined ||
-      body.password === undefined
+      body.store_owner_first_name === undefined ||
+      body.store_owner_last_name === undefined ||
+      body.email === undefined ||
+      body.hash_password === undefined
     ) {
       return {
         message: 'Vendor admin name, email and password are required',
@@ -34,14 +39,14 @@ export class AuthController {
   }
   @Post('login-vendor')
   async loginVendor(
-    @Body() body: { email: string; password: string },
+    @Body() body: { email: string; hash_password: string },
     @Res({ passthrough: true }) res: express.Response,
   ) {
     console.log('Login request received with body:', body);
     return await this.vendorService.vendorLogin(
       {
         email: body.email,
-        password: body.password,
+        hash_password: body.hash_password,
       },
       res,
     );

@@ -1,48 +1,67 @@
 import { Transform } from 'class-transformer';
-import { IsNotEmpty, IsString, Length } from 'class-validator';
+import { IsEmail, IsNotEmpty, IsString, Length } from 'class-validator';
+import { Role } from 'src/enums/role.enum';
 
 export class CreateVendorDto {
   @IsNotEmpty()
   @IsString()
+  @Transform(({ value }: { value: string }) => value.trim().toLowerCase())
+  user_role!: Role;
+
+  @IsNotEmpty()
+  @IsString()
   @Length(3, 100)
   @Transform(({ value }: { value: string }) => value.trim().toLowerCase())
-  business_name!: string;
+  store_name!: string;
 
-  @IsNotEmpty()
-  @IsString()
-  @Length(4, 15)
-  @Transform(({ value }: { value: string }) => value.trim())
-  business_number!: string;
   @IsNotEmpty()
   @IsString()
   @Length(3, 100)
   @Transform(({ value }: { value: string }) => value.trim())
-  business_owner_full_name!: string;
+  store_owner_first_name!: string;
 
+  @IsNotEmpty()
+  @IsString()
+  @Length(3, 100)
+  @Transform(({ value }: { value: string }) => value.trim())
+  store_owner_last_name!: string;
   @IsNotEmpty()
   @IsString()
   category!: string;
 
   @IsNotEmpty()
   @IsString()
+  @Length(2, 4)
+  @Transform(({ value }: { value: string }) => value.trim().toUpperCase())
   country_code!: string;
-
   @IsNotEmpty()
   @IsString()
+  @Length(4, 15)
+  @Transform(({ value }: { value: string }) => value.trim())
   phone_number!: string;
 
   @IsNotEmpty()
   @IsString()
   @Length(3, 100)
-  vendor_admin_email!: string;
+  @IsEmail()
+  @Transform(({ value }: { value: string }) => value.trim())
+  email!: string;
 
   @IsNotEmpty()
   @IsString()
+  @Transform(({ value }: { value: string }) => value.trim())
   @Length(3, 100)
-  vendor_admin_full_name!: string;
+  first_name!: string;
 
   @IsNotEmpty()
   @IsString()
+  @Transform(({ value }: { value: string }) => value.trim())
+  @Length(3, 100)
+  last_name!: string;
+
+  @IsNotEmpty()
+  @IsString()
+  @Transform(({ value }: { value: string }) => value.trim())
   @Length(6, 100)
-  password!: string;
+  hash_password!: string;
 }

@@ -1,19 +1,34 @@
-import { Body, Controller, Delete, Post } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Delete,
+  Get,
+  Param,
+  Patch,
+  Post,
+} from '@nestjs/common';
 import { RolesService } from './roles.service';
 import { Roles } from 'src/common/decorators/roles.decorator';
 import { response } from 'express';
-import { InferSelectModel } from 'drizzle-orm';
 import { user_roles } from 'src/drizzle/schema';
 import { Role } from 'src/enums/role.enum';
+import { InferSelectModel } from 'drizzle-orm';
 type userRole = InferSelectModel<typeof user_roles>['role_name'];
-@Roles(Role.ADMIN)
+// @Roles(Role.ADMIN)
 @Controller({
   version: '1',
   path: 'roles',
 })
 export class RolesController {
   constructor(private readonly rolesService: RolesService) {}
-
+  @Get('hello')
+  getHello() {
+    return 'Hello World!';
+  }
+  @Get('all')
+  getAllRoles() {
+    return this.rolesService.getAllRoles();
+  }
   @Post('create')
   createRole(@Body('role') role: userRole) {
     if (!role) {
@@ -22,15 +37,15 @@ export class RolesController {
     return this.rolesService.createRole(role);
   }
   @Delete(':id')
-  removeRole(@Body('id') id: string) {
+  removeRole(@Param('id') id: string) {
     if (!id) {
       return response.status(400).json({ message: 'Role ID is required' });
     }
 
     return this.rolesService.removeRole(id);
   }
-  @Post('update')
-  updateRole(@Body('id') id: string, @Body('role') role: userRole) {
+  @Patch(':id')
+  updateRole(@Param('id') id: string, @Body('role') role: userRole) {
     if (!id) {
       return response.status(400).json({ message: 'Role ID is required' });
     }
@@ -39,44 +54,12 @@ export class RolesController {
     }
     return this.rolesService.updateRole(id, role);
   }
-  @Post('permission/create')
-  createPermission(@Body('permissionName') permissionName: string) {
-    if (!permissionName) {
-      return response
-        .status(400)
-        .json({ message: 'Permission name is required' });
-    }
+  @Get('get-role-permissions')
+  getRolePermissions() {
+    return this.rolesService.getRolePermissions();
+  }
 
-    return this.rolesService.createPermission(permissionName);
-  }
-  @Delete('permission/:id')
-  removePermission(@Body('id') id: string) {
-    if (!id) {
-      return response
-        .status(400)
-        .json({ message: 'Permission ID is required' });
-    }
-    return this.rolesService.removePermission(id);
-  }
-  @Post('permission/update')
-  updatePermission(
-    @Body('id') id: string,
-    @Body('permissionName') permissionName: string,
-  ) {
-    if (!id) {
-      return response
-        .status(400)
-        .json({ message: 'Permission ID is required' });
-    }
-    if (!permissionName) {
-      return response
-        .status(400)
-        .json({ message: 'Permission name is required' });
-    }
-
-    return this.rolesService.updatePermission(id, permissionName);
-  }
-  @Post('permission-to-add')
+  @Post('add-permission-to-role')
   addPermissionToRole(
     @Body('roleId') roleId: string,
     @Body('permissionId') permissionId: string,
@@ -91,7 +74,7 @@ export class RolesController {
     }
     return this.rolesService.addPermissionToRole(roleId, permissionId);
   }
-  @Delete('permission-to-delete')
+  @Delete('remove-permission-from-role')
   removePermissionFromRole(
     @Body('roleId') roleId: string,
     @Body('permissionId') permissionId: string,

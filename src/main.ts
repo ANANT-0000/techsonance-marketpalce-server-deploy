@@ -12,10 +12,10 @@ async function bootstrap() {
 
   app.enableCors({
     origin: [
-      'http://localhost:5173',
-      'http://192.168.43.1:5173',
-      'http://192.168.81.1:5173',
-      'http://192.168.29.26:5173',
+      'http://localhost:3000',
+      'http://192.168.43.1:3000',
+      'http://192.168.81.1:3000',
+      'http://192.168.29.26:3000    ',
       '*',
     ],
     methods: 'GET,HEAD,PUT,PATCH,POST,DELETE',
@@ -39,6 +39,6 @@ async function bootstrap() {
     .build();
   const document = SwaggerModule.createDocument(app, config);
   SwaggerModule.setup('api', app, document);
-  await app.listen(process.env.PORT ?? 3000);
+  await app.listen(process.env.PORT ?? 8000);
 }
 bootstrap();

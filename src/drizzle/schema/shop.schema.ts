@@ -16,14 +16,12 @@ export const categories = pg.pgTable('categories', {
   parent_id: pg
     .uuid('parent_id')
     .references((): AnyPgColumn => categories.id, { onDelete: 'cascade' }),
-  created_at: pg
-    .timestamp('created_at')
-    .$default(() => new Date())
-    .notNull(),
+  created_at: pg.timestamp('created_at').notNull().defaultNow(),
   updated_at: pg
     .timestamp('updated_at')
-    .$onUpdate(() => new Date())
-    .notNull(),
+    .notNull()
+    .defaultNow()
+    .$onUpdate(() => new Date()),
 });
 export const coupons = pg.pgTable('coupons', {
   id: pg.uuid('id').primaryKey().defaultRandom(),
@@ -36,14 +34,12 @@ export const coupons = pg.pgTable('coupons', {
   valid_from: pg.timestamp('valid_from').notNull(),
   valid_to: pg.timestamp('valid_to').notNull(),
   is_active: pg.boolean('is_active').notNull().default(true),
-  created_at: pg
-    .timestamp('created_at')
-    .$default(() => new Date())
-    .notNull(),
+  created_at: pg.timestamp('created_at').notNull().defaultNow(),
   updated_at: pg
     .timestamp('updated_at')
-    .$onUpdate(() => new Date())
-    .notNull(),
+    .notNull()
+    .defaultNow()
+    .$onUpdate(() => new Date()),
   company_id: pg.uuid('company_id').references(() => company.id),
 });
 export const carts = pg.pgTable('carts', {
@@ -52,14 +48,12 @@ export const carts = pg.pgTable('carts', {
   user_id: pg
     .uuid('user_id')
     .references(() => user.id, { onDelete: 'cascade' }),
-  created_at: pg
-    .timestamp('created_at')
-    .$default(() => new Date())
-    .notNull(),
+  created_at: pg.timestamp('created_at').notNull().defaultNow(),
   updated_at: pg
     .timestamp('updated_at')
-    .$onUpdate(() => new Date())
-    .notNull(),
+    .notNull()
+    .defaultNow()
+    .$onUpdate(() => new Date()),
 });
 
 export const wishlist = pg.pgTable('wishlist', {
@@ -68,14 +62,12 @@ export const wishlist = pg.pgTable('wishlist', {
   user_id: pg
     .uuid('user_id')
     .references(() => user.id, { onDelete: 'cascade' }),
-  created_at: pg
-    .timestamp('created_at')
-    .$default(() => new Date())
-    .notNull(),
+  created_at: pg.timestamp('created_at').notNull().defaultNow(),
   updated_at: pg
     .timestamp('updated_at')
-    .$onUpdate(() => new Date())
-    .notNull(),
+    .notNull()
+    .defaultNow()
+    .$onUpdate(() => new Date()),
 });
 export const coupon_usage = pg.pgTable('coupon_usage', {
   id: pg.uuid('id').primaryKey().defaultRandom(),
@@ -107,14 +99,12 @@ export const products = pg.pgTable(
     stock_quantity: pg.integer('stock_quantity').default(0),
     status: ProductStatusEnum().notNull().default(ProductStatus.INACTIVE),
     has_variants: pg.boolean('has_variants').notNull().default(false),
-    created_at: pg
-      .timestamp('created_at')
-      .$default(() => new Date())
-      .notNull(),
+    created_at: pg.timestamp('created_at').notNull().defaultNow(),
     updated_at: pg
       .timestamp('updated_at')
-      .$onUpdate(() => new Date())
-      .notNull(),
+      .notNull()
+      .defaultNow()
+      .$onUpdate(() => new Date()),
     company_id: pg.uuid('company_id').references(() => company.id),
     vendor_id: pg
       .uuid('vendor_id')
@@ -137,14 +127,12 @@ export const orders = pg.pgTable(
       .decimal('total_amount', { precision: 10, scale: 2 })
       .notNull(),
     order_status: order_status_enum().notNull(),
-    created_at: pg
-      .timestamp('created_at')
-      .$default(() => new Date())
-      .notNull(),
+    created_at: pg.timestamp('created_at').notNull().defaultNow(),
     updated_at: pg
       .timestamp('updated_at')
-      .$onUpdate(() => new Date())
-      .notNull(),
+      .notNull()
+      .defaultNow()
+      .$onUpdate(() => new Date()),
     user_id: pg
       .uuid('user_id')
       .references(() => user.id, { onDelete: 'cascade' }),
@@ -169,14 +157,12 @@ export const order_items = pg.pgTable(
       .references(() => product_variants.id),
     quantity: pg.integer('quantity').notNull(),
     price: pg.decimal('price', { precision: 10, scale: 2 }).notNull(),
-    created_at: pg
-      .timestamp('created_at')
-      .$default(() => new Date())
-      .notNull(),
+    created_at: pg.timestamp('created_at').notNull().defaultNow(),
     updated_at: pg
       .timestamp('updated_at')
-      .$onUpdate(() => new Date())
-      .notNull(),
+      .notNull()
+      .defaultNow()
+      .$onUpdate(() => new Date()),
   },
   (table) => [pg.index('idx_order_items_order_id').on(table.order_id)],
 );
@@ -191,14 +177,12 @@ export const product_variants = pg.pgTable(
     status: ProductStatusEnum().notNull().default(ProductStatus.INACTIVE),
     stock_quantity: pg.integer('stock_quantity').default(0),
     seo_meta: pg.jsonb('seo_meta'),
-    created_at: pg
-      .timestamp('created_at')
-      .$default(() => new Date())
-      .notNull(),
+    created_at: pg.timestamp('created_at').notNull().defaultNow(),
     updated_at: pg
       .timestamp('updated_at')
-      .$onUpdate(() => new Date())
-      .notNull(),
+      .notNull()
+      .defaultNow()
+      .$onUpdate(() => new Date()),
     product_id: pg
       .uuid('product_id')
       .references(() => products.id, { onDelete: 'cascade' }),
@@ -209,7 +193,7 @@ export const product_variants = pg.pgTable(
     pg.index('idx_product_variants_status').on(table.status),
   ],
 );
-const productImageTypeEnum = pg.pgEnum(
+export const productImageTypeEnum = pg.pgEnum(
   'product_image_type_enum',
   productImageType,
 );
@@ -219,6 +203,12 @@ export const product_images = pg.pgTable('product_images', {
   alt_text: pg.text('alt_text'),
   imgType: productImageTypeEnum(),
   is_primary: pg.boolean('is_primary').notNull().default(false),
+  created_at: pg.timestamp('created_at').notNull().defaultNow(),
+  updated_at: pg
+    .timestamp('updated_at')
+    .notNull()
+    .defaultNow()
+    .$onUpdate(() => new Date()),
   product_id: pg
     .uuid('product_id')
     .references(() => products.id, { onDelete: 'cascade' })
@@ -234,27 +224,23 @@ export const cart_items = pg.pgTable('cart_items', {
     .uuid('product_variant_id')
     .references(() => product_variants.id, { onDelete: 'cascade' }),
   quantity: pg.integer('quantity').notNull(),
-  created_at: pg
-    .timestamp('created_at')
-    .$default(() => new Date())
-    .notNull(),
+  created_at: pg.timestamp('created_at').notNull().defaultNow(),
   updated_at: pg
     .timestamp('updated_at')
-    .$onUpdate(() => new Date())
-    .notNull(),
+    .notNull()
+    .defaultNow()
+    .$onUpdate(() => new Date()),
 });
 export const product_reviews = pg.pgTable('product_reviews', {
   id: pg.uuid('id').primaryKey().defaultRandom(),
   rating: pg.integer('rating').notNull(),
   review: pg.text('review'),
-  created_at: pg
-    .timestamp('created_at')
-    .$default(() => new Date())
-    .notNull(),
+  created_at: pg.timestamp('created_at').notNull().defaultNow(),
   updated_at: pg
     .timestamp('updated_at')
-    .$onUpdate(() => new Date())
-    .notNull(),
+    .notNull()
+    .defaultNow()
+    .$onUpdate(() => new Date()),
   product_variant_id: pg
     .uuid('product_variant_id')
     .references(() => product_variants.id, { onDelete: 'cascade' }),
@@ -271,14 +257,12 @@ export const wishlist_items = pg.pgTable('wishlist_items', {
   product_variant_id: pg
     .uuid('product_variant_id')
     .references(() => product_variants.id, { onDelete: 'cascade' }),
-  created_at: pg
-    .timestamp('created_at')
-    .$default(() => new Date())
-    .notNull(),
+  created_at: pg.timestamp('created_at').notNull().defaultNow(),
   updated_at: pg
     .timestamp('updated_at')
-    .$onUpdate(() => new Date())
-    .notNull(),
+    .notNull()
+    .defaultNow()
+    .$onUpdate(() => new Date()),
 });
 
 export const payment_status_enum = pg.pgEnum(
@@ -293,14 +277,12 @@ export const payments = pg.pgTable(
     payment_status: payment_status_enum().notNull(),
     transaction_ref: pg.text('transaction_ref').notNull(),
     amount: pg.decimal('amount', { precision: 10, scale: 2 }).notNull(),
-    created_at: pg
-      .timestamp('created_at')
-      .$default(() => new Date())
-      .notNull(),
+    created_at: pg.timestamp('created_at').notNull().defaultNow(),
     updated_at: pg
       .timestamp('updated_at')
-      .$onUpdate(() => new Date())
-      .notNull(),
+      .notNull()
+      .defaultNow()
+      .$onUpdate(() => new Date()),
     order_id: pg.uuid('order_id').references(() => orders.id),
     company_id: pg.uuid('company_id').references(() => company.id),
   },
@@ -323,14 +305,12 @@ export const shipping_details = pg.pgTable('shipping_details', {
   carrier: pg.text('carrier').notNull(),
   estimated_delivery: pg.date('estimated_delivery').notNull(),
   shipping_status: shipping_status_enum().notNull(),
-  created_at: pg
-    .timestamp('created_at')
-    .$default(() => new Date())
-    .notNull(),
+  created_at: pg.timestamp('created_at').notNull().defaultNow(),
   updated_at: pg
     .timestamp('updated_at')
-    .$onUpdate(() => new Date())
-    .notNull(),
+    .notNull()
+    .defaultNow()
+    .$onUpdate(() => new Date()),
   order_id: pg.uuid('order_id').references(() => orders.id),
   company_id: pg.uuid('company_id').references(() => company.id),
 });
