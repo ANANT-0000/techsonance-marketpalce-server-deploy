@@ -1,5 +1,11 @@
 import { Transform } from 'class-transformer';
-import { IsEmail, IsNotEmpty, IsString, Length } from 'class-validator';
+import {
+  IsEmail,
+  IsNotEmpty,
+  IsOptional,
+  IsString,
+  Length,
+} from 'class-validator';
 import { Role } from 'src/enums/role.enum';
 
 export class CreateVendorDto {
@@ -14,6 +20,12 @@ export class CreateVendorDto {
   @Transform(({ value }: { value: string }) => value.trim().toLowerCase())
   store_name!: string;
 
+  @IsOptional()
+  @IsString()
+  @Length(0, 500)
+  @Transform(({ value }: { value: string }) => value.trim())
+  store_description?: string;
+
   @IsNotEmpty()
   @IsString()
   @Length(3, 100)
@@ -25,6 +37,7 @@ export class CreateVendorDto {
   @Length(3, 100)
   @Transform(({ value }: { value: string }) => value.trim())
   store_owner_last_name!: string;
+
   @IsNotEmpty()
   @IsString()
   category!: string;
@@ -46,6 +59,18 @@ export class CreateVendorDto {
   @IsEmail()
   @Transform(({ value }: { value: string }) => value.trim())
   email!: string;
+
+  @IsNotEmpty()
+  @IsString()
+  @Length(6, 100)
+  @Transform(({ value }: { value: string }) => value.trim())
+  company_domain!: string;
+
+  @IsNotEmpty()
+  @IsString()
+  @Length(3, 100)
+  @Transform(({ value }: { value: string }) => value.trim())
+  company_structure!: string;
 
   @IsNotEmpty()
   @IsString()

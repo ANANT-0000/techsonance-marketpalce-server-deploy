@@ -1,4 +1,10 @@
-import { HttpException, HttpStatus, Inject, Injectable } from '@nestjs/common';
+import {
+  HttpException,
+  HttpStatus,
+  Inject,
+  Injectable,
+  InternalServerErrorException,
+} from '@nestjs/common';
 
 import { JwtService } from '@nestjs/jwt';
 import { DRIZZLE } from 'src/drizzle/drizzle.module';
@@ -36,25 +42,30 @@ export class AuthService {
       // secure: process.env.NODE_ENV === "production",
       // sameSite: "strict",
     });
-    return { message: 'Logged out successfully' };
+    return;
   }
   async forgetPassword(email: string) {
     if (!email) {
       throw new HttpException('Email is required', HttpStatus.BAD_REQUEST);
     }
 
-    const mailExits = await this.drizzle
-      .select()
-      .from(user)
-      .where(eq(user.email, email));
-    if (!mailExits) {
-      throw new HttpException('User not found', HttpStatus.NOT_FOUND);
+    try {
+      const mailExits = await this.drizzle
+        .select()
+        .from(user)
+        .where(eq(user.email, email));
+      if (!mailExits) {
+        throw new HttpException('User not found', HttpStatus.NOT_FOUND);
+      }
+      await this.mail.sendResetPasswordEmail(email);
+      return {
+        message: 'Password reset link sent to email (not implemented)',
+      };
+    } catch (error) {
+      throw new InternalServerErrorException('Failed to reset password', {
+        cause: error,
+      });
     }
-    await this.mail.sendResetPasswordEmail(email);
-    return {
-      message: 'Password reset link sent to email (not implemented)',
-      status: 200,
-    };
   }
   async resetPassword(token: string, newPassword: string) {
     const email = this.mail.verifyResetToken(token);
@@ -64,10 +75,16 @@ export class AuthService {
         HttpStatus.BAD_REQUEST,
       );
     }
-    await this.drizzle
-      .update(user)
-      .set({ password_hash: newPassword })
-      .where(eq(user.email, email));
-    return { message: 'Password reset successful' };
+    try {
+      await this.drizzle
+        .update(user)
+        .set({ password_hash: newPassword })
+        .where(eq(user.email, email));
+      return { message: 'Password reset successful' };
+    } catch (error) {
+      throw new InternalServerErrorException('Failed to reset password', {
+        cause: error,
+      });
+    }
   }
 }

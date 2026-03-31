@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   Body,
   Controller,
   Delete,
@@ -19,14 +20,16 @@ export class PermissionsController {
     return 'Hello World!';
   }
 
-  @Get('')
+  @Get()
   getAllPermissions() {
     return this.permissionsService.getAllPermissions();
   }
 
-  @Post('create')
+  @Post()
   createPermission(@Body('permissionName') permissionName: string) {
-    if (!permissionName) return { message: 'Permission name is required' };
+    if (!permissionName) {
+      throw new BadRequestException('Permission name is required');
+    }
     return this.permissionsService.createPermission(permissionName);
   }
   @Patch(':id')
@@ -35,14 +38,14 @@ export class PermissionsController {
     @Body('permissionName') permissionName: string,
   ) {
     if (!id || !permissionName) {
-      return { message: 'Permission ID and name are required' };
+      throw new BadRequestException('Permission ID and name are required');
     }
     return this.permissionsService.updatePermission(id, permissionName);
   }
   @Delete(':id')
   removePermission(@Param('id') id: string) {
     if (!id) {
-      return { message: 'Permission ID is required' };
+      throw new BadRequestException('Permission ID is required');
     }
     return this.permissionsService.removePermission(id);
   }

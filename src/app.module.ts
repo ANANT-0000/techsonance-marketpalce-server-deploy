@@ -20,9 +20,10 @@ import { AddressModule } from './modules/address/address.module';
 import { CategoryModule } from './modules/category/category.module';
 
 import { CloudinaryModule } from './utils/cloudinary/cloudinary.module';
-import { UploadMediaModule } from './utils/upload-media/upload-media.module';
 import { ProductReviewModule } from './modules/product-review/product-review.module';
 import { PermissionsModule } from './modules/permissions/permissions.module';
+import { ProductVariantModule } from './modules/product-variant/product-variant.module';
+import { UploadToCloudModule } from './utils/upload-to-cloud/upload-to-cloud.module';
 @Module({
   imports: [
     DrizzleModule,
@@ -41,9 +42,10 @@ import { PermissionsModule } from './modules/permissions/permissions.module';
     AddressModule,
     CategoryModule,
     CloudinaryModule,
-    UploadMediaModule,
     ProductReviewModule,
     PermissionsModule,
+    ProductVariantModule,
+    UploadToCloudModule,
     // ThrottlerModule.forRoot([
     //   {
     //     name: "short",

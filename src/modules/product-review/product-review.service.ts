@@ -11,10 +11,7 @@ export class ProductReviewService {
   constructor(@Inject(DRIZZLE) private readonly db: DrizzleDB) {}
   async create(createProductReviewDto: CreateProductReviewDto) {
     await this.db.insert(product_reviews).values(createProductReviewDto);
-    return {
-      message: 'Product review created successfully',
-      data: createProductReviewDto,
-    };
+    return createProductReviewDto;
   }
   async findAll() {
     return await this.db.select().from(product_reviews);
@@ -29,10 +26,7 @@ export class ProductReviewService {
         eq(product_reviews.product_variant_id, product_variants.id),
       )
       .where(eq(product_variants.product_id, productId));
-    return {
-      message: 'Product reviews retrieved successfully',
-      data: reviews,
-    };
+    return reviews;
   }
 
   async findOneById(id: string) {
@@ -44,10 +38,7 @@ export class ProductReviewService {
         product_variants,
         eq(product_reviews.product_variant_id, product_variants.id),
       );
-    return {
-      message: 'Product review retrieved successfully',
-      data: review,
-    };
+    return review;
   }
 
   async update(id: string, updateProductReviewDto: UpdateProductReviewDto) {
@@ -55,10 +46,7 @@ export class ProductReviewService {
       .update(product_reviews)
       .set(updateProductReviewDto)
       .where(eq(product_reviews.id, id));
-    return {
-      message: 'Product review updated successfully',
-      data: { ...updateProductReviewDto, id },
-    };
+    return { ...updateProductReviewDto, id };
   }
 
   async remove(id: string) {

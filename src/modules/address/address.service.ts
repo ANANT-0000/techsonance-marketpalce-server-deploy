@@ -1,4 +1,10 @@
-import { Inject, Injectable } from '@nestjs/common';
+import {
+  HttpException,
+  HttpStatus,
+  Inject,
+  Injectable,
+  InternalServerErrorException,
+} from '@nestjs/common';
 import { eq, getTableColumns, InferSelectModel } from 'drizzle-orm';
 import { DRIZZLE } from 'src/drizzle/drizzle.module';
 import { address } from 'src/drizzle/schema';
@@ -14,40 +20,94 @@ export class AddressService {
   }
   // find addresses by user id
   async findAddressesByUserId(userId: string) {
-    const [addressRecords] = await this.db
-      .select(this.getAddressColumns())
-      .from(address)
-      .where(eq(address.user_id, userId));
-    return addressRecords;
+    if (!userId) {
+      return new HttpException('User ID is required', HttpStatus.BAD_REQUEST);
+    }
+    try {
+      const [addressRecords] = await this.db
+        .select(this.getAddressColumns())
+        .from(address)
+        .where(eq(address.user_id, userId));
+      return addressRecords;
+    } catch (error) {
+      throw new InternalServerErrorException('Failed to find addresses', {
+        cause: error,
+      });
+    }
   }
   // find a address by address id
   async findAddressById(addressId: string) {
-    const [addressRecord] = await this.db
-      .select(this.getAddressColumns())
-      .from(address)
-      .where(eq(address.id, addressId));
-    return addressRecord;
+    if (!addressId) {
+      return new HttpException(
+        'Address ID is required',
+        HttpStatus.BAD_REQUEST,
+      );
+    }
+    try {
+      const [addressRecord] = await this.db
+        .select(this.getAddressColumns())
+        .from(address)
+        .where(eq(address.id, addressId));
+      return addressRecord;
+    } catch (error) {
+      throw new InternalServerErrorException('Failed to find addresses', {
+        cause: error,
+      });
+    }
   }
   // create address for user
   async createAddressForUser(userId: string, addressData: Address) {
-    const [newAddress] = await this.db
-      .insert(address)
-      .values(addressData)
-      .returning();
-    return newAddress;
+    if (!userId) {
+      return new HttpException('User ID is required', HttpStatus.BAD_REQUEST);
+    }
+    try {
+      const [newAddress] = await this.db
+        .insert(address)
+        .values(addressData)
+        .returning();
+      return newAddress;
+    } catch (error) {
+      throw new InternalServerErrorException('Failed to find addresses', {
+        cause: error,
+      });
+    }
   }
   // update address by address id
   async updateAddress(addressId: string, addressData: Address) {
-    const [updatedAddress] = await this.db
-      .update(address)
-      .set(addressData)
-      .where(eq(address.id, addressId))
-      .returning();
-    return updatedAddress;
+    if (!addressId) {
+      return new HttpException(
+        'Address ID is required',
+        HttpStatus.BAD_REQUEST,
+      );
+    }
+    try {
+      const [updatedAddress] = await this.db
+        .update(address)
+        .set(addressData)
+        .where(eq(address.id, addressId))
+        .returning();
+      return updatedAddress;
+    } catch (error) {
+      throw new InternalServerErrorException('Failed to find addresses', {
+        cause: error,
+      });
+    }
   }
   // delete address by address id
   async deleteAddress(addressId: string) {
-    await this.db.delete(address).where(eq(address.id, addressId));
-    return { message: 'Address deleted successfully' };
+    if (!addressId) {
+      return new HttpException(
+        'Address ID is required',
+        HttpStatus.BAD_REQUEST,
+      );
+    }
+    try {
+      await this.db.delete(address).where(eq(address.id, addressId));
+      return { message: 'Address deleted successfully', status: HttpStatus.OK };
+    } catch (error) {
+      throw new InternalServerErrorException('Failed to find addresses', {
+        cause: error,
+      });
+    }
   }
 }

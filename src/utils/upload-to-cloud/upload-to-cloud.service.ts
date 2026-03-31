@@ -1,12 +1,13 @@
 import { Injectable } from '@nestjs/common';
-import { CloudinaryService } from '../cloudinary/cloudinary.service';
-import { CloudinaryResponse } from '../cloudinary/cloudinary-response';
 import { productImageType } from 'src/drizzle/types/types';
+import { CloudinaryService } from '../cloudinary/cloudinary.service';
 
 @Injectable()
-export class UploadMediaService {
+export class UploadToCloudService {
   constructor(private cloudinaryService: CloudinaryService) {}
-  async uploadFile(file: Express.Multer.File) {
+  async uploadFile(
+    file: Express.Multer.File,
+  ): Promise<{ secure_url: string; type: string }> {
     return await this.cloudinaryService
       .uploadFile(file)
       .then((data) => {
@@ -16,7 +17,9 @@ export class UploadMediaService {
         throw new Error(err);
       });
   }
-  async uploadFiles(files: Express.Multer.File[]) {
+  async uploadFiles(
+    files: Express.Multer.File[],
+  ): Promise<{ secure_url: string; type: string }[]> {
     return await this.cloudinaryService
       .uploadFiles(files)
       .then((data) => {
@@ -24,6 +27,19 @@ export class UploadMediaService {
           secure_url: item.secure_url,
           type: productImageType.GALLERY,
         }));
+      })
+      .catch((err) => {
+        throw new Error(err);
+      });
+  }
+  async uploadDocument(
+    file: Express.Multer.File,
+    fileType: string,
+  ): Promise<{ secure_url: string; type: string }> {
+    return await this.cloudinaryService
+      .uploadFile(file)
+      .then((data) => {
+        return { secure_url: data.secure_url, type: fileType };
       })
       .catch((err) => {
         throw new Error(err);

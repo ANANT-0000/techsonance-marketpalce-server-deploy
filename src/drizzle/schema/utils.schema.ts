@@ -3,7 +3,7 @@ import { address, company, product_variants, user, vendor } from '.';
 import {
   SupportTicketPriority,
   SupportTicketStatus,
-  VendorDocumentType,
+  // VendorDocumentType,
 } from '../types/types';
 
 export const support_tickets_status_enum = pg.pgEnum(
@@ -14,14 +14,16 @@ export const support_tickets_priority_enum = pg.pgEnum(
   'support_tickets_priority_enum',
   SupportTicketPriority,
 );
-export const documentTypeEnum = pg.pgEnum(
-  'vendor_document_type_enum',
-  VendorDocumentType,
-);
+
+// export const documentTypeEnum = pg.pgEnum(
+//   'vendor_document_type_enum',
+//   VendorDocumentType,
+// );
+
 export const vendor_document = pg.pgTable('vendor_document', {
   id: pg.uuid('id').primaryKey().defaultRandom(),
-  document_type: documentTypeEnum('document_type').notNull(),
-  document_url: pg.text('document_url'),
+  document_type: pg.text('document_type').notNull(),
+  document_url: pg.text('document_url').notNull(),
   document_status: pg.text('document_status'),
   created_at: pg.timestamp('created_at').notNull().defaultNow(),
   updated_at: pg

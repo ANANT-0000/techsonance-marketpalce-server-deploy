@@ -1,10 +1,11 @@
 import { Module } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { NodePgDatabase } from 'drizzle-orm/node-postgres';
-import { drizzle } from 'drizzle-orm/node-postgres';
+import { NodePgDatabase, drizzle } from 'drizzle-orm/node-postgres';
 import { Pool } from 'pg';
 import * as schema from './schema/index';
+
 export const DRIZZLE: unique symbol = Symbol('DRIZZLE');
+export type DrizzleService = NodePgDatabase<typeof schema>;
 @Module({
   providers: [
     {
@@ -23,7 +24,7 @@ export const DRIZZLE: unique symbol = Symbol('DRIZZLE');
         });
         return drizzle(pool, {
           schema: schema,
-        }) as NodePgDatabase<typeof schema>;
+        }) as DrizzleService;
       },
     },
   ],

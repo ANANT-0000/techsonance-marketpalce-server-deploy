@@ -3,6 +3,7 @@ import {
   HttpStatus,
   Inject,
   Injectable,
+  InternalServerErrorException,
   UnauthorizedException,
 } from '@nestjs/common';
 import { user, user_roles } from 'src/drizzle/schema';
@@ -13,7 +14,7 @@ import { type DrizzleDB } from 'src/drizzle/types/drizzle';
 import bcrypt from 'bcryptjs';
 import { JwtService } from '@nestjs/jwt';
 import express from 'express';
-import { CreateUserDtoTs, LoginDtoTs } from './dto/userAuth.dto.ts.js';
+import { CreateUserDto, LoginDto } from './dto/userAuth.dto.ts.js';
 import { UpdateUserDtoTs } from './dto/update-user.dto.ts.js';
 @Injectable()
 export class UsersService {
@@ -44,7 +45,9 @@ export class UsersService {
 
       return userRecord;
     } catch (error) {
-      throw new Error('Failed to fetch user', { cause: error });
+      throw new InternalServerErrorException('Failed to find user', {
+        cause: error,
+      });
     }
   }
   // update user profile
@@ -68,7 +71,7 @@ export class UsersService {
         });
       return userRecord[0];
     } catch (error) {
-      throw new Error('Failed to update user profile', {
+      throw new InternalServerErrorException('Failed to update profile', {
         cause: error,
       });
     }
@@ -90,14 +93,14 @@ export class UsersService {
         .where(eq(user.id, userId))
         .limit(1);
       if (!userRecord) {
-        throw new Error('User not found');
+        throw new UnauthorizedException('User not found');
       }
       const isPasswordValid = await bcrypt.compare(
         currentPassword,
         userRecord.password_hash,
       );
       if (!isPasswordValid) {
-        throw new Error('Current password is incorrect');
+        throw new UnauthorizedException('Current password is incorrect');
       }
       const hashedNewPassword = await bcrypt.hash(newPassword, 10);
       await this.db
@@ -105,62 +108,71 @@ export class UsersService {
         .set({ password_hash: hashedNewPassword })
         .where(eq(user.id, userId));
     } catch (error) {
-      throw new Error('Failed to update password', {
+      throw new InternalServerErrorException('Failed to update password', {
         cause: error,
       });
     }
   }
   // Register a new user
-  async register(userData: CreateUserDtoTs) {
-    const userRole = await this.db
-      .select()
-      .from(user_roles)
-      .where(eq(user_roles.role_name, UserRole.CUSTOMER))
-      .limit(1);
-    const hashedPassword = await bcrypt.hash(userData.password, 10);
-    const [userRecord] = await this.db
-      .insert(user)
-      .values({
-        first_name: userData.first_name,
-        last_name: userData.last_name,
-        email: userData.email,
-        password_hash: hashedPassword,
-        role_id: userRole[0].id,
-      })
-      .returning();
-    return { userRecord };
+  async register(userData: CreateUserDto) {
+    try {
+      const userRole = await this.db
+        .select()
+        .from(user_roles)
+        .where(eq(user_roles.role_name, UserRole.CUSTOMER))
+        .limit(1);
+      const hashedPassword = await bcrypt.hash(userData.password, 10);
+      const [userRecord] = await this.db
+        .insert(user)
+        .values({
+          first_name: userData.first_name,
+          last_name: userData.last_name,
+          email: userData.email,
+          password_hash: hashedPassword,
+          role_id: userRole[0].id,
+        })
+        .returning();
+      return userRecord;
+    } catch (error) {
+      throw new InternalServerErrorException('Failed to register user', {
+        cause: error,
+      });
+    }
   }
   // User login
-  async login(login: LoginDtoTs, res: express.Response) {
-    const userExists = await this.findByEmail(login.email);
-    if (!userExists) {
-      throw new HttpException('Invalid credentials', HttpStatus.UNAUTHORIZED);
-    }
-    const isPasswordValid = await bcrypt.compare(
-      login.password,
-      userExists.password_hash,
-    );
-    if (!isPasswordValid) {
-      throw new HttpException('Invalid credentials', HttpStatus.UNAUTHORIZED);
-    }
-    const payload = { sub: userExists.id, email: userExists.email };
-    const expiresIn = process.env.JWT_EXPIRES_IN
-      ? parseInt(process.env.JWT_EXPIRES_IN, 10)
-      : 3600;
-    const access_token = await this.jwtService.signAsync(payload, {
-      expiresIn,
-      secret: process.env.JWT_SECRET || 'defaultSecret',
-    });
-    const filteredUser = { ...userExists, password_hash: undefined };
-    res.cookie('access_token', access_token, {
-      // httpOnly: true,
-      // secure: process.env.NODE_ENV === "production",
-    });
+  async login(login: LoginDto, res: express.Response) {
+    try {
+      const userExists = await this.findByEmail(login.email);
+      if (!userExists || !userExists.password_hash) {
+        throw new HttpException('Invalid credentials', HttpStatus.UNAUTHORIZED);
+      }
+      const isPasswordValid = await bcrypt.compare(
+        login.password,
+        userExists.password_hash,
+      );
+      if (!isPasswordValid) {
+        throw new HttpException('Invalid credentials', HttpStatus.UNAUTHORIZED);
+      }
+      const payload = { sub: userExists.id, email: userExists.email };
+      const expiresIn = process.env.JWT_EXPIRES_IN
+        ? parseInt(process.env.JWT_EXPIRES_IN, 10)
+        : 3600;
+      const access_token = await this.jwtService.signAsync(payload, {
+        expiresIn,
+        secret: process.env.JWT_SECRET || 'defaultSecret',
+      });
+      const filteredUser = { ...userExists, password_hash: undefined };
+      res.cookie('access_token', access_token, {
+        // httpOnly: true,
+        // secure: process.env.NODE_ENV === "production",
+      });
 
-    res.send({
-      user: filteredUser,
-      message: 'Login successful',
-    });
+      res.send(filteredUser);
+    } catch (error) {
+      throw new InternalServerErrorException('Failed to login user', {
+        cause: error,
+      });
+    }
   }
   // Find user by email
   async findByEmail(email: string) {
@@ -175,7 +187,7 @@ export class UsersService {
       }
       return userRecord;
     } catch (error) {
-      throw new Error('Failed to find user by email', {
+      throw new InternalServerErrorException('Failed to find user by email', {
         cause: error,
       });
     }
@@ -191,11 +203,9 @@ export class UsersService {
       if (!userRecord) {
         return null;
       }
-      return {
-        userRecord,
-      };
+      return userRecord;
     } catch (error) {
-      throw new Error('Failed to find user by payload', {
+      throw new InternalServerErrorException('Failed to find user by payload', {
         cause: error,
       });
     }
@@ -208,9 +218,13 @@ export class UsersService {
         .where(eq(user.id, userId));
       return {
         message: 'User disabled successfully',
+        status: HttpStatus.OK,
+        success: true,
       };
     } catch (error) {
-      throw new Error('Failed to disable user', { cause: error });
+      throw new InternalServerErrorException('Failed to disable user', {
+        cause: error,
+      });
     }
   }
 }

@@ -1,4 +1,3 @@
-// src/product/dto/create-product.dto.ts
 import {
   IsString,
   IsNumber,
@@ -6,8 +5,8 @@ import {
   IsArray,
   IsOptional,
   ValidateNested,
-  IsObject,
   IsEnum,
+  IsNumberString,
 } from 'class-validator';
 import { Type } from 'class-transformer';
 import { ProductStatus } from 'src/drizzle/types/types';
@@ -19,39 +18,13 @@ class FeatureDto {
   @IsString()
   description!: string;
 }
-export class VariantDto {
-  @IsString()
-  variant_name!: string;
-
-  @IsObject()
-  attributes!: Record<string, any>;
-
-  @IsString()
-  sku!: string;
-
-  @IsString()
-  price!: string;
-
-  @IsNumber()
-  stock_quantity!: number;
-
-  @IsOptional()
-  @IsString()
-  seo_meta?: string;
-}
-export class CategoryDto {
-  @IsString()
-  id!: string;
-
-  @IsString()
-  name!: string;
-}
 export class ProductImgDto {
   @IsString()
   url!: string;
   @IsEnum(['main', 'gallery', 'thumbnail'])
   type!: 'main' | 'gallery' | 'thumbnail';
 }
+
 export class CreateProductDto {
   @IsString()
   name!: string;
@@ -59,35 +32,37 @@ export class CreateProductDto {
   @IsString()
   description!: string;
 
-  @IsString()
-  base_price!: string;
-
-  @IsString()
-  discount_percent?: string;
-
-  @IsNumber()
-  stock_quantity!: number;
-
-  @IsString()
-  sku?: string;
-
-  @IsString()
-  category!: CategoryDto;
-
-  @IsEnum(ProductStatus)
-  status!: ProductStatus;
-
-  @IsBoolean()
-  has_variants!: boolean;
-
   @IsArray()
   @ValidateNested({ each: true })
   @Type(() => FeatureDto)
   features!: FeatureDto[];
 
-  @IsArray()
-  @ValidateNested({ each: true })
-  @Type(() => VariantDto)
+  @IsString()
+  category_id!: string;
+
   @IsOptional()
-  variants?: VariantDto[];
+  @IsEnum(ProductStatus)
+  status?: ProductStatus;
+
+  @IsOptional()
+  @IsString()
+  tax_profile?: string;
+
+  @IsOptional()
+  @IsBoolean()
+  has_variants?: boolean;
+
+  @IsNumberString()
+  base_price!: string;
+
+  @IsNumberString()
+  discount_percent!: string;
+
+  @IsNumber()
+  @Type(() => Number)
+  stock_quantity?: number;
+
+  @IsOptional()
+  @IsString()
+  sku?: string;
 }

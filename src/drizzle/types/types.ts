@@ -28,6 +28,7 @@ export enum ProductStatus {
   ACTIVE = 'active',
   INACTIVE = 'inactive',
   DISCONTINUED = 'discontinued',
+  DRAFT = 'draft',
 }
 export enum OrderStatus {
   PENDING = 'pending',
@@ -69,12 +70,15 @@ export enum VendorDocumentType {
   VendorInformation = 'vendor_information',
   BusinessContinuityPlan = 'business_continuity_plan',
 }
-export interface VendorObject {
+export interface VendorType {
   user_role: Role;
   store_name: string;
   phone_number: string;
   store_owner_first_name: string;
   store_owner_last_name: string;
+  company_structure: string;
+  company_domain: string;
+  store_description?: string;
   category: string;
   email: string;
   first_name: string;
