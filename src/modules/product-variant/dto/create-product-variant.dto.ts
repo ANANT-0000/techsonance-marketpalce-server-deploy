@@ -1,27 +1,36 @@
-import { Type } from 'class-transformer';
-import { IsNumber, IsObject, IsOptional, IsString } from 'class-validator';
+import { Transform, Type } from 'class-transformer';
+import {
+  IsEnum,
+  IsNumber,
+  IsObject,
+  IsOptional,
+  IsString,
+} from 'class-validator';
+import { ProductStatus } from 'src/drizzle/types/types';
 
 export class CreateProductVariantDto {
-  @IsOptional()
   @IsString()
-  variant_name?: string;
-
-  @IsOptional()
+  @Transform(({ value }: { value: string }) => value.trim())
+  variant_name!: string;
+  
+  @IsString()
+  @Transform(({ value }: { value: string }) => value.trim())
+  sku!: string;
+  @IsString()
+  @Transform(({ value }: { value: string }) => value.trim())
+  price!: string;
   @IsObject()
   attributes!: Record<string, any>;
-
-  @IsOptional()
-  @IsString()
-  sku!: string;
-
-  @IsNumber()
-  @Type(() => Number)
-  price!: number;
-
+  @IsEnum(ProductStatus)
+  status!: ProductStatus;
   @IsNumber()
   stock_quantity!: number;
 
   @IsOptional()
   @IsString()
-  seo_meta?: string;
+  @Transform(({ value }: { value: string }) => value.trim())
+  seo_meta!: string | null;
+
+  @IsString()
+  product_id!: string;
 }

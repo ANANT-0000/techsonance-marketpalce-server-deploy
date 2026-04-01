@@ -46,6 +46,7 @@ export const coupons = pg.pgTable('coupons', {
     .$onUpdate(() => new Date()),
   company_id: pg.uuid('company_id').references(() => company.id),
 });
+
 export const carts = pg.pgTable('carts', {
   id: pg.uuid('id').primaryKey().defaultRandom(),
   company_id: pg.uuid('company_id').references(() => company.id),
@@ -193,7 +194,7 @@ export const product_variants = pg.pgTable(
   },
   (table) => [
     pg.index('idx_product_variants_product_id').on(table.product_id),
-    pg.index('idx_product_variants_sku').on(table.sku),
+    pg.index('idx_product_variants_sku').on(table.sku), 
     pg.index('idx_product_variants_status').on(table.status),
   ],
 );

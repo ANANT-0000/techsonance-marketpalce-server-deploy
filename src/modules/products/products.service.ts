@@ -49,6 +49,7 @@ export class ProductsService {
         where: (products) => eq(products.vendor_id, vendorId),
         with: {
           images: true,
+          variants: true,
         },
       });
       console.log('response', product);
@@ -99,6 +100,7 @@ export class ProductsService {
     companyId: string,
     files?: ProductFiles,
   ) {
+    console.log('productDto', productDto);
     const finalResults: { url: string; type: productImageType }[] = [];
 
     if (files?.product?.[0]) {
@@ -154,11 +156,29 @@ export class ProductsService {
         const [createdProduct] = await tx
           .insert(products)
           .values(productInsert)
-          .returning();
+          .returning({ id: products.id });
+
         console.log('createdProduct', createdProduct);
+        const [variantRecords] = await tx
+          .insert(product_variants)
+          .values({
+            variant_name: productDto.variant_name || productDto.name,
+            sku: productDto.sku,
+            price: productDto.price || productDto.base_price.toString(),
+            attributes: productDto.attributes,
+            status: productDto.status,
+            stock_quantity: productDto.stock_quantity,
+            seo_meta: productDto.seo_meta ?? null,
+            product_id: createdProduct.id,
+          })
+          .returning({
+            id: product_variants.id,
+          });
+        console.log('variantRecords', variantRecords);
         if (finalResults.length > 0) {
           const imageInserts = finalResults.map((image, index) => ({
-            product_id: createdProduct.id,
+            variant_id: variantRecords?.id,
+            product_id: createdProduct?.id,
             image_url: image.url,
             alt_text: `${image.type} Image ${index + 1}`,
             is_primary: index === 0,

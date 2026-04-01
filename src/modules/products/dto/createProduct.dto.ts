@@ -7,8 +7,9 @@ import {
   ValidateNested,
   IsEnum,
   IsNumberString,
+  IsObject,
 } from 'class-validator';
-import { Type } from 'class-transformer';
+import { Transform, Type } from 'class-transformer';
 import { ProductStatus } from 'src/drizzle/types/types';
 
 class FeatureDto {
@@ -50,7 +51,7 @@ export class CreateProductDto {
 
   @IsOptional()
   @IsBoolean()
-  has_variants?: boolean;
+  has_variants!: boolean;
 
   @IsNumberString()
   base_price!: string;
@@ -60,9 +61,26 @@ export class CreateProductDto {
 
   @IsNumber()
   @Type(() => Number)
-  stock_quantity?: number;
+  stock_quantity!: number;
+
+  @Transform(({ value }) =>
+    typeof value !== 'string' ? value.toString() : value,
+  )
+  @IsString()
+  variant_name!: string;
+
+  @IsString()
+  sku!: string;
+ 
+  @IsOptional()
+  @IsString()
+  price!: string;
+
+  @IsOptional()
+  @IsArray()
+  attributes!: Record<string, any>[];
 
   @IsOptional()
   @IsString()
-  sku?: string;
-}
+  seo_meta!: string;
+} 
