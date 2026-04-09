@@ -14,6 +14,8 @@ import { ProductVariantService } from './product-variant.service';
 import { CreateProductVariantDto } from './dto/create-product-variant.dto';
 import { UploadToCloud } from 'src/common/decorators/upload.decorator';
 import { ParseJsonPipe } from 'src/common/pipes/parseJsonPipe';
+import { UpdateProductVariantDto } from './dto/update-product-variant.dto';
+import { type ProductFiles } from 'src/common/Types/index.type';
 
 @Controller({
   version: '1',
@@ -40,28 +42,35 @@ export class ProductVariantController {
     return this.productVariantService.create(createProductVariantDto, files);
   }
 
-  @Get('product-variants/:vendorId')
+  @Get('vendor-products-variants/:vendorId')
   findAll(@Param('vendorId') vendorId: string) {
     return this.productVariantService.findAll(vendorId);
   }
 
-  @Get(':id')
-  async findOne(@Param('id') id: string) {
+  @Get(':productId')
+  findAllVariants(@Param('productId') productId: string) {
+    return this.productVariantService.findAllVariantsByProductId(productId);
+  }
+  @Get('variant/:id')
+  findOne(@Param('id') id: string) {
     return this.productVariantService.findOne(id);
   }
 
-  // @Patch(':id')
-  // async update(
-  //   @Param('id') id: string,
-  //   @Body() updateProductVariantDto: UpdateProductVariantDto,
-  //   @UploadedFiles() files: Express.Multer.File[],
-  // ) {
-  //   return this.productVariantService.update(
-  //     id,
-  //     updateProductVariantDto,
-  //     files,
-  //   );
-  // }
+  @Patch(':id')
+  async update(
+    @Param('id') id: string,
+    @Body('variant_data', ParseJsonPipe)
+    updateProductVariantDto: UpdateProductVariantDto,
+    @Body('imagesToDelete', ParseJsonPipe) imagesToDelete: string[],
+    @UploadedFiles() files: ProductFiles,
+  ) {
+    return this.productVariantService.update(
+      id,
+      updateProductVariantDto,
+      imagesToDelete,
+      files,
+    );
+  }
 
   @Delete(':id')
   async delete(@Param('id') id: string) {

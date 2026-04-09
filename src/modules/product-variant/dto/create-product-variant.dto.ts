@@ -12,7 +12,7 @@ export class CreateProductVariantDto {
   @IsString()
   @Transform(({ value }: { value: string }) => value.trim())
   variant_name!: string;
-  
+
   @IsString()
   @Transform(({ value }: { value: string }) => value.trim())
   sku!: string;

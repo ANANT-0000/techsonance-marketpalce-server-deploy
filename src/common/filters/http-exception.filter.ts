@@ -35,8 +35,6 @@ export class HttpExceptionFilter implements ExceptionFilter {
     if (typeof exceptionResponse === 'string') {
       return exceptionResponse;
     }
-
-    // Now safely typed as object
     const res = exceptionResponse as ExceptionResponseObject;
     return res.message ?? exception.message ?? 'An error occurred';
   }

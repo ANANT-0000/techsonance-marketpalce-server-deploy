@@ -8,6 +8,7 @@ import {
   ShippingStatus,
 } from '../types/types';
 import { AnyPgColumn } from 'drizzle-orm/pg-core';
+import { unique } from 'drizzle-orm/pg-core';
 
 export const categories = pg.pgTable('categories', {
   id: pg.uuid('id').primaryKey().defaultRandom(),
@@ -103,7 +104,6 @@ export const products = pg.pgTable(
       .notNull(),
     stock_quantity: pg.integer('stock_quantity').default(0),
     status: ProductStatusEnum().notNull().default(ProductStatus.INACTIVE),
-    has_variants: pg.boolean('has_variants').notNull().default(false),
     created_at: pg.timestamp('created_at').notNull().defaultNow(),
     updated_at: pg
       .timestamp('updated_at')
@@ -194,7 +194,7 @@ export const product_variants = pg.pgTable(
   },
   (table) => [
     pg.index('idx_product_variants_product_id').on(table.product_id),
-    pg.index('idx_product_variants_sku').on(table.sku), 
+    pg.index('idx_product_variants_sku').on(table.sku),
     pg.index('idx_product_variants_status').on(table.status),
   ],
 );
@@ -218,24 +218,34 @@ export const product_images = pg.pgTable('product_images', {
     .uuid('product_id')
     .references(() => products.id, { onDelete: 'cascade' })
     .notNull(),
-  variants_id: pg
-    .uuid('variants_id')
+  variant_id: pg
+    .uuid('variant_id')
     .references(() => product_variants.id, { onDelete: 'cascade' }),
 });
-export const cart_items = pg.pgTable('cart_items', {
-  id: pg.uuid('id').primaryKey().defaultRandom(),
-  cart_id: pg.uuid('cart_id').references(() => carts.id),
-  product_variant_id: pg
-    .uuid('product_variant_id')
-    .references(() => product_variants.id, { onDelete: 'cascade' }),
-  quantity: pg.integer('quantity').notNull(),
-  created_at: pg.timestamp('created_at').notNull().defaultNow(),
-  updated_at: pg
-    .timestamp('updated_at')
-    .notNull()
-    .defaultNow()
-    .$onUpdate(() => new Date()),
-});
+export const cart_items = pg.pgTable(
+  'cart_items',
+  {
+    id: pg.uuid('id').primaryKey().defaultRandom(),
+    cart_id: pg
+      .uuid('cart_id')
+      .references(() => carts.id, { onDelete: 'cascade' }),
+    product_variant_id: pg
+      .uuid('product_variant_id')
+      .references(() => product_variants.id, { onDelete: 'cascade' }),
+    quantity: pg.integer('quantity').notNull(),
+    created_at: pg.timestamp('created_at').notNull().defaultNow(),
+    updated_at: pg
+      .timestamp('updated_at')
+      .notNull()
+      .defaultNow()
+      .$onUpdate(() => new Date()),
+  },
+  (table) => {
+    return {
+      cartProductUnique: unique().on(table.cart_id, table.product_variant_id),
+    };
+  },
+);
 export const product_reviews = pg.pgTable('product_reviews', {
   id: pg.uuid('id').primaryKey().defaultRandom(),
   rating: pg.integer('rating').notNull(),
@@ -254,21 +264,32 @@ export const product_reviews = pg.pgTable('product_reviews', {
     .references(() => user.id, { onDelete: 'cascade' }),
   company_id: pg.uuid('company_id').references(() => company.id),
 });
-export const wishlist_items = pg.pgTable('wishlist_items', {
-  id: pg.uuid('id').primaryKey().defaultRandom(),
-  wishlist_id: pg
-    .uuid('wishlist_id')
-    .references(() => wishlist.id, { onDelete: 'cascade' }),
-  product_variant_id: pg
-    .uuid('product_variant_id')
-    .references(() => product_variants.id, { onDelete: 'cascade' }),
-  created_at: pg.timestamp('created_at').notNull().defaultNow(),
-  updated_at: pg
-    .timestamp('updated_at')
-    .notNull()
-    .defaultNow()
-    .$onUpdate(() => new Date()),
-});
+export const wishlist_items = pg.pgTable(
+  'wishlist_items',
+  {
+    id: pg.uuid('id').primaryKey().defaultRandom(),
+    wishlist_id: pg
+      .uuid('wishlist_id')
+      .references(() => wishlist.id, { onDelete: 'cascade' }),
+    product_variant_id: pg
+      .uuid('product_variant_id')
+      .references(() => product_variants.id, { onDelete: 'cascade' }),
+    created_at: pg.timestamp('created_at').notNull().defaultNow(),
+    updated_at: pg
+      .timestamp('updated_at')
+      .notNull()
+      .defaultNow()
+      .$onUpdate(() => new Date()),
+  },
+  (table) => {
+    return {
+      wishlistProductUnique: unique().on(
+        table.wishlist_id,
+        table.product_variant_id,
+      ),
+    };
+  },
+);
 
 export const payment_status_enum = pg.pgEnum(
   'payment_status_enum',

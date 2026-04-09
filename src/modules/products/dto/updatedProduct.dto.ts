@@ -25,8 +25,16 @@ export class ProductImgDto {
   @IsEnum(['main', 'gallery', 'thumbnail'])
   type!: 'main' | 'gallery' | 'thumbnail';
 }
+class Attributes {
+  @IsString()
+  @Transform(({ value }: { value: string }) => value.trim())
+  name!: string;
 
-export class CreateProductDto {
+  @IsString()
+  @Transform(({ value }: { value: string }) => value.trim())
+  value!: string;
+}
+export class UpdateProductDto {
   @IsString()
   name!: string;
 
@@ -64,17 +72,25 @@ export class CreateProductDto {
   variant_name!: string;
 
   @IsString()
+  @Transform(({ value }: { value: string }) => value.trim())
+  variant_id!: string;
+
+  @IsString()
   sku!: string;
 
   @IsOptional()
   @IsString()
   price!: string;
 
-  @IsOptional()
   @IsArray()
-  attributes!: Record<string, any>[];
+  @ValidateNested({ each: true })
+  attributes!: Attributes[];
 
   @IsOptional()
   @IsString()
   seo_meta!: string;
+
+  @IsOptional()
+  @IsArray()
+  imagesToDelete!: string[];
 }

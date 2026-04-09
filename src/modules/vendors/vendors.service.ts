@@ -149,6 +149,9 @@ export class VendorsService {
         return;
       });
     } catch (error) {
+      if (error instanceof HttpException) {
+        throw error;
+      }
       throw new InternalServerErrorException('Failed to register vendor', {
         cause: error,
       });
@@ -176,16 +179,16 @@ export class VendorsService {
           .where(eq(userTable.email, loginDto.email));
         console.log('user.email', loginDto.email, 'userRecord', userRecord);
         if (!userRecord || !userRecord.id || !userRecord.password_hash) {
-          return new HttpException('User not found', HttpStatus.NOT_FOUND);
+          throw new UnauthorizedException('User not found');
         }
         console.log(loginDto.password, 'password', userRecord.password_hash);
         const isPasswordValid = await bcrypt.compare(
           loginDto.password,
           userRecord.password_hash,
         );
-
         if (!isPasswordValid) {
-          return new HttpException('Invalid password', HttpStatus.UNAUTHORIZED);
+          console.log('isPasswordValid', isPasswordValid);
+          throw new UnauthorizedException('Invalid password');
         }
         const [vendorRecord]: Partial<VendorType>[] = await tx
           .select()
@@ -193,20 +196,19 @@ export class VendorsService {
           .where(eq(vendorTable.user_id, userRecord.id));
         console.log('vendorRecord', vendorRecord);
         if (!userRecord.role_id) {
-          throw new HttpException('User role not found', HttpStatus.NOT_FOUND);
+          throw new UnauthorizedException('User role not found');
         }
         const [roleRecord]: Partial<UserRoleType>[] = await tx
           .select({ role_name: user_rolesTable.role_name })
           .from(user_rolesTable)
           .where(eq(user_rolesTable.id, userRecord.role_id));
         console.log('roleRecord', roleRecord);
-        if (!vendorRecord)
-          return new HttpException('Vendor not found', HttpStatus.NOT_FOUND);
+        if (!vendorRecord) throw new UnauthorizedException('Vendor not found');
         const isVendorApproved =
           vendorRecord.vendor_status === UserStatus.ACTIVE;
         console.log('isVendorApproved', isVendorApproved);
         if (!isVendorApproved)
-          return new HttpException(
+          throw new HttpException(
             'Vendor application is still under review',
             HttpStatus.UNAUTHORIZED,
           );
@@ -263,6 +265,12 @@ export class VendorsService {
       console.log('response', response);
       return response;
     } catch (error) {
+      if (
+        error instanceof HttpException ||
+        error instanceof UnauthorizedException
+      ) {
+        throw error;
+      }
       throw new InternalServerErrorException('Failed to Login vendor', {
         cause: error,
       });
@@ -281,7 +289,13 @@ export class VendorsService {
       }
       return vendorRecord;
     } catch (error) {
-      throw new Error('Failed to find vendor by email', {
+      if (
+        error instanceof HttpException ||
+        error instanceof UnauthorizedException
+      ) {
+        throw error;
+      }
+      throw new InternalServerErrorException('Failed to find vendor by email', {
         cause: error,
       });
     }
@@ -294,9 +308,12 @@ export class VendorsService {
         .where(eq(vendorTable.id, vendorId))
         .catch((error) => {
           console.error('Database update error:', error);
-          throw new Error('Failed to update vendor status in database', {
-            cause: error,
-          });
+          throw new InternalServerErrorException(
+            'Failed to update vendor status in database',
+            {
+              cause: error,
+            },
+          );
         });
       const [vendorUser] = await this.db
         .select({ email: userTable.email })
@@ -316,6 +333,9 @@ export class VendorsService {
         status: HttpStatus.OK,
       };
     } catch (error) {
+      if (error instanceof HttpException) {
+        throw error;
+      }
       throw new InternalServerErrorException('Failed to approve vendor', {
         cause: error,
       });
@@ -343,7 +363,7 @@ export class VendorsService {
           .where(eq(vendorTable.id, vendorId));
 
         if (!vendorUser.email) {
-          throw new Error(
+          throw new UnauthorizedException(
             `User linked to vendor with ID ${vendorId} has no email.`,
           );
         }
@@ -352,7 +372,7 @@ export class VendorsService {
         };
       });
       if (!vendorUser || !vendorUser.email) {
-        throw new Error(
+        throw new UnauthorizedException(
           `Failed to retrieve vendor user email for vendor ID ${vendorId}.`,
         );
       }
@@ -366,6 +386,12 @@ export class VendorsService {
       };
     } catch (error) {
       console.error('RejectVendor Error:', error);
+      if (
+        error instanceof HttpException ||
+        error instanceof UnauthorizedException
+      ) {
+        throw error;
+      }
       throw new InternalServerErrorException('Failed to reject vendor', {
         cause: error,
       });
@@ -379,7 +405,7 @@ export class VendorsService {
         .where(eq(vendorTable.id, vendorId))
         .limit(1);
       if (!vendorRow || !vendorRow.user_id) {
-        throw new Error('Vendor not found');
+        throw new UnauthorizedException('Vendor not found');
       }
       const deleteUserResult = await this.db
         .delete(userTable)
@@ -387,6 +413,12 @@ export class VendorsService {
 
       return;
     } catch (error) {
+      if (
+        error instanceof HttpException ||
+        error instanceof UnauthorizedException
+      ) {
+        throw error;
+      }
       throw new InternalServerErrorException('Failed to remove vendor', {
         cause: error,
       });
@@ -461,6 +493,9 @@ export class VendorsService {
         return;
       });
     } catch (error) {
+      if (error instanceof HttpException) {
+        throw error;
+      }
       throw new InternalServerErrorException(
         'Failed to complete vendor profile',
         {
@@ -491,6 +526,9 @@ export class VendorsService {
       console.log(applications);
       return applications;
     } catch (error) {
+      if (error instanceof HttpException) {
+        throw error;
+      }
       throw new InternalServerErrorException(
         'Failed to retrieve vendor applications',
         {
@@ -527,6 +565,12 @@ export class VendorsService {
         message: 'Vendor status updated successfully',
       };
     } catch (error) {
+      if (
+        error instanceof HttpException ||
+        error instanceof UnauthorizedException
+      ) {
+        throw error;
+      }
       throw new InternalServerErrorException('Failed to update vendor status', {
         cause: error,
       });

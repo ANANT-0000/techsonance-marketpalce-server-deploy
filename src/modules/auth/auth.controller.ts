@@ -2,6 +2,9 @@ import {
   Body,
   Controller,
   Get,
+  HttpCode,
+  HttpStatus,
+  Param,
   Post,
   Res,
   UploadedFiles,
@@ -26,6 +29,7 @@ export class AuthController {
   }
   @Post('register-vendor')
   @UploadToCloud([{ name: 'documents', maxCount: 20 }])
+  @HttpCode(HttpStatus.CREATED)
   async signUpVendor(
     @Body('vendor') body: any,
     @UploadedFiles() files: Express.Multer.File[],
@@ -37,18 +41,25 @@ export class AuthController {
     return vendor;
   }
   @Post('login-vendor')
+  @HttpCode(HttpStatus.OK)
   async loginVendor(
     @Body() loginDto: LoginDto,
     @Res({ passthrough: true }) res: express.Response,
   ) {
     return await this.vendorService.vendorLogin(loginDto, res);
   }
-  @Post('register-user')
-  async signUpUser(@Body() createUser: CreateUserDto) {
-    const result = await this.userService.register(createUser);
+  @Post('register-user/:companyId')
+  @HttpCode(HttpStatus.CREATED)
+  async signUpUser(
+    @Param('companyId') companyId: string,
+    @Body('customer_data') createUser: CreateUserDto,
+  ) {
+    console.log(createUser);
+    const result = await this.userService.register(createUser, companyId);
     return result;
   }
   @Post('login-user')
+  @HttpCode(HttpStatus.OK)
   async loginUser(
     @Body() loginDto: LoginDto,
     @Res({ passthrough: true }) res: express.Response,
@@ -57,14 +68,17 @@ export class AuthController {
     return await this.userService.login(loginDto, res);
   }
   @Post('logout')
+  @HttpCode(HttpStatus.OK)
   logout(@Res({ passthrough: true }) res: express.Response) {
     return this.authService.logout(res);
   }
   @Post('forget-password')
+  @HttpCode(HttpStatus.OK)
   async forgetPassword(@Body() body: { email: string }) {
     return await this.authService.forgetPassword(body.email);
   }
   @Post('reset-password')
+  @HttpCode(HttpStatus.OK)
   async resetPassword(@Body() body: { token: string; newPassword: string }) {
     return await this.authService.resetPassword(body.token, body.newPassword);
   }

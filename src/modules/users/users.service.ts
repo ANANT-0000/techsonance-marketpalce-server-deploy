@@ -8,7 +8,7 @@ import {
 } from '@nestjs/common';
 import { user, user_roles } from 'src/drizzle/schema';
 import { UserRole, UserStatus } from 'src/drizzle/types/types';
-import { and, eq } from 'drizzle-orm';
+import { and, eq, InferSelectModel } from 'drizzle-orm';
 import { DRIZZLE } from 'src/drizzle/drizzle.module';
 import { type DrizzleDB } from 'src/drizzle/types/drizzle';
 import bcrypt from 'bcryptjs';
@@ -16,6 +16,8 @@ import { JwtService } from '@nestjs/jwt';
 import express from 'express';
 import { CreateUserDto, LoginDto } from './dto/userAuth.dto.ts.js';
 import { UpdateUserDtoTs } from './dto/update-user.dto.ts.js';
+type UserRecord = InferSelectModel<typeof user>;
+type UserRoleRecord = InferSelectModel<typeof user_roles>;
 @Injectable()
 export class UsersService {
   constructor(
@@ -114,14 +116,26 @@ export class UsersService {
     }
   }
   // Register a new user
-  async register(userData: CreateUserDto) {
+  async register(userData: CreateUserDto, companyId: string) {
     try {
+      console.log('create user', userData);
+      console.log('company ID', companyId);
       const userRole = await this.db
         .select()
         .from(user_roles)
         .where(eq(user_roles.role_name, UserRole.CUSTOMER))
-        .limit(1);
+        .limit(1)
+        .catch((error) => {
+          console.error('Error fetching user role:', error);
+          throw new InternalServerErrorException('Failed to fetch user role', {
+            cause: error,
+          });
+        });
+      if (userRole.length === 0) {
+        throw new InternalServerErrorException('Customer role not found');
+      }
       const hashedPassword = await bcrypt.hash(userData.password, 10);
+
       const [userRecord] = await this.db
         .insert(user)
         .values({
@@ -130,10 +144,18 @@ export class UsersService {
           email: userData.email,
           password_hash: hashedPassword,
           role_id: userRole[0].id,
+          company_id: companyId,
         })
         .returning();
       return userRecord;
     } catch (error) {
+      if (
+        error instanceof HttpException ||
+        error instanceof InternalServerErrorException
+      ) {
+        throw error;
+      }
+
       throw new InternalServerErrorException('Failed to register user', {
         cause: error,
       });
@@ -142,18 +164,31 @@ export class UsersService {
   // User login
   async login(login: LoginDto, res: express.Response) {
     try {
-      const userExists = await this.findByEmail(login.email);
-      if (!userExists || !userExists.password_hash) {
+      const records = await this.findByEmail(login.email);
+      if (!records) {
         throw new HttpException('Invalid credentials', HttpStatus.UNAUTHORIZED);
       }
+      const { userRecord, roleRecord } = records;
+      console.log(userRecord, roleRecord);
+      if (!userRecord || !userRecord?.password_hash) {
+        throw new HttpException('Invalid credentials', HttpStatus.UNAUTHORIZED);
+      }
+      console.log(userRecord, roleRecord);
       const isPasswordValid = await bcrypt.compare(
         login.password,
-        userExists.password_hash,
+        userRecord.password_hash,
       );
       if (!isPasswordValid) {
         throw new HttpException('Invalid credentials', HttpStatus.UNAUTHORIZED);
       }
-      const payload = { sub: userExists.id, email: userExists.email };
+      if (!userRecord?.id && !userRecord?.email) {
+        throw new HttpException(
+          'User record is incomplete',
+          HttpStatus.INTERNAL_SERVER_ERROR,
+        );
+      }
+
+      const payload = { sub: userRecord?.id, email: userRecord?.email };
       const expiresIn = process.env.JWT_EXPIRES_IN
         ? parseInt(process.env.JWT_EXPIRES_IN, 10)
         : 3600;
@@ -161,31 +196,49 @@ export class UsersService {
         expiresIn,
         secret: process.env.JWT_SECRET || 'defaultSecret',
       });
-      const filteredUser = { ...userExists, password_hash: undefined };
+      const filteredUser = {
+        ...userRecord,
+        role: roleRecord?.role_name,
+        password_hash: undefined,
+      };
+      console.log(filteredUser);
       res.cookie('access_token', access_token, {
-        // httpOnly: true,
-        // secure: process.env.NODE_ENV === "production",
+        httpOnly: true,
+        secure: process.env.NODE_ENV === 'production',
       });
 
-      res.send(filteredUser);
+      return filteredUser;
     } catch (error) {
+      if (error instanceof HttpException) {
+        throw error;
+      }
       throw new InternalServerErrorException('Failed to login user', {
         cause: error,
       });
     }
   }
   // Find user by email
-  async findByEmail(email: string) {
+  async findByEmail(
+    email: string,
+  ): Promise<{ userRecord: UserRecord; roleRecord: UserRoleRecord } | null> {
     try {
       const [userRecord] = await this.db
         .select()
         .from(user)
         .where(eq(user.email, email))
         .limit(1);
-      if (!userRecord) {
+      if (!userRecord.role_id) {
         return null;
       }
-      return userRecord;
+      const [roleRecord] = await this.db
+        .select()
+        .from(user_roles)
+        .where(eq(user_roles.id, userRecord.role_id))
+        .limit(1);
+      if (!roleRecord) {
+        return null;
+      }
+      return { userRecord, roleRecord };
     } catch (error) {
       throw new InternalServerErrorException('Failed to find user by email', {
         cause: error,

@@ -32,7 +32,7 @@ export class RolesService {
     }
   }
   async createRole(role: Role) {
-    console.log('role', role);
+    console.log('role creating', role);
     if (!role) {
       throw new BadRequestException('Role is required');
     }

@@ -1,14 +1,19 @@
 import {
+  HttpException,
+  HttpStatus,
   Inject,
   Injectable,
   InternalServerErrorException,
 } from '@nestjs/common';
 import { CreateProductVariantDto } from './dto/create-product-variant.dto';
 import { DRIZZLE, type DrizzleService } from 'src/drizzle/drizzle.module';
-import { eq, inArray } from 'drizzle-orm';
+import { and, eq, inArray } from 'drizzle-orm';
 import { product_images, product_variants, products } from 'src/drizzle/schema';
 import { productImageType } from 'src/drizzle/types/types';
 import { UploadToCloudService } from 'src/utils/upload-to-cloud/upload-to-cloud.service';
+import { ProductFiles } from 'src/common/Types/index.type';
+import { UpdateProductDto } from '../products/dto/updatedProduct.dto';
+import { UpdateProductVariantDto } from './dto/update-product-variant.dto';
 @Injectable()
 export class ProductVariantService {
   constructor(
@@ -48,7 +53,7 @@ export class ProductVariantService {
           .returning({
             id: product_variants.id,
           });
-
+        console.log('variantRecord', variantRecord);
         if (!variantRecord) {
           console.log('failed to create variant ', variantRecord);
           throw new Error('Failed to create product variant');
@@ -84,16 +89,22 @@ export class ProductVariantService {
           throw new InternalServerErrorException('Failed variant record');
         }
         if (finalResults.length > 0) {
-          const imageInserts = finalResults.map((image, index) => ({
-            product_id: productId.id,
-            variant_id: variantRecord.id,
-            image_url: `${image.url}`,
-            alt_text: `${image.type} Image ${index + 1}`,
-            is_primary: image.type === productImageType.MAIN,
-            imgType: image.type,
-          }));
+          const imageInserts = finalResults.map((image, index) => {
+            return {
+              product_id: productId.id,
+              variant_id: variantRecord.id,
+              image_url: `${image.url}`,
+              alt_text: `${image.type} Image ${index + 1}`,
+              is_primary: image.type === productImageType.MAIN,
+              imgType: image.type,
+            };
+          });
 
-          await this.db.insert(product_images).values(imageInserts);
+          const variantImgsResult = await tx
+            .insert(product_images)
+            .values(imageInserts)
+            .returning();
+          console.log('variantImgsResult', variantImgsResult);
         }
         return variantRecord;
       });
@@ -105,17 +116,38 @@ export class ProductVariantService {
       );
     }
   }
-
+  async findAllVariantsByProductId(productId: string) {
+    try {
+      console.log(productId);
+      const productVariants = await this.db.query.product_variants.findMany({
+        where: (product_variants) => eq(product_variants.product_id, productId),
+        with: {
+          images: true,
+        },
+      });
+      console.log('produc vA', productVariants);
+      const imgs = await this.db
+        .select()
+        .from(product_images)
+        .where(
+          eq(product_images.variant_id, '1616ba27-8095-49ff-af4c-8f2e013b7e21'),
+        );
+      console.log('imgs', imgs);
+      return productVariants;
+    } catch (error) {
+      console.error('Error fetching product variants by product ID:', error);
+      throw new InternalServerErrorException(
+        'Failed to fetch product variants by product ID',
+      );
+    }
+  }
   async findAll(vendorId: string) {
     try {
       const product = await this.db
-        .select({ id: products.id, has_variants: products.has_variants })
+        .select({ id: products.id })
         .from(products)
         .where(eq(products.vendor_id, vendorId));
       if (product.length === 0) {
-        return [];
-      }
-      if (product[0].has_variants === false) {
         return [];
       }
       const productIds = product.map((p) => p.id);
@@ -152,78 +184,126 @@ export class ProductVariantService {
     }
   }
 
-  // async update(
-  //   id: string,
-  //   updateProductVariantDto: any,
-  //   files: Express.Multer.File[],
-  // ) {
-  //   const updatedProductVariant = await this.db.transaction(async (tx) => {
-  //     const productVariant = await tx.query.product_variants.findFirst({
-  //       where: (product_variants) => eq(product_variants.id, id),
-  //     });
-  //     if (!productVariant) {
-  //       throw new Error(`Product variant with ID ${id} not found`);
-  //     }
-  //     const updatedProductVariantRecord = await tx
-  //       .update(product_variants)
-  //       .set({
-  //         variant_name: updateProductVariantDto.variant_name,
-  //         sku: updateProductVariantDto.sku,
-  //         price: updateProductVariantDto.price,
-  //         attributes: updateProductVariantDto.attributes,
-  //         status: updateProductVariantDto.status,
-  //         stock_quantity: updateProductVariantDto.stock_quantity,
-  //         seo_meta: updateProductVariantDto.seo_meta,
-  //       })
-  //       .where(eq(product_variants.id, id));
-  //     await tx.delete(product_images).where(eq(product_images.product_id, id));
-  //      const finalResults: { url: string; type: productImageType }[] = [];
+  async update(
+    id: string,
+    updateProductVariantDto: UpdateProductVariantDto,
+    imagesToDelete?: string[],
+    files?: ProductFiles,
+  ) {
+    const updateData: Partial<UpdateProductVariantDto> = {
+      variant_name: updateProductVariantDto.variant_name,
+      sku: updateProductVariantDto.sku,
+      price: updateProductVariantDto.price,
+      attributes: updateProductVariantDto.attributes,
+      status: updateProductVariantDto.status,
+      stock_quantity: updateProductVariantDto.stock_quantity,
+      seo_meta: updateProductVariantDto.seo_meta ?? null,
+    };
 
-  //           if (files?.product?.[0]) {
-  //             const mainRes = await this.uploadToCloudService.uploadFile(
-  //               files.product[0],
-  //             );
-  //             finalResults.push({
-  //               url: mainRes.secure_url,
-  //               type: productImageType.MAIN,
-  //             });
-  //           }
+    try {
+      const result = await this.db.transaction(async (tx) => {
+        const [existingVariant] = await tx
+          .select({
+            id: product_variants.id,
+            product_id: product_variants.product_id,
+          })
+          .from(product_variants)
+          .where(eq(product_variants.id, id))
+          .limit(1);
 
-  //           if (files?.product_spec && files.product_spec.length > 0) {
-  //             const galleryRes = await this.uploadToCloudService.uploadFiles(
-  //               files.product_spec,
-  //             );
-  //             finalResults.push(
-  //               ...galleryRes.map((res) => ({
-  //                 url: res.secure_url,
-  //                 type: productImageType.GALLERY,
-  //               })),
-  //             );
-  //           }
-  //           console.log('finalResults *******');
-  //           console.table(finalResults);
-  //           if (finalResults.length > 0) {
-  //             const imageInserts = finalResults.map((image, index) => ({
-  //               product_id: productId,
-  //               image_url: image.url,
-  //               alt_text: `${image.type} Image ${index + 1}`,
-  //               is_primary: image.type === productImageType.MAIN,
-  //               imgType: image.type,
-  //             }));
-  //             await this.db.insert(product_images).values(imageInserts);
+        if (!existingVariant) {
+          throw new HttpException(
+            'Product variant not found',
+            HttpStatus.NOT_FOUND,
+          );
+        }
 
-  //     return productVariant;
-  //   });
-  // }
+        await tx
+          .update(product_variants)
+          .set(updateData)
+          .where(eq(product_variants.id, id));
+
+        if (imagesToDelete && imagesToDelete.length > 0) {
+          await tx
+            .delete(product_images)
+            .where(
+              and(
+                eq(product_images.variant_id, id),
+                inArray(product_images.id, imagesToDelete),
+              ),
+            );
+        }
+
+        const finalResults: { url: string; type: productImageType }[] = [];
+
+        if (files?.product?.[0]) {
+          const mainRes = await this.uploadToCloudService.uploadFile(
+            files.product[0],
+          );
+          finalResults.push({
+            url: mainRes.secure_url,
+            type: productImageType.MAIN,
+          });
+        }
+
+        if (files?.product_spec && files.product_spec.length > 0) {
+          const galleryRes = await this.uploadToCloudService.uploadFiles(
+            files.product_spec,
+          );
+          finalResults.push(
+            ...galleryRes.map((res) => ({
+              url: res.secure_url,
+              type: productImageType.GALLERY,
+            })),
+          );
+        }
+
+        if (finalResults.length > 0 && existingVariant.product_id !== null) {
+          const imageInserts = finalResults.map((image, index) => {
+            if (!existingVariant.product_id) {
+              console.log('existing variant id is null', existingVariant);
+              throw new InternalServerErrorException(
+                'Failed to update product variant',
+              );
+            }
+            return {
+              variant_id: id,
+              product_id:
+                existingVariant.product_id,
+              image_url: image.url,
+              alt_text: `${image.type} Image ${index + 1}`,
+              is_primary: image.type === productImageType.MAIN,
+              imgType: image.type,
+            };
+          });
+
+          await tx.insert(product_images).values(imageInserts);
+        }
+
+        return { ...existingVariant, ...updateData };
+      });
+
+      return result;
+    } catch (error) {
+      if (error instanceof HttpException) throw error;
+
+      console.error('Update Error:', error);
+      throw new InternalServerErrorException(
+        'Failed to update product variant',
+      );
+    }
+  }
 
   async delete(id: string) {
     try {
+      if (!id) throw new HttpException('id required', HttpStatus.BAD_REQUEST);
       const result = await this.db
         .delete(product_variants)
         .where(eq(product_variants.id, id));
       if (!result) {
         throw new Error(`Product variant with ID ${id} not found`);
       }
+      console.log('varint delete result', result);
       return result;
     } catch (error) {
       console.error('Error deleting product variant:', error);

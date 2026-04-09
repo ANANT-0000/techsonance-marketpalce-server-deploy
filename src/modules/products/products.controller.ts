@@ -3,6 +3,8 @@ import {
   Controller,
   Delete,
   Get,
+  Header,
+  Headers,
   Patch,
   Post,
   UploadedFiles,
@@ -15,13 +17,10 @@ import { ProductStatus } from 'src/drizzle/types/types';
 import { ParseJsonPipe } from 'src/common/pipes/parseJsonPipe';
 import { plainToInstance } from 'class-transformer';
 import { validate } from 'class-validator';
+import { type ProductFiles } from 'src/common/Types/index.type';
 // import { ParseJsonPipe } from 'src/common/pipes/parseJsonPipe';
 // import { validate } from 'class-validator';
 // import { plainToInstance } from 'class-transformer';
-export interface ProductFiles {
-  product?: Express.Multer.File[];
-  product_spec?: Express.Multer.File[];
-}
 @Controller({
   version: '1',
   path: 'products',
@@ -29,12 +28,7 @@ export interface ProductFiles {
 export class ProductsController {
   constructor(private productsService: ProductsService) {}
 
-  // @Get(':id')
-  // async getProduct(@Param('id') id: string) {
-  //   return await this.productsService.getProductById(id);
-  // }
-
-  @Post(':company_id/:vendor_id')
+  @Post(':vendor_id')
   @UploadToCloud([
     { name: 'product', maxCount: 1 },
     { name: 'product_spec', maxCount: 10 },
@@ -42,12 +36,12 @@ export class ProductsController {
   async createProduct(
     @Body('product_data', ParseJsonPipe) productDto: any,
     @Param('vendor_id') vendorId: string,
-    @Param('company_id') companyId: string,
+    @Headers('company-domain') domain: string,
     @UploadedFiles() files?: ProductFiles,
   ) {
     console.log(' Received product data:', productDto);
     console.log('vendorId', vendorId);
-    console.log('companyId', companyId);
+    console.log('companyId', domain);
     console.log('Received files:', files);
     const dto = plainToInstance(CreateProductDto, productDto);
     const errors = await validate(dto);
@@ -56,25 +50,38 @@ export class ProductsController {
     return await this.productsService.createProduct(
       productDto,
       vendorId,
-      companyId,
+      domain,
       files,
     );
   }
-  @Get(':vendorId/all')
-  async getAllProducts(@Param('vendorId') vendorId: string) {
+  @Get('all')
+  async getAllProducts(@Headers('company-domain') companyId: string) {
     console.log('get all products');
-    return await this.productsService.getProducts(vendorId);
+    return await this.productsService.getProducts(companyId);
   }
   @Get(':id')
   async getProductById(@Param('id') id: string) {
     return await this.productsService.getProductById(id);
   }
+
   @Patch(':id')
+  @UploadToCloud([
+    { name: 'product', maxCount: 1 },
+    { name: 'product_spec', maxCount: 10 },
+  ])
   async updateProduct(
     @Param('id') id: string,
-    @Body('product') product: CreateProductDto,
+    @Body('product_data', ParseJsonPipe) product: any,
+    @Body('imagesToDelete', ParseJsonPipe) imagesToDelete?: string[],
+    @UploadedFiles() files?: ProductFiles,
   ) {
-    return await this.productsService.updateProduct(id, product);
+    // console.log(imagesToDelete);
+    return await this.productsService.updateProduct(
+      id,
+      product,
+      imagesToDelete,
+      files,
+    );
   }
   @Patch('update-product-category/:id')
   async updateProductCategory(

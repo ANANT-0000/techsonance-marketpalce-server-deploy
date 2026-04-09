@@ -5,6 +5,7 @@ export * from './utils.schema';
 export * from './main.schema';
 import { address, user, vendor } from './users.schema';
 import {
+  cart_items,
   carts,
   categories,
   coupon_usage,
@@ -19,6 +20,7 @@ import {
   refunds,
   shipping_details,
   wishlist,
+  wishlist_items,
 } from './shop.schema';
 import { relations } from 'drizzle-orm';
 import {
@@ -29,12 +31,6 @@ import {
   role_permissions,
   user_roles,
 } from './main.schema';
-import {
-  gst_invoices,
-  gst_registrations,
-  product_tax,
-  tax_rates,
-} from './finance.schema';
 import { audit_logs, inventory, warehouse } from './utils.schema';
 
 export const companyRelations = relations(company, ({ many }) => ({
@@ -79,6 +75,7 @@ export const userRelations = relations(user, ({ one, many }) => ({
 // --- User Roles Relations ---
 export const userRolesRelations = relations(user_roles, ({ many }) => ({
   rolePermissions: many(role_permissions), // Link to the join table
+  users: many(user), // One role can be assigned to multiple users
 }));
 
 // --- Permissions Relations ---
@@ -117,6 +114,10 @@ export const productImagesRelations = relations(product_images, ({ one }) => ({
     fields: [product_images.product_id],
     references: [products.id],
   }),
+  variant: one(product_variants, {
+    fields: [product_images.variant_id],
+    references: [product_variants.id],
+  }),
 }));
 export const categoriesRelations = relations(categories, ({ one, many }) => ({
   parent: one(categories, {
@@ -140,6 +141,27 @@ export const productVariantsRelations = relations(
     reviews: many(product_reviews),
   }),
 );
+export const wishlistRelations = relations(wishlist, ({ one, many }) => ({
+  user: one(user, {
+    fields: [wishlist.user_id],
+    references: [user.id],
+  }),
+  company: one(company, {
+    fields: [wishlist.company_id],
+    references: [company.id],
+  }),
+  items: many(wishlist_items),
+}));
+export const wishlistItemsRelations = relations(wishlist_items, ({ one }) => ({
+  wishlist: one(wishlist, {
+    fields: [wishlist_items.wishlist_id],
+    references: [wishlist.id],
+  }),
+  productVariant: one(product_variants, {
+    fields: [wishlist_items.product_variant_id],
+    references: [product_variants.id],
+  }),
+}));
 
 export const ordersRelations = relations(orders, ({ one, many }) => ({
   items: many(order_items),
@@ -150,32 +172,6 @@ export const ordersRelations = relations(orders, ({ one, many }) => ({
   shipping: one(shipping_details, {
     fields: [orders.id],
     references: [shipping_details.order_id],
-  }),
-}));
-export const gstInvoicesRelations = relations(gst_invoices, ({ one }) => ({
-  order: one(orders, {
-    fields: [gst_invoices.order_id],
-    references: [orders.id],
-  }),
-  company: one(company, {
-    fields: [gst_invoices.company_id],
-    references: [company.id],
-  }),
-  registration: one(gst_registrations, {
-    fields: [gst_invoices.gst_registration_id],
-    references: [gst_registrations.id],
-  }),
-}));
-
-// --- Product Tax Mapping ---
-export const productTaxRelations = relations(product_tax, ({ one }) => ({
-  product: one(products, {
-    fields: [product_tax.product_id],
-    references: [products.id],
-  }),
-  taxRate: one(tax_rates, {
-    fields: [product_tax.tax_rate_id],
-    references: [tax_rates.id],
   }),
 }));
 
@@ -207,5 +203,26 @@ export const auditLogsRelations = relations(audit_logs, ({ one }) => ({
   company: one(company, {
     fields: [audit_logs.company_id],
     references: [company.id],
+  }),
+}));
+export const cartRelations = relations(carts, ({ one, many }) => ({
+  user: one(user, {
+    fields: [carts.user_id],
+    references: [user.id],
+  }),
+  company: one(company, {
+    fields: [carts.company_id],
+    references: [company.id],
+  }),
+  items: many(cart_items),
+}));
+export const cartItemsRelations = relations(cart_items, ({ one }) => ({
+  cart: one(carts, {
+    fields: [cart_items.cart_id],
+    references: [carts.id],
+  }),
+  productVariant: one(product_variants, {
+    fields: [cart_items.product_variant_id],
+    references: [product_variants.id],
   }),
 }));

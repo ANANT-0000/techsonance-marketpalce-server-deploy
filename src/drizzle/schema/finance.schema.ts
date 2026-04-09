@@ -1,5 +1,6 @@
 import * as pg from 'drizzle-orm/pg-core';
 import { company, orders, products } from '.';
+import { relations } from 'drizzle-orm';
 
 export const tax_profiles = pg.pgTable('tax_profiles', {
   id: pg.uuid('id').primaryKey().defaultRandom(),
@@ -118,3 +119,29 @@ export const gst_invoices = pg.pgTable('gst_invoices', {
     .references(() => gst_registrations.id),
   company_id: pg.uuid('company_id').references(() => company.id),
 });
+
+export const gstInvoicesRelations = relations(gst_invoices, ({ one }) => ({
+  order: one(orders, {
+    fields: [gst_invoices.order_id],
+    references: [orders.id],
+  }),
+  company: one(company, {
+    fields: [gst_invoices.company_id],
+    references: [company.id],
+  }),
+  registration: one(gst_registrations, {
+    fields: [gst_invoices.gst_registration_id],
+    references: [gst_registrations.id],
+  }),
+}));
+// --- Product Tax Mapping ---
+export const productTaxRelations = relations(product_tax, ({ one }) => ({
+  product: one(products, {
+    fields: [product_tax.product_id],
+    references: [products.id],
+  }),
+  taxRate: one(tax_rates, {
+    fields: [product_tax.tax_rate_id],
+    references: [tax_rates.id],
+  }),
+}));

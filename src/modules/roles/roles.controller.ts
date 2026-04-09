@@ -29,6 +29,7 @@ export class RolesController {
   }
   @Post()
   createRole(@Body('role') role: userRole) {
+    console.log('reole', role);
     return this.rolesService.createRole(role);
   }
   @Delete(':id')
