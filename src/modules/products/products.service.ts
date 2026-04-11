@@ -6,7 +6,6 @@ import {
   InternalServerErrorException,
 } from '@nestjs/common';
 import { DRIZZLE, type DrizzleService } from 'src/drizzle/drizzle.module';
-// import { type DrizzleDB } from 'src/drizzle/types/drizzle';
 import { CreateProductDto } from './dto/createProduct.dto';
 import {
   categories,
@@ -62,17 +61,18 @@ export class ProductsService {
       const product = await this.db.query.products.findFirst({
         where: (products) => eq(products.id, productId),
         with: {
-          images: true,
+          variants: {
+            with: {
+              images: true,
+            },
+          },
         },
       });
       if (!product) {
         throw new HttpException('Product not found', HttpStatus.NOT_FOUND);
       }
-      const variants = await this.db.query.product_variants.findFirst({
-        where: (product_variants) => eq(product_variants.product_id, productId),
-      });
-      console.log('variants', variants);
-      return { ...product, variants };
+
+      return product;
     } catch (error) {
       throw new InternalServerErrorException('Failed to fetch product', {
         cause: error,

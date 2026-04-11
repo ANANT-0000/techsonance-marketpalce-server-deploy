@@ -197,7 +197,7 @@ export class UsersService {
         secret: process.env.JWT_SECRET || 'defaultSecret',
       });
       const filteredUser = {
-        ...userRecord,
+        user: userRecord,
         role: roleRecord?.role_name,
         password_hash: undefined,
       };

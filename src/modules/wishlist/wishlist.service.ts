@@ -77,6 +77,15 @@ export class WishlistService {
               wishlist_id: wishlistExists.id,
               product_variant_id: productVariantId,
             })
+            .onConflictDoUpdate({
+              target: [
+                wishlist_items.wishlist_id,
+                wishlist_items.product_variant_id,
+              ],
+              set: {
+                updated_at: new Date(),
+              },
+            })
             .returning({
               id: wishlist_items.id,
               wishlist_id: wishlist_items.wishlist_id,

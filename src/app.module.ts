@@ -26,6 +26,8 @@ import { ProductVariantModule } from './modules/product-variant/product-variant.
 import { UploadToCloudModule } from './utils/upload-to-cloud/upload-to-cloud.module';
 import { CartModule } from './modules/cart/cart.module';
 import { WishlistModule } from './modules/wishlist/wishlist.module';
+import { ShippingModule } from './modules/shipping/shipping.module';
+import { CheckoutModule } from './modules/checkout/checkout.module';
 @Module({
   imports: [
     DrizzleModule,
@@ -50,6 +52,8 @@ import { WishlistModule } from './modules/wishlist/wishlist.module';
     UploadToCloudModule,
     CartModule,
     WishlistModule,
+    ShippingModule,
+    CheckoutModule,
     // ThrottlerModule.forRoot([
     //   {
     //     name: "short",

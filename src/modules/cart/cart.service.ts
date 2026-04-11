@@ -179,7 +179,7 @@ export class CartService {
           if (!cartItem || cartItem.length === 0) {
             throw new NotFoundException(`Cart items not found `);
           }
-          console.log('cart list', cartItem);
+          // console.log('cart list', cartItem);
           return cartItem;
         })
         .catch((error) => {
@@ -193,7 +193,7 @@ export class CartService {
             cause: error,
           });
         });
-      console.log('cartItems', cartItems);
+      // console.log('cartItems', cartItems);
       return cartItems;
     } catch (error) {
       if (

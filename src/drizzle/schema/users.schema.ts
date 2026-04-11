@@ -65,6 +65,7 @@ export const address = pg.pgTable('address', {
   state: pg.text('state').notNull(),
   postal_code: pg.text('postal_code').notNull(),
   country: pg.text('country').notNull(),
+  landmark: pg.text('landmark').notNull(),
   is_default: pg.boolean('is_default').notNull().default(false),
   created_at: pg.timestamp('created_at').notNull().defaultNow(),
   updated_at: pg

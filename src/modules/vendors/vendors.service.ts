@@ -257,8 +257,7 @@ export class VendorsService {
         joined_at: vendor.created_at,
       };
       const response = {
-        ...responseData,
-        user_role: UserRole.VENDOR,
+        user: responseData,
         token: accessToken,
         password_hash: undefined,
       };

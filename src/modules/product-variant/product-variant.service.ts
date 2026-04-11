@@ -125,14 +125,6 @@ export class ProductVariantService {
           images: true,
         },
       });
-      console.log('produc vA', productVariants);
-      const imgs = await this.db
-        .select()
-        .from(product_images)
-        .where(
-          eq(product_images.variant_id, '1616ba27-8095-49ff-af4c-8f2e013b7e21'),
-        );
-      console.log('imgs', imgs);
       return productVariants;
     } catch (error) {
       console.error('Error fetching product variants by product ID:', error);
@@ -268,8 +260,7 @@ export class ProductVariantService {
             }
             return {
               variant_id: id,
-              product_id:
-                existingVariant.product_id,
+              product_id: existingVariant.product_id,
               image_url: image.url,
               alt_text: `${image.type} Image ${index + 1}`,
               is_primary: image.type === productImageType.MAIN,
