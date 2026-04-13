@@ -9,10 +9,9 @@ import { CreateProductVariantDto } from './dto/create-product-variant.dto';
 import { DRIZZLE, type DrizzleService } from 'src/drizzle/drizzle.module';
 import { and, eq, inArray } from 'drizzle-orm';
 import { product_images, product_variants, products } from 'src/drizzle/schema';
-import { productImageType } from 'src/drizzle/types/types';
+import { productImageType, ProductStatus } from 'src/drizzle/types/types';
 import { UploadToCloudService } from 'src/utils/upload-to-cloud/upload-to-cloud.service';
 import { ProductFiles } from 'src/common/Types/index.type';
-import { UpdateProductDto } from '../products/dto/updatedProduct.dto';
 import { UpdateProductVariantDto } from './dto/update-product-variant.dto';
 @Injectable()
 export class ProductVariantService {
@@ -133,6 +132,42 @@ export class ProductVariantService {
       );
     }
   }
+  async findVariantDetailsById(variantId: string) {
+    try {
+      const [productVariant] = await this.db
+        .select({
+          id: product_variants.id,
+          variant_name: product_variants.variant_name,
+          sku: product_variants.sku,
+          price: product_variants.price,
+          status: product_variants.status,
+          stock_quantity: product_variants.stock_quantity,
+        })
+        .from(product_variants)
+        .where(eq(product_variants.id, variantId))
+        .limit(1);
+      if (!productVariant) {
+        throw new HttpException(
+          'Product variant not found',
+          HttpStatus.NOT_FOUND,
+        );
+      }
+      if (productVariant.status === ProductStatus.INACTIVE) {
+        throw new HttpException(
+          'Product variant is inactive',
+          HttpStatus.BAD_REQUEST,
+        );
+      }
+      return productVariant;
+    } catch (error) {
+      if (error instanceof HttpException) throw error;
+      console.error('Error fetching product variant details:', error);
+      throw new InternalServerErrorException(
+        'Failed to fetch product variant details',
+      );
+    }
+  }
+
   async findAll(vendorId: string) {
     try {
       const product = await this.db

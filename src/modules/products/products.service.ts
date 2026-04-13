@@ -45,8 +45,7 @@ export class ProductsService {
           variants: true,
         },
       });
-      console.log('response', product);
-
+      console.log('response product ', product);
       return product;
     } catch (error) {
       throw new InternalServerErrorException('Failed to fetch products', {

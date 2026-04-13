@@ -28,6 +28,7 @@ import { CartModule } from './modules/cart/cart.module';
 import { WishlistModule } from './modules/wishlist/wishlist.module';
 import { ShippingModule } from './modules/shipping/shipping.module';
 import { CheckoutModule } from './modules/checkout/checkout.module';
+import { CouponModule } from './modules/coupon/coupon.module';
 @Module({
   imports: [
     DrizzleModule,
@@ -54,6 +55,7 @@ import { CheckoutModule } from './modules/checkout/checkout.module';
     WishlistModule,
     ShippingModule,
     CheckoutModule,
+    CouponModule,
     // ThrottlerModule.forRoot([
     //   {
     //     name: "short",

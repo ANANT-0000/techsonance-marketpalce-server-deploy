@@ -55,7 +55,10 @@ export class ProductVariantController {
   findOne(@Param('id') id: string) {
     return this.productVariantService.findOne(id);
   }
-
+  @Get('details/:id')
+  findVariantDetails(@Param('id') id: string) {
+    return this.productVariantService.findVariantDetailsById(id);
+  }
   @Patch(':id')
   async update(
     @Param('id') id: string,

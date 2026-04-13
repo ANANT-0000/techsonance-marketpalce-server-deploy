@@ -175,6 +175,24 @@ export const ordersRelations = relations(orders, ({ one, many }) => ({
   }),
 }));
 
+export const couponsRelations = relations(coupons, ({ one, many }) => ({
+  company: one(company, {
+    fields: [coupons.company_id],
+    references: [company.id],
+  }),
+  usage: many(coupon_usage),
+}));
+export const couponUsageRelations = relations(coupon_usage, ({ one }) => ({
+  coupon: one(coupons, {
+    fields: [coupon_usage.coupon_id],
+    references: [coupons.id],
+  }),
+  user: one(user, {
+    fields: [coupon_usage.user_id],
+    references: [user.id],
+  }),
+}));
+
 // --- Inventory & Warehouse Relations ---
 export const inventoryRelations = relations(inventory, ({ one }) => ({
   variant: one(product_variants, {

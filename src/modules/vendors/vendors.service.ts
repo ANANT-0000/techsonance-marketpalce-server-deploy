@@ -55,14 +55,23 @@ export class VendorsService {
       const documentPromises = docFiles.map(
         async (file: Express.Multer.File) => {
           console.log('Received file:', file.originalname);
-          return await this.uploadToCloudService.uploadDocument(
-            file,
-            file.originalname.split('__')[0],
-          );
+          return await this.uploadToCloudService
+            .uploadDocument(file, file.originalname.split('__')[0])
+            .catch((error) => {
+              console.error(
+                `Error uploading document ${file.originalname}:`,
+                error,
+              );
+              throw new InternalServerErrorException(
+                `Failed to upload document ${file.originalname}`,
+                { cause: error },
+              );
+            });
         },
       );
       const resolvedDocuments = await Promise.all(documentPromises);
       vendorDocuments.push(...resolvedDocuments);
+      console.log('vendorDocuments');
       console.table(vendorDocuments);
       return await this.db.transaction(async (tx) => {
         const hashedPassword = await bcrypt.hash(
@@ -149,7 +158,10 @@ export class VendorsService {
         return;
       });
     } catch (error) {
-      if (error instanceof HttpException) {
+      if (
+        error instanceof HttpException ||
+        error instanceof InternalServerErrorException
+      ) {
         throw error;
       }
       throw new InternalServerErrorException('Failed to register vendor', {
@@ -266,7 +278,8 @@ export class VendorsService {
     } catch (error) {
       if (
         error instanceof HttpException ||
-        error instanceof UnauthorizedException
+        error instanceof UnauthorizedException ||
+        error instanceof InternalServerErrorException
       ) {
         throw error;
       }
