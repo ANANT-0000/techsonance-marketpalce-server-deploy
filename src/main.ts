@@ -19,12 +19,7 @@ async function bootstrap() {
   app.use(json({ limit: '50mb' }));
   app.use(urlencoded({ limit: '50mb', extended: true }));
   app.enableCors({
-    origin: [
-      'http://localhost:3000',
-      'http://192.168.81.1:3000',
-      'http://192.168.29.26:3000',
-      'http://192.168.43.1:3000',
-    ],
+    origin: ['*'],
     methods: 'GET,HEAD,PUT,PATCH,POST,DELETE',
     credentials: true,
   });
