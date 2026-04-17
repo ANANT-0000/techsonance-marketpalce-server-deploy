@@ -16,6 +16,7 @@ import express from 'express';
 import { CreateUserDto, LoginDto } from '../users/dto/userAuth.dto.ts';
 import { type VendorType } from 'src/drizzle/types/types';
 import { UploadToCloud } from 'src/common/decorators/upload.decorator';
+import { ParseJsonPipe } from 'src/common/pipes/parseJsonPipe';
 @Controller({ version: '1', path: 'auth' })
 export class AuthController {
   constructor(
@@ -31,12 +32,12 @@ export class AuthController {
   @UploadToCloud([{ name: 'documents', maxCount: 20 }])
   @HttpCode(HttpStatus.CREATED)
   async signUpVendor(
-    @Body('vendor') body: any,
+    @Body('vendor', ParseJsonPipe) body: any,
     @UploadedFiles() files: Express.Multer.File[],
   ) {
     console.log('body', body);
-    console.log('vendor documents');
-    console.table(files['documents']);
+    // console.log('vendor documents');
+    // console.table(files['documents']);
     const vendor = await this.vendorService.vendorRegister(body, files);
     return vendor;
   }

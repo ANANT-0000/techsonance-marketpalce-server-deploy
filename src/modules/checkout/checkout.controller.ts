@@ -9,10 +9,9 @@ import {
   Headers,
 } from '@nestjs/common';
 import { CheckoutService } from './checkout.service';
-import { CreateCheckoutDto } from './dto/create-checkout.dto';
-import { UpdateCheckoutDto } from './dto/update-checkout.dto';
+import { InitiateCheckoutDto, VerifyCheckoutDto } from './dto/checkout.dto';
+
 import { CouponService } from '../coupon/coupon.service';
-import { domainToUnicode } from 'url';
 
 @Controller({
   version: '1',
@@ -24,6 +23,28 @@ export class CheckoutController {
     private readonly couponService: CouponService,
   ) {}
 
+  @Post(':userId/initiate')
+  async initiateCheckout(
+    @Param('userId') userId: string,
+    @Body() initiateCheckoutDto: InitiateCheckoutDto,
+    @Headers('company-domain') domain: string,
+  ) {
+    return this.checkoutService.initiateCheckout(
+      userId,
+      initiateCheckoutDto,
+      domain,
+    );
+  }
+
+  @Post('verify')
+  verifyCheckout(
+    @Body() verifyCheckoutDto: VerifyCheckoutDto,
+    @Headers('company-domain') domain: string,
+  ) {
+    console.log("verifyCheckoutDto", verifyCheckoutDto);
+    return this.checkoutService.verifyCheckout(verifyCheckoutDto, domain);
+  }
+
   @Post('apply-coupon/:userId')
   applyCoupon(
     @Body('couponCode') couponCode: string,
@@ -32,28 +53,4 @@ export class CheckoutController {
   ) {
     return this.couponService.verifyCoupon(couponCode, userId, domain);
   }
-  // @Post()
-  // create(@Body() createCheckoutDto: CreateCheckoutDto) {
-  //   return this.checkoutService.create(createCheckoutDto);
-  // }
-
-  // @Get()
-  // findAll() {
-  //   return this.checkoutService.findAll();
-  // }
-
-  // @Get(':id')
-  // findOne(@Param('id') id: string) {
-  //   return this.checkoutService.findOne(+id);
-  // }
-
-  // @Patch(':id')
-  // update(@Param('id') id: string, @Body() updateCheckoutDto: UpdateCheckoutDto) {
-  //   return this.checkoutService.update(+id, updateCheckoutDto);
-  // }
-
-  // @Delete(':id')
-  // remove(@Param('id') id: string) {
-  //   return this.checkoutService.remove(+id);
-  // }
 }

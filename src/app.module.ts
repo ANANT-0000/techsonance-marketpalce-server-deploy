@@ -29,6 +29,9 @@ import { WishlistModule } from './modules/wishlist/wishlist.module';
 import { ShippingModule } from './modules/shipping/shipping.module';
 import { CheckoutModule } from './modules/checkout/checkout.module';
 import { CouponModule } from './modules/coupon/coupon.module';
+import { CompanyModule } from './modules/company/company.module';
+import { WarehouseModule } from './modules/warehouse/warehouse.module';
+import { InventoryModule } from './modules/inventory/inventory.module';
 @Module({
   imports: [
     DrizzleModule,
@@ -56,6 +59,9 @@ import { CouponModule } from './modules/coupon/coupon.module';
     ShippingModule,
     CheckoutModule,
     CouponModule,
+    CompanyModule,
+    WarehouseModule,
+    InventoryModule,
     // ThrottlerModule.forRoot([
     //   {
     //     name: "short",

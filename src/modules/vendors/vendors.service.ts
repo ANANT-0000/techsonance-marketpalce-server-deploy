@@ -29,6 +29,7 @@ import { MailService } from 'src/common/services/mail/mail.service';
 import { CreateVendorDto } from './dto/CreateVendorDto';
 import { LoginDto } from '../users/dto/userAuth.dto.ts';
 import { UploadToCloudService } from 'src/utils/upload-to-cloud/upload-to-cloud.service';
+import { formatCompanyDomain } from 'src/common/filters/formatDomain.filter';
 const SALT_ROUNDS = 10;
 type UserType = typeof userTable.$inferSelect;
 type VendorType = typeof vendorTable.$inferSelect;
@@ -46,8 +47,8 @@ export class VendorsService {
     files: Express.Multer.File[],
   ) {
     try {
-      console.log('vendorData', vendorData);
-      console.log('files', files);
+      // console.log('vendorData registration', vendorData);
+      // console.log('files', files);
       const docFiles = Array.isArray(files['documents'])
         ? files['documents']
         : [];
@@ -73,38 +74,71 @@ export class VendorsService {
       vendorDocuments.push(...resolvedDocuments);
       console.log('vendorDocuments');
       console.table(vendorDocuments);
+      console.log('starting transaction...');
       return await this.db.transaction(async (tx) => {
-        const hashedPassword = await bcrypt.hash(
-          vendorData.hash_password,
-          SALT_ROUNDS,
-        );
-
+        console.log('transaction started');
+        if (!vendorData.confirm_password) {
+          console.log(
+            'venodr pass',
+            vendorData['confirm_password'],
+            vendorData.confirm_password,
+            SALT_ROUNDS,
+          );
+          throw new InternalServerErrorException(
+            'Password is required for vendor registration',
+            {
+              cause: 'vendor registration failed',
+            },
+          );
+        }
+        const hashedPassword = await bcrypt
+          .hash(vendorData.confirm_password, SALT_ROUNDS)
+          .catch((error) => {
+            console.error('Error hashing password:', error);
+            throw new InternalServerErrorException('Failed to hash password', {
+              cause: error,
+            });
+          });
+        console.log('pass haseded', hashedPassword);
         const [vendorRole] = await tx
           .select({ id: user_rolesTable.id })
           .from(user_rolesTable)
           .where(eq(user_rolesTable.role_name, UserRole.VENDOR))
           .limit(1);
         if (!vendorRole) {
+          console.log('vendor  role not found');
           throw new HttpException(
             'Vendor role not found in the database',
             HttpStatus.INTERNAL_SERVER_ERROR,
           );
         }
-
+        console.log('creating company');
+        const companyDomain = formatCompanyDomain(vendorData.company_domain);
         const [newCompany] = await tx
           .insert(companyTable)
           .values({
-            company_name: vendorData.store_name,
-            company_domain: vendorData.company_domain,
+            company_name: vendorData.company_name,
+            company_domain: companyDomain,
             company_structure: vendorData.company_structure,
           })
-          .returning({ id: companyTable.id });
+          .returning({ id: companyTable.id })
+          .catch((error) => {
+            console.error('Error creating company:', error);
+            throw new InternalServerErrorException(
+              'Failed to create company for vendor',
+              {
+                cause: error,
+              },
+            );
+          });
+        console.log('company created', newCompany);
         if (!newCompany || !newCompany.id) {
           throw new HttpException(
             'Failed to create company for vendor',
             HttpStatus.INTERNAL_SERVER_ERROR,
           );
         }
+        console.log('creating admin vendor user ...');
         const [newUser] = await tx
           .insert(userTable)
           .values({
@@ -117,26 +151,46 @@ export class VendorsService {
             role_id: vendorRole.id,
             company_id: newCompany.id,
           })
-          .returning({ id: userTable.id, email: userTable.email });
-        console.log(newUser);
+          .returning({ id: userTable.id, email: userTable.email })
+          .catch((error) => {
+            console.error('Error creating user:', error);
+            throw new InternalServerErrorException(
+              'Failed to create user for vendor',
+              {
+                cause: error,
+              },
+            );
+          });
+        console.log('newUser created', newUser);
         if (!newUser || !newUser.id) {
           throw new HttpException(
             'Failed to create user for vendor',
             HttpStatus.INTERNAL_SERVER_ERROR,
           );
         }
+        console.log('creatring vendor ...');
         const [newVendor] = await tx
           .insert(vendorTable)
           .values({
             store_owner_first_name: vendorData.first_name,
             store_owner_last_name: vendorData.last_name,
-            store_name: vendorData.store_name,
-            store_description: vendorData.store_description ?? '',
+            store_name: vendorData.company_name,
+            store_description: vendorData.company_description ?? '',
             category: vendorData.category,
             user_id: newUser.id,
             company_id: newCompany.id,
           })
-          .returning({ id: vendorTable.id });
+          .returning({ id: vendorTable.id })
+          .catch((error) => {
+            console.error('Error creating vendor:', error);
+            throw new InternalServerErrorException(
+              'Failed to create vendor record',
+              {
+                cause: error,
+              },
+            );
+          });
+        console.log('vednor created ', newVendor);
         if (!newVendor || !newVendor.id) {
           throw new HttpException(
             'Failed to create vendor record',
@@ -144,12 +198,18 @@ export class VendorsService {
           );
         }
         for (const doc of vendorDocuments) {
-          await tx.insert(vendor_documentTable).values({
-            document_url: doc.secure_url,
-            document_type: doc.type,
-            vendor_id: newVendor.id,
-          });
+          await tx
+            .insert(vendor_documentTable)
+            .values({
+              document_url: doc.secure_url,
+              document_type: doc.type,
+              vendor_id: newVendor.id,
+            })
+            .catch((error) => {
+              console.error('Error inserting vendor document record:', error);
+            });
         }
+        console.log('vendor documents inserted');
         // this.mailService.sendEmail(
         //   newUser.email,
         //   'Vendor Registration Received',

@@ -45,12 +45,16 @@ export const coupons = pg.pgTable('coupons', {
     .notNull()
     .defaultNow()
     .$onUpdate(() => new Date()),
-  company_id: pg.uuid('company_id').references(() => company.id),
+  company_id: pg
+    .uuid('company_id')
+    .references(() => company.id, { onDelete: 'cascade' }),
 });
 
 export const carts = pg.pgTable('carts', {
   id: pg.uuid('id').primaryKey().defaultRandom(),
-  company_id: pg.uuid('company_id').references(() => company.id),
+  company_id: pg
+    .uuid('company_id')
+    .references(() => company.id, { onDelete: 'cascade' }),
   user_id: pg
     .uuid('user_id')
     .references(() => user.id, { onDelete: 'cascade' }),
@@ -64,7 +68,9 @@ export const carts = pg.pgTable('carts', {
 
 export const wishlist = pg.pgTable('wishlist', {
   id: pg.uuid('id').primaryKey().defaultRandom(),
-  company_id: pg.uuid('company_id').references(() => company.id),
+  company_id: pg
+    .uuid('company_id')
+    .references(() => company.id, { onDelete: 'cascade' }),
   user_id: pg
     .uuid('user_id')
     .references(() => user.id, { onDelete: 'cascade' }),
@@ -81,7 +87,9 @@ export const coupon_usage = pg.pgTable('coupon_usage', {
   user_id: pg
     .uuid('user_id')
     .references(() => user.id, { onDelete: 'cascade' }),
-  company_id: pg.uuid('company_id').references(() => company.id),
+  company_id: pg
+    .uuid('company_id')
+    .references(() => company.id, { onDelete: 'cascade' }),
   created_at: pg
     .timestamp('created_at')
     .$default(() => new Date())
@@ -110,7 +118,9 @@ export const products = pg.pgTable(
       .notNull()
       .defaultNow()
       .$onUpdate(() => new Date()),
-    company_id: pg.uuid('company_id').references(() => company.id),
+    company_id: pg
+      .uuid('company_id')
+      .references(() => company.id, { onDelete: 'cascade' }),
     vendor_id: pg
       .uuid('vendor_id')
       .references(() => vendor.id, { onDelete: 'cascade' }),
@@ -326,11 +336,11 @@ export const shipping_status_enum = pg.pgEnum(
 );
 export const shipping_details = pg.pgTable('shipping_details', {
   id: pg.uuid('id').primaryKey().defaultRandom(),
-  shipping_method: pg.text('shipping_method').notNull(),
-  tracking_number: pg.text('tracking_number').notNull(),
-  carrier: pg.text('carrier').notNull(),
-  estimated_delivery: pg.date('estimated_delivery').notNull(),
-  shipping_status: shipping_status_enum().notNull(),
+  // shipping_method: pg.text('shipping_method').notNull(),
+  tracking_url: pg.text('tracking_url').notNull(),
+  // carrier: pg.text('carrier').notNull(),
+  // estimated_delivery: pg.date('estimated_delivery').notNull(),
+  // shipping_status: shipping_status_enum().notNull(),
   created_at: pg.timestamp('created_at').notNull().defaultNow(),
   updated_at: pg
     .timestamp('updated_at')

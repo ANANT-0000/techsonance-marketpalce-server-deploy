@@ -158,6 +158,7 @@ export class ProductVariantService {
           HttpStatus.BAD_REQUEST,
         );
       }
+      console.log('sending product varint details', productVariant);
       return productVariant;
     } catch (error) {
       if (error instanceof HttpException) throw error;

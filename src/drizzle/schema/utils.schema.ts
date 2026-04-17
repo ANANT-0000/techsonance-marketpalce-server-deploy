@@ -47,11 +47,11 @@ export const warehouse = pg.pgTable('warehouse', {
     .$onUpdate(() => new Date()),
   address_id: pg
     .uuid('address_id')
-    .references(() => address.id)
+    .references(() => address.id, { onDelete: 'cascade' })
     .notNull(),
   company_id: pg
     .uuid('company_id')
-    .references(() => company.id)
+    .references(() => company.id, { onDelete: 'cascade' })
     .notNull(),
 });
 export const inventory = pg.pgTable(
@@ -75,7 +75,9 @@ export const inventory = pg.pgTable(
       .uuid('warehouse_id')
       .references(() => warehouse.id, { onDelete: 'cascade' })
       .notNull(),
-    company_id: pg.uuid('company_id').references(() => company.id),
+    company_id: pg
+      .uuid('company_id')
+      .references(() => company.id, { onDelete: 'cascade' }),
   },
   (table) => [
     pg.index('idx_inventory_product_variant_id').on(table.product_variant_id),
@@ -95,7 +97,9 @@ export const support_tickets = pg.pgTable('support_tickets', {
     .notNull()
     .defaultNow()
     .$onUpdate(() => new Date()),
-  company_id: pg.uuid('company_id').references(() => company.id),
+  company_id: pg
+    .uuid('company_id')
+    .references(() => company.id, { onDelete: 'cascade' }),
 });
 export const notifications = pg.pgTable(
   'notifications',
@@ -112,8 +116,12 @@ export const notifications = pg.pgTable(
       .timestamp('updated_at')
       .$onUpdate(() => new Date())
       .notNull(),
-    user_id: pg.uuid('user_id').references(() => user.id),
-    company_id: pg.uuid('company_id').references(() => company.id),
+    user_id: pg
+      .uuid('user_id')
+      .references(() => user.id, { onDelete: 'cascade' }),
+    company_id: pg
+      .uuid('company_id')
+      .references(() => company.id, { onDelete: 'cascade' }),
   },
   (table) => [
     pg.index('idx_notifications_user_id').on(table.user_id),
@@ -137,8 +145,12 @@ export const audit_logs = pg.pgTable(
       .timestamp('updated_at')
       .$onUpdate(() => new Date())
       .notNull(),
-    user_id: pg.uuid('user_id').references(() => user.id),
-    company_id: pg.uuid('company_id').references(() => company.id),
+    user_id: pg
+      .uuid('user_id')
+      .references(() => user.id, { onDelete: 'cascade' }),
+    company_id: pg
+      .uuid('company_id')
+      .references(() => company.id, { onDelete: 'cascade' }),
   },
   (table) => [
     pg.index('idx_audit_logs_user_id').on(table.user_id),

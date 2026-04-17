@@ -1,34 +1,38 @@
-import { Controller, Get, Post, Body, Patch, Param, Delete } from '@nestjs/common';
+import {
+  Controller,
+  Get,
+  Post,
+  Body,
+  Patch,
+  Param,
+  Delete,
+  Headers,
+} from '@nestjs/common';
 import { ShippingService } from './shipping.service';
-import { CreateShippingDto } from './dto/create-shipping.dto';
-import { UpdateShippingDto } from './dto/update-shipping.dto';
 
-@Controller('shipping')
+@Controller({
+  version: '1',
+  path: 'shipping',
+})
 export class ShippingController {
   constructor(private readonly shippingService: ShippingService) {}
 
   @Post()
-  create(@Body() createShippingDto: CreateShippingDto) {
-    return this.shippingService.create(createShippingDto);
+  async addTrackingUrl(
+    @Body('orderId') orderId: string,
+    @Body('trackingUrl') trackingUrl: string,
+    @Headers('company-domain') domain: string,
+  ) {
+    console.log(orderId, trackingUrl);
+    console.log(domain);
+    return this.shippingService.addTrackingUrl(orderId, trackingUrl, domain);
   }
-
-  @Get()
-  findAll() {
-    return this.shippingService.findAll();
-  }
-
-  @Get(':id')
-  findOne(@Param('id') id: string) {
-    return this.shippingService.findOne(+id);
-  }
-
-  @Patch(':id')
-  update(@Param('id') id: string, @Body() updateShippingDto: UpdateShippingDto) {
-    return this.shippingService.update(+id, updateShippingDto);
-  }
-
-  @Delete(':id')
-  remove(@Param('id') id: string) {
-    return this.shippingService.remove(+id);
+  @Patch(':orderId')
+  async updateTrackingUrl(
+    @Param('orderId') orderId: string,
+    @Body('trackingUrl') trackingUrl: string,
+    @Headers('company-domain') domain: string,
+  ) {
+    return this.shippingService.updateTrackingUrl(orderId, trackingUrl, domain);
   }
 }

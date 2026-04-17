@@ -34,7 +34,7 @@ import {
 import { audit_logs, inventory, warehouse } from './utils.schema';
 
 export const companyRelations = relations(company, ({ many }) => ({
-  roles: many(user_roles), // One company can have multiple role definitions
+  roles: many(user_roles),
   pages: many(cms_pages),
   user: many(user),
   vendor: many(vendor),
@@ -165,16 +165,47 @@ export const wishlistItemsRelations = relations(wishlist_items, ({ one }) => ({
 
 export const ordersRelations = relations(orders, ({ one, many }) => ({
   items: many(order_items),
+  customer: one(user, {
+    fields: [orders.user_id],
+    references: [user.id],
+  }),
+  company: one(company, {
+    fields: [orders.company_id],
+    references: [company.id],
+  }),
   payment: one(payments, {
     fields: [orders.id],
     references: [payments.order_id],
+  }),
+  address: one(address, {
+    fields: [orders.address_id],
+    references: [address.id],
   }),
   shipping: one(shipping_details, {
     fields: [orders.id],
     references: [shipping_details.order_id],
   }),
 }));
-
+export const orderItemsRelations = relations(order_items, ({ one }) => ({
+  order: one(orders, {
+    fields: [order_items.order_id],
+    references: [orders.id],
+  }),
+  productVariant: one(product_variants, {
+    fields: [order_items.product_variant_id],
+    references: [product_variants.id],
+  }),
+}));
+export const addressRelations = relations(address, ({ one }) => ({
+  user: one(user, {
+    fields: [address.user_id],
+    references: [user.id],
+  }),
+  warehouse: one(warehouse, {
+    fields: [address.id],
+    references: [warehouse.address_id],
+  }),
+}));
 export const couponsRelations = relations(coupons, ({ one, many }) => ({
   company: one(company, {
     fields: [coupons.company_id],

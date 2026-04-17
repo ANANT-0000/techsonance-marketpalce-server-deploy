@@ -9,84 +9,71 @@ import {
 import { Role } from 'src/enums/role.enum';
 
 export class CreateVendorDto {
+  @IsString()
   @IsNotEmpty()
-  @IsString()
-  @Transform(({ value }: { value: string }) => value.trim().toLowerCase())
-  user_role!: Role;
-
-  @IsNotEmpty()
-  @IsString()
-  @Length(3, 100)
-  @Transform(({ value }: { value: string }) => value.trim().toLowerCase())
-  store_name!: string;
-
-  @IsOptional()
-  @IsString()
-  @Length(0, 500)
+  @Length(2, 100)
   @Transform(({ value }: { value: string }) => value.trim())
-  store_description?: string;
+  company_name!: string;
 
-  @IsNotEmpty()
   @IsString()
-  @Length(3, 100)
+  @IsOptional()
+  @Length(2, 500)
+  @Transform(({ value }: { value: string }) => value.trim())
+  company_description?: string;
+  @IsString()
+  @IsNotEmpty()
+  @Length(2, 100)
   @Transform(({ value }: { value: string }) => value.trim())
   store_owner_first_name!: string;
-
-  @IsNotEmpty()
   @IsString()
-  @Length(3, 100)
+  @IsNotEmpty()
+  @Length(2, 100)
   @Transform(({ value }: { value: string }) => value.trim())
   store_owner_last_name!: string;
-
-  @IsNotEmpty()
   @IsString()
-  category!: string;
-
   @IsNotEmpty()
-  @IsString()
   @Length(2, 4)
-  @Transform(({ value }: { value: string }) => value.trim().toUpperCase())
   country_code!: string;
-  @IsNotEmpty()
   @IsString()
-  @Length(4, 15)
-  @Transform(({ value }: { value: string }) => value.trim())
+  @IsNotEmpty()
+  @Length(10, 15)
   phone_number!: string;
-
-  @IsNotEmpty()
   @IsString()
-  @Length(3, 100)
-  @IsEmail()
+  @IsNotEmpty()
+  @Length(2, 100)
   @Transform(({ value }: { value: string }) => value.trim())
-  email!: string;
-
-  @IsNotEmpty()
+  category!: string;
   @IsString()
-  @Length(6, 100)
-  @Transform(({ value }: { value: string }) => value.trim())
-  company_domain!: string;
-
   @IsNotEmpty()
-  @IsString()
-  @Length(3, 100)
+  @Length(2, 100)
   @Transform(({ value }: { value: string }) => value.trim())
   company_structure!: string;
-
-  @IsNotEmpty()
   @IsString()
+  @IsNotEmpty()
+  @Length(2, 100)
   @Transform(({ value }: { value: string }) => value.trim())
-  @Length(3, 100)
+  company_domain!: string;
+  @IsString()
+  @IsNotEmpty()
+  @Length(8, 128)
+  @Transform(({ value }: { value: string }) => value.trim())
   first_name!: string;
-
-  @IsNotEmpty()
   @IsString()
+  @IsNotEmpty()
+  @Length(2, 100)
   @Transform(({ value }: { value: string }) => value.trim())
-  @Length(3, 100)
   last_name!: string;
-
+  @IsEmail()
   @IsNotEmpty()
+  email!: string;
   @IsString()
+  @IsNotEmpty()
+  @Length(8, 128)
   @Transform(({ value }: { value: string }) => value.trim())
-  @Length(6, 100)
-  hash_password!: string;
+  password!: string;
+  @IsString()
+  @IsNotEmpty()
+  @Length(8, 128)
+  @Transform(({ value }: { value: string }) => value.trim())
+  confirm_password!: string;
 }

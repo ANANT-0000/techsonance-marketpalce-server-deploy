@@ -5,13 +5,12 @@ import {
   Injectable,
   InternalServerErrorException,
 } from '@nestjs/common';
-import { and, count, eq, getTableColumns, InferSelectModel } from 'drizzle-orm';
+import { and, count, eq } from 'drizzle-orm';
 import { DRIZZLE } from 'src/drizzle/drizzle.module';
 import { address } from 'src/drizzle/schema';
 import { type DrizzleDB } from 'src/drizzle/types/drizzle';
 import { CreateAddressDto } from './dto/createAddress.dto';
 import { UpdateAddressDto } from './dto/updateAddress.dto';
-type Address = InferSelectModel<typeof address>;
 @Injectable()
 export class AddressService {
   constructor(@Inject(DRIZZLE) private readonly db: DrizzleDB) {}
@@ -107,7 +106,6 @@ export class AddressService {
             .set({ is_default: false })
             .where(eq(address.user_id, customerId));
         }
-
         const [insertedAddress] = await tx
           .insert(address)
           .values({
@@ -115,8 +113,8 @@ export class AddressService {
             address_type: addressData.address_for,
             name: addressData.name,
             number: addressData.phone,
-            address_line1: addressData.address_line_1,
-            address_line2: addressData.address_line_2,
+            address_line_1: addressData.address_line_1,
+            address_line_2: addressData.address_line_2,
             street: addressData.street,
             city: addressData.city,
             state: addressData.state,
@@ -179,8 +177,8 @@ export class AddressService {
             address_type: addressData.address_for,
             name: addressData.name,
             number: addressData.phone,
-            address_line1: addressData.address_line_1,
-            address_line2: addressData.address_line_2,
+            address_line_1: addressData.address_line_1,
+            address_line_2: addressData.address_line_2,
             street: addressData.street,
             city: addressData.city,
             state: addressData.state,
