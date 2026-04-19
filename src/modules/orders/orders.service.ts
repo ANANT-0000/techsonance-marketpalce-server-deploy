@@ -16,12 +16,14 @@ import {
 } from 'src/drizzle/schema';
 import { OrderStatus, PaymentStatus } from 'src/drizzle/types/types';
 import { CompanyService } from '../company/company.service';
+import { InventoryService } from '../inventory/inventory.service';
 
 @Injectable()
 export class OrdersService {
   constructor(
     @Inject(DRIZZLE) private readonly db: DrizzleService,
     private readonly companyService: CompanyService,
+    private readonly inventoryService: InventoryService,
   ) {}
 
   async createOrder({
@@ -46,6 +48,15 @@ export class OrdersService {
         throw new Error('Total amount must be greater than zero');
       }
       const orderResult = await this.db.transaction(async (tx) => {
+        await this.inventoryService.deductStockForOrder(
+          orderLines.map((l) => ({
+            variantId: l.variantId,
+            quantity: l.quantity,
+          })),
+          companyId,
+          tx as DrizzleService,
+        );
+
         const [createdOrder] = await tx
           .insert(orders)
           .values({
@@ -113,6 +124,12 @@ export class OrdersService {
       });
       return orderResult;
     } catch (error) {
+      if (
+        error instanceof HttpException ||
+        error instanceof InternalServerErrorException
+      ) {
+        throw error;
+      }
       throw new InternalServerErrorException('Failed to create order', {
         cause: error,
       });
@@ -198,6 +215,14 @@ export class OrdersService {
       if (!existingOrder) {
         throw new HttpException('Order not found', HttpStatus.NOT_FOUND);
       }
+      const orderLines = await this.db
+        .select({
+          variantId: order_items.product_variant_id,
+          quantity: order_items.quantity,
+        })
+        .from(order_items)
+        .where(eq(order_items.order_id, orderId));
+
       console.log('starting transaction of order complete');
       return this.db.transaction(async (tx) => {
         if (isSuccess) {
@@ -236,6 +261,14 @@ export class OrdersService {
             message: 'Order placed successfully',
           };
         } else {
+          await this.inventoryService.rollbackStockForOrder(
+            orderLines.map((l) => ({
+              variantId: l.variantId ?? '',
+              quantity: l.quantity,
+            })),
+            companyId,
+            tx as DrizzleService,
+          );
           await tx
             .update(orders)
             .set({ order_status: OrderStatus.CANCELLED })

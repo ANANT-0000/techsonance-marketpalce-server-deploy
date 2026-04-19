@@ -21,10 +21,7 @@ export class ProductVariantService {
   ) {}
   async create(
     createProductVariantDto: CreateProductVariantDto,
-    files: {
-      product?: Express.Multer.File;
-      product_spec?: Express.Multer.File[];
-    },
+    files: ProductFiles,
   ) {
     if (!createProductVariantDto.product_id) {
       throw new InternalServerErrorException('Product ID is required');
@@ -196,15 +193,17 @@ export class ProductVariantService {
   }
   async findOne(id: string) {
     try {
-      const productVariant = await this.db.query.product_variants.findMany({
+      const productVariant = await this.db.query.product_variants.findFirst({
         where: (product_variants) => eq(product_variants.id, id),
         with: {
+          product: true,
           images: true,
         },
       });
-      if (!productVariant || productVariant.length === 0) {
+      if (!productVariant) {
         throw new Error(`Product variant with ID ${id} not found`);
       }
+      console.log('productVariant sending', productVariant);
       return productVariant;
     } catch (error) {
       console.error('Error fetching product variant:', error);

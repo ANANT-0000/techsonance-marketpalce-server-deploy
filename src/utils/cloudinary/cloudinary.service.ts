@@ -8,8 +8,21 @@ import 'multer';
 export class CloudinaryService {
   uploadFile(file: Express.Multer.File): Promise<CloudinaryResponse> {
     return new Promise((resolve, reject) => {
+      if (!file || !file.buffer) {
+        reject(new Error('No file provided'));
+        return;
+      }
+      const uploadOptions: Record<string, any> = {
+        resource_type: 'auto',
+      };
+      const mimeParts = file.mimetype.split('/');
+      const fileFormat = mimeParts.length > 1 ? mimeParts[1] : '';
+      if (fileFormat === 'svg+xml' || fileFormat === 'svg') {
+        uploadOptions.resource_type = 'image'; // Force image type
+        uploadOptions.format = 'svg'; // Explicitly define format
+      }
       const uploadStream = cloudinary.uploader.upload_stream(
-        { resource_type: 'auto' },
+        uploadOptions,
         (error, result) => {
           if (error) {
             reject(error as Error);

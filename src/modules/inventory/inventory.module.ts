@@ -8,5 +8,6 @@ import { CompanyModule } from '../company/company.module';
   imports: [DrizzleModule, CompanyModule],
   controllers: [InventoryController],
   providers: [InventoryService],
+  exports: [InventoryService],
 })
 export class InventoryModule {}

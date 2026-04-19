@@ -41,8 +41,18 @@ export class ProductsService {
       const product = await this.db.query.products.findMany({
         where: (products) => eq(products.company_id, companyRecord.id),
         with: {
-          images: true,
-          variants: true,
+          images: {
+            where: (images) => eq(images.is_primary, true),
+          },
+          variants: {
+            columns: {
+              id: true,
+              variant_name: true,
+              price: true,
+              sku: true,
+              status: true,
+            },
+          },
         },
       });
       console.log('response product ', product);
@@ -54,19 +64,31 @@ export class ProductsService {
     }
   }
 
-  async getProductById(productId: string) {
+  async getProductById(productId: string, domain: string) {
     try {
       console.log(productId);
-      const product = await this.db.query.products.findFirst({
-        where: (products) => eq(products.id, productId),
-        with: {
-          variants: {
-            with: {
-              images: true,
+      const product = await this.db.query.product_variants
+        .findFirst({
+          where: (products) => eq(products.id, productId),
+          with: {
+            product: {
+              // where: (variants) => eq(variants.product_id, productId),
+              with: {
+                images: true,
+              },
             },
           },
-        },
-      });
+        })
+        .then((res) => {
+          console.log(res);
+          return res;
+        })
+        .catch((error) => {
+          console.error('Error fetching product by ID:', error);
+          throw new InternalServerErrorException('Failed to fetch product', {
+            cause: error,
+          });
+        });
       if (!product) {
         throw new HttpException('Product not found', HttpStatus.NOT_FOUND);
       }
@@ -208,18 +230,43 @@ export class ProductsService {
     }
   }
   async updateProduct(
-    productId: string,
+    productVariantId: string,
     product: UpdateProductDto,
     imagesToDelete?: string[],
     files?: ProductFiles,
   ) {
-    console.log('updateProduct productId', productId);
+    console.log('updateProduct productVariantId', productVariantId);
     console.log('product', product);
     console.log('imagesToDelete', imagesToDelete);
-    if (!productId) {
+    if (!productVariantId) {
       return new HttpException(
-        'Product ID is required',
+        'Product Variant ID is required',
         HttpStatus.BAD_REQUEST,
+      );
+    }
+    const [productId] = await this.db
+      .select({
+        product_id: product_variants.product_id,
+      })
+      .from(product_variants)
+      .where(eq(product_variants.id, productVariantId))
+      .then((res) => {
+        console.log('productId', res);
+        return res.map((item) => item.product_id);
+      })
+      .catch((error) => {
+        console.error('Error fetching product variant:', error);
+        throw new InternalServerErrorException(
+          'Failed to fetch product variant',
+          {
+            cause: error,
+          },
+        );
+      });
+    if (!productId && productId === null) {
+      throw new HttpException(
+        'Product ID not found for the given variant',
+        HttpStatus.NOT_FOUND,
       );
     }
     const productUpdatedData = {
@@ -242,7 +289,7 @@ export class ProductsService {
         const updatedProductResult = await tx
           .update(products)
           .set(productUpdatedData)
-          .where(eq(products.id, productId));
+          .where(eq(products.id, productVariantId));
         console.log('updatedProductResult', updatedProductResult);
         const finalResults: { url: string; type: productImageType }[] = [];
 
@@ -269,26 +316,58 @@ export class ProductsService {
         }
         console.log('finalResults *******', product.variant_id);
         if (finalResults.length > 0 && product.variant_id) {
-          const imageInserts = finalResults.map((image, index) => ({
-            variant_id: product.variant_id,
-            product_id: productId,
-            image_url: image.url,
-            alt_text: `${image.type} Image ${index + 1}`,
-            is_primary: image.type === productImageType.MAIN,
-            imgType: image.type,
-          }));
+          const imageInserts = finalResults.map((image, index) => {
+            console.log('images inserts');
+            console.table(image);
+            return {
+              variant_id: product.variant_id,
+              product_id: productId,
+              image_url: image.url,
+              alt_text: `${image.type} Image ${index + 1}`,
+              is_primary: image.type === productImageType.MAIN,
+              imgType: image.type,
+            };
+          });
           console.table(imageInserts);
           const createdImages = await tx
             .insert(product_images)
-            .values(imageInserts);
+            .values(imageInserts)
+            .catch((error) => {
+              console.error('Error inserting product images:', error);
+              throw new InternalServerErrorException(
+                'Failed to insert product images',
+                {
+                  cause: error,
+                },
+              );
+            });
           console.log('createdImages', createdImages);
           console.log('imagesToDelete', imagesToDelete);
-          if (imagesToDelete && imagesToDelete.length > 0) {
+          if (imagesToDelete) {
+            console.log('starting deleting images');
             const deletePromises = imagesToDelete.map(
               async (id) =>
                 await tx
                   .delete(product_images)
-                  .where(eq(product_images.id, id)),
+                  .where(
+                    or(
+                      eq(product_images.id, id),
+                      eq(product_images.product_id, id),
+                    ),
+                  )
+                  .then(() => {
+                    console.log(`Deleted product image with ID: ${id}`);
+                    return id;
+                  })
+                  .catch((error) => {
+                    console.error('Error deleting product image:', error);
+                    throw new InternalServerErrorException(
+                      'Failed to delete product image',
+                      {
+                        cause: error,
+                      },
+                    );
+                  }),
             );
             const deletedImages = await Promise.all(deletePromises);
             console.log('deletedImages', deletedImages);
@@ -310,7 +389,7 @@ export class ProductsService {
             .where(
               and(
                 eq(product_variants.product_id, productId),
-                eq(product_variants.id, product.variant_id),
+                eq(product_variants.id, productVariantId),
               ),
             )
             .catch((error) => {
@@ -344,7 +423,16 @@ export class ProductsService {
       );
     }
     try {
-      await this.db.delete(products).where(eq(products.id, productId));
+      console.log('deleting product', productId);
+      await this.db
+        .delete(products)
+        .where(eq(products.id, productId))
+        .catch((error) => {
+          console.error('Error deleting product:', error);
+          throw new InternalServerErrorException('Failed to delete product', {
+            cause: error,
+          });
+        });
       return {
         message: 'Product deleted successfully',
         status: HttpStatus.OK,
@@ -430,6 +518,7 @@ export class ProductsService {
       );
     }
   }
+
   async deleteProductVariant(variantId: string) {
     if (!variantId) {
       return new HttpException(

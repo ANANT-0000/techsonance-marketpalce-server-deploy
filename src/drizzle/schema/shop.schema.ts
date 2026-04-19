@@ -83,7 +83,9 @@ export const wishlist = pg.pgTable('wishlist', {
 });
 export const coupon_usage = pg.pgTable('coupon_usage', {
   id: pg.uuid('id').primaryKey().defaultRandom(),
-  coupon_id: pg.uuid('coupon_id').references(() => coupons.id),
+  coupon_id: pg
+    .uuid('coupon_id')
+    .references(() => coupons.id, { onDelete: 'cascade' }),
   user_id: pg
     .uuid('user_id')
     .references(() => user.id, { onDelete: 'cascade' }),
@@ -124,7 +126,9 @@ export const products = pg.pgTable(
     vendor_id: pg
       .uuid('vendor_id')
       .references(() => vendor.id, { onDelete: 'cascade' }),
-    category_id: pg.uuid('category_id').references(() => categories.id),
+    category_id: pg
+      .uuid('category_id')
+      .references(() => categories.id, { onDelete: 'cascade' }),
   },
   (table) => [
     pg.index('idx_products_company_id').on(table.company_id),
@@ -151,8 +155,12 @@ export const orders = pg.pgTable(
     user_id: pg
       .uuid('user_id')
       .references(() => user.id, { onDelete: 'cascade' }),
-    address_id: pg.uuid('address_id').references(() => address.id),
-    company_id: pg.uuid('company_id').references(() => company.id),
+    address_id: pg
+      .uuid('address_id')
+      .references(() => address.id, { onDelete: 'cascade' }),
+    company_id: pg
+      .uuid('company_id')
+      .references(() => company.id, { onDelete: 'cascade' }),
   },
   (table) => [
     pg.index('idx_orders_user_id').on(table.user_id),
@@ -166,10 +174,12 @@ export const order_items = pg.pgTable(
   'order_items',
   {
     id: pg.uuid('id').primaryKey().defaultRandom(),
-    order_id: pg.uuid('order_id').references(() => orders.id),
+    order_id: pg
+      .uuid('order_id')
+      .references(() => orders.id, { onDelete: 'cascade' }),
     product_variant_id: pg
       .uuid('product_variant_id')
-      .references(() => product_variants.id),
+      .references(() => product_variants.id, { onDelete: 'cascade' }),
     quantity: pg.integer('quantity').notNull(),
     price: pg.decimal('price', { precision: 10, scale: 2 }).notNull(),
     created_at: pg.timestamp('created_at').notNull().defaultNow(),
@@ -272,7 +282,9 @@ export const product_reviews = pg.pgTable('product_reviews', {
   user_id: pg
     .uuid('user_id')
     .references(() => user.id, { onDelete: 'cascade' }),
-  company_id: pg.uuid('company_id').references(() => company.id),
+  company_id: pg
+    .uuid('company_id')
+    .references(() => company.id, { onDelete: 'cascade' }),
 });
 export const wishlist_items = pg.pgTable(
   'wishlist_items',
@@ -319,7 +331,9 @@ export const payments = pg.pgTable(
       .notNull()
       .defaultNow()
       .$onUpdate(() => new Date()),
-    order_id: pg.uuid('order_id').references(() => orders.id),
+    order_id: pg
+      .uuid('order_id')
+      .references(() => orders.id, { onDelete: 'cascade' }),
     company_id: pg.uuid('company_id').references(() => company.id),
   },
   (table) => [
@@ -347,7 +361,9 @@ export const shipping_details = pg.pgTable('shipping_details', {
     .notNull()
     .defaultNow()
     .$onUpdate(() => new Date()),
-  order_id: pg.uuid('order_id').references(() => orders.id),
+  order_id: pg
+    .uuid('order_id')
+    .references(() => orders.id, { onDelete: 'cascade' }),
   company_id: pg.uuid('company_id').references(() => company.id),
 });
 
@@ -364,9 +380,15 @@ export const refunds = pg.pgTable(
       .timestamp('created_at')
       .$default(() => new Date())
       .notNull(),
-    order_id: pg.uuid('order_id').references(() => orders.id),
-    payment_id: pg.uuid('payment_id').references(() => payments.id),
-    company_id: pg.uuid('company_id').references(() => company.id),
+    order_id: pg
+      .uuid('order_id')
+      .references(() => orders.id, { onDelete: 'cascade' }),
+    payment_id: pg
+      .uuid('payment_id')
+      .references(() => payments.id, { onDelete: 'cascade' }),
+    company_id: pg
+      .uuid('company_id')
+      .references(() => company.id, { onDelete: 'cascade' }),
   },
   (table) => [
     pg.index('idx_refunds_order_id').on(table.order_id),

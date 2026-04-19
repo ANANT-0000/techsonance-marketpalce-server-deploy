@@ -1,34 +1,57 @@
-import { Controller, Get, Post, Body, Patch, Param, Delete } from '@nestjs/common';
+import {
+  Controller,
+  Get,
+  Post,
+  Body,
+  Patch,
+  Param,
+  Delete,
+  Headers,
+  HttpCode,
+  HttpStatus,
+} from '@nestjs/common';
 import { InventoryService } from './inventory.service';
-import { CreateInventoryDto } from './dto/create-inventory.dto';
-import { UpdateInventoryDto } from './dto/update-inventory.dto';
+import { CreateInventoryDto } from './dto/inventory.dto';
 
 @Controller('inventory')
 export class InventoryController {
   constructor(private readonly inventoryService: InventoryService) {}
-
   @Post()
-  create(@Body() createInventoryDto: CreateInventoryDto) {
-    return this.inventoryService.create(createInventoryDto);
+  @HttpCode(HttpStatus.CREATED)
+  create(
+    @Body() dto: CreateInventoryDto,
+    @Headers('company-domain') domain: string,
+  ) {
+    return this.inventoryService.create(dto, domain);
   }
-
   @Get()
-  findAll() {
-    return this.inventoryService.findAll();
+  @HttpCode(HttpStatus.OK)
+  findAll(@Headers('company-domain') domain: string) {
+    return this.inventoryService.findAll(domain);
   }
 
-  @Get(':id')
-  findOne(@Param('id') id: string) {
-    return this.inventoryService.findOne(+id);
-  }
+  /**
+   * Low-stock alert panel only items below threshold.
+   */
+  // @Get('alerts/low-stock')
+  // @HttpCode(HttpStatus.OK)
+  // getLowStockAlerts(@Headers('company-domain') domain: string) {
+  //   return this.inventoryService.getLowStockAlerts(domain);
+  // }
 
   @Patch(':id')
-  update(@Param('id') id: string, @Body() updateInventoryDto: UpdateInventoryDto) {
-    return this.inventoryService.update(+id, updateInventoryDto);
+  @HttpCode(HttpStatus.OK)
+  updateStock(
+    @Param('id') id: string,
+    @Body('quantity') quantity: number,
+    @Headers('company-domain') domain: string,
+  ) {
+    return this.inventoryService.updateStock(id, quantity, domain);
   }
 
   @Delete(':id')
-  remove(@Param('id') id: string) {
-    return this.inventoryService.remove(+id);
+  @HttpCode(HttpStatus.OK)
+  remove(@Param('id') id: string, @Headers('company-domain') domain: string) {
+    return this.inventoryService.remove(id, domain);
   }
 }

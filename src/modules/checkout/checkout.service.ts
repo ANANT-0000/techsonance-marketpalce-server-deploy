@@ -11,12 +11,14 @@ import {
 } from 'src/drizzle/schema';
 import { and, eq, or } from 'drizzle-orm';
 import { OrdersService } from '../orders/orders.service';
+import { CompanyService } from '../company/company.service';
 
 @Injectable()
 export class CheckoutService {
   constructor(
     @Inject(DRIZZLE) private readonly db: DrizzleDB,
     private readonly ordersService: OrdersService,
+    private readonly companyService: CompanyService,
   ) {}
   async initiateCheckout(
     userId: string,
@@ -39,20 +41,21 @@ export class CheckoutService {
         HttpStatus.BAD_REQUEST,
       );
     }
+    const companyId = await this.companyService.find(domain);
 
-    const [companyRecord] = await this.db
-      .select({ id: company.id })
-      .from(company)
-      .where(or(eq(company.company_domain, domain), eq(company.id, domain)))
-      .limit(1);
-    if (!companyRecord) {
-      throw new HttpException('Company not found', HttpStatus.NOT_FOUND);
-    }
     const addressRecord = await this.db
       .select()
       .from(address)
       .where(eq(address.user_id, userId))
-      .limit(1);
+      .limit(1)
+      .catch((error) => {
+        console.error('Error fetching address:', error);
+        throw new HttpException(
+          'Failed to fetch address for checkout',
+          HttpStatus.INTERNAL_SERVER_ERROR,
+          { cause: error },
+        );
+      });
     if (!addressRecord) {
       throw new HttpException('Address not found', HttpStatus.NOT_FOUND);
     }
@@ -69,7 +72,7 @@ export class CheckoutService {
     }
     return await this.ordersService.createOrder({
       userId,
-      companyId: companyRecord.id,
+      companyId,
       addressId,
       orderLines,
       paymentMethod,

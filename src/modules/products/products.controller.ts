@@ -60,8 +60,11 @@ export class ProductsController {
     return await this.productsService.getProducts(companyId);
   }
   @Get(':id')
-  async getProductById(@Param('id') id: string) {
-    return await this.productsService.getProductById(id);
+  async getProductById(
+    @Param('id') id: string,
+    @Headers('company-domain') domain: string,
+  ) {
+    return await this.productsService.getProductById(id, domain);
   }
 
   @Patch(':id')
