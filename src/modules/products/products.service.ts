@@ -63,7 +63,41 @@ export class ProductsService {
       });
     }
   }
-
+  async getProductMainDetails(productId: string, domain: string) {
+    try {
+      console.log(productId);
+      const productRecord = await this.db.query.products
+        .findFirst({
+          where: (products) => eq(products.id, productId),
+          columns: {
+            id: true,
+            name: true,
+          },
+          with: {
+            category: {
+              columns: {
+                name: true,
+              },
+            },
+          },
+        })
+        .catch((error) => {
+          console.error('Error fetching product by ID:', error);
+          throw new InternalServerErrorException('Failed to fetch product', {
+            cause: error,
+          });
+        });
+      if (!productRecord) {
+        throw new HttpException('Product not found', HttpStatus.NOT_FOUND);
+      }
+      console.log('sending product main details', productRecord);
+      return productRecord;
+    } catch (error) {
+      throw new InternalServerErrorException('Failed to fetch product', {
+        cause: error,
+      });
+    }
+  }
   async getProductById(productId: string, domain: string) {
     try {
       console.log(productId);
@@ -156,7 +190,7 @@ export class ProductsService {
           description: productDto.description,
           base_price: productDto.base_price.toString(),
           discount_percent: (productDto.discount_percent || 0).toString(),
-          stock_quantity: productDto.stock_quantity,
+
           status: productDto.status,
           features: productDto.features,
           category_id: productDto.category_id,
@@ -178,7 +212,7 @@ export class ProductsService {
             price: productDto.price || productDto.base_price.toString(),
             attributes: productDto.attributes,
             status: productDto.status,
-            stock_quantity: productDto.stock_quantity,
+
             seo_meta: productDto.seo_meta ?? null,
             product_id: createdProduct.id,
           })
@@ -213,6 +247,7 @@ export class ProductsService {
         }
 
         return {
+          id: variantRecords?.id,
           message: 'Product created successfully',
           status: HttpStatus.CREATED,
         };
@@ -275,7 +310,7 @@ export class ProductsService {
       features: product.features,
       base_price: product.base_price,
       discount_percent: product.discount_percent,
-      stock_quantity: product.stock_quantity,
+
       status: product.status,
     };
     try {
@@ -379,7 +414,7 @@ export class ProductsService {
             price: product.base_price,
             attributes: product.attributes,
             status: product.status,
-            stock_quantity: product.stock_quantity,
+
             seo_meta: null,
           };
           console.log('updateProductVariantDat', updateProductVariantData);

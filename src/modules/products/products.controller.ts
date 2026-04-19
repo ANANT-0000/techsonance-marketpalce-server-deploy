@@ -66,7 +66,13 @@ export class ProductsController {
   ) {
     return await this.productsService.getProductById(id, domain);
   }
-
+  @Get('main-details/:id')
+  async getProductMainDetails(
+    @Param('id') id: string,
+    @Headers('company-domain') domain: string,
+  ) {
+    return await this.productsService.getProductMainDetails(id, domain);
+  }
   @Patch(':id')
   @UploadToCloud([
     { name: 'product', maxCount: 1 },

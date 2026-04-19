@@ -34,7 +34,10 @@ export class WarehouseController {
   findAll(@Headers('company-domain') domain: string) {
     return this.warehouseService.findAll(domain);
   }
-
+  @Get('options')
+  findOptions(@Headers('company-domain') domain: string) {
+    return this.warehouseService.findOptions(domain);
+  }
   @Get(':id')
   findOne(@Param('id') id: string, @Headers('company-domain') domain: string) {
     return this.warehouseService.findOne(id, domain);

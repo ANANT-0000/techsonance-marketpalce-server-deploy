@@ -36,7 +36,6 @@ export class ProductVariantService {
       price: createProductVariantDto.price,
       attributes: createProductVariantDto.attributes,
       status: createProductVariantDto.status,
-      stock_quantity: createProductVariantDto.stock_quantity,
       seo_meta: createProductVariantDto.seo_meta ?? null,
       product_id: productId.id,
     };
@@ -138,7 +137,6 @@ export class ProductVariantService {
           sku: product_variants.sku,
           price: product_variants.price,
           status: product_variants.status,
-          stock_quantity: product_variants.stock_quantity,
         })
         .from(product_variants)
         .where(eq(product_variants.id, variantId))
@@ -223,7 +221,6 @@ export class ProductVariantService {
       price: updateProductVariantDto.price,
       attributes: updateProductVariantDto.attributes,
       status: updateProductVariantDto.status,
-      stock_quantity: updateProductVariantDto.stock_quantity,
       seo_meta: updateProductVariantDto.seo_meta ?? null,
     };
 

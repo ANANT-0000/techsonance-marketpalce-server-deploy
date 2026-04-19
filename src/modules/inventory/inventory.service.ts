@@ -9,7 +9,12 @@ import {
 import { DRIZZLE, type DrizzleService } from 'src/drizzle/drizzle.module';
 import { CompanyService } from '../company/company.service';
 import { CreateInventoryDto } from './dto/inventory.dto';
-import { inventory, product_variants } from 'src/drizzle/schema';
+import {
+  inventory,
+  product_variants,
+  products,
+  warehouse,
+} from 'src/drizzle/schema';
 import { and, eq, sql } from 'drizzle-orm';
 export const LOW_STOCK_THRESHOLD = 5; // configurable
 
@@ -67,40 +72,83 @@ export class InventoryService {
     try {
       const companyId = await this.companyService.find(domain);
 
-      const rows = await this.db.query.inventory.findMany({
-        where: eq(inventory.company_id, companyId),
-        with: {
-          variant: {
-            columns: {
-              id: true,
-              variant_name: true,
-              sku: true,
-              price: true,
-              stock_quantity: true,
-              status: true,
-            },
-            with: {
-              images: {
-                columns: { image_url: true, is_primary: true },
-              },
-            },
-          },
-          warehouse: {
-            columns: { id: true, warehouse_name: true },
-          },
-        },
-      });
+      const rows = await this.db
+        .select({
+          // Variant fields
+          variant_id: product_variants.id,
+          variant_name: product_variants.variant_name,
+          sku: product_variants.sku,
+          price: product_variants.price,
+          stock_quantity: product_variants.stock_quantity, // global stock on variant
+          // Inventory fields (nullable — leftJoin)
+          inventory_record_id: inventory.id,
+          warehouse_stock: inventory.stock_quantity,
+          warehouse_id: inventory.warehouse_id,
+          // Warehouse fields (nullable — leftJoin)
+          warehouse_name: warehouse.warehouse_name,
+        })
+        .from(product_variants)
+        .innerJoin(products, eq(product_variants.product_id, products.id))
+        .leftJoin(
+          inventory,
+          and(
+            eq(product_variants.id, inventory.product_variant_id),
+            eq(inventory.company_id, companyId),
+          ),
+        )
+        .leftJoin(warehouse, eq(inventory.warehouse_id, warehouse.id))
+        .where(eq(products.company_id, companyId)); // ← scope to this company only
 
-      return rows.map((row) => ({
-        ...row,
-        isLowStock: row.stock_quantity <= LOW_STOCK_THRESHOLD,
-        isOutOfStock: row.stock_quantity === 0,
-      }));
-    } catch (error) {
-      if (error instanceof HttpException) {
-        throw error;
+      // Group flat rows by variant_id
+      const variantMap = new Map<
+        string,
+        {
+          variant_id: string;
+          variant_name: string;
+          sku: string;
+          price: string;
+          total_stock: number | null;
+          isLowStock: boolean;
+          isOutOfStock: boolean;
+          locations: {
+            inventory_id: string;
+            warehouse_id: string;
+            warehouse_name: string | null;
+            stock: number;
+          }[];
+        }
+      >();
+
+      for (const row of rows) {
+        if (!variantMap.has(row.variant_id)) {
+          variantMap.set(row.variant_id, {
+            variant_id: row.variant_id,
+            variant_name: row.variant_name,
+            sku: row.sku,
+            price: row.price,
+            total_stock: row.stock_quantity,
+            isLowStock: (row.stock_quantity ?? 0) <= LOW_STOCK_THRESHOLD,
+            isOutOfStock:
+              row.stock_quantity === 0 || row.stock_quantity === null,
+            locations: [],
+          });
+        }
+
+        // Only push a location entry if an inventory record exists for this row
+        if (row?.inventory_record_id && row.warehouse_id) {
+          variantMap.get(row.variant_id)!.locations.push({
+            inventory_id: row.inventory_record_id,
+            warehouse_id: row.warehouse_id,
+            warehouse_name: row.warehouse_name,
+            stock: row.warehouse_stock ?? 0,
+          });
+        }
       }
-      throw new InternalServerErrorException('Failed to create inventory', {
+
+      return Array.from(variantMap.values());
+    } catch (error) {
+      if (error instanceof HttpException) throw error;
+      throw new InternalServerErrorException('Failed to fetch inventory', {
         cause: error,
       });
     }

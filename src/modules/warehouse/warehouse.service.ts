@@ -127,7 +127,34 @@ export class WarehouseService {
       });
     }
   }
-
+  async findOptions(domain: string) {
+    try {
+      const companyId = await this.companyService.find(domain);
+      return await this.db.query.warehouse
+        .findMany({
+          where: eq(warehouse.company_id, companyId),
+          columns: {
+            id: true,
+            warehouse_name: true,
+          },
+        })
+        .then((warehouses) => {
+          console.log('warehouses', warehouses);
+          return warehouses;
+        })
+        .catch((error) => {
+          console.error('Error finding warehouses:', error);
+          throw new InternalServerErrorException('Failed to find warehouses', {
+            cause: error,
+          });
+        });
+    } catch (error) {
+      console.error('Error finding all warehouses:', error);
+      throw new InternalServerErrorException('Failed to find warehouses', {
+        cause: error,
+      });
+    }
+  }
   async findOne(id: string, domain: string) {
     try {
       const companyId = await this.companyService.find(domain);
