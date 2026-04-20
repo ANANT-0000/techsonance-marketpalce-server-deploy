@@ -8,28 +8,44 @@ import {
 import { CreateProductVariantDto } from './dto/create-product-variant.dto';
 import { DRIZZLE, type DrizzleService } from 'src/drizzle/drizzle.module';
 import { and, eq, inArray } from 'drizzle-orm';
-import { product_images, product_variants, products } from 'src/drizzle/schema';
+import {
+  inventory,
+  product_images,
+  product_variants,
+  products,
+} from 'src/drizzle/schema';
 import { productImageType, ProductStatus } from 'src/drizzle/types/types';
 import { UploadToCloudService } from 'src/utils/upload-to-cloud/upload-to-cloud.service';
 import { ProductFiles } from 'src/common/Types/index.type';
 import { UpdateProductVariantDto } from './dto/update-product-variant.dto';
+import { CompanyService } from '../company/company.service';
+import { InventoryService } from '../inventory/inventory.service';
 @Injectable()
 export class ProductVariantService {
   constructor(
     @Inject(DRIZZLE) private readonly db: DrizzleService,
     private readonly uploadToCloudService: UploadToCloudService,
+    private inventoryService: InventoryService,
+    private readonly companyService: CompanyService,
   ) {}
   async create(
     createProductVariantDto: CreateProductVariantDto,
+    domain: string,
     files: ProductFiles,
   ) {
     if (!createProductVariantDto.product_id) {
       throw new InternalServerErrorException('Product ID is required');
     }
+    const companyId = await this.companyService.find(domain);
     const [productId] = await this.db
       .select({ id: products.id })
       .from(products)
-      .where(eq(products.id, createProductVariantDto.product_id));
+      .where(
+        and(
+          eq(products.id, createProductVariantDto.product_id),
+          eq(products.company_id, companyId),
+        ),
+      );
     const variantData = {
       variant_name: createProductVariantDto.variant_name,
       sku: createProductVariantDto.sku,
@@ -100,6 +116,15 @@ export class ProductVariantService {
             .values(imageInserts)
             .returning();
           console.log('variantImgsResult', variantImgsResult);
+        }
+        if (createProductVariantDto.warehouse_id && variantRecord?.id) {
+          await this.inventoryService.setStock(
+            variantRecord.id,
+            createProductVariantDto.warehouse_id,
+            createProductVariantDto.stock_quantity ?? 0,
+            companyId,
+            tx as DrizzleService,
+          );
         }
         return variantRecord;
       });

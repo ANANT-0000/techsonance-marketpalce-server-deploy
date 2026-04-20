@@ -79,7 +79,7 @@ export class InventoryService {
           variant_name: product_variants.variant_name,
           sku: product_variants.sku,
           price: product_variants.price,
-          stock_quantity: product_variants.stock_quantity, // global stock on variant
+          stock_quantity: inventory.stock_quantity, // global stock on variant
           // Inventory fields (nullable — leftJoin)
           inventory_record_id: inventory.id,
           warehouse_stock: inventory.stock_quantity,
@@ -97,7 +97,7 @@ export class InventoryService {
           ),
         )
         .leftJoin(warehouse, eq(inventory.warehouse_id, warehouse.id))
-        .where(eq(products.company_id, companyId)); // ← scope to this company only
+        .where(eq(products.company_id, companyId));
 
       // Group flat rows by variant_id
       const variantMap = new Map<
@@ -126,10 +126,10 @@ export class InventoryService {
             variant_name: row.variant_name,
             sku: row.sku,
             price: row.price,
-            total_stock: row.stock_quantity,
-            isLowStock: (row.stock_quantity ?? 0) <= LOW_STOCK_THRESHOLD,
+            total_stock: row.warehouse_stock,
+            isLowStock: (row.warehouse_stock ?? 0) <= LOW_STOCK_THRESHOLD,
             isOutOfStock:
-              row.stock_quantity === 0 || row.stock_quantity === null,
+              row.warehouse_stock === 0 || row.warehouse_stock === null,
             locations: [],
           });
         }
@@ -154,6 +154,85 @@ export class InventoryService {
     }
   }
 
+  async setStock(
+    productVariantId: string,
+    warehouseId: string,
+    newQuantity: number,
+    companyId: string,
+    tx?: DrizzleService,
+  ): Promise<void> {
+    const db = tx ?? this.db;
+
+    const [existing] = await db
+      .select({ id: inventory.id, stock_quantity: inventory.stock_quantity })
+      .from(inventory)
+      .where(
+        and(
+          eq(inventory.product_variant_id, productVariantId),
+          eq(inventory.warehouse_id, warehouseId),
+          eq(inventory.company_id, companyId),
+        ),
+      )
+      .limit(1);
+
+    if (existing) {
+      await db
+        .update(inventory)
+        .set({ stock_quantity: newQuantity })
+        .where(eq(inventory.id, existing.id));
+    } else {
+      await db.insert(inventory).values({
+        product_variant_id: productVariantId,
+        warehouse_id: warehouseId,
+        stock_quantity: newQuantity,
+        company_id: companyId,
+      });
+    }
+  }
+  async updateStock(inventoryId: string, newQuantity: number, domain: string) {
+    try {
+      const companyId = await this.companyService.find(domain);
+
+      const [inv] = await this.db
+        .select({
+          id: inventory.id,
+          product_variant_id: inventory.product_variant_id,
+          warehouse_id: inventory.warehouse_id,
+        })
+        .from(inventory)
+        .where(
+          and(
+            eq(inventory.id, inventoryId),
+            eq(inventory.company_id, companyId),
+          ),
+        )
+        .limit(1);
+
+      if (!inv) {
+        throw new HttpException(
+          'Inventory record not found',
+          HttpStatus.NOT_FOUND,
+        );
+      }
+
+      // Use centralized method — syncs both tables
+      await this.setStock(
+        inv.product_variant_id,
+        inv.warehouse_id,
+        newQuantity,
+        companyId,
+      );
+
+      return {
+        inventoryId,
+        newQuantity,
+        isLowStock: newQuantity <= LOW_STOCK_THRESHOLD,
+      };
+    } catch (error) {
+      if (error instanceof HttpException) throw error;
+      throw new InternalServerErrorException('Failed to update stock');
+    }
+  }
   async deductStockForOrder(
     orderLines: { variantId: string; quantity: number }[],
     companyId: string,
@@ -198,12 +277,6 @@ export class InventoryService {
               eq(inventory.product_variant_id, line.variantId),
             ),
           );
-        await tx
-          .update(product_variants)
-          .set({
-            stock_quantity: sql`${product_variants.stock_quantity} - ${line.quantity}`,
-          })
-          .where(eq(product_variants.id, line.variantId));
       }
     } catch (error) {
       if (error instanceof HttpException) {
@@ -252,63 +325,7 @@ export class InventoryService {
               eq(inventory.product_variant_id, line.variantId),
             ),
           );
-        await tx
-          .update(product_variants)
-          .set({
-            stock_quantity: sql`${product_variants.stock_quantity} + ${line.quantity}`,
-          })
-          .where(eq(product_variants.id, line.variantId));
       }
-    } catch (error) {
-      if (error instanceof HttpException) {
-        throw error;
-      }
-      throw new InternalServerErrorException('Failed to create inventory', {
-        cause: error,
-      });
-    }
-  }
-  async updateStock(inventoryId: string, newQuantity: number, domain: string) {
-    try {
-      const companyId = await this.companyService.find(domain);
-
-      const [inv] = await this.db
-        .select({
-          id: inventory.id,
-          product_variant_id: inventory.product_variant_id,
-        })
-        .from(inventory)
-        .where(
-          and(
-            eq(inventory.id, inventoryId),
-            eq(inventory.company_id, companyId),
-          ),
-        )
-        .limit(1);
-
-      if (!inv) {
-        throw new HttpException(
-          'Inventory record not found',
-          HttpStatus.NOT_FOUND,
-        );
-      }
-
-      const [updated] = await this.db
-        .update(inventory)
-        .set({ stock_quantity: newQuantity })
-        .where(eq(inventory.id, inventoryId))
-        .returning();
-
-      // Sync variant table
-      await this.db
-        .update(product_variants)
-        .set({ stock_quantity: newQuantity })
-        .where(eq(product_variants.id, inv.product_variant_id));
-
-      return {
-        ...updated,
-        isLowStock: updated.stock_quantity <= LOW_STOCK_THRESHOLD,
-      };
     } catch (error) {
       if (error instanceof HttpException) {
         throw error;

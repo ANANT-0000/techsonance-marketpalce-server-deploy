@@ -4,6 +4,7 @@ import {
   IsNumber,
   IsObject,
   IsOptional,
+  isString,
   IsString,
 } from 'class-validator';
 import { ProductStatus } from 'src/drizzle/types/types';
@@ -32,5 +33,10 @@ export class CreateProductVariantDto {
   seo_meta!: string | null;
 
   @IsString()
+  @Transform(({ value }: { value: string }) => value.trim())
   product_id!: string;
+
+  @IsString()
+  @Transform(({ value }: { value: string }) => value.trim())
+  warehouse_id!: string;
 }

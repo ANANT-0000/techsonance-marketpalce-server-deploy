@@ -104,6 +104,7 @@ export const productsRelations = relations(products, ({ one, many }) => ({
   }),
   variants: many(product_variants),
   images: many(product_images),
+  reviews: many(product_reviews),
   vendor: one(vendor, {
     fields: [products.vendor_id],
     references: [vendor.id],
@@ -139,6 +140,10 @@ export const productVariantsRelations = relations(
     }),
     images: many(product_images),
     reviews: many(product_reviews),
+    inventory: one(inventory, {
+      fields: [product_variants.id],
+      references: [inventory.product_variant_id],
+    }),
   }),
 );
 export const wishlistRelations = relations(wishlist, ({ one, many }) => ({

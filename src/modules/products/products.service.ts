@@ -19,7 +19,8 @@ import { and, eq, or } from 'drizzle-orm';
 import { UploadToCloudService } from 'src/utils/upload-to-cloud/upload-to-cloud.service';
 import { UpdateProductDto } from './dto/updatedProduct.dto';
 import { type ProductFiles } from 'src/common/Types/index.type';
-import { company } from 'src/drizzle/schema';
+import { CompanyService } from '../company/company.service';
+import { InventoryService } from '../inventory/inventory.service';
 
 @Injectable()
 export class ProductsService {
@@ -27,19 +28,16 @@ export class ProductsService {
     @Inject(DRIZZLE) readonly db: DrizzleService,
     @Inject(UploadToCloudService)
     private uploadToCloudService: UploadToCloudService,
+    private inventoryService: InventoryService,
+    private readonly companyService: CompanyService,
   ) {}
 
-  async getProducts(companyId: string) {
+  async getProducts(domain: string) {
     try {
-      console.log('companyId', companyId);
-      const [companyRecord] = await this.db
-        .select({ id: company.id })
-        .from(company)
-        .where(
-          or(eq(company.id, companyId), eq(company.company_domain, companyId)),
-        );
+      console.log('companyId', domain);
+      const companyId = await this.companyService.find(domain);
       const product = await this.db.query.products.findMany({
-        where: (products) => eq(products.company_id, companyRecord.id),
+        where: (products) => eq(products.company_id, companyId),
         with: {
           images: {
             where: (images) => eq(images.is_primary, true),
@@ -169,10 +167,7 @@ export class ProductsService {
     }
     console.log('domain', domain);
     try {
-      const [companyRecord] = await this.db
-        .select({ id: company.id })
-        .from(company)
-        .where(or(eq(company.id, domain), eq(company.company_domain, domain)));
+      const companyId = await this.companyService.find(domain);
 
       return await this.db.transaction(async (tx) => {
         console.log('productDto.category_id', productDto.category_id);
@@ -195,7 +190,7 @@ export class ProductsService {
           features: productDto.features,
           category_id: productDto.category_id,
           vendor_id: vendorId,
-          company_id: companyRecord.id,
+          company_id: companyId,
         };
         console.log('productInsert', productInsert);
         const [createdProduct] = await tx
@@ -245,7 +240,15 @@ export class ProductsService {
             .returning();
           console.log('createdImages', createdImages);
         }
-
+        if (productDto.warehouse_id && variantRecords?.id) {
+          await this.inventoryService.setStock(
+            variantRecords.id,
+            productDto.warehouse_id,
+            productDto.stock_quantity ?? 0,
+            companyId,
+            tx as DrizzleService, // pass transaction context
+          );
+        }
         return {
           id: variantRecords?.id,
           message: 'Product created successfully',
@@ -622,32 +625,5 @@ export class ProductsService {
     }
   }
 
-  async qtyUpdate(productId: string, quantity: number) {
-    if (!productId) {
-      return new HttpException(
-        'Product ID is required',
-        HttpStatus.BAD_REQUEST,
-      );
-    }
-    try {
-      const result = await this.db
-        .update(products)
-        .set({
-          stock_quantity: quantity,
-        })
-        .where(eq(products.id, productId));
-      console.log('qty result', result);
-      return {
-        message: 'Product quantity updated successfully',
-        status: HttpStatus.OK,
-      };
-    } catch (error) {
-      throw new InternalServerErrorException(
-        'Failed to update product quantity',
-        {
-          cause: error,
-        },
-      );
-    }
-  }
+
 }

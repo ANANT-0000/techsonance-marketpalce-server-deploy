@@ -9,6 +9,7 @@ import {
   UploadedFiles,
   HttpStatus,
   HttpCode,
+  Headers,
 } from '@nestjs/common';
 import { ProductVariantService } from './product-variant.service';
 // import { CreateProductVariantDto } from './dto/create-product-variant.dto';
@@ -32,11 +33,16 @@ export class ProductVariantController {
   @HttpCode(HttpStatus.CREATED)
   create(
     @Body('variant_data', ParseJsonPipe) createProductVariantDto: any,
+    @Headers('company-domain') domain: string,
     @UploadedFiles()
     files: ProductFiles,
   ) {
     console.log('createProductVariantDto', createProductVariantDto);
-    return this.productVariantService.create(createProductVariantDto, files);
+    return this.productVariantService.create(
+      createProductVariantDto,
+      domain,
+      files,
+    );
   }
 
   @Get('vendor-products-variants/:vendorId')

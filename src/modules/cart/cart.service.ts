@@ -158,9 +158,13 @@ export class CartService {
                 price: true,
                 product_id: true,
                 sku: true,
-                stock_quantity: true,
               },
               with: {
+                inventory: {
+                  columns: {
+                    stock_quantity: true,
+                  },
+                },
                 images: {
                   columns: {
                     id: true,

@@ -112,7 +112,6 @@ export const products = pg.pgTable(
     discount_percent: pg
       .decimal('discount_percent', { precision: 10, scale: 2 })
       .notNull(),
-    stock_quantity: pg.integer('stock_quantity').default(0),
     status: ProductStatusEnum().notNull().default(ProductStatus.INACTIVE),
     created_at: pg.timestamp('created_at').notNull().defaultNow(),
     updated_at: pg
@@ -200,7 +199,6 @@ export const product_variants = pg.pgTable(
     price: pg.decimal('price', { precision: 10, scale: 2 }).notNull(),
     attributes: pg.jsonb('attributes').notNull(),
     status: ProductStatusEnum().notNull().default(ProductStatus.INACTIVE),
-    stock_quantity: pg.integer('stock_quantity').default(0),
     seo_meta: pg.jsonb('seo_meta'),
     created_at: pg.timestamp('created_at').notNull().defaultNow(),
     updated_at: pg
