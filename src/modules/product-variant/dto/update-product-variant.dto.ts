@@ -1,4 +1,4 @@
-''
+'';
 import {
   IsArray,
   IsEnum,
@@ -41,6 +41,11 @@ export class UpdateProductVariantDto {
   @IsString()
   @Transform(({ value }: { value: string }) => value.trim())
   seo_meta!: string | null;
+
+  @IsOptional()
+  @IsString()
+  @Transform(({ value }: { value: string }) => value.trim())
+  warehouse_id!: string | null;
 
   @IsString()
   product_id!: string;

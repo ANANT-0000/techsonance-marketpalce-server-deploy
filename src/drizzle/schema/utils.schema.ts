@@ -69,7 +69,7 @@ export const inventory = pg.pgTable(
       .notNull(),
     product_variant_id: pg
       .uuid('product_variant_id')
-      .references(() => product_variants.id)
+      .references(() => product_variants.id, { onDelete: 'cascade' })
       .notNull(),
     warehouse_id: pg
       .uuid('warehouse_id')

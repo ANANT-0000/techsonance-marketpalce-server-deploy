@@ -7,7 +7,7 @@ export function UploadToCloud(fields: { name: string; maxCount: number }[]) {
     UseInterceptors(
       FileFieldsInterceptor(fields, {
         storage: memoryStorage(),
-        limits: { fieldSize: 30 * 1024 * 1024 }, // 30MB
+        limits: { fieldSize: 60 * 1024 * 1024 }, // 60MB
       }),
     ),
   );

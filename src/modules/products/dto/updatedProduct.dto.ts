@@ -74,6 +74,9 @@ export class UpdateProductDto {
   @IsString()
   @Transform(({ value }: { value: string }) => value.trim())
   variant_id!: string;
+  @IsString()
+  @Transform(({ value }: { value: string }) => value.trim())
+  warehouse_id!: string;
 
   @IsString()
   sku!: string;

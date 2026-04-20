@@ -31,7 +31,7 @@ export class ProductsController {
   @Post(':vendor_id')
   @UploadToCloud([
     { name: 'product', maxCount: 1 },
-    { name: 'product_spec', maxCount: 10 },
+    { name: 'product_spec', maxCount: 20 },
   ])
   async createProduct(
     @Body('product_data', ParseJsonPipe) productDto: any,
@@ -76,7 +76,7 @@ export class ProductsController {
   @Patch(':id')
   @UploadToCloud([
     { name: 'product', maxCount: 1 },
-    { name: 'product_spec', maxCount: 10 },
+    { name: 'product_spec', maxCount: 20 },
   ])
   async updateProduct(
     @Param('id') id: string,

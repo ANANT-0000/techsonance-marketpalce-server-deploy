@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   HttpException,
   HttpStatus,
   Inject,
@@ -33,10 +34,21 @@ export class ProductVariantService {
     domain: string,
     files: ProductFiles,
   ) {
+    console.log('createProductVariantDto', createProductVariantDto);
+    console.log('domain', domain);
+
     if (!createProductVariantDto.product_id) {
-      throw new InternalServerErrorException('Product ID is required');
+      console.log(
+        'createProductVariantDto in conditional check',
+        createProductVariantDto,
+        domain,
+      );
+      throw new InternalServerErrorException('Product ID is required', {
+        cause: new Error('Product ID is required'),
+      });
     }
     const companyId = await this.companyService.find(domain);
+    console.log('creating product variant..');
     const [productId] = await this.db
       .select({ id: products.id })
       .from(products)
@@ -45,7 +57,11 @@ export class ProductVariantService {
           eq(products.id, createProductVariantDto.product_id),
           eq(products.company_id, companyId),
         ),
-      );
+      )
+      .catch((error) => {
+        console.error('Error fetching product:', error);
+        throw new InternalServerErrorException('Failed to fetch product');
+      });
     const variantData = {
       variant_name: createProductVariantDto.variant_name,
       sku: createProductVariantDto.sku,
@@ -63,6 +79,12 @@ export class ProductVariantService {
           .values(variantData)
           .returning({
             id: product_variants.id,
+          })
+          .catch((error) => {
+            console.error('Error creating product variant:', error);
+            throw new InternalServerErrorException(
+              'Failed to create product variant',
+            );
           });
         console.log('variantRecord', variantRecord);
         if (!variantRecord) {
@@ -114,7 +136,13 @@ export class ProductVariantService {
           const variantImgsResult = await tx
             .insert(product_images)
             .values(imageInserts)
-            .returning();
+            .returning()
+            .catch((error) => {
+              console.error('Error inserting product images:', error);
+              throw new InternalServerErrorException(
+                'Failed to insert product images',
+              );
+            });
           console.log('variantImgsResult', variantImgsResult);
         }
         if (createProductVariantDto.warehouse_id && variantRecord?.id) {
@@ -131,8 +159,17 @@ export class ProductVariantService {
       console.log('productVariantRecord', productVariantRecord);
     } catch (error) {
       console.error('Error creating product variant:', error);
+      if (
+        error instanceof HttpException ||
+        error instanceof InternalServerErrorException ||
+        error instanceof BadRequestException
+      )
+        throw error;
       throw new InternalServerErrorException(
         'Failed to create product variant',
+        {
+          cause: error,
+        },
       );
     }
   }
@@ -204,6 +241,12 @@ export class ProductVariantService {
           inArray(product_variants.product_id, productIds),
         with: {
           images: true,
+          inventory: {
+            columns: {
+              stock_quantity: true,
+              warehouse_id: true,
+            },
+          },
         },
       });
       return productVariants;
@@ -221,6 +264,12 @@ export class ProductVariantService {
         with: {
           product: true,
           images: true,
+          inventory: {
+            columns: {
+              stock_quantity: true,
+              warehouse_id: true,
+            },
+          },
         },
       });
       if (!productVariant) {
@@ -239,6 +288,7 @@ export class ProductVariantService {
     updateProductVariantDto: UpdateProductVariantDto,
     imagesToDelete?: string[],
     files?: ProductFiles,
+    domain?: string,
   ) {
     const updateData: Partial<UpdateProductVariantDto> = {
       variant_name: updateProductVariantDto.variant_name,
@@ -250,6 +300,13 @@ export class ProductVariantService {
     };
 
     try {
+      if (!domain) {
+        throw new HttpException(
+          'Company domain is required',
+          HttpStatus.BAD_REQUEST,
+        );
+      }
+      const companyId = await this.companyService.find(domain);
       const result = await this.db.transaction(async (tx) => {
         const [existingVariant] = await tx
           .select({
@@ -327,7 +384,15 @@ export class ProductVariantService {
 
           await tx.insert(product_images).values(imageInserts);
         }
-
+        if (updateProductVariantDto.warehouse_id && existingVariant?.id) {
+          await this.inventoryService.setStock(
+            existingVariant.id,
+            updateProductVariantDto.warehouse_id,
+            updateProductVariantDto.stock_quantity ?? 0,
+            companyId,
+            tx as DrizzleService,
+          );
+        }
         return { ...existingVariant, ...updateData };
       });
 

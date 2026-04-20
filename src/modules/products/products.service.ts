@@ -10,6 +10,7 @@ import { CreateProductDto } from './dto/createProduct.dto';
 import {
   categories,
   product_images,
+  product_reviews,
   product_variants,
   products,
 } from 'src/drizzle/schema/shop.schema';
@@ -39,16 +40,27 @@ export class ProductsService {
       const product = await this.db.query.products.findMany({
         where: (products) => eq(products.company_id, companyId),
         with: {
-          images: {
-            where: (images) => eq(images.is_primary, true),
-          },
           variants: {
+            limit: 1,
+            orderBy: (variants, { desc }) => desc(variants.created_at),
             columns: {
               id: true,
               variant_name: true,
               price: true,
               sku: true,
               status: true,
+            },
+            with: {
+              images: {
+                limit: 1,
+                where: (images) => eq(images.is_primary, true),
+              },
+              inventory: {
+                columns: {
+                  stock_quantity: true,
+                  warehouse_id: true,
+                },
+              },
             },
           },
         },
@@ -99,20 +111,21 @@ export class ProductsService {
   async getProductById(productId: string, domain: string) {
     try {
       console.log(productId);
-      const product = await this.db.query.product_variants
+      const product = await this.db.query.products
         .findFirst({
-          where: (products) => eq(products.id, productId),
+          where: eq(products.id, productId),
           with: {
-            product: {
-              // where: (variants) => eq(variants.product_id, productId),
+            variants: {
               with: {
                 images: true,
+                inventory: true,
+                reviews: true,
               },
             },
           },
         })
         .then((res) => {
-          console.log(res);
+          // console.log(res);
           return res;
         })
         .catch((error) => {
@@ -127,6 +140,12 @@ export class ProductsService {
 
       return product;
     } catch (error) {
+      if (
+        error instanceof HttpException ||
+        error instanceof InternalServerErrorException
+      ) {
+        throw error;
+      }
       throw new InternalServerErrorException('Failed to fetch product', {
         cause: error,
       });
@@ -241,13 +260,14 @@ export class ProductsService {
           console.log('createdImages', createdImages);
         }
         if (productDto.warehouse_id && variantRecords?.id) {
-          await this.inventoryService.setStock(
+          const inventoryResult = await this.inventoryService.setStock(
             variantRecords.id,
             productDto.warehouse_id,
             productDto.stock_quantity ?? 0,
             companyId,
             tx as DrizzleService, // pass transaction context
           );
+          console.log('inventoryResult', inventoryResult);
         }
         return {
           id: variantRecords?.id,
@@ -282,6 +302,7 @@ export class ProductsService {
         HttpStatus.BAD_REQUEST,
       );
     }
+    const companyId = await this.companyService.find(productVariantId);
     const [productId] = await this.db
       .select({
         product_id: product_variants.product_id,
@@ -417,7 +438,6 @@ export class ProductsService {
             price: product.base_price,
             attributes: product.attributes,
             status: product.status,
-
             seo_meta: null,
           };
           console.log('updateProductVariantDat', updateProductVariantData);
@@ -440,6 +460,15 @@ export class ProductsService {
               );
             });
           console.log('updatedVariantResult', updatedVariantResult);
+        }
+        if (product.warehouse_id && productVariantId) {
+          await this.inventoryService.setStock(
+            productVariantId,
+            product.warehouse_id,
+            product.stock_quantity ?? 0,
+            companyId,
+            tx as DrizzleService,
+          );
         }
         return {
           message: 'Product updated successfully',
@@ -624,6 +653,4 @@ export class ProductsService {
       });
     }
   }
-
-
 }

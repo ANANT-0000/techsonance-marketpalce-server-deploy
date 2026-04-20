@@ -37,7 +37,6 @@ export class ProductVariantController {
     @UploadedFiles()
     files: ProductFiles,
   ) {
-    console.log('createProductVariantDto', createProductVariantDto);
     return this.productVariantService.create(
       createProductVariantDto,
       domain,
@@ -76,6 +75,7 @@ export class ProductVariantController {
     @Param('id') id: string,
     @Body('variant_data', ParseJsonPipe) updateProductVariantDto: any,
     @Body('imagesToDelete', ParseJsonPipe) imagesToDelete: string[],
+    @Headers('company-domain') domain: string,
     @UploadedFiles() files: ProductFiles,
   ) {
     console.log('id', id);
@@ -87,6 +87,7 @@ export class ProductVariantController {
       updateProductVariantDto,
       imagesToDelete,
       files,
+      domain,
     );
   }
 
