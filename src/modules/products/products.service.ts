@@ -33,7 +33,7 @@ export class ProductsService {
     private readonly companyService: CompanyService,
   ) {}
 
-  async getProducts(domain: string) {
+  async getAllProducts(domain: string) {
     try {
       console.log('companyId', domain);
       const companyId = await this.companyService.find(domain);

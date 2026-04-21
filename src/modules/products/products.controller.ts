@@ -57,7 +57,7 @@ export class ProductsController {
   @Get('all')
   async getAllProducts(@Headers('company-domain') domain: string) {
     console.log('get all products');
-    return await this.productsService.getProducts(domain);
+    return await this.productsService.getAllProducts(domain);
   }
   @Get(':id')
   async getProductById(
