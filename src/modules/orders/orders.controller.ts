@@ -1,6 +1,15 @@
-import { Body, Controller, Get, Headers, Param, Patch } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Get,
+  Headers,
+  HttpCode,
+  HttpStatus,
+  Param,
+  Patch,
+} from '@nestjs/common';
 import { OrdersService } from './orders.service';
-import { OrderStatus } from 'src/drizzle/types/types';
+import { CancelledByEnum, OrderStatus } from 'src/drizzle/types/types';
 
 @Controller({
   version: '1',
@@ -47,5 +56,20 @@ export class OrdersController {
     @Headers('company-domain') domain: string,
   ) {
     return this.ordersService.setOrderStatus(orderId, newStatus, domain);
+  }
+
+  @Patch(':orderItemId/cancel')
+  @HttpCode(HttpStatus.OK)
+  async cancelOrderItem(
+    @Param('itemId') itemId: string,
+    @Body() dto: { cancelReason: string; cancelledBy: CancelledByEnum },
+    @Headers('company-domain') domain: string,
+  ) {
+    return this.ordersService.cancelOrder(
+      itemId,
+      dto.cancelReason,
+      dto.cancelledBy,
+      domain,
+    );
   }
 }

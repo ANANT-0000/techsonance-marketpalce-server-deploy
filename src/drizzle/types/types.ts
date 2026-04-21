@@ -70,6 +70,16 @@ export enum VendorDocumentType {
   VendorInformation = 'vendor_information',
   BusinessContinuityPlan = 'business_continuity_plan',
 }
+export enum CancelledByEnum {
+  USER = 'customer',
+  VENDOR = 'vendor',
+  SYSTEM = 'system',
+}
+export enum refundStatusEnum {
+  PENDING = 'pending',
+  PROCESSED = 'processed',
+  REJECTED = 'rejected',
+}
 export interface VendorType {
   user_role: Role;
   store_name: string;

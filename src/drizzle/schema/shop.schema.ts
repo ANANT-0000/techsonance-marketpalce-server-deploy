@@ -1,10 +1,12 @@
 import * as pg from 'drizzle-orm/pg-core';
 import { address, company, user, vendor } from '.';
 import {
+  CancelledByEnum,
   OrderStatus,
   PaymentStatus,
   productImageType,
   ProductStatus,
+  refundStatusEnum,
   ShippingStatus,
 } from '../types/types';
 import { AnyPgColumn } from 'drizzle-orm/pg-core';
@@ -144,7 +146,6 @@ export const orders = pg.pgTable(
     total_amount: pg
       .decimal('total_amount', { precision: 10, scale: 2 })
       .notNull(),
-    order_status: order_status_enum().notNull(),
     created_at: pg.timestamp('created_at').notNull().defaultNow(),
     updated_at: pg
       .timestamp('updated_at')
@@ -165,7 +166,6 @@ export const orders = pg.pgTable(
     pg.index('idx_orders_user_id').on(table.user_id),
     pg.index('idx_orders_address_id').on(table.address_id),
     pg.index('idx_orders_company_id').on(table.company_id),
-    pg.index('idx_orders_order_status').on(table.order_status),
     pg.index('idx_orders_created_at').on(table.created_at),
   ],
 );
@@ -179,8 +179,12 @@ export const order_items = pg.pgTable(
     product_variant_id: pg
       .uuid('product_variant_id')
       .references(() => product_variants.id, { onDelete: 'cascade' }),
+    company_id: pg
+      .uuid('company_id')
+      .references(() => company.id, { onDelete: 'cascade' }),
     quantity: pg.integer('quantity').notNull(),
     price: pg.decimal('price', { precision: 10, scale: 2 }).notNull(),
+    order_status: order_status_enum().notNull(),
     created_at: pg.timestamp('created_at').notNull().defaultNow(),
     updated_at: pg
       .timestamp('updated_at')
@@ -190,6 +194,20 @@ export const order_items = pg.pgTable(
   },
   (table) => [pg.index('idx_order_items_order_id').on(table.order_id)],
 );
+
+export const cancelled_by_enum = pg.pgEnum('canceled_by_enum', CancelledByEnum);
+export const order_item_cancelled = pg.pgTable('order_item_canceled', {
+  id: pg.uuid('id').primaryKey().defaultRandom(),
+  order_item_id: pg
+    .uuid('order_item_id')
+    .references(() => order_items.id, { onDelete: 'cascade' }),
+  reason: pg.text('reason').notNull(),
+  cancelled_by: cancelled_by_enum().notNull(),
+  created_at: pg.timestamp('created_at').notNull().defaultNow(),
+  company_id: pg
+    .uuid('company_id')
+    .references(() => company.id, { onDelete: 'cascade' }),
+});
 export const product_variants = pg.pgTable(
   'product_variants',
   {
@@ -258,11 +276,9 @@ export const cart_items = pg.pgTable(
       .defaultNow()
       .$onUpdate(() => new Date()),
   },
-  (table) => {
-    return {
-      cartProductUnique: unique().on(table.cart_id, table.product_variant_id),
-    };
-  },
+  (table) => [
+    unique('cartProductUnique').on(table.cart_id, table.product_variant_id),
+  ],
 );
 export const product_reviews = pg.pgTable('product_reviews', {
   id: pg.uuid('id').primaryKey().defaultRandom(),
@@ -301,14 +317,12 @@ export const wishlist_items = pg.pgTable(
       .defaultNow()
       .$onUpdate(() => new Date()),
   },
-  (table) => {
-    return {
-      wishlistProductUnique: unique().on(
-        table.wishlist_id,
-        table.product_variant_id,
-      ),
-    };
-  },
+  (table) => [
+    unique('wishlistProductUnique').on(
+      table.wishlist_id,
+      table.product_variant_id,
+    ),
+  ],
 );
 
 export const payment_status_enum = pg.pgEnum(
@@ -348,11 +362,7 @@ export const shipping_status_enum = pg.pgEnum(
 );
 export const shipping_details = pg.pgTable('shipping_details', {
   id: pg.uuid('id').primaryKey().defaultRandom(),
-  // shipping_method: pg.text('shipping_method').notNull(),
   tracking_url: pg.text('tracking_url').notNull(),
-  // carrier: pg.text('carrier').notNull(),
-  // estimated_delivery: pg.date('estimated_delivery').notNull(),
-  // shipping_status: shipping_status_enum().notNull(),
   created_at: pg.timestamp('created_at').notNull().defaultNow(),
   updated_at: pg
     .timestamp('updated_at')
@@ -365,6 +375,10 @@ export const shipping_details = pg.pgTable('shipping_details', {
   company_id: pg.uuid('company_id').references(() => company.id),
 });
 
+export const refund_status_enum = pg.pgEnum(
+  'refund_status_enum',
+  refundStatusEnum,
+);
 export const refunds = pg.pgTable(
   'refunds',
   {
@@ -373,7 +387,7 @@ export const refunds = pg.pgTable(
       .decimal('refund_amount', { precision: 10, scale: 2 })
       .notNull(),
     refund_reason: pg.text('refund_reason').notNull(),
-    refund_status: pg.text('refund_status').notNull(),
+    refund_status: refund_status_enum().notNull(),
     created_at: pg
       .timestamp('created_at')
       .$default(() => new Date())
@@ -381,6 +395,9 @@ export const refunds = pg.pgTable(
     order_id: pg
       .uuid('order_id')
       .references(() => orders.id, { onDelete: 'cascade' }),
+    order_items_id: pg
+      .uuid('order_items_id')
+      .references(() => order_items.id, { onDelete: 'cascade' }),
     payment_id: pg
       .uuid('payment_id')
       .references(() => payments.id, { onDelete: 'cascade' }),

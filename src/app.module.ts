@@ -32,6 +32,7 @@ import { CouponModule } from './modules/coupon/coupon.module';
 import { CompanyModule } from './modules/company/company.module';
 import { WarehouseModule } from './modules/warehouse/warehouse.module';
 import { InventoryModule } from './modules/inventory/inventory.module';
+import { RefundsModule } from './modules/refunds/refunds.module';
 @Module({
   imports: [
     DrizzleModule,
@@ -62,6 +63,7 @@ import { InventoryModule } from './modules/inventory/inventory.module';
     CompanyModule,
     WarehouseModule,
     InventoryModule,
+    RefundsModule,
     // ThrottlerModule.forRoot([
     //   {
     //     name: "short",

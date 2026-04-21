@@ -1,4 +1,4 @@
-import { Inject, Injectable } from '@nestjs/common';
+import { Inject, Injectable, UnauthorizedException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
 import { and, eq } from 'drizzle-orm';
@@ -10,7 +10,7 @@ import * as nodemailer from 'nodemailer';
 import { BadRequestException } from '@nestjs/common';
 @Injectable()
 export class MailService {
-  nodeMailerTransporter: any;
+  nodeMailerTransporter: nodemailer.Transporter;
   constructor(
     @Inject(DRIZZLE) private readonly drizzle: DrizzleDB,
     private readonly jwtService: JwtService,
@@ -69,7 +69,7 @@ export class MailService {
          <p>This link will expire in ${expiresIn / 3600} hour(s).</p>`,
     );
   }
-  public sendEmail(to: string, subject: string, html: string) {
+  public async sendEmail(to: string, subject: string, html: string) {
     const mailOptions = {
       from: `${this.configService.get<string>('MAIL_FROM_NAME')} <${this.configService.get<string>('MAIL_FROM_EMAIL')}>`,
       to,
@@ -77,24 +77,63 @@ export class MailService {
       html,
     };
     // eslint-disable-next-line @typescript-eslint/no-unsafe-return
-    return this.nodeMailerTransporter.sendMail(mailOptions);
+    return await this.nodeMailerTransporter.sendMail(mailOptions);
   }
   public verifyResetToken(token: string): string {
     try {
       const decoded = this.jwtService.verify(token, {
         secret: this.configService.get<string>('JWT_SECRET'),
       });
-      if (typeof decoded === 'object' && 'email' in decoded) {
-        return decoded.email;
+      if (
+        typeof decoded === 'object' &&
+        decoded !== null &&
+        'email' in decoded
+      ) {
+        return decoded?.email as string;
       }
-      throw new Error('Invalid token');
-    } catch (error) {
+
+      // If the payload is valid JWT but missing the email field
+      throw new BadRequestException('Invalid token payload structure.');
+    } catch (error: any) {
+      // 1. Handle Expired Tokens
       if (error?.name === 'TokenExpiredError') {
         throw new BadRequestException(
-          'Error: Token has expired. Please request a new password reset link.',
+          'Token has expired. Please request a new password reset link.',
         );
       }
-      throw new Error('Invalid or expired token');
+      throw new UnauthorizedException('Invalid or malformed token.');
     }
+  }
+
+  public async sendOrderCancellationEmail(
+    email: string,
+    orderId: string,
+    reason: string,
+  ) {
+    const shortOrderId = orderId.split('-')[0].toUpperCase();
+
+    return await this.sendEmail(
+      email,
+      `Your Order Item Has Been Cancelled — #${shortOrderId}`,
+      `<div style="font-family: sans-serif; max-width: 600px; margin: auto;">
+      <h2>Order Cancellation Confirmation</h2>
+      <p>An item in your order <strong>#${shortOrderId}</strong> has been successfully cancelled.</p>
+      <table style="width:100%; border-collapse: collapse; margin: 16px 0;">
+        <tr>
+          <td style="padding: 8px; border: 1px solid #eee; color: #666;">Order ID</td>
+          <td style="padding: 8px; border: 1px solid #eee;">${orderId}</td>
+        </tr>
+        <tr>
+          <td style="padding: 8px; border: 1px solid #eee; color: #666;">Reason</td>
+          <td style="padding: 8px; border: 1px solid #eee;">${reason}</td>
+        </tr>
+      </table>
+      <p>A refund has been initiated and will reflect in your account within 
+         <strong>3–5 business days</strong> depending on your payment method.</p>
+      <p style="color: #888; font-size: 12px;">
+        If you did not request this cancellation, please contact our support team immediately.
+      </p>
+    </div>`,
+    );
   }
 }

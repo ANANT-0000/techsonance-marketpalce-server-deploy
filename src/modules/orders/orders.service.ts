@@ -9,14 +9,23 @@ import { and, eq, or } from 'drizzle-orm';
 import { DRIZZLE, type DrizzleService } from 'src/drizzle/drizzle.module';
 import {
   company,
+  order_item_cancelled,
   order_items,
   orders,
   payments,
   product_images,
+  refunds,
+  user,
 } from 'src/drizzle/schema';
-import { OrderStatus, PaymentStatus } from 'src/drizzle/types/types';
+import {
+  CancelledByEnum,
+  OrderStatus,
+  PaymentStatus,
+  refundStatusEnum,
+} from 'src/drizzle/types/types';
 import { CompanyService } from '../company/company.service';
 import { InventoryService } from '../inventory/inventory.service';
+import { MailService } from 'src/common/services/mail/mail.service';
 
 @Injectable()
 export class OrdersService {
@@ -24,6 +33,7 @@ export class OrdersService {
     @Inject(DRIZZLE) private readonly db: DrizzleService,
     private readonly companyService: CompanyService,
     private readonly inventoryService: InventoryService,
+    private readonly mailService: MailService,
   ) {}
 
   async createOrder({
@@ -64,7 +74,6 @@ export class OrdersService {
             company_id: companyId,
             address_id: addressId,
             total_amount: String(totalAmount),
-            order_status: OrderStatus.PENDING,
           })
           .returning({
             id: orders.id,
@@ -80,6 +89,7 @@ export class OrdersService {
           product_variant_id: line.variantId,
           quantity: line.quantity,
           price: String(line.price),
+          order_status: OrderStatus.PENDING,
         }));
         await tx
           .insert(order_items)
@@ -135,12 +145,7 @@ export class OrdersService {
       });
     }
   }
-  async getOrderById(
-    orderId: string,
-    domain?: string,
-  ): Promise<
-    { id: string; userId: string | null; order_status: OrderStatus } | undefined
-  > {
+  async getOrderById(orderId: string, domain?: string) {
     try {
       if (!orderId || !domain) {
         throw new HttpException(
@@ -165,18 +170,17 @@ export class OrdersService {
       if (!companyRecord) {
         throw new HttpException('Company not found', HttpStatus.NOT_FOUND);
       }
-      const [orderResult] = await this.db
-        .select({
-          id: orders.id,
-          userId: orders.user_id,
-          order_status: orders.order_status,
-        })
-        .from(orders)
-        .where(
-          (eq(orders.id, orderId), eq(orders.company_id, companyRecord.id)),
-        )
-        .limit(1);
-      if (!orderResult) {
+      const [orderResult] = await this.db.query.orders.findMany({
+        where: and(
+          eq(orders.id, orderId),
+          eq(orders.company_id, companyRecord.id),
+        ),
+        with: {
+          items: true,
+        },
+      });
+
+      if (!orderResult || !orderResult.items) {
         throw new HttpException(
           'Order not found with the provided ID',
           HttpStatus.NOT_FOUND,
@@ -187,6 +191,7 @@ export class OrdersService {
       //     'Order is still pending. Please complete the checkout process.',
       //   );
       // }
+
       return orderResult;
     } catch (error) {
       console.error('Error fetching order:', error);
@@ -226,19 +231,35 @@ export class OrdersService {
       console.log('starting transaction of order complete');
       return this.db.transaction(async (tx) => {
         if (isSuccess) {
-          await tx
-            .update(orders)
-            .set({ order_status: OrderStatus.PROCESSING })
-            .where(eq(orders.id, existingOrder.id))
-            .catch((error) => {
-              console.error('Error updating order status:', error);
-              throw new InternalServerErrorException(
-                'Failed to update order status',
-                {
-                  cause: error,
-                },
-              );
+          const orderItemsRecord = await tx
+            .select({ id: order_items.id })
+            .from(order_items)
+            .where(eq(order_items.order_id, orderId))
+            .limit(1);
+          if (orderItemsRecord.length === 0) {
+            const updateItem = orderItemsRecord.map(async (item) => {
+              return await tx
+                .update(order_items)
+                .set({ order_status: OrderStatus.PROCESSING })
+                .where(
+                  and(
+                    eq(order_items.order_id, orderId),
+                    eq(order_items.id, item.id),
+                  ),
+                )
+                .catch((error) => {
+                  console.error('Error updating order status:', error);
+                  throw new InternalServerErrorException(
+                    'Failed to update order status',
+                    {
+                      cause: error,
+                    },
+                  );
+                });
             });
+            const updateResults = await Promise.all(updateItem);
+            console.log('order items updated to processing', updateResults);
+          }
           await tx
             .update(payments)
             .set({ payment_status: PaymentStatus.COMPLETED })
@@ -269,19 +290,35 @@ export class OrdersService {
             companyId,
             tx as DrizzleService,
           );
-          await tx
-            .update(orders)
-            .set({ order_status: OrderStatus.CANCELLED })
-            .where(eq(orders.id, existingOrder.id))
-            .catch((error) => {
-              console.error('Error updating order status:', error);
-              throw new InternalServerErrorException(
-                'Failed to update order status',
-                {
-                  cause: error,
-                },
-              );
+          const orderItemsRecord = await tx
+            .select({ id: order_items.id })
+            .from(order_items)
+            .where(eq(order_items.order_id, orderId))
+            .limit(1);
+          if (orderItemsRecord.length === 0) {
+            const updateItem = orderItemsRecord.map(async (item) => {
+              return await tx
+                .update(order_items)
+                .set({ order_status: OrderStatus.CANCELLED })
+                .where(
+                  and(
+                    eq(order_items.order_id, orderId),
+                    eq(order_items.id, item.id),
+                  ),
+                )
+                .catch((error) => {
+                  console.error('Error updating order status:', error);
+                  throw new InternalServerErrorException(
+                    'Failed to update order status',
+                    {
+                      cause: error,
+                    },
+                  );
+                });
             });
+            const updateResults = await Promise.all(updateItem);
+            console.log('order items updated to cancelled', updateResults);
+          }
           await tx
             .update(payments)
             .set({ payment_status: PaymentStatus.FAILED })
@@ -708,19 +745,35 @@ export class OrdersService {
           HttpStatus.BAD_REQUEST,
         );
       }
-      await this.db
-        .update(orders)
-        .set({ order_status: newStatus.toLowerCase() as OrderStatus })
-        .where(eq(orders.id, existingOrder.id))
-        .catch((error) => {
-          console.error('Error updating order status:', error);
-          throw new InternalServerErrorException(
-            'Failed to update order status',
-            {
-              cause: error,
-            },
-          );
+      const orderItemsRecord = await this.db
+        .select({ id: order_items.id })
+        .from(order_items)
+        .where(eq(order_items.order_id, orderId))
+        .limit(1);
+      if (orderItemsRecord.length === 0) {
+        const updateItem = orderItemsRecord.map(async (item) => {
+          return await this.db
+            .update(order_items)
+            .set({ order_status: newStatus.toLowerCase() as OrderStatus })
+            .where(
+              and(
+                eq(order_items.order_id, orderId),
+                eq(order_items.id, item.id),
+              ),
+            )
+            .catch((error) => {
+              console.error('Error updating order status:', error);
+              throw new InternalServerErrorException(
+                'Failed to update order status',
+                {
+                  cause: error,
+                },
+              );
+            });
         });
+        const updateResults = await Promise.all(updateItem);
+        console.log('order items updated to processing', updateResults);
+      }
       return orderId;
     } catch (error) {
       console.error('Error updating order status:', error);
@@ -728,6 +781,255 @@ export class OrdersService {
         throw error;
       }
       throw new InternalServerErrorException('Failed to update order status', {
+        cause: error,
+      });
+    }
+  }
+
+  async cancelOrder(
+    orderItemId: string,
+    cancelReason: string,
+    cancelledBy: CancelledByEnum,
+    domain: string,
+  ) {
+    try {
+      const companyId = await this.companyService.find(domain);
+
+      return await this.db.transaction(async (tx) => {
+        const [existingOrderItem] = await tx
+          .select({
+            id: order_items.id,
+            order_id: order_items.order_id,
+            order_status: order_items.order_status,
+            product_variant_id: order_items.product_variant_id,
+            quantity: order_items.quantity,
+            price: order_items.price,
+          })
+          .from(order_items)
+          .where(eq(order_items.id, orderItemId))
+          .limit(1);
+
+        if (!existingOrderItem) {
+          throw new HttpException('Order item not found', HttpStatus.NOT_FOUND);
+        }
+
+        if (
+          !existingOrderItem.order_id ||
+          !existingOrderItem.product_variant_id
+        ) {
+          throw new HttpException(
+            'Order item has incomplete data',
+            HttpStatus.INTERNAL_SERVER_ERROR,
+          );
+        }
+        if (existingOrderItem.order_status === OrderStatus.CANCELLED) {
+          throw new HttpException(
+            'Order item is already cancelled',
+            HttpStatus.BAD_REQUEST,
+          );
+        }
+
+        if (existingOrderItem.order_status === OrderStatus.DELIVERED) {
+          throw new HttpException(
+            'Order item is already delivered and cannot be cancelled',
+            HttpStatus.BAD_REQUEST,
+          );
+        }
+
+        if (existingOrderItem.order_status === OrderStatus.SHIPPED) {
+          throw new HttpException(
+            'Order item has already been shipped and cannot be cancelled',
+            HttpStatus.BAD_REQUEST,
+          );
+        }
+        const [order] = await tx
+          .select({
+            id: orders.id,
+            total_amount: orders.total_amount,
+            user_id: orders.user_id,
+          })
+          .from(orders)
+          .where(
+            and(
+              eq(orders.id, existingOrderItem.order_id),
+              eq(orders.company_id, companyId),
+            ),
+          )
+          .limit(1);
+
+        if (!order) {
+          throw new HttpException(
+            'Order not found or does not belong to this company',
+            HttpStatus.NOT_FOUND,
+          );
+        }
+        const allOrderItems = await tx
+          .select({
+            id: order_items.id,
+            order_status: order_items.order_status,
+            quantity: order_items.quantity,
+            price: order_items.price,
+          })
+          .from(order_items)
+          .where(
+            and(
+              eq(order_items.order_id, existingOrderItem.order_id),
+              eq(order_items.company_id, companyId),
+            ),
+          );
+
+        const hasShippedOrDelivered = allOrderItems.some((item) =>
+          [OrderStatus.SHIPPED, OrderStatus.DELIVERED].includes(
+            item.order_status as OrderStatus,
+          ),
+        );
+
+        if (hasShippedOrDelivered) {
+          throw new HttpException(
+            'Cannot cancel: one or more items in this order have already been shipped or delivered',
+            HttpStatus.BAD_REQUEST,
+          );
+        }
+        const [paymentRecord] = await tx
+          .select({ id: payments.id })
+          .from(payments)
+          .where(eq(payments.order_id, existingOrderItem.order_id))
+          .limit(1);
+
+        if (!paymentRecord) {
+          throw new HttpException(
+            'Payment record not found for this order',
+            HttpStatus.NOT_FOUND,
+          );
+        }
+        const refundAmount =
+          Number(existingOrderItem.price) * existingOrderItem.quantity;
+        await tx
+          .update(order_items)
+          .set({ order_status: OrderStatus.CANCELLED })
+          .where(eq(order_items.id, existingOrderItem.id))
+          .catch((error) => {
+            throw new InternalServerErrorException(
+              'Failed to cancel order item',
+              {
+                cause: error,
+              },
+            );
+          });
+        await tx
+          .insert(order_item_cancelled)
+          .values({
+            order_item_id: existingOrderItem.id,
+            reason: cancelReason,
+            cancelled_by: cancelledBy,
+            company_id: companyId,
+          })
+          .catch((error) => {
+            throw new InternalServerErrorException(
+              'Failed to record cancellation audit entry',
+              { cause: error },
+            );
+          });
+        await this.inventoryService.rollbackStockForOrder(
+          {
+            variantId: existingOrderItem.product_variant_id,
+            quantity: existingOrderItem.quantity,
+          },
+          companyId,
+          tx as DrizzleService,
+        );
+        await tx
+          .insert(refunds)
+          .values({
+            refund_amount: String(refundAmount),
+            refund_reason: cancelReason,
+            refund_status: refundStatusEnum.PENDING,
+            order_id: existingOrderItem.order_id,
+            order_items_id: existingOrderItem.id,
+            payment_id: paymentRecord.id,
+            company_id: companyId,
+          })
+          .catch((error) => {
+            throw new InternalServerErrorException(
+              'Failed to create refund record',
+              { cause: error },
+            );
+          });
+
+        const remainingActiveItems = allOrderItems.filter(
+          (item) =>
+            item.id !== existingOrderItem.id &&
+            item.order_status !== OrderStatus.CANCELLED,
+        );
+
+        const newOrderTotal = remainingActiveItems.reduce(
+          (sum, item) => sum + Number(item.price) * item.quantity,
+          0,
+        );
+
+        await tx
+          .update(orders)
+          .set({ total_amount: String(newOrderTotal) })
+          .where(eq(orders.id, existingOrderItem.order_id))
+          .catch((error) => {
+            throw new InternalServerErrorException(
+              'Failed to update order total',
+              { cause: error },
+            );
+          });
+
+        const allItemsNowCancelled = remainingActiveItems.length === 0;
+
+        if (allItemsNowCancelled) {
+          await tx
+            .update(payments)
+            .set({ payment_status: PaymentStatus.REFUNDED })
+            .where(eq(payments.id, paymentRecord.id))
+            .catch((error) => {
+              throw new InternalServerErrorException(
+                'Failed to update payment status',
+                { cause: error },
+              );
+            });
+        }
+        const [customerRecord] = await tx
+          .select({ email: user.email, id: user.id })
+          .from(user)
+          .where(eq(user.id, order.user_id ?? ''))
+          .limit(1);
+
+        if (customerRecord?.email) {
+          this.mailService
+            .sendOrderCancellationEmail(
+              customerRecord.email,
+              existingOrderItem.order_id,
+              cancelReason,
+            )
+            .catch((error) => {
+              console.error(
+                'Failed to send order cancellation email to customer',
+                error,
+              );
+            });
+        }
+        return {
+          message: 'Order item cancelled successfully',
+          orderItemId,
+          cancelledQuantity: existingOrderItem.quantity,
+          refundAmount: String(refundAmount),
+          refundStatus: refundStatusEnum.PENDING,
+          newOrderTotal: String(newOrderTotal),
+          orderFullyCancelled: allItemsNowCancelled,
+        };
+      });
+    } catch (error) {
+      if (
+        error instanceof HttpException ||
+        error instanceof InternalServerErrorException
+      ) {
+        throw error;
+      }
+      throw new InternalServerErrorException('Failed to cancel order', {
         cause: error,
       });
     }

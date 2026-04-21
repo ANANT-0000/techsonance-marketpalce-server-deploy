@@ -477,12 +477,48 @@ export class InventoryService {
     }
   }
   async rollbackStockForOrder(
-    orderLines: { variantId: string; quantity: number }[],
+    orderLines:
+      | { variantId: string; quantity: number }[]
+      | { variantId: string; quantity: number },
     companyId: string,
     tx: DrizzleService,
   ) {
     try {
-      for (const line of orderLines) {
+      if (Array.isArray(orderLines)) {
+        for (const line of orderLines) {
+          const [idv] = await tx
+            .select({
+              id: inventory.id,
+              stock_quantity: inventory.stock_quantity,
+            })
+            .from(inventory)
+            .where(
+              and(
+                eq(inventory.product_variant_id, line.variantId),
+                eq(inventory.company_id, companyId),
+              ),
+            )
+            .limit(1);
+          if (!idv) {
+            throw new HttpException(
+              `Inventory not found for variant ${line.variantId}`,
+              HttpStatus.NOT_FOUND,
+            );
+          }
+          await tx
+            .update(inventory)
+            .set({
+              stock_quantity: sql`${inventory.stock_quantity} + ${line.quantity}`,
+            })
+            .where(
+              and(
+                eq(inventory.id, idv.id),
+                eq(inventory.company_id, companyId),
+                eq(inventory.product_variant_id, line.variantId),
+              ),
+            );
+        }
+      } else {
         const [idv] = await tx
           .select({
             id: inventory.id,
@@ -491,27 +527,27 @@ export class InventoryService {
           .from(inventory)
           .where(
             and(
-              eq(inventory.product_variant_id, line.variantId),
+              eq(inventory.product_variant_id, orderLines.variantId),
               eq(inventory.company_id, companyId),
             ),
           )
           .limit(1);
         if (!idv) {
           throw new HttpException(
-            `Inventory not found for variant ${line.variantId}`,
+            `Inventory not found for variant ${orderLines.variantId}`,
             HttpStatus.NOT_FOUND,
           );
         }
         await tx
           .update(inventory)
           .set({
-            stock_quantity: sql`${inventory.stock_quantity} + ${line.quantity}`,
+            stock_quantity: sql`${inventory.stock_quantity} + ${orderLines.quantity}`,
           })
           .where(
             and(
               eq(inventory.id, idv.id),
               eq(inventory.company_id, companyId),
-              eq(inventory.product_variant_id, line.variantId),
+              eq(inventory.product_variant_id, orderLines.variantId),
             ),
           );
       }

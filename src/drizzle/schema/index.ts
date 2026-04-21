@@ -10,6 +10,7 @@ import {
   categories,
   coupon_usage,
   coupons,
+  order_item_cancelled,
   order_items,
   orders,
   payments,
@@ -189,6 +190,10 @@ export const ordersRelations = relations(orders, ({ one, many }) => ({
     fields: [orders.id],
     references: [payments.order_id],
   }),
+  refund: one(refunds, {
+    fields: [orders.id],
+    references: [refunds.order_id],
+  }),
   address: one(address, {
     fields: [orders.address_id],
     references: [address.id],
@@ -206,6 +211,46 @@ export const orderItemsRelations = relations(order_items, ({ one }) => ({
   productVariant: one(product_variants, {
     fields: [order_items.product_variant_id],
     references: [product_variants.id],
+  }),
+  cancelledRecord: one(order_item_cancelled, {
+    fields: [order_items.id],
+    references: [order_item_cancelled.order_item_id],
+  }),
+  refund: one(refunds, {
+    fields: [order_items.id],
+    references: [refunds.order_items_id],
+  }),
+}));
+
+export const orderItemCancelledRelations = relations(
+  order_item_cancelled,
+  ({ one }) => ({
+    orderItem: one(order_items, {
+      fields: [order_item_cancelled.order_item_id],
+      references: [order_items.id],
+    }),
+    company: one(company, {
+      fields: [order_item_cancelled.company_id],
+      references: [company.id],
+    }),
+  }),
+);
+export const refundsRelations = relations(refunds, ({ one }) => ({
+  order: one(orders, {
+    fields: [refunds.order_id],
+    references: [orders.id],
+  }),
+  orderItem: one(order_items, {
+    fields: [refunds.order_items_id],
+    references: [order_items.id],
+  }),
+  payment: one(payments, {
+    fields: [refunds.payment_id],
+    references: [payments.id],
+  }),
+  company: one(company, {
+    fields: [refunds.company_id],
+    references: [company.id],
   }),
 }));
 export const addressRelations = relations(address, ({ one }) => ({

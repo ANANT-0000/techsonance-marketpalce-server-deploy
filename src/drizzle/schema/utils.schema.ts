@@ -63,6 +63,7 @@ export const inventory = pg.pgTable(
       .timestamp('created_at')
       .$default(() => new Date())
       .notNull(),
+    restocked_at: pg.timestamp('restocked_at'),
     updated_at: pg
       .timestamp('updated_at')
       .$onUpdate(() => new Date())
