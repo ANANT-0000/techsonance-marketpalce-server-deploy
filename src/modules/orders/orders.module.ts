@@ -4,9 +4,10 @@ import { OrdersController } from './orders.controller';
 import { DrizzleModule } from 'src/drizzle/drizzle.module';
 import { CompanyModule } from '../company/company.module';
 import { InventoryModule } from '../inventory/inventory.module';
+import { MailModule } from 'src/common/services/mail/mail.module';
 
 @Module({
-  imports: [DrizzleModule, CompanyModule, InventoryModule],
+  imports: [DrizzleModule, CompanyModule, InventoryModule, MailModule],
   controllers: [OrdersController],
   providers: [OrdersService],
   exports: [OrdersService],

@@ -1,5 +1,5 @@
 import * as pg from 'drizzle-orm/pg-core';
-import { company, user_roles } from '.';
+import { company, user_roles } from './main.schema';
 import { UserStatus } from '../types/types';
 
 export const UserStatusEnum = pg.pgEnum('user_status_enum', UserStatus);

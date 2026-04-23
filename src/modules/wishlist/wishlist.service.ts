@@ -1,6 +1,5 @@
 import { HttpException, HttpStatus, Inject, Injectable } from '@nestjs/common';
-import { CreateWishlistDto } from './dto/create-wishlist.dto';
-import { UpdateWishlistDto } from './dto/update-wishlist.dto';
+
 import { DRIZZLE, type DrizzleService } from 'src/drizzle/drizzle.module';
 import {
   company,
@@ -9,10 +8,14 @@ import {
   wishlist_items,
 } from 'src/drizzle/schema';
 import { and, eq, or } from 'drizzle-orm';
+import { CompanyService } from '../company/company.service';
 
 @Injectable()
 export class WishlistService {
-  constructor(@Inject(DRIZZLE) private readonly db: DrizzleService) {}
+  constructor(
+    @Inject(DRIZZLE) private readonly db: DrizzleService,
+    private readonly companyService: CompanyService,
+  ) {}
   async create(productVariantId: string, customerId: string, domain: string) {
     if (!domain) {
       throw new HttpException(
@@ -22,18 +25,7 @@ export class WishlistService {
     }
     console.log('productVariantId', productVariantId);
     console.log('customerId', customerId);
-    const [companyRecord] = await this.db
-      .select({ id: company.id })
-      .from(company)
-      .where(or(eq(company.company_domain, domain), eq(company.id, domain)))
-      .limit(1)
-      .catch((error) => {
-        console.error('Error fetching company:', error);
-        throw new HttpException(
-          'Failed to fetch company information',
-          HttpStatus.INTERNAL_SERVER_ERROR,
-        );
-      });
+    const companyId = await this.companyService.find(domain);
     const [variantExists] = await this.db
       .select({ id: product_variants.id })
       .from(product_variants)
@@ -64,7 +56,7 @@ export class WishlistService {
       console.log('wishlistExists', wishlistExists);
 
       const response = await this.db.transaction(async (tx) => {
-        if (!companyRecord || !companyRecord?.id) {
+        if (!companyId) {
           throw new HttpException('Company not found', HttpStatus.NOT_FOUND);
         }
         console.log(wishlistExists);
@@ -109,7 +101,7 @@ export class WishlistService {
         const [wishlistRecord] = await tx
           .insert(wishlist)
           .values({
-            company_id: companyRecord.id,
+            company_id: companyId,
             user_id: customerId,
           })
           .returning({ id: wishlist.id });
@@ -164,23 +156,11 @@ export class WishlistService {
       );
     }
     try {
-      const [companyRecord] = await this.db
-        .select({ id: company.id })
-        .from(company)
-        .where(or(eq(company.company_domain, domain), eq(company.id, domain)))
-        .limit(1)
-        .catch((error) => {
-          console.error('Error fetching company:', error);
-          throw new HttpException(
-            'Failed to fetch company information',
-            HttpStatus.INTERNAL_SERVER_ERROR,
-          );
-        });
-      console.log('company record', companyRecord.id);
+      const companyId = await this.companyService.find(domain);
       const wishlistData = await this.db.query.wishlist.findMany({
         where: and(
           eq(wishlist.user_id, customerId),
-          eq(wishlist.company_id, companyRecord.id),
+          eq(wishlist.company_id, companyId),
         ),
         with: {
           items: {
@@ -224,24 +204,17 @@ export class WishlistService {
       );
     }
 
-    const [companyRecord] = await this.db
-      .select({ id: company.id })
-      .from(company)
-      .where(or(eq(company.company_domain, domain), eq(company.id, domain)))
-      .limit(1)
-      .catch((error) => {
-        console.error('Error fetching company:', error);
-        throw new HttpException(
-          'Failed to fetch company information',
-          HttpStatus.INTERNAL_SERVER_ERROR,
-        );
-      });
-    console.log('company record', companyRecord.id);
+    const companyId = await this.companyService.find(domain);
     try {
       const [wishlistRecord] = await this.db
         .select({ id: wishlist.id })
         .from(wishlist)
-        .where(eq(wishlist.user_id, customerId))
+        .where(
+          and(
+            eq(wishlist.user_id, customerId),
+            eq(wishlist.company_id, companyId),
+          ),
+        )
         .limit(1);
       if (!wishlistRecord) {
         throw new HttpException('Wishlist not found', HttpStatus.NOT_FOUND);

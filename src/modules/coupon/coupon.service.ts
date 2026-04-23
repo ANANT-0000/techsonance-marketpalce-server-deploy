@@ -3,22 +3,21 @@ import {
   Injectable,
   InternalServerErrorException,
 } from '@nestjs/common';
-import { CreateCouponDto } from './dto/create-coupon.dto';
-import { UpdateCouponDto } from './dto/update-coupon.dto';
 import { DRIZZLE, type DrizzleService } from 'src/drizzle/drizzle.module';
 import { and, eq, or } from 'drizzle-orm';
-import { company, coupon_usage, coupons } from 'src/drizzle/schema';
+import { coupon_usage, coupons } from 'src/drizzle/schema';
+import { CompanyService } from '../company/company.service';
 
 @Injectable()
 export class CouponService {
-  constructor(@Inject(DRIZZLE) private readonly db: DrizzleService) {}
+  constructor(
+    @Inject(DRIZZLE) private readonly db: DrizzleService,
+    private readonly companyService: CompanyService,
+  ) {}
   async verifyCoupon(code: string, userId: string, domain: string) {
     try {
-      const [companyRecord] = await this.db
-        .select({ id: company.id })
-        .from(company)
-        .where(or(eq(company.company_domain, domain), eq(company.id, domain)))
-        .limit(1);
+      const companyId = await this.companyService.find(domain);
+
       console.log('coupon verifying');
       const couponRecord = await this.db
         .select()
@@ -26,7 +25,7 @@ export class CouponService {
         .where(
           and(
             eq(coupons.code, code),
-            eq(coupons.company_id, companyRecord.id),
+            eq(coupons.company_id, companyId),
             eq(coupons.is_active, true),
           ),
         )

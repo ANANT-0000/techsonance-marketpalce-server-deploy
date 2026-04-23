@@ -37,6 +37,11 @@ export class AdminController {
     console.log(body.email, body.password);
     return await this.adminService.adminLogin(body.email, body.password, res);
   }
+  @Post('create-vendor')
+  @HttpCode(HttpStatus.OK)
+  async createVendor(@Body() vendorData: any) {
+    return await this.vendorService.vendorRegister(vendorData, []);
+  }
   @Get('vendor-applications')
   @HttpCode(HttpStatus.OK)
   async getVendorApplications() {

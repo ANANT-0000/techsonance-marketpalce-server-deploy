@@ -7,8 +7,7 @@ import {
   UnauthorizedException,
 } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
-import { DRIZZLE } from 'src/drizzle/drizzle.module';
-import { type DrizzleDB } from 'src/drizzle/types/drizzle';
+import { DRIZZLE, type DrizzleService } from 'src/drizzle/drizzle.module';
 import {
   address as addressTable,
   company as companyTable,
@@ -18,6 +17,7 @@ import {
   tax_types,
   user as userTable,
   user_roles as user_rolesTable,
+  vendor,
   vendor as vendorTable,
   vendor_document as vendor_documentTable,
 } from 'src/drizzle/schema';
@@ -37,7 +37,7 @@ type UserRoleType = typeof user_rolesTable.$inferSelect;
 @Injectable()
 export class VendorsService {
   constructor(
-    @Inject(DRIZZLE) private db: DrizzleDB,
+    @Inject(DRIZZLE) private db: DrizzleService,
     private jwtService: JwtService,
     private readonly mailService: MailService,
     private readonly uploadToCloudService: UploadToCloudService,
@@ -100,18 +100,26 @@ export class VendorsService {
             });
           });
         console.log('pass haseded', hashedPassword);
-        const [vendorRole] = await tx
-          .select({ id: user_rolesTable.id })
-          .from(user_rolesTable)
-          .where(eq(user_rolesTable.role_name, UserRole.VENDOR))
-          .limit(1);
-        if (!vendorRole) {
-          console.log('vendor  role not found');
-          throw new HttpException(
-            'Vendor role not found in the database',
-            HttpStatus.INTERNAL_SERVER_ERROR,
-          );
-        }
+        const [newRole] = await tx
+          .insert(user_rolesTable)
+          .values({
+            role_name: UserRole.VENDOR,
+          })
+          .onConflictDoUpdate({
+            target: user_rolesTable.role_name,
+            set: { id: user_rolesTable.id },
+          })
+          .returning({ id: user_rolesTable.id })
+          .catch((error) => {
+            console.error('Error creating vendor role:', error);
+            throw new InternalServerErrorException(
+              'Failed to create vendor role',
+              {
+                cause: error,
+              },
+            );
+          });
+
         console.log('creating company');
         const companyDomain = formatCompanyDomain(vendorData.company_domain);
         const [newCompany] = await tx
@@ -148,7 +156,7 @@ export class VendorsService {
             country_code: vendorData.country_code,
             phone_number: vendorData.phone_number,
             password_hash: hashedPassword,
-            role_id: vendorRole.id,
+            role_id: newRole.id,
             company_id: newCompany.id,
           })
           .returning({ id: userTable.id, email: userTable.email })
@@ -190,7 +198,7 @@ export class VendorsService {
               },
             );
           });
-        console.log('vednor created ', newVendor);
+        console.log('vendor created ', newVendor);
         if (!newVendor || !newVendor.id) {
           throw new HttpException(
             'Failed to create vendor record',
@@ -210,11 +218,11 @@ export class VendorsService {
             });
         }
         console.log('vendor documents inserted');
-        // this.mailService.sendEmail(
-        //   newUser.email,
-        //   'Vendor Registration Received',
-        //   `<p>Thank you for registering as a vendor on our marketplace. Your application is currently under review, and we will notify you once it has been approved.</p>`,
-        // );
+        this.mailService.sendEmail(
+          newUser.email,
+          'Vendor Registration Received',
+          `<p>Thank you for registering as a vendor on our marketplace. Your application is currently under review, and we will notify you once it has been approved.</p>`,
+        );
         return;
       });
     } catch (error) {
@@ -253,7 +261,7 @@ export class VendorsService {
         if (!userRecord || !userRecord.id || !userRecord.password_hash) {
           throw new UnauthorizedException('User not found');
         }
-        console.log(loginDto.password, 'password', userRecord.password_hash);
+        console.log(userRecord.email, 'password', userRecord.password_hash);
         const isPasswordValid = await bcrypt.compare(
           loginDto.password,
           userRecord.password_hash,
@@ -482,8 +490,10 @@ export class VendorsService {
       const deleteUserResult = await this.db
         .delete(userTable)
         .where(eq(userTable.id, vendorRow.user_id));
-
-      return;
+      console.log('deleted user', deleteUserResult);
+      return {
+        message: 'Vendor and associated user removed successfully',
+      };
     } catch (error) {
       if (
         error instanceof HttpException ||
@@ -578,23 +588,25 @@ export class VendorsService {
   }
   async vendorApplications() {
     try {
-      const applications = await this.db
-        .select()
-        .from(vendorTable)
-        .innerJoin(userTable, eq(vendorTable.user_id, userTable.id))
-        .innerJoin(companyTable, eq(vendorTable.company_id, companyTable.id))
-        .where(
-          or(
-            eq(vendorTable.vendor_status, UserStatus.PENDING),
-            eq(vendorTable.is_verified, false),
-          ),
-        );
-      if (!applications) {
-        throw new HttpException(
-          'No vendor applications found',
-          HttpStatus.NOT_FOUND,
-        );
-      }
+      const applications = await this.db.query.vendor
+        .findMany({
+          where: eq(vendor.vendor_status, UserStatus.PENDING),
+          with: {
+            company: true,
+            user: true,
+            documents: true,
+          },
+          orderBy: (vendor, { desc }) => desc(vendor.created_at),
+        })
+        .catch((error) => {
+          console.error('Error fetching vendor applications:', error);
+          throw new InternalServerErrorException(
+            'Failed to retrieve vendor applications',
+            {
+              cause: error,
+            },
+          );
+        });
       console.log(applications);
       return applications;
     } catch (error) {

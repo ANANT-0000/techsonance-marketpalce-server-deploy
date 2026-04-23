@@ -15,13 +15,14 @@ import {
   products,
 } from 'src/drizzle/schema/shop.schema';
 import { productImageType, ProductStatus } from 'src/drizzle/types/types';
-import { and, eq, or } from 'drizzle-orm';
+import { and, desc, eq, or } from 'drizzle-orm';
 
 import { UploadToCloudService } from 'src/utils/upload-to-cloud/upload-to-cloud.service';
 import { UpdateProductDto } from './dto/updatedProduct.dto';
 import { type ProductFiles } from 'src/common/Types/index.type';
 import { CompanyService } from '../company/company.service';
 import { InventoryService } from '../inventory/inventory.service';
+import { warehouse } from 'src/drizzle/schema';
 
 @Injectable()
 export class ProductsService {
@@ -258,6 +259,22 @@ export class ProductsService {
             .values(imageInserts)
             .returning();
           console.log('createdImages', createdImages);
+        }
+        if (!productDto.warehouse_id && variantRecords?.id) {
+          const defaultWarehouse = await tx
+            .select()
+            .from(warehouse)
+            .where(eq(warehouse.company_id, companyId))
+            .limit(1)
+            .orderBy(desc(warehouse.created_at));
+          const inventoryResult = await this.inventoryService.setStock(
+            variantRecords.id,
+            defaultWarehouse[0].id,
+            productDto.stock_quantity ?? 0,
+            companyId,
+            tx as DrizzleService, // pass transaction context
+          );
+          console.log('inventoryResult', inventoryResult);
         }
         if (productDto.warehouse_id && variantRecords?.id) {
           const inventoryResult = await this.inventoryService.setStock(

@@ -16,21 +16,22 @@ import {
   product_variants,
 } from 'src/drizzle/schema';
 import { and, eq, or, sql } from 'drizzle-orm';
+import { CompanyService } from '../company/company.service';
 
 @Injectable()
 export class CartService {
-  constructor(@Inject(DRIZZLE) private readonly db: DrizzleService) {}
+  constructor(
+    @Inject(DRIZZLE) private readonly db: DrizzleService,
+    private readonly companyService: CompanyService,
+  ) {}
   async create(
     createCartDto: CreateCartDto,
     customerId: string,
     domain: string,
   ) {
     try {
-      const [companyRecord] = await this.db
-        .select({ id: company.id })
-        .from(company)
-        .where(or(eq(company.company_domain, domain), eq(company.id, domain)));
-      if (!companyRecord || !companyRecord?.id) {
+      const companyId = await this.companyService.find(domain);
+      if (!companyId) {
         throw new HttpException('Company not found', HttpStatus.NOT_FOUND);
       }
       console.log('createCartDto', createCartDto);
@@ -82,7 +83,7 @@ export class CartService {
           const [createCart] = await tx
             .insert(carts)
             .values({
-              company_id: companyRecord.id,
+              company_id: companyId,
               user_id: customerId,
             })
             .returning({ id: carts.id })
@@ -136,12 +137,12 @@ export class CartService {
   async findAll(customerId: string, domain: string) {
     try {
       console.log('customerId', customerId);
-      console.log('domain', domain);
+      const companyId = await this.companyService.find(domain);
       const [isUserCartExits] = await this.db
         .select({ id: carts.id })
         .from(carts)
         .where(
-          and(eq(carts.user_id, customerId), eq(carts.company_id, domain)),
+          and(eq(carts.user_id, customerId), eq(carts.company_id, companyId)),
         );
       console.log('isUserCartExits', isUserCartExits);
       if (isUserCartExits === undefined || isUserCartExits.id === '') {
@@ -183,7 +184,7 @@ export class CartService {
           if (!cartItem || cartItem.length === 0) {
             throw new NotFoundException(`Cart items not found `);
           }
-          // console.log('cart list', cartItem);
+          console.log('cart list', cartItem);
           return cartItem;
         })
         .catch((error) => {
@@ -215,29 +216,12 @@ export class CartService {
 
   async findOne(productVariantId: string, customerId: string, domain: string) {
     try {
-      const [CompanyRecord] = await this.db
-        .select({ company_id: company.id })
-        .from(company)
-        .where(or(eq(company.company_domain, domain), eq(company.id, domain)))
-        .limit(1)
-        .catch((error) => {
-          console.error('Error fetching company:', error);
-          throw new HttpException(
-            'Failed to fetch company information',
-            HttpStatus.INTERNAL_SERVER_ERROR,
-            {
-              cause: error,
-            },
-          );
-        });
+      const companyId = await this.companyService.find(domain);
       const [isUserCartExits] = await this.db
         .select({ id: carts.id })
         .from(carts)
         .where(
-          and(
-            eq(carts.user_id, customerId),
-            eq(carts.company_id, CompanyRecord.company_id),
-          ),
+          and(eq(carts.user_id, customerId), eq(carts.company_id, companyId)),
         );
       const [cartItem] = await this.db
         .select()
@@ -280,7 +264,11 @@ export class CartService {
   async updateCartItemQuantity(cartId: string, updateCartDto: UpdateCartDto) {
     try {
       await this.db
-        .select({ id: cart_items.id })
+        .select({
+          id: cart_items.id,
+          quantity: cart_items.quantity,
+          cart_id: cart_items.cart_id,
+        })
         .from(cart_items)
         .where(eq(cart_items.id, cartId))
         .then((cartItems) => {
@@ -301,7 +289,12 @@ export class CartService {
       const updatedCartItem = await this.db
         .update(cart_items)
         .set({ quantity: updateCartDto.quantity })
-        .where(eq(cart_items.id, cartId))
+        .where(
+          and(
+            eq(cart_items.id, cartId),
+            eq(cart_items.cart_id, updateCartDto.cart_items_id),
+          ),
+        )
         .returning();
       console.log('updatedCartItem', updatedCartItem);
       return updatedCartItem;
@@ -323,28 +316,14 @@ export class CartService {
     domain: string,
   ) {
     try {
-      const [companyRecord] = await this.db
-        .select({ id: company.id })
-        .from(company)
-        .where(or(eq(company.company_domain, domain), eq(company.id, domain)))
-        .limit(1)
-        .catch((error) => {
-          console.error('Error fetching company:', error);
-          throw new HttpException(
-            'Failed to fetch company information',
-            HttpStatus.INTERNAL_SERVER_ERROR,
-            {
-              cause: error,
-            },
-          );
-        });
+      const companyId = await this.companyService.find(domain);
       const [isUserCartExits] = await this.db
         .select({ id: carts.id })
         .from(carts)
         .where(
           and(
             eq(carts.user_id, customerId),
-            eq(carts.company_id, companyRecord.id),
+            eq(carts.company_id, companyId),
             eq(carts.id, cartId),
           ),
         )
@@ -361,7 +340,7 @@ export class CartService {
       if (!isUserCartExits.id || isUserCartExits.id === '') {
         throw new NotFoundException('User Cart not found');
       }
-      console.log('company record', companyRecord.id);
+      console.log('company record', companyId);
       const [cartItemRecord] = await this.db
         .select({ id: cart_items.id, quantity: cart_items.quantity })
         .from(cart_items)

@@ -63,11 +63,14 @@ export const inventory = pg.pgTable(
       .timestamp('created_at')
       .$default(() => new Date())
       .notNull(),
-    restocked_at: pg.timestamp('restocked_at'),
-    updated_at: pg
-      .timestamp('updated_at')
+    restocked_at: pg
+      .timestamp('restocked_at')
       .$onUpdate(() => new Date())
       .notNull(),
+    // updated_at: pg
+    //   .timestamp('updated_at')
+    //   .$onUpdate(() => new Date())
+    //   .notNull(),
     product_variant_id: pg
       .uuid('product_variant_id')
       .references(() => product_variants.id, { onDelete: 'cascade' })

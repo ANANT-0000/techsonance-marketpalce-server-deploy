@@ -14,7 +14,7 @@ import { VendorsService } from '../vendors/vendors.service';
 import { UsersService } from '../users/users.service';
 import express from 'express';
 import { CreateUserDto, LoginDto } from '../users/dto/userAuth.dto.ts';
-import { type VendorType } from 'src/drizzle/types/types';
+// import { type VendorType } from 'src/drizzle/types/types';
 import { UploadToCloud } from 'src/common/decorators/upload.decorator';
 import { ParseJsonPipe } from 'src/common/pipes/parseJsonPipe';
 @Controller({ version: '1', path: 'auth' })

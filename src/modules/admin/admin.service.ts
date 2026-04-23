@@ -65,21 +65,23 @@ export class AdminService {
       } = { sub: existingUser.id, email: existingUser.email };
       const accessToken = this.jwtService.sign(payload);
       console.log('access token', accessToken);
-      const response = {
+      const filteredUser = {
         ...existingUser,
-        user_role: UserRole.ADMIN,
-        token: accessToken,
         password_hash: undefined,
       };
-      console.log('admin login response', response);
-      res.cookie('access_token', accessToken, {
-        httpOnly: true,
-        secure: process.env.NODE_ENV === 'production',
-        sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax',
-        path: '/',
-        maxAge: 30 * 24 * 60 * 60 * 1000, // 30 days
-      });
-      return response as Record<string, unknown>;
+      console.log('admin login response', filteredUser);
+      // res.cookie('access_token', accessToken, {
+      //   httpOnly: true,
+      //   secure: process.env.NODE_ENV === 'production',
+      //   sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax',
+      //   path: '/',
+      //   maxAge: 30 * 24 * 60 * 60 * 1000, // 30 days
+      // });
+      return {
+        user: filteredUser,
+        role: UserRole.ADMIN,
+        token: accessToken,
+      };
     } catch (error) {
       throw new InternalServerErrorException('Failed to login admin', {
         cause: error,

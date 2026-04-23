@@ -20,6 +20,11 @@ export class CloudinaryService {
       if (fileFormat === 'svg+xml' || fileFormat === 'svg') {
         uploadOptions.resource_type = 'image'; // Force image type
         uploadOptions.format = 'svg'; // Explicitly define format
+      } else if (fileFormat === 'pdf' || fileFormat === 'application/pdf') {
+        uploadOptions.resource_type = 'raw'; // Force raw type for PDFs
+        uploadOptions.access_control = [{ access_type: 'anonymous' }];
+        uploadOptions.use_filename = true;
+        uploadOptions.unique_filename = false;
       }
       const uploadStream = cloudinary.uploader.upload_stream(
         uploadOptions,

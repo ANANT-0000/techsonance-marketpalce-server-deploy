@@ -74,7 +74,7 @@ export class InventoryService {
   async findAll(domain: string) {
     try {
       const companyId = await this.companyService.find(domain);
-
+      console.log(companyId);
       // const rows = await this.db
       //   .select({
       //     // Variant fields
@@ -150,57 +150,68 @@ export class InventoryService {
       // console.log('variantMap', Array.from(variantMap.values()));
       // return Array.from(variantMap.values());
 
-      const rows = await this.db.query.inventory.findMany({
-        where: eq(inventory.company_id, companyId),
-        with: {
-          variant: {
-            with: {
-              product: {
-                columns: {
-                  id: true,
-                  category_id: true,
+      const rows = await this.db.query.inventory
+        .findMany({
+          where: eq(inventory.company_id, companyId),
+          columns: {
+            id: true,
+            stock_quantity: true,
+            warehouse_id: true,
+            product_variant_id: true,
+            created_at: true,
+          },
+          with: {
+            variant: {
+              with: {
+                product: {
+                  columns: {
+                    id: true,
+                    category_id: true,
+                  },
+                },
+                images: {
+                  where: eq(product_images.imgType, productImageType.MAIN),
+                  columns: {
+                    image_url: true,
+                  },
                 },
               },
-              images: {
-                where: eq(product_images.imgType, productImageType.MAIN),
-                columns: {
-                  image_url: true,
+            },
+            warehouse: {
+              columns: {
+                id: true,
+                warehouse_name: true,
+              },
+              with: {
+                address: {
+                  columns: {
+                    id: true,
+                    name: true,
+                    number: true,
+                    address_type: true,
+                    address_line_1: true,
+                    address_line_2: true,
+                    street: true,
+                    city: true,
+                    state: true,
+                    postal_code: true,
+                    country: true,
+                    landmark: true,
+                    is_default: true,
+                    created_at: true,
+                  },
                 },
               },
             },
           },
-          warehouse: {
-            columns: {
-              id: true,
-              warehouse_name: true,
-            },
-            with: {
-              address: {
-                columns: {
-                  id: true,
-                  name: true,
-                  number: true,
-                  address_type: true,
-                  address_line_1: true,
-                  address_line_2: true,
-                  street: true,
-                  city: true,
-                  state: true,
-                  postal_code: true,
-                  country: true,
-                  landmark: true,
-                  is_default: true,
-                  created_at: true,
-                },
-              },
-            },
-          },
-        },
-      });
-      // Define your threshold
+        })
+        .catch((error) => {
+          console.log(error);
+          throw new InternalServerErrorException('Failed to fetch inventory', {
+            cause: error,
+          });
+        });
       const LOW_STOCK_THRESHOLD = 10;
-
-      // 1. Define the address type based on your Drizzle columns
       type AddressRecord = {
         id: string;
         name: string | null;
@@ -234,7 +245,7 @@ export class InventoryService {
             warehouse_id: string;
             warehouse_name: string | null;
             stock: number;
-            address: AddressRecord | null; // <-- Added address to the location type
+            address: AddressRecord | null;
           }[];
         }
       >();
@@ -242,7 +253,7 @@ export class InventoryService {
       for (const row of rows) {
         const variant = row.variant;
         const warehouse = row.warehouse;
-        const image = variant?.images?.[0]?.image_url ?? null; // Get the first image URL or null
+        const image = variant?.images?.[0]?.image_url ?? null;
         const stockQuantity = row.stock_quantity ?? 0;
 
         if (!variantMap.has(variant.id)) {
@@ -283,7 +294,11 @@ export class InventoryService {
       console.log('formattedInventory', formattedInventory);
       return formattedInventory;
     } catch (error) {
-      if (error instanceof HttpException) throw error;
+      if (
+        error instanceof HttpException ||
+        error instanceof InternalServerErrorException
+      )
+        throw error;
       throw new InternalServerErrorException('Failed to fetch inventory', {
         cause: error,
       });
@@ -425,6 +440,7 @@ export class InventoryService {
     tx: DrizzleService, // transaction context
   ) {
     try {
+      console.log('deductStockForOrder ...');
       for (const line of orderLines) {
         const [idv] = await tx
           .select({
@@ -464,6 +480,7 @@ export class InventoryService {
             ),
           );
       }
+      console.log('deductStockForOrder completed');
     } catch (error) {
       if (
         error instanceof HttpException ||

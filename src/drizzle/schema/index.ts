@@ -32,7 +32,12 @@ import {
   role_permissions,
   user_roles,
 } from './main.schema';
-import { audit_logs, inventory, warehouse } from './utils.schema';
+import {
+  audit_logs,
+  inventory,
+  vendor_document,
+  warehouse,
+} from './utils.schema';
 
 export const companyRelations = relations(company, ({ many }) => ({
   roles: many(user_roles),
@@ -61,6 +66,10 @@ export const userRelations = relations(user, ({ one, many }) => ({
   role: one(user_roles, {
     fields: [user.role_id],
     references: [user_roles.id],
+  }),
+  vendor: one(vendor, {
+    fields: [user.id],
+    references: [vendor.user_id],
   }),
   refresh_tokens: one(refresh_tokens, {
     fields: [user.id],
@@ -98,6 +107,23 @@ export const rolePermissionsRelations = relations(
     }),
   }),
 );
+export const vendorRelations = relations(vendor, ({ one, many }) => ({
+  company: one(company, {
+    fields: [vendor.company_id],
+    references: [company.id],
+  }),
+  user: one(user, {
+    fields: [vendor.user_id],
+    references: [user.id],
+  }),
+  documents: many(vendor_document),
+}));
+export const documentRelations = relations(vendor_document, ({ one }) => ({
+  vendor: one(vendor, {
+    fields: [vendor_document.vendor_id],
+    references: [vendor.id],
+  }),
+}));
 export const productsRelations = relations(products, ({ one, many }) => ({
   category: one(categories, {
     fields: [products.category_id],

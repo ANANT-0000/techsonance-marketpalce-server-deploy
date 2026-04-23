@@ -22,7 +22,7 @@ export const UserRoleEnum = pg.pgEnum('user_role_enum', [
 ]);
 export const user_roles = pg.pgTable('user_roles', {
   id: pg.uuid('id').primaryKey().defaultRandom(),
-  role_name: UserRoleEnum().notNull(),
+  role_name: pg.text('role_name').notNull().default(UserRole.ADMIN),
   created_at: pg.timestamp('created_at').notNull().defaultNow(),
   updated_at: pg
     .timestamp('updated_at')

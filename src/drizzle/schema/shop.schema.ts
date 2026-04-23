@@ -1,5 +1,6 @@
 import * as pg from 'drizzle-orm/pg-core';
-import { address, company, user, vendor } from '.';
+import { company } from './main.schema';
+import { address, user, vendor } from './users.schema';
 import {
   CancelledByEnum,
   OrderStatus,
@@ -184,7 +185,7 @@ export const order_items = pg.pgTable(
       .references(() => company.id, { onDelete: 'cascade' }),
     quantity: pg.integer('quantity').notNull(),
     price: pg.decimal('price', { precision: 10, scale: 2 }).notNull(),
-    order_status: order_status_enum().notNull(),
+    order_status: order_status_enum('order_status').notNull(),
     created_at: pg.timestamp('created_at').notNull().defaultNow(),
     updated_at: pg
       .timestamp('updated_at')
@@ -202,7 +203,7 @@ export const order_item_cancelled = pg.pgTable('order_item_canceled', {
     .uuid('order_item_id')
     .references(() => order_items.id, { onDelete: 'cascade' }),
   reason: pg.text('reason').notNull(),
-  cancelled_by: cancelled_by_enum().notNull(),
+  cancelled_by: cancelled_by_enum('cancelled_by').notNull(),
   created_at: pg.timestamp('created_at').notNull().defaultNow(),
   company_id: pg
     .uuid('company_id')
@@ -334,7 +335,7 @@ export const payments = pg.pgTable(
   {
     id: pg.uuid('id').primaryKey().defaultRandom(),
     payment_method: pg.text('payment_method').notNull(),
-    payment_status: payment_status_enum().notNull(),
+    payment_status: payment_status_enum('payment_status').notNull(),
     transaction_ref: pg.text('transaction_ref').notNull(),
     amount: pg.decimal('amount', { precision: 10, scale: 2 }).notNull(),
     created_at: pg.timestamp('created_at').notNull().defaultNow(),
@@ -387,7 +388,7 @@ export const refunds = pg.pgTable(
       .decimal('refund_amount', { precision: 10, scale: 2 })
       .notNull(),
     refund_reason: pg.text('refund_reason').notNull(),
-    refund_status: refund_status_enum().notNull(),
+    refund_status: refund_status_enum('refund_status').notNull(),
     created_at: pg
       .timestamp('created_at')
       .$default(() => new Date())

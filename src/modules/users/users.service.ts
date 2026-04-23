@@ -135,6 +135,7 @@ export class UsersService {
         throw new InternalServerErrorException('Customer role not found');
       }
       const hashedPassword = await bcrypt.hash(userData.password, 10);
+      console.log('creating user');
 
       const [userRecord] = await this.db
         .insert(user)
@@ -146,7 +147,14 @@ export class UsersService {
           role_id: userRole[0].id,
           company_id: companyId,
         })
-        .returning();
+        .returning()
+        .catch((error) => {
+          console.error('Error inserting user:', error);
+          throw new InternalServerErrorException('Failed to create user', {
+            cause: error,
+          });
+        });
+      console.log('created user');
       return userRecord;
     } catch (error) {
       if (
@@ -197,17 +205,20 @@ export class UsersService {
         secret: process.env.JWT_SECRET || 'defaultSecret',
       });
       const filteredUser = {
-        user: userRecord,
-        role: roleRecord?.role_name,
-        password_hash: undefined,
+        ...userRecord,
+        password_hash: undefined, // Exclude password hash from the response
       };
       console.log(filteredUser);
-      res.cookie('access_token', access_token, {
-        httpOnly: true,
-        secure: process.env.NODE_ENV === 'production',
-      });
+      // res.cookie('access_token', access_token, {
+      //   httpOnly: true,
+      //   secure: process.env.NODE_ENV === 'production',
+      // });
 
-      return filteredUser;
+      return {
+        user: filteredUser,
+        role: roleRecord.role_name,
+        token: access_token,
+      };
     } catch (error) {
       if (error instanceof HttpException) {
         throw error;

@@ -66,7 +66,7 @@ export class OrdersService {
           companyId,
           tx as DrizzleService,
         );
-
+        console.log('creating order ...');
         const [createdOrder] = await tx
           .insert(orders)
           .values({
@@ -84,13 +84,16 @@ export class OrdersService {
               cause: error,
             });
           });
+        console.log('Order created:', createdOrder);
         const orderItemsData = orderLines.map((line) => ({
           order_id: createdOrder.id,
           product_variant_id: line.variantId,
           quantity: line.quantity,
           price: String(line.price),
           order_status: OrderStatus.PENDING,
+          company_id: companyId,
         }));
+        console.log('creating order item...');
         await tx
           .insert(order_items)
           .values(orderItemsData)
@@ -103,6 +106,8 @@ export class OrdersService {
               },
             );
           });
+        console.log('created order item...');
+
         console.log('creating payment ');
         await tx
           .insert(payments)
@@ -153,28 +158,10 @@ export class OrdersService {
           HttpStatus.BAD_REQUEST,
         );
       }
-      const [companyRecord] = await this.db
-        .select({ id: company.id })
-        .from(company)
-        .where(or(eq(company.company_domain, domain), eq(company.id, domain)))
-        .limit(1)
-        .catch((error) => {
-          console.error('Error fetching company record:', error);
-          throw new InternalServerErrorException(
-            'Failed to fetch company record',
-            {
-              cause: error,
-            },
-          );
-        });
-      if (!companyRecord) {
-        throw new HttpException('Company not found', HttpStatus.NOT_FOUND);
-      }
+      const companyId = await this.companyService.find(domain);
+
       const [orderResult] = await this.db.query.orders.findMany({
-        where: and(
-          eq(orders.id, orderId),
-          eq(orders.company_id, companyRecord.id),
-        ),
+        where: and(eq(orders.id, orderId), eq(orders.company_id, companyId)),
         with: {
           items: true,
         },
@@ -364,39 +351,23 @@ export class OrdersService {
       if (!userId) {
         throw new HttpException('User ID is required', HttpStatus.BAD_REQUEST);
       }
-      const [companyRecord] = await this.db
-        .select({ id: company.id })
-        .from(company)
-        .where(or(eq(company.company_domain, domain), eq(company.id, domain)))
-        .limit(1)
-        .catch((error) => {
-          console.error('Error fetching company record:', error);
-          throw new InternalServerErrorException(
-            'Failed to fetch company record',
-            {
-              cause: error,
-            },
-          );
-        });
-      if (!companyRecord) {
-        throw new HttpException('Company not found', HttpStatus.NOT_FOUND);
-      }
+      const companyId = await this.companyService.find(domain);
 
       const ordersList = await this.db.query.orders.findMany({
         where: and(
           eq(orders.user_id, userId),
-          eq(orders.company_id, companyRecord.id),
+          eq(orders.company_id, companyId),
         ),
         columns: {
           id: true,
           user_id: true,
           total_amount: true,
-          order_status: true,
           created_at: true,
         },
         with: {
           items: {
             columns: {
+              order_status: true,
               quantity: true,
               price: true,
             },
@@ -463,39 +434,22 @@ export class OrdersService {
           HttpStatus.BAD_REQUEST,
         );
       }
-      const [companyRecord] = await this.db
-        .select({ id: company.id })
-        .from(company)
-        .where(or(eq(company.company_domain, domain), eq(company.id, domain)))
-        .limit(1)
-        .catch((error) => {
-          console.error('Error fetching company record:', error);
-          throw new InternalServerErrorException(
-            'Failed to fetch company record',
-            {
-              cause: error,
-            },
-          );
-        });
-      if (!companyRecord) {
-        throw new HttpException('Company not found', HttpStatus.NOT_FOUND);
-      }
+      const companyId = await this.companyService.find(domain);
+
       const orderDetails = await this.db.query.orders.findFirst({
-        where: and(
-          eq(orders.id, orderId),
-          eq(orders.company_id, companyRecord.id),
-        ),
+        where: and(eq(orders.id, orderId), eq(orders.company_id, companyId)),
         columns: {
           id: true,
           user_id: true,
           total_amount: true,
-          order_status: true,
+
           created_at: true,
         },
         with: {
           items: {
             columns: {
               quantity: true,
+              order_status: true,
               price: true,
             },
             with: {
@@ -551,29 +505,13 @@ export class OrdersService {
   }
   async getOrdersList(domain: string) {
     try {
-      const [companyRecord] = await this.db
-        .select({ id: company.id })
-        .from(company)
-        .where(or(eq(company.company_domain, domain), eq(company.id, domain)))
-        .limit(1)
-        .catch((error) => {
-          console.error('Error fetching company record:', error);
-          throw new InternalServerErrorException(
-            'Failed to fetch company record',
-            {
-              cause: error,
-            },
-          );
-        });
-      if (!companyRecord) {
-        throw new HttpException('Company not found', HttpStatus.NOT_FOUND);
-      }
+      const companyId = await this.companyService.find(domain);
+
       const ordersList = await this.db.query.orders.findMany({
-        where: and(eq(orders.company_id, companyRecord.id)),
+        where: and(eq(orders.company_id, companyId)),
         columns: {
           id: true,
           total_amount: true,
-          order_status: true,
           created_at: true,
         },
 
@@ -617,39 +555,22 @@ export class OrdersService {
           HttpStatus.BAD_REQUEST,
         );
       }
-      const [companyRecord] = await this.db
-        .select({ id: company.id })
-        .from(company)
-        .where(or(eq(company.company_domain, domain), eq(company.id, domain)))
-        .limit(1)
-        .catch((error) => {
-          console.error('Error fetching company record:', error);
-          throw new InternalServerErrorException(
-            'Failed to fetch company record',
-            {
-              cause: error,
-            },
-          );
-        });
-
-      const orderDetails = await this.db.query.orders.findFirst({
-        where: and(
-          eq(orders.id, orderId),
-          eq(orders.company_id, companyRecord.id),
-        ),
+      const companyId = await this.companyService.find(domain);
+      const row = await this.db.query.orders.findFirst({
+        where: and(eq(orders.id, orderId), eq(orders.company_id, companyId)),
         columns: {
           id: true,
-          order_status: true,
           total_amount: true,
           created_at: true,
         },
         with: {
           items: {
             columns: {
+              id: true,
+              order_status: true,
               quantity: true,
               price: true,
             },
-
             with: {
               productVariant: {
                 columns: {
@@ -662,6 +583,32 @@ export class OrdersService {
                     where: eq(product_images.is_primary, true),
                     columns: {
                       image_url: true,
+                    },
+                  },
+                  inventory: {
+                    columns: {
+                      stock_quantity: true,
+                      warehouse_id: true,
+                    },
+                    with: {
+                      warehouse: {
+                        columns: {
+                          warehouse_name: true,
+                          address_id: true,
+                        },
+                        with: {
+                          address: {
+                            columns: {
+                              address_line_1: true,
+                              address_line_2: true,
+                              city: true,
+                              state: true,
+                              postal_code: true,
+                              country: true,
+                            },
+                          },
+                        },
+                      },
                     },
                   },
                 },
@@ -696,7 +643,92 @@ export class OrdersService {
           },
         },
       });
-      return orderDetails;
+      if (!row) {
+        throw new HttpException('Order not found', HttpStatus.NOT_FOUND);
+      }
+      console.log(row);
+      const warehouseIds = new Set(
+        row.items.map(
+          (i) => i?.productVariant?.inventory?.warehouse_id ?? null,
+        ),
+      );
+      const isSingleWarehouse = warehouseIds.size <= 1;
+
+      const formattedOrderDetails = {
+        id: row.id,
+        total_amount: row.total_amount,
+        created_at: row.created_at,
+        is_single_warehouse: isSingleWarehouse,
+        customer: {
+          id: row.customer?.id ?? null,
+          first_name: row.customer?.first_name ?? null,
+          last_name: row.customer?.last_name ?? null,
+          email: row.customer?.email ?? null,
+          phone_number: row.customer?.phone_number ?? null,
+        },
+
+        items: row.items.map((item) => {
+          const inventory = item?.productVariant?.inventory ?? null;
+          const warehouse = inventory?.warehouse ?? null;
+
+          return {
+            id: item.id,
+            quantity: item?.quantity,
+            unit_price: item?.price, // renamed: price → unit_price (clearer)
+            line_total: (Number(item?.price) * item?.quantity).toFixed(2), // pre-computed
+            order_status: item?.order_status,
+
+            warehouse: warehouse
+              ? {
+                  id: inventory?.warehouse_id ?? null,
+                  name: warehouse.warehouse_name,
+                  address: warehouse.address
+                    ? {
+                        address_line_1: warehouse.address.address_line_1,
+                        address_line_2:
+                          warehouse.address.address_line_2 ?? null,
+                        city: warehouse.address.city,
+                        state: warehouse.address.state,
+                        postal_code: warehouse.address.postal_code,
+                        country: warehouse.address.country,
+                      }
+                    : null,
+                }
+              : null,
+
+            product_variant: {
+              id: item.productVariant?.id ?? null,
+              variant_name: item.productVariant?.variant_name ?? null,
+              price: item.productVariant?.price ?? null,
+              image_url: item.productVariant?.images?.[0]?.image_url ?? null, // flattened: no array needed
+            },
+          };
+        }),
+
+        shipping_address: row.address
+          ? {
+              name: row.address.name,
+              address_line_1: row.address.address_line_1,
+              address_line_2: row.address.address_line_2 ?? null,
+              city: row.address.city,
+              state: row.address.state,
+              postal_code: row.address.postal_code,
+              country: row.address.country,
+            }
+          : null,
+
+        payment: row.payment
+          ? {
+              amount: row.payment.amount,
+              payment_method: row.payment.payment_method,
+            }
+          : null,
+        shipping: {
+          tracking_url: row.shipping?.tracking_url ?? null,
+        },
+      };
+      console.log('formattedOrderDetails', formattedOrderDetails.items);
+      return formattedOrderDetails;
     } catch (error) {
       console.error('Error fetching order details:', error);
       if (error instanceof HttpException) {
@@ -745,12 +777,15 @@ export class OrdersService {
           HttpStatus.BAD_REQUEST,
         );
       }
+      console.log('find items...');
       const orderItemsRecord = await this.db
         .select({ id: order_items.id })
         .from(order_items)
         .where(eq(order_items.order_id, orderId))
         .limit(1);
-      if (orderItemsRecord.length === 0) {
+      console.log('orderItemsRecord', orderItemsRecord);
+      if (orderItemsRecord) {
+        console.log('updating item statuses...');
         const updateItem = orderItemsRecord.map(async (item) => {
           return await this.db
             .update(order_items)
@@ -761,6 +796,12 @@ export class OrdersService {
                 eq(order_items.id, item.id),
               ),
             )
+            .then((result) => {
+              console.log(
+                `order item ${item.id} updated to ${newStatus}`,
+                result,
+              );
+            })
             .catch((error) => {
               console.error('Error updating order status:', error);
               throw new InternalServerErrorException(
