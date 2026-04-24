@@ -180,8 +180,29 @@ export class CheckoutService {
   }
 
   private async _clearCart(tx: DrizzleDB, cartId: string, userId: string) {
+    console.log('clearing cart');
     await tx
       .delete(carts)
-      .where(and(eq(carts.id, cartId), eq(carts.user_id, userId)));
+      .where(and(eq(carts.id, cartId), eq(carts.user_id, userId)))
+      .catch((error) => {
+        console.error('Error clearing cart:', error);
+        throw new HttpException(
+          'Failed to clear cart after successful checkout',
+          HttpStatus.INTERNAL_SERVER_ERROR,
+          { cause: error },
+        );
+      });
+    await tx
+      .delete(cart_items)
+      .where(eq(cart_items.cart_id, cartId))
+      .catch((error) => {
+        console.error('Error clearing cart items:', error);
+        throw new HttpException(
+          'Failed to clear cart items after successful checkout',
+          HttpStatus.INTERNAL_SERVER_ERROR,
+          { cause: error },
+        );
+      });
+    console.log('cleared cart successfully');
   }
 }

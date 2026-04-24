@@ -5,7 +5,7 @@ import {
   Injectable,
   InternalServerErrorException,
 } from '@nestjs/common';
-import { and, eq, or } from 'drizzle-orm';
+import { and, desc, eq, or } from 'drizzle-orm';
 import { DRIZZLE, type DrizzleService } from 'src/drizzle/drizzle.module';
 import {
   company,
@@ -353,69 +353,80 @@ export class OrdersService {
       }
       const companyId = await this.companyService.find(domain);
 
-      const ordersList = await this.db.query.orders.findMany({
-        where: and(
-          eq(orders.user_id, userId),
-          eq(orders.company_id, companyId),
-        ),
-        columns: {
-          id: true,
-          user_id: true,
-          total_amount: true,
-          created_at: true,
-        },
-        with: {
-          items: {
-            columns: {
-              order_status: true,
-              quantity: true,
-              price: true,
-            },
-            with: {
-              productVariant: {
-                columns: {
-                  id: true,
-                  variant_name: true,
-                  price: true,
-                },
-                with: {
-                  images: {
-                    where: eq(product_images.is_primary, true),
-                    columns: {
-                      image_url: true,
+      const ordersList = await this.db.query.orders
+        .findMany({
+          orderBy: desc(orders.created_at),
+          where: and(
+            eq(orders.user_id, userId),
+            eq(orders.company_id, companyId),
+          ),
+          columns: {
+            id: true,
+            user_id: true,
+            total_amount: true,
+            created_at: true,
+          },
+          with: {
+            items: {
+              columns: {
+                order_status: true,
+                quantity: true,
+                price: true,
+              },
+              with: {
+                variant: {
+                  columns: {
+                    id: true,
+                    variant_name: true,
+                    price: true,
+                  },
+                  with: {
+                    images: {
+                      where: eq(product_images.is_primary, true),
+                      columns: {
+                        image_url: true,
+                      },
                     },
                   },
                 },
               },
             },
-          },
-          address: {
-            columns: {
-              name: true,
-              address_line_1: true,
-              address_line_2: true,
-              city: true,
-              state: true,
-              postal_code: true,
-              country: true,
+            address: {
+              columns: {
+                name: true,
+                address_line_1: true,
+                address_line_2: true,
+                city: true,
+                state: true,
+                postal_code: true,
+                country: true,
+              },
+            },
+            payment: {
+              columns: {
+                id: true,
+                amount: true,
+                payment_status: true,
+                payment_method: true,
+                transaction_ref: true,
+              },
+            },
+            shipping: {
+              columns: {
+                tracking_url: true,
+              },
             },
           },
-          payment: {
-            columns: {
-              id: true,
-              amount: true,
-              payment_status: true,
-              payment_method: true,
-              transaction_ref: true,
+        })
+        .catch((error) => {
+          console.error('Error fetching user orders:', error);
+          throw new InternalServerErrorException(
+            'Failed to retrieve user orders',
+            {
+              cause: error,
             },
-          },
-          shipping: {
-            columns: {
-              tracking_url: true,
-            },
-          },
-        },
-      });
+          );
+        });
 
       // console.log('user orders \n', ordersList);
       return ordersList;
@@ -442,18 +453,18 @@ export class OrdersService {
           id: true,
           user_id: true,
           total_amount: true,
-
           created_at: true,
         },
         with: {
           items: {
             columns: {
+              id: true,
               quantity: true,
               order_status: true,
               price: true,
             },
             with: {
-              productVariant: {
+              variant: {
                 columns: {
                   id: true,
                   variant_name: true,
@@ -518,6 +529,7 @@ export class OrdersService {
         with: {
           items: {
             columns: {
+              order_status: true,
               quantity: true,
               price: true,
             },
@@ -572,7 +584,7 @@ export class OrdersService {
               price: true,
             },
             with: {
-              productVariant: {
+              variant: {
                 columns: {
                   id: true,
                   variant_name: true,
@@ -648,9 +660,7 @@ export class OrdersService {
       }
       console.log(row);
       const warehouseIds = new Set(
-        row.items.map(
-          (i) => i?.productVariant?.inventory?.warehouse_id ?? null,
-        ),
+        row.items.map((i) => i?.variant?.inventory?.warehouse_id ?? null),
       );
       const isSingleWarehouse = warehouseIds.size <= 1;
 
@@ -668,7 +678,7 @@ export class OrdersService {
         },
 
         items: row.items.map((item) => {
-          const inventory = item?.productVariant?.inventory ?? null;
+          const inventory = item?.variant?.inventory ?? null;
           const warehouse = inventory?.warehouse ?? null;
 
           return {
@@ -697,10 +707,10 @@ export class OrdersService {
               : null,
 
             product_variant: {
-              id: item.productVariant?.id ?? null,
-              variant_name: item.productVariant?.variant_name ?? null,
-              price: item.productVariant?.price ?? null,
-              image_url: item.productVariant?.images?.[0]?.image_url ?? null, // flattened: no array needed
+              id: item.variant?.id ?? null,
+              variant_name: item.variant?.variant_name ?? null,
+              price: item.variant?.price ?? null,
+              image_url: item.variant?.images?.[0]?.image_url ?? null, // flattened: no array needed
             },
           };
         }),
@@ -822,255 +832,6 @@ export class OrdersService {
         throw error;
       }
       throw new InternalServerErrorException('Failed to update order status', {
-        cause: error,
-      });
-    }
-  }
-
-  async cancelOrder(
-    orderItemId: string,
-    cancelReason: string,
-    cancelledBy: CancelledByEnum,
-    domain: string,
-  ) {
-    try {
-      const companyId = await this.companyService.find(domain);
-
-      return await this.db.transaction(async (tx) => {
-        const [existingOrderItem] = await tx
-          .select({
-            id: order_items.id,
-            order_id: order_items.order_id,
-            order_status: order_items.order_status,
-            product_variant_id: order_items.product_variant_id,
-            quantity: order_items.quantity,
-            price: order_items.price,
-          })
-          .from(order_items)
-          .where(eq(order_items.id, orderItemId))
-          .limit(1);
-
-        if (!existingOrderItem) {
-          throw new HttpException('Order item not found', HttpStatus.NOT_FOUND);
-        }
-
-        if (
-          !existingOrderItem.order_id ||
-          !existingOrderItem.product_variant_id
-        ) {
-          throw new HttpException(
-            'Order item has incomplete data',
-            HttpStatus.INTERNAL_SERVER_ERROR,
-          );
-        }
-        if (existingOrderItem.order_status === OrderStatus.CANCELLED) {
-          throw new HttpException(
-            'Order item is already cancelled',
-            HttpStatus.BAD_REQUEST,
-          );
-        }
-
-        if (existingOrderItem.order_status === OrderStatus.DELIVERED) {
-          throw new HttpException(
-            'Order item is already delivered and cannot be cancelled',
-            HttpStatus.BAD_REQUEST,
-          );
-        }
-
-        if (existingOrderItem.order_status === OrderStatus.SHIPPED) {
-          throw new HttpException(
-            'Order item has already been shipped and cannot be cancelled',
-            HttpStatus.BAD_REQUEST,
-          );
-        }
-        const [order] = await tx
-          .select({
-            id: orders.id,
-            total_amount: orders.total_amount,
-            user_id: orders.user_id,
-          })
-          .from(orders)
-          .where(
-            and(
-              eq(orders.id, existingOrderItem.order_id),
-              eq(orders.company_id, companyId),
-            ),
-          )
-          .limit(1);
-
-        if (!order) {
-          throw new HttpException(
-            'Order not found or does not belong to this company',
-            HttpStatus.NOT_FOUND,
-          );
-        }
-        const allOrderItems = await tx
-          .select({
-            id: order_items.id,
-            order_status: order_items.order_status,
-            quantity: order_items.quantity,
-            price: order_items.price,
-          })
-          .from(order_items)
-          .where(
-            and(
-              eq(order_items.order_id, existingOrderItem.order_id),
-              eq(order_items.company_id, companyId),
-            ),
-          );
-
-        const hasShippedOrDelivered = allOrderItems.some((item) =>
-          [OrderStatus.SHIPPED, OrderStatus.DELIVERED].includes(
-            item.order_status as OrderStatus,
-          ),
-        );
-
-        if (hasShippedOrDelivered) {
-          throw new HttpException(
-            'Cannot cancel: one or more items in this order have already been shipped or delivered',
-            HttpStatus.BAD_REQUEST,
-          );
-        }
-        const [paymentRecord] = await tx
-          .select({ id: payments.id })
-          .from(payments)
-          .where(eq(payments.order_id, existingOrderItem.order_id))
-          .limit(1);
-
-        if (!paymentRecord) {
-          throw new HttpException(
-            'Payment record not found for this order',
-            HttpStatus.NOT_FOUND,
-          );
-        }
-        const refundAmount =
-          Number(existingOrderItem.price) * existingOrderItem.quantity;
-        await tx
-          .update(order_items)
-          .set({ order_status: OrderStatus.CANCELLED })
-          .where(eq(order_items.id, existingOrderItem.id))
-          .catch((error) => {
-            throw new InternalServerErrorException(
-              'Failed to cancel order item',
-              {
-                cause: error,
-              },
-            );
-          });
-        await tx
-          .insert(order_item_cancelled)
-          .values({
-            order_item_id: existingOrderItem.id,
-            reason: cancelReason,
-            cancelled_by: cancelledBy,
-            company_id: companyId,
-          })
-          .catch((error) => {
-            throw new InternalServerErrorException(
-              'Failed to record cancellation audit entry',
-              { cause: error },
-            );
-          });
-        await this.inventoryService.rollbackStockForOrder(
-          {
-            variantId: existingOrderItem.product_variant_id,
-            quantity: existingOrderItem.quantity,
-          },
-          companyId,
-          tx as DrizzleService,
-        );
-        await tx
-          .insert(refunds)
-          .values({
-            refund_amount: String(refundAmount),
-            refund_reason: cancelReason,
-            refund_status: refundStatusEnum.PENDING,
-            order_id: existingOrderItem.order_id,
-            order_items_id: existingOrderItem.id,
-            payment_id: paymentRecord.id,
-            company_id: companyId,
-          })
-          .catch((error) => {
-            throw new InternalServerErrorException(
-              'Failed to create refund record',
-              { cause: error },
-            );
-          });
-
-        const remainingActiveItems = allOrderItems.filter(
-          (item) =>
-            item.id !== existingOrderItem.id &&
-            item.order_status !== OrderStatus.CANCELLED,
-        );
-
-        const newOrderTotal = remainingActiveItems.reduce(
-          (sum, item) => sum + Number(item.price) * item.quantity,
-          0,
-        );
-
-        await tx
-          .update(orders)
-          .set({ total_amount: String(newOrderTotal) })
-          .where(eq(orders.id, existingOrderItem.order_id))
-          .catch((error) => {
-            throw new InternalServerErrorException(
-              'Failed to update order total',
-              { cause: error },
-            );
-          });
-
-        const allItemsNowCancelled = remainingActiveItems.length === 0;
-
-        if (allItemsNowCancelled) {
-          await tx
-            .update(payments)
-            .set({ payment_status: PaymentStatus.REFUNDED })
-            .where(eq(payments.id, paymentRecord.id))
-            .catch((error) => {
-              throw new InternalServerErrorException(
-                'Failed to update payment status',
-                { cause: error },
-              );
-            });
-        }
-        const [customerRecord] = await tx
-          .select({ email: user.email, id: user.id })
-          .from(user)
-          .where(eq(user.id, order.user_id ?? ''))
-          .limit(1);
-
-        if (customerRecord?.email) {
-          this.mailService
-            .sendOrderCancellationEmail(
-              customerRecord.email,
-              existingOrderItem.order_id,
-              cancelReason,
-            )
-            .catch((error) => {
-              console.error(
-                'Failed to send order cancellation email to customer',
-                error,
-              );
-            });
-        }
-        return {
-          message: 'Order item cancelled successfully',
-          orderItemId,
-          cancelledQuantity: existingOrderItem.quantity,
-          refundAmount: String(refundAmount),
-          refundStatus: refundStatusEnum.PENDING,
-          newOrderTotal: String(newOrderTotal),
-          orderFullyCancelled: allItemsNowCancelled,
-        };
-      });
-    } catch (error) {
-      if (
-        error instanceof HttpException ||
-        error instanceof InternalServerErrorException
-      ) {
-        throw error;
-      }
-      throw new InternalServerErrorException('Failed to cancel order', {
         cause: error,
       });
     }

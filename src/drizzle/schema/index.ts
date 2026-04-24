@@ -166,6 +166,7 @@ export const productVariantsRelations = relations(
       fields: [product_variants.product_id],
       references: [products.id],
     }),
+    orderItem: many(order_items),
     images: many(product_images),
     reviews: many(product_reviews),
     inventory: one(inventory, {
@@ -175,6 +176,14 @@ export const productVariantsRelations = relations(
   }),
 );
 export const productReviewRelations = relations(product_reviews, ({ one }) => ({
+  user: one(user, {
+    fields: [product_reviews.user_id],
+    references: [user.id],
+  }),
+  company: one(company, {
+    fields: [product_reviews.company_id],
+    references: [company.id],
+  }),
   variant: one(product_variants, {
     fields: [product_reviews.product_variant_id],
     references: [product_variants.id],
@@ -234,7 +243,7 @@ export const orderItemsRelations = relations(order_items, ({ one }) => ({
     fields: [order_items.order_id],
     references: [orders.id],
   }),
-  productVariant: one(product_variants, {
+  variant: one(product_variants, {
     fields: [order_items.product_variant_id],
     references: [product_variants.id],
   }),

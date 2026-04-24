@@ -109,24 +109,94 @@ export class ProductsService {
       });
     }
   }
+
   async getProductById(productId: string, domain: string) {
     try {
-      console.log(productId);
-      const product = await this.db.query.products
+      const companyId = await this.companyService.find(domain);
+      const productRecord = await this.db.query.products
         .findFirst({
-          where: eq(products.id, productId),
+          where: and(
+            eq(products.id, productId),
+            eq(products.company_id, companyId),
+          ),
           with: {
             variants: {
               with: {
                 images: true,
-                inventory: true,
-                reviews: true,
+                inventory: {
+                  with: {
+                    warehouse: true,
+                  },
+                },
+              },
+            },
+            category: true,
+          },
+        })
+        .catch((error) => {
+          console.error('Error fetching product by ID:', error);
+          throw new InternalServerErrorException('Failed to fetch product', {
+            cause: error,
+          });
+        });
+      if (!productRecord) {
+        throw new HttpException('Product not found', HttpStatus.NOT_FOUND);
+      }
+      return productRecord;
+    } catch (error) {
+      throw new InternalServerErrorException('Failed to fetch product', {
+        cause: error,
+      });
+    }
+  }
+  async getProductDetailsById(productVariantId: string, domain: string) {
+    try {
+      console.log('productVariantId', productVariantId);
+      const isProductVariantExist = await this.db
+        .select({ id: product_variants.id })
+        .from(product_variants)
+        .where(eq(product_variants.id, productVariantId))
+        .catch((error) => {
+          console.error('Error checking product variant existence:', error);
+          throw new InternalServerErrorException(
+            'Failed to check product variant existence',
+          );
+        });
+      console.log('isProductVariantExist', isProductVariantExist);
+      // const companyId = await this.companyService.find(domain);
+      const productVariant = await this.db.query.product_variants
+        .findFirst({
+          where: eq(product_variants.id, productVariantId),
+          with: {
+            images: true,
+            product: {
+              columns: {
+                name: true,
+                description: true,
+                features: true,
+                base_price: true,
+                discount_percent: true,
+                status: true,
+              },
+            },
+            inventory: {
+              columns: {
+                stock_quantity: true,
+                warehouse_id: true,
+              },
+              with: {
+                warehouse: {
+                  columns: {
+                    id: true,
+                    warehouse_name: true,
+                  },
+                },
               },
             },
           },
         })
         .then((res) => {
-          // console.log(res);
+          console.log('res', res);
           return res;
         })
         .catch((error) => {
@@ -135,11 +205,14 @@ export class ProductsService {
             cause: error,
           });
         });
-      if (!product) {
-        throw new HttpException('Product not found', HttpStatus.NOT_FOUND);
+      if (!productVariant) {
+        throw new HttpException(
+          'Product variant not found',
+          HttpStatus.NOT_FOUND,
+        );
       }
 
-      return product;
+      return productVariant;
     } catch (error) {
       if (
         error instanceof HttpException ||
@@ -152,7 +225,6 @@ export class ProductsService {
       });
     }
   }
-
   async createProduct(
     productDto: CreateProductDto,
     vendorId: string,

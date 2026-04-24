@@ -1,23 +1,27 @@
-import { IsNotEmpty, IsOptional, IsString, Length } from 'class-validator';
+// src/modules/product-review/dto/create-product-review.dto.ts
+import {
+  IsNotEmpty,
+  IsNumber,
+  IsOptional,
+  IsString,
+  Max,
+  Min,
+  Length,
+} from 'class-validator';
 
 export class CreateProductReviewDto {
-  @IsNotEmpty()
-  @IsString()
-  rating!: number;
-
-  @IsString()
-  @IsOptional()
-  @Length(0, 300)
-  review?: string;
-
   @IsNotEmpty()
   @IsString()
   product_variant_id!: string;
 
   @IsNotEmpty()
-  @IsString()
-  user_id!: string;
+  @IsNumber()
+  @Min(1)
+  @Max(5)
+  rating!: number;
 
-  @IsNotEmpty()
-  company_id!: string;
+  @IsString()
+  @IsOptional()
+  @Length(10, 500, { message: 'Review must be between 10 and 500 characters' })
+  review?: string;
 }

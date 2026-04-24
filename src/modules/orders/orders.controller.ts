@@ -58,18 +58,18 @@ export class OrdersController {
     return this.ordersService.setOrderStatus(orderId, newStatus, domain);
   }
 
-  @Patch(':orderItemId/cancel')
-  @HttpCode(HttpStatus.OK)
-  async cancelOrderItem(
-    @Param('itemId') itemId: string,
-    @Body() dto: { cancelReason: string; cancelledBy: CancelledByEnum },
-    @Headers('company-domain') domain: string,
-  ) {
-    return this.ordersService.cancelOrder(
-      itemId,
-      dto.cancelReason,
-      dto.cancelledBy,
-      domain,
-    );
-  }
+  // @Patch(':orderItemId/cancel')
+  // @HttpCode(HttpStatus.OK)
+  // async cancelOrderItem(
+  //   @Param('itemId') itemId: string,
+  //   @Body() dto: { cancelReason: string; cancelledBy: CancelledByEnum },
+  //   @Headers('company-domain') domain: string,
+  // ) {
+  //   return this.ordersService.cancelOrder(
+  //     itemId,
+  //     dto.cancelReason,
+  //     dto.cancelledBy,
+  //     domain,
+  //   );
+  // }
 }

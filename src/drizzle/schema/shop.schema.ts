@@ -205,6 +205,9 @@ export const order_item_cancelled = pg.pgTable('order_item_canceled', {
   reason: pg.text('reason').notNull(),
   cancelled_by: cancelled_by_enum('cancelled_by').notNull(),
   created_at: pg.timestamp('created_at').notNull().defaultNow(),
+  user_id: pg
+    .uuid('user_id')
+    .references(() => user.id, { onDelete: 'cascade' }),
   company_id: pg
     .uuid('company_id')
     .references(() => company.id, { onDelete: 'cascade' }),

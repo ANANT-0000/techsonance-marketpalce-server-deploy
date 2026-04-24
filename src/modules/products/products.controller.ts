@@ -59,13 +59,7 @@ export class ProductsController {
     console.log('get all products');
     return await this.productsService.getAllProducts(domain);
   }
-  @Get(':id')
-  async getProductById(
-    @Param('id') id: string,
-    @Headers('company-domain') domain: string,
-  ) {
-    return await this.productsService.getProductById(id, domain);
-  }
+
   @Get('main-details/:id')
   async getProductMainDetails(
     @Param('id') id: string,
@@ -99,14 +93,27 @@ export class ProductsController {
   ) {
     return await this.productsService.UpdateProductCategory(categoryId, id);
   }
-  @Patch('update-product-status/:id')
+  @Patch('update-status/:id')
   async updateProductStatus(
     @Param('id') id: string,
     @Body('status') status: ProductStatus,
   ) {
     return await this.productsService.UpdateProductStatus(status, id);
   }
-
+  @Get(':id/details')
+  async getProductDetailsById(
+    @Param('id') id: string,
+    @Headers('company-domain') domain: string,
+  ) {
+    return await this.productsService.getProductDetailsById(id, domain);
+  }
+  @Get(':id')
+  async getProductById(
+    @Param('id') id: string,
+    @Headers('company-domain') domain: string,
+  ) {
+    return await this.productsService.getProductById(id, domain);
+  }
 
   @Delete(':id')
   async deleteProduct(@Param('id') id: string) {
