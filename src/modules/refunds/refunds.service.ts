@@ -28,24 +28,34 @@ export class RefundsService {
     @Inject(DRIZZLE) private readonly db: DrizzleService,
     private readonly mailService: MailService,
     private readonly companyService: CompanyService,
-  ) {}
+  ) { }
 
-  // ── Called from vendor dashboard to manually initiate a refund ──
-  // Note: cancelOrder() in orders.service already auto-creates a refund record.
-  // This method is for cases where the vendor wants to manually trigger one
-  // (e.g. item lost in transit, goodwill refund, etc.)
   async initiateRefund({
     orderId,
+    orderItemId,
     reason,
     domain,
   }: {
     orderId: string;
+    orderItemId?: string;
     reason: string;
     domain: string;
   }) {
     try {
-      const companyId = await this.companyService.find(domain);
-
+      const companyId = await this.companyService.find(domain)
+      if (orderItemId) {
+        const orderItem = await this.db
+          .select({
+            id: order_items.id,
+            price: order_items.price,
+            order_id: order_items.order_id,
+          })
+          .from(order_items)
+          .where(eq(order_items.id, orderItemId))
+        if (!orderItem) {
+          throw new HttpException('Order item not found', HttpStatus.NOT_FOUND);
+        }
+      }
       // Validate order exists and belongs to company
       const [order] = await this.db
         .select({
@@ -69,7 +79,13 @@ export class RefundsService {
           and(eq(refunds.order_id, orderId), eq(refunds.company_id, companyId)),
         )
         .limit(1);
-
+      const [existingRefundOrderItem] = await this.db
+        .select({ id: refunds.id, refund_status: refunds.refund_status })
+        .from(refunds)
+        .where(
+          and(eq(refunds.order_items_id, orderItemId), eq(refunds.company_id, companyId)),
+        )
+        .limit(1);
       if (existingRefund) {
         throw new HttpException(
           `A refund already exists for this order with status: ${existingRefund.refund_status}`,

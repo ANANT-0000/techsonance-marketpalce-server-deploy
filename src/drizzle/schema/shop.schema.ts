@@ -8,6 +8,8 @@ import {
   productImageType,
   ProductStatus,
   refundStatusEnum,
+  ReturnStatus,
+  ReturnType,
   ShippingStatus,
 } from '../types/types';
 import { AnyPgColumn } from 'drizzle-orm/pg-core';
@@ -415,5 +417,47 @@ export const refunds = pg.pgTable(
     pg.index('idx_refunds_company_id').on(table.company_id),
     pg.index('idx_refunds_status').on(table.refund_status),
     pg.index('idx_refunds_created_at').on(table.created_at),
+  ],
+);
+
+export const returnTypeEnum = pg.pgEnum('return_type_enum', ReturnType);
+
+export const returnStatusEnum = pg.pgEnum('return_status_enum', ReturnStatus);
+
+export const return_requests = pg.pgTable(
+  'return_requests',
+  {
+    id: pg.uuid('id').primaryKey().defaultRandom(),
+    order_item_id: pg
+      .uuid('order_item_id')
+      .references(() => order_items.id, { onDelete: 'cascade' })
+      .notNull()
+      .unique(),
+    user_id: pg
+      .uuid('user_id')
+      .references(() => user.id, { onDelete: 'cascade' })
+      .notNull(),
+    company_id: pg
+      .uuid('company_id')
+      .references(() => company.id, { onDelete: 'cascade' })
+      .notNull(),
+    type: returnTypeEnum('type').notNull(),
+    status: returnStatusEnum('status').default(ReturnStatus.PENDING).notNull(),
+    reason: pg.text('reason').notNull(),
+    customer_note: pg.text('customer_note'),
+    store_owner_note: pg.text('store_owner_note'),
+    evidence_images: pg.jsonb('evidence_images'),
+    tracking_id: pg.text('tracking_id'),
+    created_at: pg.timestamp('created_at').notNull().defaultNow(),
+    updated_at: pg
+      .timestamp('updated_at')
+      .notNull()
+      .defaultNow()
+      .$onUpdate(() => new Date()),
+  },
+  (table) => [
+    pg.index('idx_return_requests_company_id').on(table.company_id),
+    pg.index('idx_return_requests_user_id').on(table.user_id),
+    pg.index('idx_return_requests_status').on(table.status),
   ],
 );

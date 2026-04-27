@@ -63,7 +63,7 @@ export class WishlistService {
         if (wishlistExists && wishlistExists?.id) {
           console.log('Wishlist already exists for customer:', customerId);
           console.log('adding item in wishlist');
-          const createdWishlistItem = await tx
+          const [createdWishlistItem] = await tx
             .insert(wishlist_items)
             .values({
               wishlist_id: wishlistExists.id,
@@ -119,11 +119,14 @@ export class WishlistService {
             wishlist_id: wishlistRecord.id,
             product_variant_id: productVariantId,
           })
-          .onConflictDoNothing({
+          .onConflictDoUpdate({
             target: [
               wishlist_items.wishlist_id,
               wishlist_items.product_variant_id,
             ],
+            set: {
+              updated_at: new Date(),
+            },
           })
           .returning({
             id: wishlist_items.id,
@@ -132,19 +135,18 @@ export class WishlistService {
             created_at: wishlist_items.created_at,
             updated_at: wishlist_items.updated_at,
           });
-        if (createdWishlistItem === undefined) {
-          throw new HttpException(
-            'Wishlist item already exists',
-            HttpStatus.BAD_REQUEST,
-          );
-        }
         console.log('Wishlist item created:', createdWishlistItem);
         return createdWishlistItem;
       });
       return response;
-    } catch (error) {
-      console.error('Error creating wishlist:', error);
-      throw error;
+    } catch (err) {
+      if (err instanceof HttpException) {
+        throw new HttpException(
+          'Failed to add item to wishlist',
+          HttpStatus.CONFLICT,
+        );
+      }
+      throw err;
     }
   }
 
@@ -232,8 +234,16 @@ export class WishlistService {
             eq(wishlist_items.wishlist_id, wishlistRecord.id),
             eq(wishlist_items.product_variant_id, productVariantId),
           ),
-        );
+        )
+        .returning({
+          id: wishlist_items.id,
+          wishlist_id: wishlist_items.wishlist_id,
+          product_variant_id: wishlist_items.product_variant_id,
+          created_at: wishlist_items.created_at,
+          updated_at: wishlist_items.updated_at,
+        });
       console.log('deleteResponse', deleteResponse);
+      return deleteResponse;
     } catch (error) {
       console.error('Error deleting wishlist item:', error);
       throw error;

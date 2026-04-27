@@ -19,6 +19,7 @@ import {
   product_variants,
   products,
   refunds,
+  return_requests,
   shipping_details,
   wishlist,
   wishlist_items,
@@ -255,6 +256,10 @@ export const orderItemsRelations = relations(order_items, ({ one }) => ({
     fields: [order_items.id],
     references: [refunds.order_items_id],
   }),
+  return_request: one(return_requests, {
+    fields: [order_items.id],
+    references: [return_requests.order_item_id],
+  }),
 }));
 
 export const orderItemCancelledRelations = relations(
@@ -285,6 +290,20 @@ export const refundsRelations = relations(refunds, ({ one }) => ({
   }),
   company: one(company, {
     fields: [refunds.company_id],
+    references: [company.id],
+  }),
+}));
+export const returnRequestsRelations = relations(return_requests, ({ one }) => ({
+  orderItem: one(order_items, {
+    fields: [return_requests.order_item_id],
+    references: [order_items.id],
+  }),
+  user: one(user, {
+    fields: [return_requests.user_id],
+    references: [user.id],
+  }),
+  company: one(company, {
+    fields: [return_requests.company_id],
     references: [company.id],
   }),
 }));

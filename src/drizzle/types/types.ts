@@ -36,6 +36,9 @@ export enum OrderStatus {
   SHIPPED = 'shipped',
   DELIVERED = 'delivered',
   CANCELLED = 'cancelled',
+  RETURNED = 'returned',
+  REFUNDED = 'refunded',
+  REPLACED = 'replaced',
 }
 export enum PaymentStatus {
   PENDING = 'pending',
@@ -49,6 +52,21 @@ export enum ShippingStatus {
   DELIVERED = 'delivered',
   RETURNED = 'returned',
   CANCELLED = 'cancelled',
+}
+export enum ReturnType {
+  RETURN = "return",
+  REFUND = "refund",
+  REPLACEMENT = "replacement"
+}
+export enum ReturnStatus {
+  PENDING = 'pending',
+  APPROVED = 'approved',
+  REJECTED = 'rejected',
+  IN_TRANSIT = 'in_transit',
+  DELIVERED = 'delivered',
+  QC_PASSED = 'qc_passed',
+  QC_FAILED = 'qc_failed',
+  COMPLETED = 'completed'
 }
 export type KeyValuePair = {
   key: string;

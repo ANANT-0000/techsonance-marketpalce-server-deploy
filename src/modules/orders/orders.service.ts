@@ -34,7 +34,7 @@ export class OrdersService {
     private readonly companyService: CompanyService,
     private readonly inventoryService: InventoryService,
     private readonly mailService: MailService,
-  ) {}
+  ) { }
 
   async createOrder({
     userId,
@@ -389,6 +389,12 @@ export class OrdersService {
                     },
                   },
                 },
+                return_request: {
+                  columns: {
+                    id: true,
+                    status: true,
+                  },
+                },
               },
             },
             address: {
@@ -428,7 +434,7 @@ export class OrdersService {
           );
         });
 
-      // console.log('user orders \n', ordersList);
+      console.log('user orders \n', ordersList);
       return ordersList;
     } catch (error) {
       console.error('Error fetching user orders:', error);
@@ -690,20 +696,20 @@ export class OrdersService {
 
             warehouse: warehouse
               ? {
-                  id: inventory?.warehouse_id ?? null,
-                  name: warehouse.warehouse_name,
-                  address: warehouse.address
-                    ? {
-                        address_line_1: warehouse.address.address_line_1,
-                        address_line_2:
-                          warehouse.address.address_line_2 ?? null,
-                        city: warehouse.address.city,
-                        state: warehouse.address.state,
-                        postal_code: warehouse.address.postal_code,
-                        country: warehouse.address.country,
-                      }
-                    : null,
-                }
+                id: inventory?.warehouse_id ?? null,
+                name: warehouse.warehouse_name,
+                address: warehouse.address
+                  ? {
+                    address_line_1: warehouse.address.address_line_1,
+                    address_line_2:
+                      warehouse.address.address_line_2 ?? null,
+                    city: warehouse.address.city,
+                    state: warehouse.address.state,
+                    postal_code: warehouse.address.postal_code,
+                    country: warehouse.address.country,
+                  }
+                  : null,
+              }
               : null,
 
             product_variant: {
@@ -717,21 +723,21 @@ export class OrdersService {
 
         shipping_address: row.address
           ? {
-              name: row.address.name,
-              address_line_1: row.address.address_line_1,
-              address_line_2: row.address.address_line_2 ?? null,
-              city: row.address.city,
-              state: row.address.state,
-              postal_code: row.address.postal_code,
-              country: row.address.country,
-            }
+            name: row.address.name,
+            address_line_1: row.address.address_line_1,
+            address_line_2: row.address.address_line_2 ?? null,
+            city: row.address.city,
+            state: row.address.state,
+            postal_code: row.address.postal_code,
+            country: row.address.country,
+          }
           : null,
 
         payment: row.payment
           ? {
-              amount: row.payment.amount,
-              payment_method: row.payment.payment_method,
-            }
+            amount: row.payment.amount,
+            payment_method: row.payment.payment_method,
+          }
           : null,
         shipping: {
           tracking_url: row.shipping?.tracking_url ?? null,
