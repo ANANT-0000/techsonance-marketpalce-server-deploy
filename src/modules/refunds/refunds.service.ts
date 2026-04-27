@@ -42,21 +42,10 @@ export class RefundsService {
     domain: string;
   }) {
     try {
-      const companyId = await this.companyService.find(domain)
-      if (orderItemId) {
-        const orderItem = await this.db
-          .select({
-            id: order_items.id,
-            price: order_items.price,
-            order_id: order_items.order_id,
-          })
-          .from(order_items)
-          .where(eq(order_items.id, orderItemId))
-        if (!orderItem) {
-          throw new HttpException('Order item not found', HttpStatus.NOT_FOUND);
-        }
-      }
-      // Validate order exists and belongs to company
+      // domain can be a domain string OR a company UUID (called internally from returns.service)
+      const companyId = await this.companyService.find(domain);
+
+      // ── 1. Validate order belongs to company ─────────────────────────
       const [order] = await this.db
         .select({
           id: orders.id,
@@ -71,29 +60,98 @@ export class RefundsService {
         throw new HttpException('Order not found', HttpStatus.NOT_FOUND);
       }
 
-      // Check no refund already exists for this order
-      const [existingRefund] = await this.db
-        .select({ id: refunds.id, refund_status: refunds.refund_status })
-        .from(refunds)
-        .where(
-          and(eq(refunds.order_id, orderId), eq(refunds.company_id, companyId)),
-        )
-        .limit(1);
-      const [existingRefundOrderItem] = await this.db
-        .select({ id: refunds.id, refund_status: refunds.refund_status })
-        .from(refunds)
-        .where(
-          and(eq(refunds.order_items_id, orderItemId), eq(refunds.company_id, companyId)),
-        )
-        .limit(1);
-      if (existingRefund) {
-        throw new HttpException(
-          `A refund already exists for this order with status: ${existingRefund.refund_status}`,
-          HttpStatus.BAD_REQUEST,
-        );
+      // ── 2. Resolve refund scope: single item OR whole order ───────────
+      const isSingleItem = !!orderItemId;
+      let refundAmount: string;
+      let resolvedOrderItemId: string | undefined;
+
+      if (isSingleItem) {
+        // Fetch the specific order item to calculate its refund amount
+        const [orderItem] = await this.db
+          .select({
+            id: order_items.id,
+            price: order_items.price,
+            quantity: order_items.quantity,
+            order_id: order_items.order_id,
+          })
+          .from(order_items)
+          .where(
+            and(
+              eq(order_items.id, orderItemId),
+              eq(order_items.order_id, orderId), // ensure item belongs to this order
+            ),
+          )
+          .limit(1);
+
+        if (!orderItem) {
+          throw new HttpException(
+            'Order item not found or does not belong to this order',
+            HttpStatus.NOT_FOUND,
+          );
+        }
+
+        // ── Guard: no duplicate refund for this specific item ────────────
+        const [existingItemRefund] = await this.db
+          .select({ id: refunds.id, refund_status: refunds.refund_status })
+          .from(refunds)
+          .where(
+            and(
+              eq(refunds.order_items_id, orderItemId),
+              eq(refunds.company_id, companyId),
+            ),
+          )
+          .limit(1);
+
+        if (existingItemRefund) {
+          throw new HttpException(
+            `A refund already exists for this item with status: ${existingItemRefund.refund_status}`,
+            HttpStatus.BAD_REQUEST,
+          );
+        }
+
+        // item refund amount = unit price × quantity
+        refundAmount = (
+          Number(orderItem.price) * orderItem.quantity
+        ).toFixed(2);
+        resolvedOrderItemId = orderItem.id;
+      } else {
+        // Whole-order refund — guard against duplicate order-level refund
+        // (allow if only item-level refunds exist for other items)
+        const [existingOrderRefund] = await this.db
+          .select({ id: refunds.id, refund_status: refunds.refund_status })
+          .from(refunds)
+          .where(
+            and(
+              eq(refunds.order_id, orderId),
+              eq(refunds.company_id, companyId),
+              // A null order_items_id means it's an order-level refund
+            ),
+          )
+          .limit(1);
+
+        // Filter in JS: only block if an ORDER-LEVEL refund already exists
+        // (item-level refunds on the same order are fine to coexist)
+        const orderLevelExists = existingOrderRefund
+          ? await this.db
+            .select({ id: refunds.id, order_items_id: refunds.order_items_id })
+            .from(refunds)
+            .where(eq(refunds.id, existingOrderRefund.id))
+            .limit(1)
+            .then(([r]) => r?.order_items_id === null)
+          : false;
+
+        if (orderLevelExists) {
+          throw new HttpException(
+            `A full-order refund already exists with status: ${existingOrderRefund!.refund_status}`,
+            HttpStatus.BAD_REQUEST,
+          );
+        }
+
+        refundAmount = order.total_amount;
+        resolvedOrderItemId = undefined;
       }
 
-      // Fetch payment for this order
+      // ── 3. Fetch payment record ───────────────────────────────────────
       const [paymentRecord] = await this.db
         .select({ id: payments.id })
         .from(payments)
@@ -107,20 +165,21 @@ export class RefundsService {
         );
       }
 
-      // Create the refund record
+      // ── 4. Create the refund record ───────────────────────────────────
       const [newRefund] = await this.db
         .insert(refunds)
         .values({
-          refund_amount: order.total_amount,
+          refund_amount: refundAmount,
           refund_reason: reason,
           refund_status: refundStatusEnum.PENDING,
           order_id: orderId,
+          order_items_id: resolvedOrderItemId ?? null, // null = whole-order refund
           payment_id: paymentRecord.id,
           company_id: companyId,
         })
         .returning();
 
-      // Send notification email to customer
+      // ── 5. Notify customer ────────────────────────────────────────────
       if (order.user_id) {
         const [customerRecord] = await this.db
           .select({ email: user.email })
@@ -129,19 +188,45 @@ export class RefundsService {
           .limit(1);
 
         if (customerRecord?.email) {
-          await this.mailService.sendOrderCancellationEmail(
+          const scope = isSingleItem ? 'item' : 'order';
+          await this.mailService.sendEmail(
             customerRecord.email,
-            orderId,
-            reason,
+            'Refund Initiated — Your Request Is Being Processed',
+            `<div style="font-family: sans-serif; max-width: 600px; margin: auto;">
+              <h2>Refund Initiated</h2>
+              <p>A refund has been initiated for your ${scope}.</p>
+              <table style="width:100%; border-collapse: collapse; margin: 16px 0;">
+                <tr>
+                  <td style="padding: 8px; border: 1px solid #eee; color: #666;">Order ID</td>
+                  <td style="padding: 8px; border: 1px solid #eee;">${orderId}</td>
+                </tr>
+                <tr>
+                  <td style="padding: 8px; border: 1px solid #eee; color: #666;">Refund Amount</td>
+                  <td style="padding: 8px; border: 1px solid #eee;">₹${refundAmount}</td>
+                </tr>
+                <tr>
+                  <td style="padding: 8px; border: 1px solid #eee; color: #666;">Reason</td>
+                  <td style="padding: 8px; border: 1px solid #eee;">${reason}</td>
+                </tr>
+              </table>
+              <p>The refund will be processed within <strong>3–5 business days</strong>.</p>
+              <p style="color: #888; font-size: 12px;">
+                If you did not request this, please contact our support team immediately.
+              </p>
+            </div>`,
           );
         }
       }
 
       return {
-        message: 'Refund initiated successfully',
+        message: isSingleItem
+          ? 'Item refund initiated successfully'
+          : 'Order refund initiated successfully',
         refundId: newRefund.id,
         refundAmount: newRefund.refund_amount,
         refundStatus: newRefund.refund_status,
+        scope: isSingleItem ? 'item' : 'order',
+        orderItemId: resolvedOrderItemId ?? null,
       };
     } catch (error) {
       if (
@@ -157,7 +242,7 @@ export class RefundsService {
     }
   }
 
-  // ── Get refund status for a specific order ───────────────────────
+  // ── Get refund status for a specific order ───────────────────────────────
   async getRefundStatus(orderId: string, domain: string) {
     try {
       const companyId = await this.companyService.find(domain);
@@ -194,21 +279,25 @@ export class RefundsService {
         );
       }
 
+      const totalRefundAmount = refundRecords.reduce(
+        (sum, r) => sum + Number(r.refund_amount),
+        0,
+      );
+
       return {
         orderId,
+        // clearly label whether each refund is item-level or order-level
         refunds: refundRecords.map((r) => ({
           refundId: r.id,
           refundAmount: r.refund_amount,
           refundReason: r.refund_reason,
           refundStatus: r.refund_status,
+          scope: r.order_items_id ? 'item' : 'order',
           createdAt: r.created_at,
-          orderItem: r.orderItem,
+          orderItem: r.orderItem ?? null,
           payment: r.payment,
         })),
-        totalRefundAmount: refundRecords.reduce(
-          (sum, r) => sum + Number(r.refund_amount),
-          0,
-        ),
+        totalRefundAmount,
       };
     } catch (error) {
       if (
@@ -224,12 +313,11 @@ export class RefundsService {
     }
   }
 
-  // ── Mark a refund as processed (vendor confirms money sent) ──────
+  // ── Mark a refund as processed (vendor confirms money sent) ─────────────
   async processRefund(refundId: string, domain: string) {
     try {
       const companyId = await this.companyService.find(domain);
 
-      // Fetch the refund
       const [existingRefund] = await this.db
         .select()
         .from(refunds)
@@ -255,7 +343,6 @@ export class RefundsService {
       }
 
       return await this.db.transaction(async (tx) => {
-        // Mark refund as processed
         const [updatedRefund] = await tx
           .update(refunds)
           .set({ refund_status: refundStatusEnum.PROCESSED })
@@ -268,8 +355,10 @@ export class RefundsService {
             );
           });
 
-        // Update linked payment to refunded
-        if (existingRefund.payment_id) {
+        // Only mark payment as REFUNDED when it is a whole-order refund
+        // For item-level refunds, payment stays as-is (partial refund scenario)
+        const isOrderLevelRefund = existingRefund.order_items_id === null;
+        if (existingRefund.payment_id && isOrderLevelRefund) {
           await tx
             .update(payments)
             .set({ payment_status: PaymentStatus.REFUNDED })
@@ -282,7 +371,7 @@ export class RefundsService {
             });
         }
 
-        // Notify customer by email
+        // Notify customer
         if (existingRefund.order_id) {
           const [orderRecord] = await tx
             .select({ user_id: orders.user_id })
@@ -301,10 +390,13 @@ export class RefundsService {
               await this.mailService.sendEmail(
                 customerRecord.email,
                 'Your Refund Has Been Processed',
-                `<p>Your refund of ₹${updatedRefund.refund_amount} for order 
-                 <strong>${existingRefund.order_id}</strong> has been 
-                 successfully processed.</p>
-                 <p>The amount will reflect in your account within 3–5 business days.</p>`,
+                `<div style="font-family: sans-serif; max-width: 600px; margin: auto;">
+                  <h2>Refund Processed</h2>
+                  <p>Your refund of <strong>₹${updatedRefund.refund_amount}</strong> for order 
+                  <strong>#${existingRefund.order_id.split('-')[0].toUpperCase()}</strong> 
+                  has been successfully processed.</p>
+                  <p>The amount will reflect in your account within <strong>3–5 business days</strong>.</p>
+                </div>`,
               );
             }
           }
@@ -315,6 +407,7 @@ export class RefundsService {
           refundId: updatedRefund.id,
           refundAmount: updatedRefund.refund_amount,
           refundStatus: updatedRefund.refund_status,
+          scope: existingRefund.order_items_id ? 'item' : 'order',
         };
       });
     } catch (error) {
@@ -370,10 +463,16 @@ export class RefundsService {
         totalPendingAmount: refundRecords
           .filter((r) => r.refund_status === refundStatusEnum.PENDING)
           .reduce((sum, r) => sum + Number(r.refund_amount), 0),
-        refunds: refundRecords.sort(
-          (a, b) =>
-            new Date(b.created_at).getTime() - new Date(a.created_at).getTime(),
-        ),
+        // split into item-level and order-level for dashboard clarity
+        itemRefunds: refundRecords.filter((r) => r.order_items_id !== null),
+        orderRefunds: refundRecords.filter((r) => r.order_items_id === null),
+        refunds: refundRecords
+          .map((r) => ({ ...r, scope: r.order_items_id ? 'item' : 'order' }))
+          .sort(
+            (a, b) =>
+              new Date(b.created_at).getTime() -
+              new Date(a.created_at).getTime(),
+          ),
       };
     } catch (error) {
       if (

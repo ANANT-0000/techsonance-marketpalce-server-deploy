@@ -13,4 +13,8 @@ export class UpdateReturnDto {
     @IsString()
     @IsNotEmpty()
     request_for: string;
+
+    @IsString()
+    @IsOptional()
+    tracking_id?: string;
 }
