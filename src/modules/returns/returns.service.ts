@@ -412,7 +412,7 @@ export class ReturnsService {
       }
 
       // ── Fetch the associated order item ───────────────────────────────
-      const [orderItem] = await this.db
+      const [orderItemRecord] = await this.db
         .select({
           id: order_items.id,
           order_id: order_items.order_id,
@@ -449,10 +449,18 @@ export class ReturnsService {
               { cause: error },
             );
           });
-        if (!orderItem || !orderItem.order_id || !orderItem.product_variant_id || !orderItem.company_id) {
+        if (!orderItemRecord || !orderItemRecord.order_id || !orderItemRecord.product_variant_id || !orderItemRecord.company_id) {
           throw new InternalServerErrorException(
             'Order item data is incomplete',
           );
+        }
+        const orderItem = {
+          id: orderItemRecord.id,
+          order_id: orderItemRecord.order_id,
+          product_variant_id: orderItemRecord.product_variant_id,
+          quantity: orderItemRecord.quantity,
+          price: orderItemRecord.price,
+          company_id: orderItemRecord.company_id,
         }
         // 2. Run side effects based on type + newStatus
         await this._handleSideEffects({
@@ -489,7 +497,6 @@ export class ReturnsService {
     }
   }
 
-  // ── Side effects state machine ────────────────────────────────────────────
   private async _handleSideEffects({
     tx,
     returnRequest,
@@ -516,9 +523,7 @@ export class ReturnsService {
     customerEmail: string | null;
     dto: UpdateReturnDto;
   }) {
-    // ════════════════════════════════════════════
     //  RETURN type side effects
-    // ════════════════════════════════════════════
     if (returnType === ReturnType.RETURN) {
       switch (newStatus) {
         case ReturnStatus.APPROVED: {

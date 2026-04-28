@@ -485,6 +485,15 @@ export class OrdersService {
                   },
                 },
               },
+              return_request: {
+                columns: {
+                  id: true,
+                  status: true,
+                  store_owner_note: true,
+                  tracking_id: true,
+                  type:true
+                }
+              }
             },
           },
           address: {
