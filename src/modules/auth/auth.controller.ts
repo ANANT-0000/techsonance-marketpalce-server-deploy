@@ -8,6 +8,7 @@ import {
   Post,
   Res,
   UploadedFiles,
+  Headers
 } from '@nestjs/common';
 import { AuthService } from './auth.service';
 import { VendorsService } from '../vendors/vendors.service';
@@ -23,7 +24,7 @@ export class AuthController {
     private readonly authService: AuthService,
     private readonly vendorService: VendorsService,
     private readonly userService: UsersService,
-  ) {}
+  ) { }
   @Get('test')
   test() {
     return 'Auth controller is working';
@@ -63,10 +64,10 @@ export class AuthController {
   @HttpCode(HttpStatus.OK)
   async loginUser(
     @Body() loginDto: LoginDto,
-    @Res({ passthrough: true }) res: express.Response,
+    @Headers('company-domain') domain: string,
   ) {
     console.log('Login request received with body:', loginDto);
-    return await this.userService.login(loginDto, res);
+    return await this.userService.login(loginDto, domain);
   }
   @Post('logout')
   @HttpCode(HttpStatus.OK)

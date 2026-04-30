@@ -16,6 +16,8 @@ import { JwtService } from '@nestjs/jwt';
 import express from 'express';
 import { CreateUserDto, LoginDto } from './dto/userAuth.dto.ts.js';
 import { UpdateUserDtoTs } from './dto/update-user.dto.ts.js';
+import { MailService } from 'src/common/services/mail/mail.service';
+import { CompanyService } from '../company/company.service.js';
 type UserRecord = InferSelectModel<typeof user>;
 type UserRoleRecord = InferSelectModel<typeof user_roles>;
 @Injectable()
@@ -23,7 +25,10 @@ export class UsersService {
   constructor(
     @Inject(DRIZZLE) private readonly db: DrizzleDB,
     private readonly jwtService: JwtService,
-  ) {}
+    private readonly companyService: CompanyService,
+
+    private readonly mailService: MailService,
+  ) { }
   // Find user by ID
   async findById(id: string) {
     try {
@@ -116,10 +121,12 @@ export class UsersService {
     }
   }
   // Register a new user
-  async register(userData: CreateUserDto, companyId: string) {
+  async register(userData: CreateUserDto, domain: string) {
     try {
-      console.log('create user', userData);
-      console.log('company ID', companyId);
+      const companyId = await this.companyService.find(domain);
+      if (!companyId) {
+        throw new HttpException('Company not found', HttpStatus.NOT_FOUND);
+      }
       const userRole = await this.db
         .select()
         .from(user_roles)
@@ -131,9 +138,11 @@ export class UsersService {
             cause: error,
           });
         });
+
       if (userRole.length === 0) {
         throw new InternalServerErrorException('Customer role not found');
       }
+
       const hashedPassword = await bcrypt.hash(userData.password, 10);
       console.log('creating user');
 
@@ -154,7 +163,15 @@ export class UsersService {
             cause: error,
           });
         });
+
       console.log('created user');
+
+      // ─────────────────────────────────────────────────────────────────
+      // ─────────────────────────────────────────────────────────────────
+      // Send Customer Welcome Email
+      // ─────────────────────────────────────────────────────────────────
+      await this.mailService.sendUserWelcomeEmail(userData.email, userData.first_name)
+
       return userRecord;
     } catch (error) {
       if (
@@ -170,8 +187,12 @@ export class UsersService {
     }
   }
   // User login
-  async login(login: LoginDto, res: express.Response) {
+  async login(login: LoginDto, domain: string) {
     try {
+      const companyId = await this.companyService.find(domain);
+      if (!companyId) {
+        throw new HttpException('Company not found', HttpStatus.UNAUTHORIZED);
+      }
       const records = await this.findByEmail(login.email);
       if (!records) {
         throw new HttpException('Invalid credentials', HttpStatus.UNAUTHORIZED);

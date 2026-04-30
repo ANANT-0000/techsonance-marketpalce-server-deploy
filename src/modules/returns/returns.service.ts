@@ -79,9 +79,15 @@ export class ReturnsService {
     files: { evidence_images?: Express.Multer.File[] },
     domain: string,
   ) {
+    // console.log(" inservce dto",dto, "files",files)
     try {
       const company_id = await this.companyService.find(domain);
-
+      console.log('serching orderitem')
+      const [userDetails] = await this.db.select({ first_name: user.first_name, last_name: user.last_name, email: user.email }).from(user).where(eq(user.id, userId));
+      if (!userDetails) {
+        throw new NotFoundException('User not found');
+      }
+      console.log('userDetails', userDetails)
       const orderItem = await this.db.query.order_items
         .findFirst({
           where: eq(order_items.id, dto.order_item_id),
@@ -97,6 +103,7 @@ export class ReturnsService {
       if (!orderItem || !orderItem.order) {
         throw new NotFoundException('Order item not found');
       }
+      console.log('found orderitem', orderItem)
 
       // Only delivered items can be returned/replaced/refunded
       if (orderItem.order_status !== OrderStatus.DELIVERED) {
@@ -104,7 +111,8 @@ export class ReturnsService {
           `Cannot raise a return request for an item with status: ${orderItem.order_status}. Item must be delivered first.`,
         );
       }
-
+      console.log('orderItem.order_status ', orderItem.order_status)
+      console.log('serching return request')
       const existingReturn = await this.db.query.return_requests
         .findFirst({
           where: eq(return_requests.order_item_id, dto.order_item_id),
@@ -121,23 +129,26 @@ export class ReturnsService {
           'A return or replacement request already exists for this item.',
         );
       }
-
+      console.log('existingReturn ', existingReturn)
       // Upload evidence images if provided
       const finalResults: { url: string }[] = [];
       if (files?.evidence_images && files.evidence_images.length > 0) {
+        console.log('evidence_images found')
         const uploaded = await this.uploadToCloudService.uploadEvidenceFiles(
           files.evidence_images,
         );
         finalResults.push(...uploaded.map((res) => ({ url: res.secure_url })));
       }
+      console.log('evidence_images uploaded', finalResults)
 
+      console.log('creating return request')
       const [newReturn] = await this.db
         .insert(return_requests)
         .values({
           order_item_id: dto.order_item_id,
           user_id: userId,
           company_id,
-          type: dto.type,
+          type: dto.type as ReturnType,
           status: ReturnStatus.PENDING,
           reason: dto.reason,
           customer_note: dto.customer_note,
@@ -145,21 +156,19 @@ export class ReturnsService {
         })
         .returning()
         .catch((error) => {
+          console.log("Failed to create return request", error)
           throw new InternalServerErrorException(
             'Failed to create return request',
             { cause: error },
           );
         });
-
+      console.log('newReturn ', newReturn)
       // Notify vendor (via mail) that a new return request has been raised
-      await this._notifyCustomer(
-        orderItem.order.user_id ?? userId,
-        'Return Request Received',
-        `<p>Your ${dto.type} request has been received and is under review.</p>
-         <p><strong>Reason:</strong> ${dto.reason}</p>
-         <p>We will update you shortly.</p>`,
-      );
-
+      if (newReturn.type == ReturnType.RETURN) {
+        await this.mailService.sendReturnRequestedEmail(userDetails.first_name + ' ' + userDetails.last_name, userDetails.email, orderItem.order_id ?? '')
+      } else if (newReturn.type == ReturnType.REPLACEMENT) {
+        await this.mailService.sendReplacementRequestedEmail(userDetails.first_name + ' ' + userDetails.last_name, userDetails.email, orderItem.order_id ?? '')
+      }
       return newReturn;
     } catch (error) {
       if (
@@ -979,8 +988,8 @@ export class ReturnsService {
       if (email) {
         await this.mailService.sendEmail(email, subject, html);
       }
-    } catch {
-      // fire-and-forget — email failure must not break the main flow
+    } catch (error) {
+      console.log('feiled to sned mail', error)
     }
   }
 }

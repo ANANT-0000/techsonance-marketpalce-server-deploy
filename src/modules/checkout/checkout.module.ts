@@ -5,10 +5,11 @@ import { CouponModule } from '../coupon/coupon.module';
 import { DrizzleModule } from 'src/drizzle/drizzle.module';
 import { OrdersModule } from '../orders/orders.module';
 import { CompanyModule } from '../company/company.module';
+import { MailModule } from 'src/common/services/mail/mail.module';
 
 @Module({
-  imports: [CouponModule, DrizzleModule, OrdersModule, CompanyModule],
+  imports: [CouponModule, DrizzleModule, MailModule, OrdersModule, CompanyModule],
   controllers: [CheckoutController],
   providers: [CheckoutService],
 })
-export class CheckoutModule {}
+export class CheckoutModule { }

@@ -7,11 +7,14 @@ import {
   cart_items,
   carts,
   company,
+  orders,
   product_variants,
+  user,
 } from 'src/drizzle/schema';
 import { and, eq, or } from 'drizzle-orm';
 import { OrdersService } from '../orders/orders.service';
 import { CompanyService } from '../company/company.service';
+import { MailService } from 'src/common/services/mail/mail.service';
 
 @Injectable()
 export class CheckoutService {
@@ -19,7 +22,9 @@ export class CheckoutService {
     @Inject(DRIZZLE) private readonly db: DrizzleDB,
     private readonly ordersService: OrdersService,
     private readonly companyService: CompanyService,
-  ) {}
+    private readonly mailService: MailService,
+
+  ) { }
   async initiateCheckout(
     userId: string,
     initiateCheckoutDto: InitiateCheckoutDto,
@@ -81,28 +86,43 @@ export class CheckoutService {
 
   async verifyCheckout(dto: VerifyCheckoutDto, domain: string) {
     const { orderId, isSuccess, cartId, productVariantId } = dto;
-    const [companyRecord] = await this.db
-      .select({ id: company.id })
-      .from(company)
-      .where(or(eq(company.company_domain, domain), eq(company.id, domain)))
-      .limit(1);
-    if (!companyRecord) {
+    console.log(orderId, "==orderId")
+    console.log("verifyCheckoutDto check", dto);
+
+    const companyId = await this.companyService.find(domain);
+    if (!companyId) {
       throw new HttpException('Company not found', HttpStatus.NOT_FOUND);
     }
 
-    await this.ordersService
-      .getOrderById(orderId, companyRecord.id)
-      .then((order) => {
-        if (!order) {
-          throw new HttpException('Order not found', HttpStatus.NOT_FOUND);
-        }
-      });
+    const [existingOrder] = await this.db.select().from(orders).where(and(eq(orders.id, orderId), eq(orders.company_id, companyId))).limit(1);
+    if (!existingOrder.user_id) {
+      throw new HttpException('user not found', HttpStatus.BAD_REQUEST);
+    }
     try {
+      const [customerRecord] = await this.db
+        .select({
+          email: user.email,
+          first_name: user.first_name,
+          last_name: user.last_name
+        })
+        .from(user)
+        .where(eq(user.id, existingOrder.user_id))
+        .limit(1);
+      if (!customerRecord || (!customerRecord.first_name && !customerRecord.last_name && !customerRecord.email)) {
+        throw new HttpException('customer not found', HttpStatus.NOT_FOUND);
+      }
+      const customerDetails = {
+        email: customerRecord.email,
+        first_name: customerRecord.first_name || '',
+        last_name: customerRecord.last_name || ''
+      }
       const verificationResult =
         await this.ordersService.completeOrderVerification(
+          customerDetails,
+          existingOrder,
           orderId,
           isSuccess,
-          companyRecord.id,
+          companyId,
         );
       if (verificationResult.success) {
         if (cartId) {

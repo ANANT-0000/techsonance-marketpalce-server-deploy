@@ -28,7 +28,7 @@ export class ProductVariantService {
     private readonly uploadToCloudService: UploadToCloudService,
     private inventoryService: InventoryService,
     private readonly companyService: CompanyService,
-  ) {}
+  ) { }
   async create(
     createProductVariantDto: CreateProductVariantDto,
     domain: string,
@@ -403,6 +403,43 @@ export class ProductVariantService {
       console.error('Update Error:', error);
       throw new InternalServerErrorException(
         'Failed to update product variant',
+      );
+    }
+  }
+
+  async UpdateProductVarintStatus(status: ProductStatus, productId: string) {
+    if (!status) {
+      return new HttpException(
+        'Product status is required',
+        HttpStatus.BAD_REQUEST,
+      );
+    }
+    console.log('Product variant status updating')
+
+    try {
+      const result = await this.db
+        .update(product_variants)
+        .set({ status })
+        .where(eq(product_variants.id, productId)).returning().catch((err) => {
+          console.error('Error updating product variant status:', err);
+          throw new InternalServerErrorException(
+            'Failed to update product variant status',
+            {
+              cause: err,
+            },
+          );
+        })
+      console.log('Product variant status updated', result)
+      return {
+        message: 'Product variant status updated successfully',
+        status: HttpStatus.OK,
+      };
+    } catch (error) {
+      throw new InternalServerErrorException(
+        'Failed to update product status',
+        {
+          cause: error,
+        },
       );
     }
   }

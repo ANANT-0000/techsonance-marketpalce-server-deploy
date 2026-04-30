@@ -386,3 +386,18 @@ export const cartItemsRelations = relations(cart_items, ({ one }) => ({
     references: [product_variants.id],
   }),
 }));
+
+export const paymentRelations = relations(payments, ({ one }) => ({
+  order: one(orders, {
+    fields: [payments.order_id],
+    references: [orders.id],
+  }),
+  refund: one(refunds, {
+    fields: [payments.id],
+    references: [refunds.payment_id],
+  }),
+  company: one(company, {
+    fields: [payments.company_id],
+    references: [company.id],
+  }),
+}));

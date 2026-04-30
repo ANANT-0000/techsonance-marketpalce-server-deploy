@@ -8,6 +8,15 @@ import { user } from 'src/drizzle/schema/users.schema';
 import { type DrizzleDB } from 'src/drizzle/types/drizzle';
 import * as nodemailer from 'nodemailer';
 import { BadRequestException } from '@nestjs/common';
+import { userRegistrationTemplate } from './templates/user-registration.template';
+import { vendorRegistrationTemplate } from './templates/vendor-registration.template';
+import { orderPlacedTemplate } from './templates/order-placed.template';
+import { orderCancelledTemplate } from './templates/order-cancelled.template';
+import { orderReturnTemplate } from './templates/order-return.template';
+import { orderReplacementTemplate } from './templates/order-replacement-approve.template';
+import { returnRequestedTemplate } from './templates/return-requested.template';
+import { replacementRequestedTemplate } from './templates/replacement-requested.template';
+import { orderShippedTemplate } from './templates/order-shipped.template';
 @Injectable()
 export class MailService {
   nodeMailerTransporter: nodemailer.Transporter;
@@ -104,36 +113,51 @@ export class MailService {
       throw new UnauthorizedException('Invalid or malformed token.');
     }
   }
+  public async sendUserWelcomeEmail(email: string, userName: string, verificationUrl?: string) {
+    const html = userRegistrationTemplate(userName, verificationUrl);
+    return this.sendEmail(email, 'Welcome to Techsonance Marketplace!', html);
+  }
 
-  public async sendOrderCancellationEmail(
+  public async sendVendorRegistrationEmail(email: string, storeName: string) {
+    const html = vendorRegistrationTemplate(storeName);
+    return this.sendEmail(email, 'Vendor Registration Received - Techsonance', html);
+  }
+
+  async sendOrderPlacedEmail(email: string, customerName: string, orderId: string, totalAmount: number) {
+    const html = orderPlacedTemplate(customerName, orderId, totalAmount);
+    return this.sendEmail(email, `Order Confirmed: #${orderId}`, html);
+  }
+
+  async sendOrderReturnEmail(email: string, customerName: string, orderId: string) {
+    const html = orderReturnTemplate(customerName, orderId);
+    return this.sendEmail(email, `Return Initiated: #${orderId}`, html);
+  }
+  async sendReturnRequestedEmail(email: string, customerName: string, orderId: string) {
+    const html = returnRequestedTemplate(customerName, orderId);
+    return this.sendEmail(email, `Return Request Received: #${orderId}`, html);
+  }
+
+  async sendReplacementRequestedEmail(email: string, customerName: string, orderId: string) {
+    const html = replacementRequestedTemplate(customerName, orderId);
+    return this.sendEmail(email, `Replacement Request Received: #${orderId}`, html);
+  }
+  async sendOrderReplacementEmail(email: string, customerName: string, orderId: string) {
+    const html = orderReplacementTemplate(customerName, orderId);
+    return this.sendEmail(email, `Replacement Approved: #${orderId}`, html);
+  }
+
+  async sendOrderCancelledEmail(email: string, customerName: string, orderId: string, refundInitiated: boolean) {
+    const html = orderCancelledTemplate(customerName, orderId, refundInitiated);
+    return this.sendEmail(email, `Order Cancelled: #${orderId}`, html);
+  }
+  async sendOrderShippedEmail(
     email: string,
+    customerName: string,
     orderId: string,
-    reason: string,
+    trackingUrl: string,
+    itemName?: string
   ) {
-    const shortOrderId = orderId.split('-')[0].toUpperCase();
-
-    return await this.sendEmail(
-      email,
-      `Your Order Item Has Been Cancelled — #${shortOrderId}`,
-      `<div style="font-family: sans-serif; max-width: 600px; margin: auto;">
-      <h2>Order Cancellation Confirmation</h2>
-      <p>An item in your order <strong>#${shortOrderId}</strong> has been successfully cancelled.</p>
-      <table style="width:100%; border-collapse: collapse; margin: 16px 0;">
-        <tr>
-          <td style="padding: 8px; border: 1px solid #eee; color: #666;">Order ID</td>
-          <td style="padding: 8px; border: 1px solid #eee;">${orderId}</td>
-        </tr>
-        <tr>
-          <td style="padding: 8px; border: 1px solid #eee; color: #666;">Reason</td>
-          <td style="padding: 8px; border: 1px solid #eee;">${reason}</td>
-        </tr>
-      </table>
-      <p>A refund has been initiated and will reflect in your account within 
-         <strong>3–5 business days</strong> depending on your payment method.</p>
-      <p style="color: #888; font-size: 12px;">
-        If you did not request this cancellation, please contact our support team immediately.
-      </p>
-    </div>`,
-    );
+    const html = orderShippedTemplate(customerName, orderId,trackingUrl, itemName);
+    return this.sendEmail(email, `Your Order #${orderId} has Shipped 🚚`, html);
   }
 }

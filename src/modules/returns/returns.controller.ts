@@ -16,7 +16,7 @@ export class ReturnsController {
   ])
   @HttpCode(HttpStatus.CREATED)
   createReturn(@Param('userId') userId: string, @Body(ParseJsonPipe) dto: CreateReturnDto, @UploadedFiles() files: { evidence_images?: Express.Multer.File[] }, @Headers('company-domain') domain: string) {
-    console.log(dto, files)
+    console.log("dto",dto, "files",files)
     return this.returnsService.createReturnRequest(userId, dto, files, domain);
   }
 

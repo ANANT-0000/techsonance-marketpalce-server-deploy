@@ -35,6 +35,7 @@ import { InventoryModule } from './modules/inventory/inventory.module';
 import { RefundsModule } from './modules/refunds/refunds.module';
 import { OrderItemsModule } from './modules/order-items/order-items.module';
 import { ReturnsModule } from './modules/returns/returns.module';
+import { FinancesModule } from './modules/finances/finances.module';
 @Module({
   imports: [
     DrizzleModule,
@@ -68,6 +69,7 @@ import { ReturnsModule } from './modules/returns/returns.module';
     RefundsModule,
     OrderItemsModule,
     ReturnsModule,
+    FinancesModule,
     // ThrottlerModule.forRoot([
     //   {
     //     name: "short",

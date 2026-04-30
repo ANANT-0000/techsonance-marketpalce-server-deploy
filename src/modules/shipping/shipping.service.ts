@@ -9,13 +9,15 @@ import { DRIZZLE, type DrizzleService } from 'src/drizzle/drizzle.module';
 import { CompanyService } from '../company/company.service';
 import { and, eq } from 'drizzle-orm';
 import { orders, shipping_details } from 'src/drizzle/schema';
+import { MailService } from 'src/common/services/mail/mail.service';
 
 @Injectable()
 export class ShippingService {
   constructor(
     @Inject(DRIZZLE) private readonly db: DrizzleService,
     private readonly companyService: CompanyService,
-  ) {}
+    private readonly mailService: MailService,
+  ) { }
   async addTrackingUrl(orderId: string, trackingUrl: string, domain: string) {
     console.log('adding tracking Url');
     const companyId = await this.companyService.find(domain);
@@ -49,6 +51,35 @@ export class ShippingService {
             HttpStatus.INTERNAL_SERVER_ERROR,
           );
         });
+      const orderDetail = await this.db.query.orders.findFirst({
+        where: eq(orders.id, orderId),
+        with: {
+          customer: true,
+          items: {
+            with: {
+              variant: {
+                columns: {
+                  variant_name: true,
+                },
+              },
+            },
+          },
+        },
+      });
+
+      if (!orderDetail?.customer) {
+        throw new HttpException('Order not found', HttpStatus.NOT_FOUND);
+      }
+      const firstItem = orderDetail.items[0];
+      const productName = firstItem?.variant?.variant_name || 'Item';
+      const itemName = orderDetail.items.length > 1 ? `${productName} +${orderDetail.items.length - 1} more items` : productName;
+      await this.mailService.sendOrderShippedEmail(
+        orderDetail?.customer?.email,
+        `${orderDetail?.customer?.first_name} ${orderDetail?.customer?.last_name}`,
+        orderDetail.id,
+        trackingUrl,
+        itemName,
+      );
     } catch (error) {
       if (error instanceof HttpException) {
         throw error;

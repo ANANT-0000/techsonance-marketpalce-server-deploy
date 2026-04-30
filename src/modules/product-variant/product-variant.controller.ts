@@ -17,13 +17,14 @@ import { UploadToCloud } from 'src/common/decorators/upload.decorator';
 import { ParseJsonPipe } from 'src/common/pipes/parseJsonPipe';
 import { UpdateProductVariantDto } from './dto/update-product-variant.dto';
 import { type ProductFiles } from 'src/common/Types/index.type';
+import { ProductStatus } from 'src/drizzle/types/types';
 
 @Controller({
   version: '1',
   path: 'product-variant',
 })
 export class ProductVariantController {
-  constructor(private readonly productVariantService: ProductVariantService) {}
+  constructor(private readonly productVariantService: ProductVariantService) { }
 
   @Post()
   @UploadToCloud([
@@ -90,7 +91,17 @@ export class ProductVariantController {
       domain,
     );
   }
-
+  @Patch('update-status/:id')
+  async updateProductStatus(
+    @Param('id') id: string,
+    @Body('status') status: ProductStatus,
+    @Headers('company-domain') domain: string,
+  ) {
+    console.log('id', id);
+    console.log('status', status);
+    console.log('dmoain', domain);
+    return await this.productVariantService.UpdateProductVarintStatus(status, id);
+  }
   @Delete(':id')
   async delete(@Param('id') id: string) {
     console.log('Deleting product variant with ID:', id);

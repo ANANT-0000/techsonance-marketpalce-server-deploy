@@ -41,7 +41,7 @@ export class VendorsService {
     private jwtService: JwtService,
     private readonly mailService: MailService,
     private readonly uploadToCloudService: UploadToCloudService,
-  ) {}
+  ) { }
   async vendorRegister(
     vendorData: CreateVendorDto,
     files: Express.Multer.File[],
@@ -218,11 +218,9 @@ export class VendorsService {
             });
         }
         console.log('vendor documents inserted');
-        this.mailService.sendEmail(
-          newUser.email,
-          'Vendor Registration Received',
-          `<p>Thank you for registering as a vendor on our marketplace. Your application is currently under review, and we will notify you once it has been approved.</p>`,
-        );
+        // Send Welcome Email
+        // ─────────────────────────────────────────────────────────────────
+        await this.mailService.sendVendorRegistrationEmail(newUser.email, vendorData.company_name)
         return;
       });
     } catch (error) {
@@ -242,58 +240,58 @@ export class VendorsService {
     try {
       const existingUser:
         | {
-            user: Partial<UserType>;
-            vendor: Partial<VendorType>;
-            role: Partial<UserRoleType>;
-          }
+          user: Partial<UserType>;
+          vendor: Partial<VendorType>;
+          role: Partial<UserRoleType>;
+        }
         | HttpException = await this.db.transaction(async (tx) => {
-        if (!loginDto.email || !loginDto.password) {
-          throw new HttpException(
-            'Email and password are required',
-            HttpStatus.BAD_REQUEST,
+          if (!loginDto.email || !loginDto.password) {
+            throw new HttpException(
+              'Email and password are required',
+              HttpStatus.BAD_REQUEST,
+            );
+          }
+          const [userRecord]: Partial<UserType>[] = await tx
+            .select()
+            .from(userTable)
+            .where(eq(userTable.email, loginDto.email));
+          console.log('user.email', loginDto.email, 'userRecord', userRecord);
+          if (!userRecord || !userRecord.id || !userRecord.password_hash) {
+            throw new UnauthorizedException('User not found');
+          }
+          console.log(userRecord.email, 'password', userRecord.password_hash);
+          const isPasswordValid = await bcrypt.compare(
+            loginDto.password,
+            userRecord.password_hash,
           );
-        }
-        const [userRecord]: Partial<UserType>[] = await tx
-          .select()
-          .from(userTable)
-          .where(eq(userTable.email, loginDto.email));
-        console.log('user.email', loginDto.email, 'userRecord', userRecord);
-        if (!userRecord || !userRecord.id || !userRecord.password_hash) {
-          throw new UnauthorizedException('User not found');
-        }
-        console.log(userRecord.email, 'password', userRecord.password_hash);
-        const isPasswordValid = await bcrypt.compare(
-          loginDto.password,
-          userRecord.password_hash,
-        );
-        if (!isPasswordValid) {
-          console.log('isPasswordValid', isPasswordValid);
-          throw new UnauthorizedException('Invalid password');
-        }
-        const [vendorRecord]: Partial<VendorType>[] = await tx
-          .select()
-          .from(vendorTable)
-          .where(eq(vendorTable.user_id, userRecord.id));
-        console.log('vendorRecord', vendorRecord);
-        if (!userRecord.role_id) {
-          throw new UnauthorizedException('User role not found');
-        }
-        const [roleRecord]: Partial<UserRoleType>[] = await tx
-          .select({ role_name: user_rolesTable.role_name })
-          .from(user_rolesTable)
-          .where(eq(user_rolesTable.id, userRecord.role_id));
-        console.log('roleRecord', roleRecord);
-        if (!vendorRecord) throw new UnauthorizedException('Vendor not found');
-        const isVendorApproved =
-          vendorRecord.vendor_status === UserStatus.ACTIVE;
-        console.log('isVendorApproved', isVendorApproved);
-        if (!isVendorApproved)
-          throw new HttpException(
-            'Vendor application is still under review',
-            HttpStatus.UNAUTHORIZED,
-          );
-        return { user: userRecord, vendor: vendorRecord, role: roleRecord };
-      });
+          if (!isPasswordValid) {
+            console.log('isPasswordValid', isPasswordValid);
+            throw new UnauthorizedException('Invalid password');
+          }
+          const [vendorRecord]: Partial<VendorType>[] = await tx
+            .select()
+            .from(vendorTable)
+            .where(eq(vendorTable.user_id, userRecord.id));
+          console.log('vendorRecord', vendorRecord);
+          if (!userRecord.role_id) {
+            throw new UnauthorizedException('User role not found');
+          }
+          const [roleRecord]: Partial<UserRoleType>[] = await tx
+            .select({ role_name: user_rolesTable.role_name })
+            .from(user_rolesTable)
+            .where(eq(user_rolesTable.id, userRecord.role_id));
+          console.log('roleRecord', roleRecord);
+          if (!vendorRecord) throw new UnauthorizedException('Vendor not found');
+          const isVendorApproved =
+            vendorRecord.vendor_status === UserStatus.ACTIVE;
+          console.log('isVendorApproved', isVendorApproved);
+          if (!isVendorApproved)
+            throw new HttpException(
+              'Vendor application is still under review',
+              HttpStatus.UNAUTHORIZED,
+            );
+          return { user: userRecord, vendor: vendorRecord, role: roleRecord };
+        });
       if (existingUser instanceof HttpException) {
         throw existingUser;
       }

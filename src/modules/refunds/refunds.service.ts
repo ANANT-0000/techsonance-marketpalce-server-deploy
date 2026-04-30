@@ -317,13 +317,13 @@ export class RefundsService {
   async processRefund(refundId: string, domain: string) {
     try {
       const companyId = await this.companyService.find(domain);
-
+      console.log("refundId", refundId)
       const [existingRefund] = await this.db
         .select()
         .from(refunds)
         .where(and(eq(refunds.id, refundId), eq(refunds.company_id, companyId)))
         .limit(1);
-
+      console.log("existingRefund", existingRefund)
       if (!existingRefund) {
         throw new HttpException('Refund not found', HttpStatus.NOT_FOUND);
       }
@@ -341,7 +341,7 @@ export class RefundsService {
           HttpStatus.BAD_REQUEST,
         );
       }
-
+      console.log('traction is starting')
       return await this.db.transaction(async (tx) => {
         const [updatedRefund] = await tx
           .update(refunds)
@@ -354,9 +354,8 @@ export class RefundsService {
               { cause: error },
             );
           });
+        console.log('updatedRefund', updatedRefund)
 
-        // Only mark payment as REFUNDED when it is a whole-order refund
-        // For item-level refunds, payment stays as-is (partial refund scenario)
         const isOrderLevelRefund = existingRefund.order_items_id === null;
         if (existingRefund.payment_id && isOrderLevelRefund) {
           await tx
@@ -428,6 +427,7 @@ export class RefundsService {
     try {
       const companyId = await this.companyService.find(domain);
 
+      // 1. Fetch raw data
       const refundRecords = await this.db.query.refunds.findMany({
         where: eq(refunds.company_id, companyId),
         with: {
@@ -437,6 +437,16 @@ export class RefundsService {
               total_amount: true,
               user_id: true,
             },
+            with: {
+              customer: {
+                columns: {
+                  id: true,
+                  first_name: true,
+                  last_name: true,
+                  email: true,
+                }
+              }
+            }
           },
           orderItem: {
             columns: {
@@ -445,6 +455,24 @@ export class RefundsService {
               price: true,
               order_status: true,
             },
+            with: {
+              cancelledRecord: {
+                columns: {
+                  id: true,
+                  reason: true,
+                  cancelled_by: true
+                }
+              },
+              return_request: {
+                columns: {
+                  id: true,
+                  type: true,
+                  status: true,
+                  created_at: true,
+                  updated_at: true,
+                }
+              }
+            }
           },
           payment: {
             columns: {
@@ -458,22 +486,25 @@ export class RefundsService {
         },
       });
 
-      return {
-        total: refundRecords.length,
-        totalPendingAmount: refundRecords
+      const formattedRefunds = refundRecords.map((r) => ({
+        ...r,
+        scope: r.order_items_id ? 'item' : 'order',
+        order_id: r.order_id,
+      }));
+      const reponse = {
+        total: formattedRefunds.length,
+        totalPendingAmount: formattedRefunds
           .filter((r) => r.refund_status === refundStatusEnum.PENDING)
           .reduce((sum, r) => sum + Number(r.refund_amount), 0),
-        // split into item-level and order-level for dashboard clarity
-        itemRefunds: refundRecords.filter((r) => r.order_items_id !== null),
-        orderRefunds: refundRecords.filter((r) => r.order_items_id === null),
-        refunds: refundRecords
-          .map((r) => ({ ...r, scope: r.order_items_id ? 'item' : 'order' }))
-          .sort(
-            (a, b) =>
-              new Date(b.created_at).getTime() -
-              new Date(a.created_at).getTime(),
-          ),
+        itemRefunds: formattedRefunds.filter((r) => r.scope === 'item'),
+        orderRefunds: formattedRefunds.filter((r) => r.scope === 'order'),
+        refunds: formattedRefunds.sort(
+          (a, b) =>
+            new Date(b.created_at).getTime() - new Date(a.created_at).getTime(),
+        ),
       };
+      console.log('rufund reponse', reponse)
+      return reponse
     } catch (error) {
       if (
         error instanceof HttpException ||

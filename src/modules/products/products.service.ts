@@ -32,7 +32,7 @@ export class ProductsService {
     private uploadToCloudService: UploadToCloudService,
     private inventoryService: InventoryService,
     private readonly companyService: CompanyService,
-  ) {}
+  ) { }
 
   async getAllProducts(domain: string) {
     try {
@@ -42,8 +42,8 @@ export class ProductsService {
         where: (products) => eq(products.company_id, companyId),
         with: {
           variants: {
-            limit: 1,
             orderBy: (variants, { desc }) => desc(variants.created_at),
+            // where: eq(product_variants.status, ProductStatus.ACTIVE),
             columns: {
               id: true,
               variant_name: true,
@@ -66,7 +66,7 @@ export class ProductsService {
           },
         },
       });
-      console.log('response product ', product);
+      console.log('response product ', product[1].variants);
       return product;
     } catch (error) {
       throw new InternalServerErrorException('Failed to fetch products', {
@@ -121,6 +121,7 @@ export class ProductsService {
           ),
           with: {
             variants: {
+              where: eq(product_variants.status, ProductStatus.ACTIVE),
               with: {
                 images: true,
                 inventory: {
@@ -224,6 +225,39 @@ export class ProductsService {
         cause: error,
       });
     }
+  }
+  async getActiveProducts(domain: string) {
+    try {
+      const companyId = await this.companyService.find(domain)
+      const result = await this.db.query.products.findMany({
+        where: and(
+          eq(products.company_id, companyId),
+        ),
+        columns: {
+          id: true,
+          created_at: true
+        },
+        with: {
+          variants: {
+            where: eq(product_variants.status, ProductStatus.ACTIVE),
+            columns: {
+              id: true,
+              status: true,
+            },
+          },
+        },
+      })
+      const response = result.map(product => (
+        product.variants
+      )).flat()
+      // console.log('response', response)
+      return response
+    } catch (error) {
+      throw new InternalServerErrorException('Failed to fetch active products', {
+        cause: error,
+      });
+    }
+
   }
   async createProduct(
     productDto: CreateProductDto,
@@ -624,31 +658,7 @@ export class ProductsService {
       );
     }
   }
-  async UpdateProductStatus(status: ProductStatus, productId: string) {
-    if (!status) {
-      return new HttpException(
-        'Product status is required',
-        HttpStatus.BAD_REQUEST,
-      );
-    }
-    try {
-      await this.db
-        .update(products)
-        .set({ status })
-        .where(eq(products.id, productId));
-      return {
-        message: 'Product status updated successfully',
-        status: HttpStatus.OK,
-      };
-    } catch (error) {
-      throw new InternalServerErrorException(
-        'Failed to update product status',
-        {
-          cause: error,
-        },
-      );
-    }
-  }
+
   async deleteSelectedProducts(productIds: string[]) {
     if (!productIds || productIds.length === 0) {
       return new HttpException(

@@ -26,7 +26,7 @@ import { type ProductFiles } from 'src/common/Types/index.type';
   path: 'products',
 })
 export class ProductsController {
-  constructor(private productsService: ProductsService) {}
+  constructor(private productsService: ProductsService) { }
 
   @Post(':vendor_id')
   @UploadToCloud([
@@ -59,7 +59,10 @@ export class ProductsController {
     console.log('get all products');
     return await this.productsService.getAllProducts(domain);
   }
-
+  @Get('active')
+  async getActiveProducts(@Headers('company-domain') domain: string) {
+    return await this.productsService.getActiveProducts(domain)
+  }
   @Get('main-details/:id')
   async getProductMainDetails(
     @Param('id') id: string,
@@ -93,13 +96,7 @@ export class ProductsController {
   ) {
     return await this.productsService.UpdateProductCategory(categoryId, id);
   }
-  @Patch('update-status/:id')
-  async updateProductStatus(
-    @Param('id') id: string,
-    @Body('status') status: ProductStatus,
-  ) {
-    return await this.productsService.UpdateProductStatus(status, id);
-  }
+
   @Get(':id/details')
   async getProductDetailsById(
     @Param('id') id: string,
@@ -115,21 +112,23 @@ export class ProductsController {
     return await this.productsService.getProductById(id, domain);
   }
 
-  @Delete(':id')
-  async deleteProduct(@Param('id') id: string) {
-    return await this.productsService.deleteProduct(id);
-  }
+
   @Delete('delete-selected')
   async deleteSelectedProduct(@Body('ids') ids: string[]) {
     return await this.productsService.deleteSelectedProducts(ids);
   }
-  @Delete('delete-variant/:id')
-  async deleteProductVariant(@Param('id') id: string) {
-    return await this.productsService.deleteProductVariant(id);
-  }
+
 
   @Delete('delete-selected-variants')
   async deleteSelectedProductVariants(@Body('ids') ids: string[]) {
     return await this.productsService.deleteSelectedProductVariants(ids);
+  }
+  @Delete(':id')
+  async deleteProduct(@Param('id') id: string) {
+    return await this.productsService.deleteProduct(id);
+  }
+  @Delete('delete-variant/:id')
+  async deleteProductVariant(@Param('id') id: string) {
+    return await this.productsService.deleteProductVariant(id);
   }
 }

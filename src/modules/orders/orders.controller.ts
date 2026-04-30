@@ -7,23 +7,37 @@ import {
   HttpStatus,
   Param,
   Patch,
+  Query,
 } from '@nestjs/common';
 import { OrdersService } from './orders.service';
 import { CancelledByEnum, OrderStatus } from 'src/drizzle/types/types';
+import { CLIENT_RENEG_LIMIT } from 'tls';
 
 @Controller({
   version: '1',
   path: 'orders',
 })
 export class OrdersController {
-  constructor(private readonly ordersService: OrdersService) {}
-  // @Get(':orderId')
-  // async getOrderDetails(
-  //   @Param('orderId') orderId: string,
-  //   @Headers('company-domain') domain: string,
-  // ) {
-  //   return this.ordersService.getOrderById(orderId, domain);
-  // }
+  constructor(private readonly ordersService: OrdersService) { }
+
+  @Get()
+  async getOrdersList(
+    @Headers('company-domain') domain: string,
+    @Query('offset') offset?: string,
+    @Query('limit') limit?: string,
+    @Query('status') status?: OrderStatus,
+    @Query('userId') userId?: string,
+  ) {
+    return this.ordersService.getOrdersList(domain, Number(offset), Number(limit), status);
+  }
+
+
+  @Get('pending')
+  async getPendingOrders(@Headers('company-domain') domain: string) {
+    console.log('hitted by order pending',domain);
+    return this.ordersService.getPendingOrders(domain);
+  }
+
   @Get(':orderId')
   async getUserOrderDetails(
     @Param('orderId') orderId: string,
@@ -37,10 +51,6 @@ export class OrdersController {
     @Headers('company-domain') domain: string,
   ) {
     return this.ordersService.getUserOrders(userId, domain);
-  }
-  @Get()
-  async getOrdersList(@Headers('company-domain') domain: string) {
-    return this.ordersService.getOrdersList(domain);
   }
   @Get(':orderid/details')
   async getOrderDetails(
@@ -57,19 +67,4 @@ export class OrdersController {
   ) {
     return this.ordersService.setOrderStatus(orderId, newStatus, domain);
   }
-
-  // @Patch(':orderItemId/cancel')
-  // @HttpCode(HttpStatus.OK)
-  // async cancelOrderItem(
-  //   @Param('itemId') itemId: string,
-  //   @Body() dto: { cancelReason: string; cancelledBy: CancelledByEnum },
-  //   @Headers('company-domain') domain: string,
-  // ) {
-  //   return this.ordersService.cancelOrder(
-  //     itemId,
-  //     dto.cancelReason,
-  //     dto.cancelledBy,
-  //     domain,
-  //   );
-  // }
 }

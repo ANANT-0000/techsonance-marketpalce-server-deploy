@@ -26,7 +26,7 @@ export class InventoryService {
   constructor(
     @Inject(DRIZZLE) private readonly db: DrizzleService,
     private readonly companyService: CompanyService,
-  ) {}
+  ) { }
   async create(dto: CreateInventoryDto, domain: string) {
     try {
       const companyId = await this.companyService.find(domain);
@@ -75,80 +75,6 @@ export class InventoryService {
     try {
       const companyId = await this.companyService.find(domain);
       console.log(companyId);
-      // const rows = await this.db
-      //   .select({
-      //     // Variant fields
-      //     variant_id: product_variants.id,
-      //     variant_name: product_variants.variant_name,
-      //     sku: product_variants.sku,
-      //     price: product_variants.price,
-      //     stock_quantity: inventory.stock_quantity, // global stock on variant
-      //     // Inventory fields (nullable — leftJoin)
-      //     inventory_record_id: inventory.id,
-      //     warehouse_stock: inventory.stock_quantity,
-      //     warehouse_id: inventory.warehouse_id,
-      //     // Warehouse fields (nullable — leftJoin)
-      //     warehouse_name: warehouse.warehouse_name,
-      //   })
-      //   .from(product_variants)
-      //   .innerJoin(products, eq(product_variants.product_id, products.id))
-      //   .leftJoin(
-      //     inventory,
-      //     and(
-      //       eq(product_variants.id, inventory.product_variant_id),
-      //       eq(inventory.company_id, companyId),
-      //     ),
-      //   )
-      //   .leftJoin(warehouse, eq(inventory.warehouse_id, warehouse.id))
-      //   .where(eq(products.company_id, companyId));
-
-      // // Group flat rows by variant_id
-      // const variantMap = new Map<
-      //   string,
-      //   {
-      //     variant_id: string;
-      //     variant_name: string;
-      //     sku: string;
-      //     price: string;
-      //     total_stock: number | null;
-      //     isLowStock: boolean;
-      //     isOutOfStock: boolean;
-      //     locations: {
-      //       inventory_id: string;
-      //       warehouse_id: string;
-      //       warehouse_name: string | null;
-      //       stock: number;
-      //     }[];
-      //   }
-      // >();
-
-      // for (const row of rows) {
-      //   if (!variantMap.has(row.variant_id)) {
-      //     variantMap.set(row.variant_id, {
-      //       variant_id: row.variant_id,
-      //       variant_name: row.variant_name,
-      //       sku: row.sku,
-      //       price: row.price,
-      //       total_stock: row.warehouse_stock,
-      //       isLowStock: (row.warehouse_stock ?? 0) <= LOW_STOCK_THRESHOLD,
-      //       isOutOfStock:
-      //         row.warehouse_stock === 0 || row.warehouse_stock === null,
-      //       locations: [],
-      //     });
-      //   }
-
-      //   // Only push a location entry if an inventory record exists for this row
-      //   if (row?.inventory_record_id && row.warehouse_id) {
-      //     variantMap.get(row.variant_id)!.locations.push({
-      //       inventory_id: row.inventory_record_id,
-      //       warehouse_id: row.warehouse_id,
-      //       warehouse_name: row.warehouse_name,
-      //       stock: row.warehouse_stock ?? 0,
-      //     });
-      //   }
-      // }
-      // console.log('variantMap', Array.from(variantMap.values()));
-      // return Array.from(variantMap.values());
 
       const rows = await this.db.query.inventory
         .findMany({
@@ -240,6 +166,7 @@ export class InventoryService {
           total_stock: number;
           isLowStock: boolean;
           isOutOfStock: boolean;
+          activeStatus: string;
           locations: {
             inventory_id: string;
             warehouse_id: string;
@@ -266,6 +193,7 @@ export class InventoryService {
             total_stock: 0,
             isLowStock: false,
             isOutOfStock: false,
+            activeStatus: variant.status,
             locations: [],
           });
         }

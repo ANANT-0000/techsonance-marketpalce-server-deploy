@@ -35,7 +35,7 @@ export class OrderItemsService {
     private readonly companyService: CompanyService,
     private readonly inventoryService: InventoryService,
     private readonly mailService: MailService,
-  ) {}
+  ) { }
 
   async getOrderItemDetails(orderItemId: string, domain: string) {
     try {
@@ -364,7 +364,7 @@ export class OrderItemsService {
         }
         console.log('serching paymtn record...');
         const [paymentRecord] = await tx
-          .select({ id: payments.id })
+          .select({ id: payments.id, payment_method: payments.payment_method })
           .from(payments)
           .where(eq(payments.order_id, existingOrderItem.order_id))
           .limit(1)
@@ -386,7 +386,7 @@ export class OrderItemsService {
         console.log('found payemnt record', paymentRecord);
         const refundAmount =
           Number(existingOrderItem.price) * existingOrderItem.quantity;
-
+        const isPrepaid = paymentRecord.payment_method !== 'COD';
         await tx
           .update(order_items)
           .set({ order_status: OrderStatus.CANCELLED })
@@ -427,25 +427,26 @@ export class OrderItemsService {
           companyId,
           tx as DrizzleService,
         );
-        await tx
-          .insert(refunds)
-          .values({
-            refund_amount: String(refundAmount),
-            refund_reason: cancelReason,
-            refund_status: refundStatusEnum.PENDING,
-            order_id: existingOrderItem.order_id,
-            order_items_id: existingOrderItem.id,
-            payment_id: paymentRecord.id,
-            company_id: companyId,
-          })
-          .catch((error) => {
-            console.error('Error creating refund record:', error);
-            throw new InternalServerErrorException(
-              'Failed to create refund record',
-              { cause: error },
-            );
-          });
-
+        if (isPrepaid) {
+          await tx
+            .insert(refunds)
+            .values({
+              refund_amount: String(refundAmount),
+              refund_reason: cancelReason,
+              refund_status: refundStatusEnum.PENDING,
+              order_id: existingOrderItem.order_id,
+              order_items_id: existingOrderItem.id,
+              payment_id: paymentRecord.id,
+              company_id: companyId,
+            })
+            .catch((error) => {
+              console.error('Error creating refund record:', error);
+              throw new InternalServerErrorException(
+                'Failed to create refund record',
+                { cause: error },
+              );
+            });
+        }
         const remainingActiveItems = allOrderItems.filter(
           (item) =>
             item.id !== existingOrderItem.id &&
@@ -472,9 +473,10 @@ export class OrderItemsService {
         const allItemsNowCancelled = remainingActiveItems.length === 0;
 
         if (allItemsNowCancelled) {
+          const finalPaymentStatus = isPrepaid ? PaymentStatus.REFUNDED : PaymentStatus.CANCELLED;
           await tx
             .update(payments)
-            .set({ payment_status: PaymentStatus.REFUNDED })
+            .set({ payment_status: finalPaymentStatus })
             .where(eq(payments.id, paymentRecord.id))
             .catch((error) => {
               console.error('Error updating payment status:', error);
@@ -485,26 +487,19 @@ export class OrderItemsService {
               );
             });
         }
+        // ─────────────────────────────────────────────────────────────────
+        // Send Order Cancellation Email
+        // ─────────────────────────────────────────────────────────────────
         const [customerRecord] = await tx
-          .select({ email: user.email, id: user.id })
+          .select({ email: user.email, first_name: user.first_name, last_name: user.last_name })
           .from(user)
           .where(eq(user.id, order.user_id ?? ''))
           .limit(1);
 
         if (customerRecord?.email) {
-          this.mailService
-            .sendOrderCancellationEmail(
-              customerRecord.email,
-              existingOrderItem.order_id,
-              cancelReason,
-            )
-            .catch((error) => {
-              console.error(
-                'Failed to send order cancellation email to customer',
-                error,
-              );
-            });
+          await this.mailService.sendOrderCancelledEmail(customerRecord.email, `${customerRecord.first_name} ${customerRecord.last_name} `, order.id, true)
         }
+        // ─────────────────────────────────────────────────────────────────`
         return {
           message: 'Order item cancelled successfully',
           orderItemId,

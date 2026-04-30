@@ -5,7 +5,7 @@ import {
   Injectable,
   InternalServerErrorException,
 } from '@nestjs/common';
-import { and, desc, eq, or } from 'drizzle-orm';
+import { and, desc, eq, gt, inArray, or } from 'drizzle-orm';
 import { DRIZZLE, type DrizzleService } from 'src/drizzle/drizzle.module';
 import {
   company,
@@ -26,6 +26,7 @@ import {
 import { CompanyService } from '../company/company.service';
 import { InventoryService } from '../inventory/inventory.service';
 import { MailService } from 'src/common/services/mail/mail.service';
+import { response } from 'express';
 
 @Injectable()
 export class OrdersService {
@@ -188,6 +189,16 @@ export class OrdersService {
     }
   }
   async completeOrderVerification(
+    customerDetails: { email: string, first_name: string, last_name: string },
+    existingOrder: {
+      id: string;
+      total_amount: string;
+      created_at: Date;
+      updated_at: Date;
+      user_id: string | null;
+      address_id: string | null;
+      company_id: string | null;
+    },
     orderId: string,
     isSuccess: boolean,
     companyId?: string,
@@ -198,15 +209,14 @@ export class OrdersService {
     if (!companyId) {
       throw new HttpException('Company ID is required', HttpStatus.BAD_REQUEST);
     }
+    console.log('order id in completeOrderVerification', orderId)
     try {
-      const [existingOrder] = await this.db
-        .select({ id: orders.id })
-        .from(orders)
-        .where((eq(orders.id, orderId), eq(orders.company_id, companyId)))
-        .limit(1);
-      if (!existingOrder) {
+      if (!existingOrder || !existingOrder.user_id) {
         throw new HttpException('Order not found', HttpStatus.NOT_FOUND);
       }
+      console.log("===================")
+      console.log("existingOrder", existingOrder)
+      console.log("===================")
       const orderLines = await this.db
         .select({
           variantId: order_items.product_variant_id,
@@ -214,16 +224,18 @@ export class OrdersService {
         })
         .from(order_items)
         .where(eq(order_items.order_id, orderId));
-
-      console.log('starting transaction of order complete');
+      console.log('starting transaction of order complete,cusomter detials', customerDetails);
       return this.db.transaction(async (tx) => {
         if (isSuccess) {
           const orderItemsRecord = await tx
-            .select({ id: order_items.id })
+            .select()
             .from(order_items)
             .where(eq(order_items.order_id, orderId))
-            .limit(1);
-          if (orderItemsRecord.length === 0) {
+          console.log('===================')
+          console.log('orderItemsRecord', orderItemsRecord)
+          console.log('===================')
+
+          if (orderItemsRecord.length > 0) {
             const updateItem = orderItemsRecord.map(async (item) => {
               return await tx
                 .update(order_items)
@@ -247,12 +259,16 @@ export class OrdersService {
             const updateResults = await Promise.all(updateItem);
             console.log('order items updated to processing', updateResults);
           }
-          await tx
+          if (!orderItemsRecord[0].order_id) {
+            throw new HttpException('Order not found', HttpStatus.NOT_FOUND);
+          }
+          const paymentResult = await tx
             .update(payments)
             .set({ payment_status: PaymentStatus.COMPLETED })
-            .where(eq(payments.order_id, existingOrder.id))
+            .where(eq(payments.order_id, orderItemsRecord[0].order_id)).returning()
             .then((result) => {
               console.log('payment status updated to completed', result);
+              return result
             })
             .catch((error) => {
               console.error('Error updating payment status:', error);
@@ -263,6 +279,12 @@ export class OrdersService {
                 },
               );
             });
+          console.log('===================')
+          console.log('paymentResult', paymentResult)
+          console.log('===================')
+          if (customerDetails.email) {
+            this.mailService.sendOrderPlacedEmail(customerDetails.email, `${customerDetails.first_name} ${customerDetails.last_name}`, orderId, Number(existingOrder.total_amount));
+          }
           return {
             success: true,
             orderId,
@@ -434,7 +456,7 @@ export class OrdersService {
           );
         });
 
-      console.log('user orders \n', ordersList);
+      // console.log('user orders \n', ordersList);
       return ordersList;
     } catch (error) {
       console.error('Error fetching user orders:', error);
@@ -443,7 +465,7 @@ export class OrdersService {
       });
     }
   }
-  async getUserOrderDetails(orderId: string, domain: string) {
+  async getUserOrderDetails(orderId: string, domain: string, offset: number = 0, limit: number = 10, status?: OrderStatus) {
     try {
       if (!orderId || !domain) {
         throw new HttpException(
@@ -491,9 +513,10 @@ export class OrdersService {
                   status: true,
                   store_owner_note: true,
                   tracking_id: true,
-                  type:true
+                  type: true
                 }
-              }
+              },
+              cancelledRecord: true
             },
           },
           address: {
@@ -518,6 +541,7 @@ export class OrdersService {
       if (!orderDetails) {
         throw new HttpException('Order not found', HttpStatus.NOT_FOUND);
       }
+      console.log('order details \n', orderDetails.payment);
       return orderDetails;
     } catch (error) {
       console.error('Error fetching order details:', error);
@@ -529,24 +553,73 @@ export class OrdersService {
       );
     }
   }
-  async getOrdersList(domain: string) {
+  async getOrdersList(domain: string, offset: number = 0, limit: number = 50, status?: OrderStatus | undefined) {
     try {
       const companyId = await this.companyService.find(domain);
+      console.log('order status \n', status, Object.values(OrderStatus).includes(status as OrderStatus))
 
+      // Step 1: Get order IDs that have matching items (for proper pagination)
+      const validOrderIdsQuery = this.db
+        .selectDistinct({ id: orders.id, created_at: orders.created_at })
+        .from(orders)
+        .innerJoin(
+          order_items,
+          and(
+            eq(order_items.order_id, orders.id),
+            Object.values(OrderStatus).includes(status as OrderStatus)
+              ? and(
+                // @ts-ignore
+                eq(order_items.order_status, status),
+                gt(order_items.quantity, 0)
+              )
+              : undefined
+          )
+        )
+        .where(eq(orders.company_id, companyId))
+        .orderBy(desc(orders.created_at))
+        .limit(limit)
+        .offset(offset);
+
+      const validOrderIds = (await validOrderIdsQuery).map((o) => o.id);
+
+      if (validOrderIds.length === 0) {
+        return [];
+      }
+
+      // Step 2: Fetch full data only for those orders
       const ordersList = await this.db.query.orders.findMany({
-        where: and(eq(orders.company_id, companyId)),
+        where: and(
+          eq(orders.company_id, companyId),
+          inArray(orders.id, validOrderIds)
+        ),
+        orderBy: desc(orders.created_at),
         columns: {
           id: true,
           total_amount: true,
           created_at: true,
         },
-
         with: {
           items: {
+            where: Object.values(OrderStatus).includes(status as OrderStatus)
+              ? and(
+                // @ts-ignore
+                eq(order_items.order_status, status),
+                gt(order_items.quantity, 0)
+              )
+              : undefined,
             columns: {
               order_status: true,
               quantity: true,
               price: true,
+            },
+            with: {
+              cancelledRecord: true,
+              return_request: true,
+              order: {
+                with: {
+                  payment: true,
+                },
+              },
             },
           },
           address: {
@@ -561,9 +634,8 @@ export class OrdersService {
           payment: true,
         },
       });
-      return ordersList.sort(
-        (a, b) => b.created_at.getTime() - a.created_at.getTime(),
-      );
+      console.log(ordersList)
+      return ordersList
     } catch (error) {
       console.error('Error fetching orders list:', error);
       if (error instanceof HttpException) {
@@ -585,6 +657,7 @@ export class OrdersService {
       const companyId = await this.companyService.find(domain);
       const row = await this.db.query.orders.findFirst({
         where: and(eq(orders.id, orderId), eq(orders.company_id, companyId)),
+
         columns: {
           id: true,
           total_amount: true,
@@ -599,6 +672,9 @@ export class OrdersService {
               price: true,
             },
             with: {
+              return_request: true,
+              cancelledRecord: true,
+              refund: true,
               variant: {
                 columns: {
                   id: true,
@@ -691,7 +767,6 @@ export class OrdersService {
           email: row.customer?.email ?? null,
           phone_number: row.customer?.phone_number ?? null,
         },
-
         items: row.items.map((item) => {
           const inventory = item?.variant?.inventory ?? null;
           const warehouse = inventory?.warehouse ?? null;
@@ -702,7 +777,9 @@ export class OrdersService {
             unit_price: item?.price, // renamed: price → unit_price (clearer)
             line_total: (Number(item?.price) * item?.quantity).toFixed(2), // pre-computed
             order_status: item?.order_status,
-
+            refund: item?.refund,
+            return: item?.return_request,
+            cancel: item?.cancelledRecord,
             warehouse: warehouse
               ? {
                 id: inventory?.warehouse_id ?? null,
@@ -767,6 +844,7 @@ export class OrdersService {
       );
     }
   }
+
   async setOrderStatus(
     orderId: string,
     newStatus: OrderStatus,
@@ -847,6 +925,36 @@ export class OrdersService {
         throw error;
       }
       throw new InternalServerErrorException('Failed to update order status', {
+        cause: error,
+      });
+    }
+  }
+  async getPendingOrders(domain: string) {
+    try {
+      const companyId = await this.companyService.find(domain)
+      const result = await this.db.query.orders.findMany({
+        where: eq(orders.company_id, companyId),
+        with: {
+          items: {
+            where: or(eq(order_items.order_status, OrderStatus.PENDING), eq(order_items.order_status, OrderStatus.PROCESSING)),
+            columns: {
+              id: true,
+              order_id: true,
+              order_status: true,
+              created_at: true,
+              updated_at: true,
+            }
+          }
+        }
+      });
+      const reponse = result.map(order => (
+        order.items
+      )).flat()
+      console.log(response)
+      return reponse
+    } catch (error) {
+      console.error('Error fetching pending orders:', error);
+      throw new InternalServerErrorException('Failed to fetch pending orders', {
         cause: error,
       });
     }

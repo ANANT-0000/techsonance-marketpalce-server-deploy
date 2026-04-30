@@ -41,7 +41,6 @@ export class CheckoutController {
     @Body() verifyCheckoutDto: VerifyCheckoutDto,
     @Headers('company-domain') domain: string,
   ) {
-    console.log("verifyCheckoutDto", verifyCheckoutDto);
     return this.checkoutService.verifyCheckout(verifyCheckoutDto, domain);
   }
 
