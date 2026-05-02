@@ -12,6 +12,13 @@ export enum UserStatus {
   PENDING = 'pending',
   REJECTED = 'rejected',
 }
+export enum AccessStatus {
+  ACTIVE    = 'active',
+  INACTIVE = 'inactive',
+  PENDING   = 'pending',
+  SUSPENDED = 'suspended',
+  BLOCKED   = 'blocked',
+}
 export enum SupportTicketStatus {
   OPEN = 'open',
   IN_PROGRESS = 'in_progress',

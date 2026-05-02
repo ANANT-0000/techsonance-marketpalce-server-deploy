@@ -1,5 +1,5 @@
 import * as pg from 'drizzle-orm/pg-core';
-import { UserRole, UserStatus } from '../types/types';
+import { AccessStatus, UserRole, UserStatus } from '../types/types';
 import { user } from './users.schema';
 export const companyEnum = pg.pgEnum('company_enum', UserStatus);
 export const company = pg.pgTable('company', {
@@ -30,6 +30,36 @@ export const user_roles = pg.pgTable('user_roles', {
     .defaultNow()
     .$onUpdate(() => new Date()),
 });
+export const AccessStatusEnum = pg.pgEnum('access_status_enum', AccessStatus);
+export const user_and_company = pg.pgTable(
+  'user_and_company',
+  {
+    id: pg.uuid('id').primaryKey().defaultRandom(),
+    user_id: pg.uuid('user_id')
+      .notNull()
+      .references(() => user.id, { onDelete: 'cascade' }),
+    company_id: pg.uuid('company_id')
+      .notNull()
+      .references(() => company.id, { onDelete: 'cascade' }),
+    access_status: AccessStatusEnum('access_status')
+      .notNull()
+      .default(AccessStatus.ACTIVE),
+    suspended_by: pg.uuid('suspended_by').references(() => user.id),
+    suspended_at: pg.timestamp('suspended_at'),
+    suspension_reason: pg.text('suspension_reason'),
+    registered_at: pg.timestamp('registered_at').notNull().defaultNow(),
+    last_login_at: pg.timestamp('last_login_at'),
+    created_at: pg.timestamp('created_at').notNull().defaultNow(),
+    updated_at: pg.timestamp('updated_at').notNull().defaultNow()
+      .$onUpdate(() => new Date()),
+  },
+  (t) => [
+    pg.uniqueIndex('uq_user_company').on(t.user_id, t.company_id),
+    pg.index('idx_uac_user_id').on(t.user_id),
+    pg.index('idx_uac_company_id').on(t.company_id),
+    pg.index('idx_uac_access_status').on(t.access_status),
+  ],
+);
 
 export const permissions = pg.pgTable('user_permissions', {
   id: pg.uuid('id').primaryKey().defaultRandom(),

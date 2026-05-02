@@ -18,6 +18,7 @@ import { returnRequestedTemplate } from './templates/return-requested.template';
 import { replacementRequestedTemplate } from './templates/replacement-requested.template';
 import { orderShippedTemplate } from './templates/order-shipped.template';
 import { passwordResetOtpTemplate } from './templates/password-reset-otp.template';
+import { vendorApprovalTemplate } from './templates/vendor-approval.template';
 @Injectable()
 export class MailService {
   nodeMailerTransporter: nodemailer.Transporter;
@@ -128,6 +129,14 @@ export class MailService {
     return this.sendEmail(
       email,
       'Vendor Registration Received - Techsonance',
+      html,
+    );
+  }
+  public async sendVendorApprovalEmail(email: string, storeName: string) {
+    const html = vendorApprovalTemplate(storeName);
+    return this.sendEmail(
+      email,
+      'Vendor Approval - Techsonance Marketplace',
       html,
     );
   }

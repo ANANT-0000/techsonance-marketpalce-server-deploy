@@ -10,19 +10,22 @@ import { JwtService } from '@nestjs/jwt';
 import { DRIZZLE, type DrizzleService } from 'src/drizzle/drizzle.module';
 import {
   address as addressTable,
+  company,
   company as companyTable,
   gst_registrations,
   tax_profiles,
   tax_rates,
   tax_types,
+  user,
   user as userTable,
+  user_and_company,
   user_roles as user_rolesTable,
   vendor,
   vendor as vendorTable,
   vendor_document as vendor_documentTable,
 } from 'src/drizzle/schema';
 import { eq, or } from 'drizzle-orm';
-import { UserRole, UserStatus } from 'src/drizzle/types/types';
+import { AccessStatus, UserRole, UserStatus } from 'src/drizzle/types/types';
 import bcrypt from 'bcryptjs';
 import express from 'express';
 import { MailService } from 'src/common/services/mail/mail.service';
@@ -157,13 +160,28 @@ export class VendorsService {
             phone_number: vendorData.phone_number,
             password_hash: hashedPassword,
             role_id: newRole.id,
-            company_id: newCompany.id,
           })
           .returning({ id: userTable.id, email: userTable.email })
           .catch((error) => {
             console.error('Error creating user:', error);
             throw new InternalServerErrorException(
               'Failed to create user for vendor',
+              {
+                cause: error,
+              },
+            );
+          });
+        await tx
+          .insert(user_and_company)
+          .values({
+            user_id: newUser.id,
+            company_id: newCompany.id,
+            access_status: AccessStatus.PENDING,
+          })
+          .catch((error) => {
+            console.error('Error creating user_and_company:', error);
+            throw new InternalServerErrorException(
+              'Failed to create user_and_company for vendor',
               {
                 cause: error,
               },
@@ -272,6 +290,10 @@ export class VendorsService {
             .select()
             .from(vendorTable)
             .where(eq(vendorTable.user_id, userRecord.id));
+          const [userAndCompanyRecord] = await tx
+            .select()
+            .from(user_and_company)
+            .where(eq(user_and_company.user_id, userRecord.id));
           console.log('vendorRecord', vendorRecord);
           if (!userRecord.role_id) {
             throw new UnauthorizedException('User role not found');
@@ -284,6 +306,7 @@ export class VendorsService {
           if (!vendorRecord) throw new UnauthorizedException('Vendor not found');
           const isVendorApproved =
             vendorRecord.vendor_status === UserStatus.ACTIVE;
+          // const isVendorApproved = vendorRecord.vendor_status === UserStatus.ACTIVE &&  userAndCompanyRecord.access_status === AccessStatus.ACTIVE;
           console.log('isVendorApproved', isVendorApproved);
           if (!isVendorApproved)
             throw new HttpException(
@@ -379,6 +402,14 @@ export class VendorsService {
   }
   async approveVendor(vendorId: string) {
     try {
+      const [isVendorExists] = await this.db
+        .select({ id: vendorTable.id, user_id: vendorTable.user_id, email: userTable.email, store_name: vendorTable.store_name })
+        .from(vendorTable)
+        .where(eq(vendorTable.id, vendorId))
+        .limit(1);
+      if (!isVendorExists || !isVendorExists.user_id) {
+        return new UnauthorizedException('Vendor not found');
+      }
       await this.db
         .update(vendorTable)
         .set({ vendor_status: UserStatus.ACTIVE })
@@ -392,18 +423,19 @@ export class VendorsService {
             },
           );
         });
-      const [vendorUser] = await this.db
-        .select({ email: userTable.email })
-        .from(vendorTable)
-        .innerJoin(userTable, eq(vendorTable.user_id, userTable.id))
-        .where(eq(vendorTable.id, vendorId))
-        .limit(1);
 
-      this.mailService.sendEmail(
-        vendorUser.email,
-        'Vendor Account Approved',
-        `<p>Congratulations! Your vendor account has been approved. You can now log in and start managing your store.</p>`,
-      );
+
+      const [updatedUserAndCompany] = await this.db
+        .update(user_and_company)
+        .set({ access_status: AccessStatus.ACTIVE })
+        .where(eq(user_and_company.user_id, isVendorExists.user_id))
+        .returning({ company_id: user_and_company.company_id })
+      const [companyDetails] = await this.db
+        .select({ company_name: company.company_name })
+        .from(company)
+        .where(eq(company.id, updatedUserAndCompany.company_id))
+        .limit(1);
+      await this.mailService.sendVendorApprovalEmail(isVendorExists.email, companyDetails.company_name);
       return {
         success: true,
         message: 'Vendor approved and notification email sent successfully',
@@ -499,6 +531,62 @@ export class VendorsService {
         throw error;
       }
       throw new InternalServerErrorException('Failed to remove vendor', {
+        cause: error,
+      });
+    }
+  }
+  async supandedVendor(vendorId: string) {
+    try {
+      const suspendedVendor = await this.db.transaction(async (tx) => {
+        const [vendorUser] = await tx
+          .select({ email: userTable.email,store_name:vendorTable.store_name,user_id:userTable.id })
+          .from(vendorTable)
+          .innerJoin(userTable, eq(vendorTable.user_id, userTable.id))
+          .where(eq(vendorTable.id, vendorId))
+          .limit(1);
+        if (!vendorUser) {
+          return {
+            success: false,
+            message: `Vendor with ID ${vendorId} not found or has no linked user.`,
+            status: HttpStatus.NOT_FOUND,
+          };
+        }
+        await tx
+          .update(vendorTable)
+          .set({ vendor_status: UserStatus.SUSPENDED })
+          .where(eq(vendorTable.id, vendorId));
+          await tx
+          .update(userTable)
+          .set({ user_status: UserStatus.SUSPENDED })
+          .where(eq(userTable.id, vendorUser.user_id))
+          .returning({ user_id: userTable.id })
+        await tx
+          .update(user_and_company)
+          .set({ access_status: AccessStatus.SUSPENDED })
+          .where(eq(user_and_company.user_id, vendorUser.user_id))
+          .returning({ user_id: user_and_company.user_id })
+        if (!vendorUser.email) {
+          throw new UnauthorizedException(
+            `User linked to vendor with ID ${vendorId} has no email.`,
+          );
+        }
+        return {
+          email: vendorUser.email,
+          store_name: vendorUser.store_name,
+        };
+      });
+      // await this.mailService.sendVendorSuspendedEmail(suspendedVendor.email, suspendedVendor.store_name);
+      return {
+        message: 'Vendor suspended successfully',
+      };
+    } catch (error) {
+      if (
+        error instanceof HttpException ||
+        error instanceof UnauthorizedException
+      ) {
+        throw error;
+      }
+      throw new InternalServerErrorException('Failed to suspend vendor', {
         cause: error,
       });
     }

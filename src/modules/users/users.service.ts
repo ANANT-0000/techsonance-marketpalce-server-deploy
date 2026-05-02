@@ -1,4 +1,5 @@
 import {
+  ConflictException,
   HttpException,
   HttpStatus,
   Inject,
@@ -6,14 +7,14 @@ import {
   InternalServerErrorException,
   UnauthorizedException,
 } from '@nestjs/common';
-import { user, user_roles } from 'src/drizzle/schema';
-import { UserRole, UserStatus } from 'src/drizzle/types/types';
+import { user, user_and_company, user_roles } from 'src/drizzle/schema';
+import { AccessStatus, UserRole, UserStatus } from 'src/drizzle/types/types';
 import { and, eq, InferSelectModel } from 'drizzle-orm';
-import { DRIZZLE } from 'src/drizzle/drizzle.module';
-import { type DrizzleDB } from 'src/drizzle/types/drizzle';
+import { DRIZZLE, type DrizzleService } from 'src/drizzle/drizzle.module';
+
 import bcrypt from 'bcryptjs';
 import { JwtService } from '@nestjs/jwt';
-import express from 'express';
+
 import { CreateUserDto, LoginDto } from './dto/userAuth.dto.ts.js';
 import { UpdateUserDtoTs } from './dto/update-user.dto.ts.js';
 import { MailService } from 'src/common/services/mail/mail.service';
@@ -23,10 +24,9 @@ type UserRoleRecord = InferSelectModel<typeof user_roles>;
 @Injectable()
 export class UsersService {
   constructor(
-    @Inject(DRIZZLE) private readonly db: DrizzleDB,
+    @Inject(DRIZZLE) private readonly db: DrizzleService,
     private readonly jwtService: JwtService,
     private readonly companyService: CompanyService,
-
     private readonly mailService: MailService,
   ) { }
   // Find user by ID
@@ -40,7 +40,6 @@ export class UsersService {
           email: user.email,
           country_code: user.country_code,
           phone_number: user.phone_number,
-          company_id: user.company_id,
           role_id: user.role_id,
         })
         .from(user)
@@ -66,7 +65,7 @@ export class UsersService {
     updateData: UpdateUserDtoTs;
   }) {
     try {
-      const userRecord = await this.db
+      const [userRecord] = await this.db
         .update(user)
         .set(updateData)
         .where(eq(user.id, userId))
@@ -76,7 +75,7 @@ export class UsersService {
           last_name: user.last_name,
           email: user.email,
         });
-      return userRecord[0];
+      return userRecord;
     } catch (error) {
       throw new InternalServerErrorException('Failed to update profile', {
         cause: error,
@@ -127,7 +126,13 @@ export class UsersService {
       if (!companyId) {
         throw new HttpException('Company not found', HttpStatus.NOT_FOUND);
       }
-      const userRole = await this.db
+      const [existingUser] = await this.db.select().from(user).where(eq(user.email, userData.email)).limit(1);
+      const existingCompanyUser = await this.db.select().from(user_and_company).where(and(eq(user_and_company.user_id, existingUser.id), eq(user_and_company.company_id, companyId))).limit(1);
+      if (existingUser && existingCompanyUser) {
+        throw new ConflictException('User with this email already exists in this company');
+      }
+
+      const [userRole] = await this.db
         .select()
         .from(user_roles)
         .where(eq(user_roles.role_name, UserRole.CUSTOMER))
@@ -139,13 +144,19 @@ export class UsersService {
           });
         });
 
-      if (userRole.length === 0) {
+      if (!userRole) {
         throw new InternalServerErrorException('Customer role not found');
       }
 
       const hashedPassword = await bcrypt.hash(userData.password, 10);
       console.log('creating user');
-
+      if (existingUser) {
+        await this.db.insert(user_and_company).values({
+          user_id: existingUser.id,
+          company_id: companyId,
+        });
+        return existingUser;
+      }
       const [userRecord] = await this.db
         .insert(user)
         .values({
@@ -153,8 +164,7 @@ export class UsersService {
           last_name: userData.last_name,
           email: userData.email,
           password_hash: hashedPassword,
-          role_id: userRole[0].id,
-          company_id: companyId,
+          role_id: userRole.id,
         })
         .returning()
         .catch((error) => {
@@ -163,7 +173,10 @@ export class UsersService {
             cause: error,
           });
         });
-
+      await this.db.insert(user_and_company).values({
+        user_id: userRecord.id,
+        company_id: companyId,
+      });
       console.log('created user');
 
       // ─────────────────────────────────────────────────────────────────
@@ -193,12 +206,16 @@ export class UsersService {
       if (!companyId) {
         throw new HttpException('Company not found', HttpStatus.UNAUTHORIZED);
       }
+
       const records = await this.findByEmail(login.email);
       if (!records) {
         throw new HttpException('Invalid credentials', HttpStatus.UNAUTHORIZED);
       }
       const { userRecord, roleRecord } = records;
-
+      const [existingCompanyUser] = await this.db.select().from(user_and_company).where(and(eq(user_and_company.user_id, userRecord.id), eq(user_and_company.company_id, companyId))).limit(1);
+      if (!existingCompanyUser) {
+        throw new ConflictException('User is not registered to this company');
+      }
       if (!userRecord || !userRecord?.password_hash) {
         throw new HttpException('Invalid credentials', HttpStatus.UNAUTHORIZED);
       }
@@ -235,18 +252,45 @@ export class UsersService {
         password_hash: undefined, // Exclude password hash from the response
       };
       console.log(filteredUser);
-     
+
       return {
         user: filteredUser,
         role: roleRecord.role_name,
-        access_token:accessToken,
-        refresh_token:refreshToken
+        access_token: accessToken,
+        refresh_token: refreshToken
       };
     } catch (error) {
       if (error instanceof HttpException || error instanceof InternalServerErrorException) {
         throw error;
       }
       throw new InternalServerErrorException('Failed to login user', {
+        cause: error,
+      });
+    }
+  }
+
+  async listCustomersByDomain(
+    domain: string,
+  ) {
+    try {
+      const companyId = await this.companyService.find(domain);
+      if (!companyId) {
+        throw new HttpException('Company not found', HttpStatus.UNAUTHORIZED);
+      }
+      const customers = this.db.query.user_and_company.findMany({
+        where: eq(user_and_company.company_id, companyId),
+        with: {
+          user: true,
+        }
+      }).catch((error) => {
+        console.error('Error listing customers:', error);
+        throw new InternalServerErrorException('Failed to list customers', {
+          cause: error,
+        });
+      })
+      return customers;
+    } catch (error) {
+      throw new InternalServerErrorException('Failed to list customers', {
         cause: error,
       });
     }
@@ -297,12 +341,25 @@ export class UsersService {
       });
     }
   }
-  async disableUser(userId: string) {
+  async disableUser(userId: string, domain: string) {
     try {
+      const companyId = await this.companyService.find(domain);
+      if (!companyId) {
+        throw new HttpException('Company not found', HttpStatus.UNAUTHORIZED);
+      }
+      const [userAndCompany] = await this.db
+        .select()
+        .from(user_and_company)
+        .where(and(eq(user_and_company.user_id, userId), eq(user_and_company.company_id, companyId)))
+        .limit(1);
+      if (!userAndCompany) {
+        throw new HttpException('User not found', HttpStatus.NOT_FOUND);
+      }
       await this.db
-        .update(user)
-        .set({ user_status: UserStatus.INACTIVE })
-        .where(eq(user.id, userId));
+        .update(user_and_company)
+        .set({ access_status: AccessStatus.SUSPENDED })
+        .where(and(eq(user_and_company.user_id, userId), eq(user_and_company.company_id, companyId)));
+
       return {
         message: 'User disabled successfully',
         status: HttpStatus.OK,

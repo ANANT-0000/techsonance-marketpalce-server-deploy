@@ -31,6 +31,7 @@ import {
   permissions,
   refresh_tokens,
   role_permissions,
+  user_and_company,
   user_roles,
 } from './main.schema';
 import {
@@ -40,11 +41,14 @@ import {
   warehouse,
 } from './utils.schema';
 
-export const companyRelations = relations(company, ({ many }) => ({
+export const companyRelations = relations(company, ({ one, many }) => ({
   roles: many(user_roles),
   pages: many(cms_pages),
-  user: many(user),
-  vendor: many(vendor),
+  users: many(user_and_company),
+  vendor: one(vendor, {
+    fields: [company.id],
+    references: [vendor.company_id],
+  }),
   address: many(address),
   coupons: many(coupons),
   carts: many(carts),
@@ -60,14 +64,11 @@ export const companyRelations = relations(company, ({ many }) => ({
 
 // --- User Relations ---
 export const userRelations = relations(user, ({ one, many }) => ({
-  company: one(company, {
-    fields: [user.company_id],
-    references: [company.id],
-  }),
   role: one(user_roles, {
     fields: [user.role_id],
     references: [user_roles.id],
   }),
+  companies: many(user_and_company),
   vendor: one(vendor, {
     fields: [user.id],
     references: [vendor.user_id],
@@ -83,6 +84,16 @@ export const userRelations = relations(user, ({ one, many }) => ({
   carts: many(carts),
 }));
 
+export const userAndCompanyRelations = relations(user_and_company, ({ one }) => ({
+  user: one(user, {
+    fields: [user_and_company.user_id],
+    references: [user.id],
+  }),
+  company: one(company, {
+    fields: [user_and_company.company_id],
+    references: [company.id],
+  }),
+}));
 // --- User Roles Relations ---
 export const userRolesRelations = relations(user_roles, ({ many }) => ({
   rolePermissions: many(role_permissions), // Link to the join table

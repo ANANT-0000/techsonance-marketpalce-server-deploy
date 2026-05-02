@@ -11,7 +11,8 @@ import { UsersModule } from '../users/users.module';
 import { VendorsModule } from '../vendors/vendors.module';
 import { MailModule } from 'src/common/services/mail/mail.module';
 import { CompanyModule } from '../company/company.module';
-import { GoogleStrategoy } from './google.strategy';
+import { GoogleStrategy } from './google.strategy';
+ 
 @Module({
   imports: [
     UsersModule,
@@ -32,7 +33,7 @@ import { GoogleStrategoy } from './google.strategy';
   controllers: [AuthController],
   providers: [
     AuthService,
-    JwtStrategy, GoogleStrategoy
+    JwtStrategy, GoogleStrategy
     // {
     //   provide: APP_GUARD,
     //   useClass: RoleGuard,
