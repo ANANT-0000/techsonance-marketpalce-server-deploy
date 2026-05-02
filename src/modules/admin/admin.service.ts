@@ -19,12 +19,11 @@ export class AdminService {
     @Inject(DRIZZLE) private readonly db: DrizzleDB,
     private jwtService: JwtService,
     private configService: ConfigService,
-  ) {}
+  ) { }
 
   async adminLogin(
     email: string,
     password: string,
-    res: express.Response,
   ): Promise<Record<string, unknown>> {
     if (!email || !password) {
       throw new HttpException(
@@ -62,25 +61,30 @@ export class AdminService {
       const payload: {
         sub: string;
         email: string;
-      } = { sub: existingUser.id, email: existingUser.email };
-      const accessToken = this.jwtService.sign(payload);
+        role: string;
+      } = { sub: existingUser.id, email: existingUser.email, role: adminRole.role_name };
+      const expiresIn = process.env.JWT_EXPIRES_IN
+        ? parseInt(process.env.JWT_EXPIRES_IN, 10)
+        : 3600;
+      const accessToken = await this.jwtService.signAsync(payload, {
+        expiresIn,
+        secret: process.env.JWT_SECRET || 'defaultSecret',
+      });
+      const refreshToken = await this.jwtService.signAsync(payload, {
+        expiresIn,
+        secret: process.env.JWT_REFRESH_SECRET || 'defaultSecret',
+      });
       console.log('access token', accessToken);
       const filteredUser = {
         ...existingUser,
         password_hash: undefined,
       };
       console.log('admin login response', filteredUser);
-      // res.cookie('access_token', accessToken, {
-      //   httpOnly: true,
-      //   secure: process.env.NODE_ENV === 'production',
-      //   sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax',
-      //   path: '/',
-      //   maxAge: 30 * 24 * 60 * 60 * 1000, // 30 days
-      // });
       return {
         user: filteredUser,
         role: UserRole.ADMIN,
-        token: accessToken,
+        access_token: accessToken,
+        refresh_token: refreshToken,
       };
     } catch (error) {
       throw new InternalServerErrorException('Failed to login admin', {

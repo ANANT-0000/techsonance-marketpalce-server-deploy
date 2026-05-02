@@ -186,10 +186,10 @@ export class UsersService {
       });
     }
   }
-  // User login
   async login(login: LoginDto, domain: string) {
     try {
-      const companyId = await this.companyService.find(domain);
+      console.log(domain)
+      const companyId = await this.companyService.find(domain)
       if (!companyId) {
         throw new HttpException('Company not found', HttpStatus.UNAUTHORIZED);
       }
@@ -198,7 +198,7 @@ export class UsersService {
         throw new HttpException('Invalid credentials', HttpStatus.UNAUTHORIZED);
       }
       const { userRecord, roleRecord } = records;
-      console.log(userRecord, roleRecord);
+
       if (!userRecord || !userRecord?.password_hash) {
         throw new HttpException('Invalid credentials', HttpStatus.UNAUTHORIZED);
       }
@@ -217,31 +217,33 @@ export class UsersService {
         );
       }
 
-      const payload = { sub: userRecord?.id, email: userRecord?.email };
+      const payload = { sub: userRecord?.id, email: userRecord?.email, role: roleRecord.role_name };
       const expiresIn = process.env.JWT_EXPIRES_IN
         ? parseInt(process.env.JWT_EXPIRES_IN, 10)
         : 3600;
-      const access_token = await this.jwtService.signAsync(payload, {
+
+      const accessToken = await this.jwtService.signAsync(payload, {
         expiresIn,
         secret: process.env.JWT_SECRET || 'defaultSecret',
+      });
+      const refreshToken = await this.jwtService.signAsync(payload, {
+        expiresIn,
+        secret: process.env.JWT_REFRESH_SECRET || 'defaultSecret',
       });
       const filteredUser = {
         ...userRecord,
         password_hash: undefined, // Exclude password hash from the response
       };
       console.log(filteredUser);
-      // res.cookie('access_token', access_token, {
-      //   httpOnly: true,
-      //   secure: process.env.NODE_ENV === 'production',
-      // });
-
+     
       return {
         user: filteredUser,
         role: roleRecord.role_name,
-        token: access_token,
+        access_token:accessToken,
+        refresh_token:refreshToken
       };
     } catch (error) {
-      if (error instanceof HttpException) {
+      if (error instanceof HttpException || error instanceof InternalServerErrorException) {
         throw error;
       }
       throw new InternalServerErrorException('Failed to login user', {

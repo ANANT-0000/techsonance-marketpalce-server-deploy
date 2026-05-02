@@ -293,20 +293,23 @@ export const refundsRelations = relations(refunds, ({ one }) => ({
     references: [company.id],
   }),
 }));
-export const returnRequestsRelations = relations(return_requests, ({ one }) => ({
-  orderItem: one(order_items, {
-    fields: [return_requests.order_item_id],
-    references: [order_items.id],
+export const returnRequestsRelations = relations(
+  return_requests,
+  ({ one }) => ({
+    orderItem: one(order_items, {
+      fields: [return_requests.order_item_id],
+      references: [order_items.id],
+    }),
+    user: one(user, {
+      fields: [return_requests.user_id],
+      references: [user.id],
+    }),
+    company: one(company, {
+      fields: [return_requests.company_id],
+      references: [company.id],
+    }),
   }),
-  user: one(user, {
-    fields: [return_requests.user_id],
-    references: [user.id],
-  }),
-  company: one(company, {
-    fields: [return_requests.company_id],
-    references: [company.id],
-  }),
-}));
+);
 export const addressRelations = relations(address, ({ one }) => ({
   user: one(user, {
     fields: [address.user_id],

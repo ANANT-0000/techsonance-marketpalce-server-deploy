@@ -17,6 +17,7 @@ import { orderReplacementTemplate } from './templates/order-replacement-approve.
 import { returnRequestedTemplate } from './templates/return-requested.template';
 import { replacementRequestedTemplate } from './templates/replacement-requested.template';
 import { orderShippedTemplate } from './templates/order-shipped.template';
+import { passwordResetOtpTemplate } from './templates/password-reset-otp.template';
 @Injectable()
 export class MailService {
   nodeMailerTransporter: nodemailer.Transporter;
@@ -113,40 +114,78 @@ export class MailService {
       throw new UnauthorizedException('Invalid or malformed token.');
     }
   }
-  public async sendUserWelcomeEmail(email: string, userName: string, verificationUrl?: string) {
+  public async sendUserWelcomeEmail(
+    email: string,
+    userName: string,
+    verificationUrl?: string,
+  ) {
     const html = userRegistrationTemplate(userName, verificationUrl);
     return this.sendEmail(email, 'Welcome to Techsonance Marketplace!', html);
   }
 
   public async sendVendorRegistrationEmail(email: string, storeName: string) {
     const html = vendorRegistrationTemplate(storeName);
-    return this.sendEmail(email, 'Vendor Registration Received - Techsonance', html);
+    return this.sendEmail(
+      email,
+      'Vendor Registration Received - Techsonance',
+      html,
+    );
   }
 
-  async sendOrderPlacedEmail(email: string, customerName: string, orderId: string, totalAmount: number) {
+  async sendOrderPlacedEmail(
+    email: string,
+    customerName: string,
+    orderId: string,
+    totalAmount: number,
+  ) {
     const html = orderPlacedTemplate(customerName, orderId, totalAmount);
-    return this.sendEmail(email, `Order Confirmed: #${orderId}`, html);
+    return await this.sendEmail(email, `Order Confirmed: #${orderId}`, html);
   }
 
-  async sendOrderReturnEmail(email: string, customerName: string, orderId: string) {
+  async sendOrderReturnEmail(
+    email: string,
+    customerName: string,
+    orderId: string,
+  ) {
     const html = orderReturnTemplate(customerName, orderId);
     return this.sendEmail(email, `Return Initiated: #${orderId}`, html);
   }
-  async sendReturnRequestedEmail(email: string, customerName: string, orderId: string) {
+  async sendReturnRequestedEmail(
+    email: string,
+    customerName: string,
+    orderId: string,
+  ) {
     const html = returnRequestedTemplate(customerName, orderId);
     return this.sendEmail(email, `Return Request Received: #${orderId}`, html);
   }
 
-  async sendReplacementRequestedEmail(email: string, customerName: string, orderId: string) {
+  async sendReplacementRequestedEmail(
+    email: string,
+    customerName: string,
+    orderId: string,
+  ) {
     const html = replacementRequestedTemplate(customerName, orderId);
-    return this.sendEmail(email, `Replacement Request Received: #${orderId}`, html);
+    return this.sendEmail(
+      email,
+      `Replacement Request Received: #${orderId}`,
+      html,
+    );
   }
-  async sendOrderReplacementEmail(email: string, customerName: string, orderId: string) {
+  async sendOrderReplacementEmail(
+    email: string,
+    customerName: string,
+    orderId: string,
+  ) {
     const html = orderReplacementTemplate(customerName, orderId);
     return this.sendEmail(email, `Replacement Approved: #${orderId}`, html);
   }
 
-  async sendOrderCancelledEmail(email: string, customerName: string, orderId: string, refundInitiated: boolean) {
+  async sendOrderCancelledEmail(
+    email: string,
+    customerName: string,
+    orderId: string,
+    refundInitiated: boolean,
+  ) {
     const html = orderCancelledTemplate(customerName, orderId, refundInitiated);
     return this.sendEmail(email, `Order Cancelled: #${orderId}`, html);
   }
@@ -155,9 +194,24 @@ export class MailService {
     customerName: string,
     orderId: string,
     trackingUrl: string,
-    itemName?: string
+    itemName?: string,
   ) {
-    const html = orderShippedTemplate(customerName, orderId,trackingUrl, itemName);
+    const html = orderShippedTemplate(
+      customerName,
+      orderId,
+      trackingUrl,
+      itemName,
+    );
     return this.sendEmail(email, `Your Order #${orderId} has Shipped 🚚`, html);
+  }
+  async sendPasswordResetOtp(
+    email: string,
+    otp: string,
+    name: string,
+    expireAt: string,
+    companyName: string,
+  ) {
+    const html = passwordResetOtpTemplate(name, otp, expireAt, companyName);
+    return this.sendEmail(email, `Password Reset OTP - ${companyName}`, html);
   }
 }

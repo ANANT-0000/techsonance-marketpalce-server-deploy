@@ -22,7 +22,7 @@ export class AdminController {
   constructor(
     private readonly adminService: AdminService,
     private readonly vendorService: VendorsService,
-  ) {}
+  ) { }
   @Get('test')
   test() {
     return 'Admin controller is working';
@@ -32,10 +32,9 @@ export class AdminController {
   @HttpCode(HttpStatus.OK)
   async adminLogin(
     @Body() body: { email: string; password: string },
-    @Res({ passthrough: true }) res: express.Response,
   ): Promise<Record<string, unknown>> {
     console.log(body.email, body.password);
-    return await this.adminService.adminLogin(body.email, body.password, res);
+    return await this.adminService.adminLogin(body.email, body.password);
   }
   @Post('create-vendor')
   @HttpCode(HttpStatus.OK)

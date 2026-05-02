@@ -10,8 +10,7 @@ import {
   Query,
 } from '@nestjs/common';
 import { OrdersService } from './orders.service';
-import { CancelledByEnum, OrderStatus } from 'src/drizzle/types/types';
-import { CLIENT_RENEG_LIMIT } from 'tls';
+import { OrderStatus } from 'src/drizzle/types/types';
 
 @Controller({
   version: '1',
@@ -34,7 +33,6 @@ export class OrdersController {
 
   @Get('pending')
   async getPendingOrders(@Headers('company-domain') domain: string) {
-    console.log('hitted by order pending',domain);
     return this.ordersService.getPendingOrders(domain);
   }
 

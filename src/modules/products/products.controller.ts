@@ -8,16 +8,22 @@ import {
   Patch,
   Post,
   UploadedFiles,
+  UseGuards,
 } from '@nestjs/common';
 import { UploadToCloud } from 'src/common/decorators/upload.decorator';
 import { ProductsService } from './products.service';
 import { CreateProductDto } from './dto/createProduct.dto';
 import { Param } from '@nestjs/common';
-import { ProductStatus } from 'src/drizzle/types/types';
+import { ProductStatus, UserRole } from 'src/drizzle/types/types';
 import { ParseJsonPipe } from 'src/common/pipes/parseJsonPipe';
 import { plainToInstance } from 'class-transformer';
 import { validate } from 'class-validator';
 import { type ProductFiles } from 'src/common/Types/index.type';
+import { AuthGuard } from '@nestjs/passport';
+import { RoleGuard } from 'src/guards/role.guard';
+import { JwtAuthGuard } from '../auth/jwt-auth.guard';
+import { Roles } from 'src/common/decorators/roles.decorator';
+import { Role } from 'src/enums/role.enum';
 // import { ParseJsonPipe } from 'src/common/pipes/parseJsonPipe';
 // import { validate } from 'class-validator';
 // import { plainToInstance } from 'class-transformer';
@@ -29,6 +35,8 @@ export class ProductsController {
   constructor(private productsService: ProductsService) { }
 
   @Post(':vendor_id')
+  @UseGuards(RoleGuard, JwtAuthGuard)
+  @Roles(Role.ADMIN, Role.VENDOR)
   @UploadToCloud([
     { name: 'product', maxCount: 1 },
     { name: 'product_spec', maxCount: 20 },
@@ -60,6 +68,8 @@ export class ProductsController {
     return await this.productsService.getAllProducts(domain);
   }
   @Get('active')
+  @UseGuards(JwtAuthGuard, RoleGuard)
+  @Roles(Role.ADMIN, Role.VENDOR)
   async getActiveProducts(@Headers('company-domain') domain: string) {
     return await this.productsService.getActiveProducts(domain)
   }

@@ -235,7 +235,7 @@ export class VendorsService {
       });
     }
   }
-  async vendorLogin(loginDto: LoginDto, res: express.Response) {
+  async vendorLogin(loginDto: LoginDto) {
     console.log(loginDto);
     try {
       const existingUser:
@@ -305,20 +305,18 @@ export class VendorsService {
       const payload: {
         sub: string | undefined;
         email: string | undefined;
-      } = { sub: user.id, email: user.email };
+        role: string | undefined;
+      } = { sub: user.id, email: user.email, role: role?.role_name };
 
       const accessToken = await this.jwtService.signAsync(payload, {
-        expiresIn: '30d',
+        expiresIn: '1h',
         secret: process.env.JWT_SECRET,
       });
-      console.log('accessToken', accessToken);
-      res.cookie('access_token', accessToken, {
-        httpOnly: true,
-        secure: process.env.NODE_ENV === 'production',
-        sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax',
-        path: '/',
-        maxAge: 30 * 24 * 60 * 60 * 1000, // 30 days
+      const refreshToken = await this.jwtService.signAsync(payload, {
+        expiresIn: '7d',
+        secret: process.env.JWT_REFRESH_SECRET,
       });
+      console.log('accessToken', accessToken);
       const responseData = {
         company_id: vendor.company_id,
         vendor_id: vendor.id,
@@ -336,8 +334,9 @@ export class VendorsService {
       };
       const response = {
         user: responseData,
-        token: accessToken,
-        password_hash: undefined,
+        access_token: accessToken,
+        refresh_token: refreshToken,
+        role: role?.role_name,
       };
       console.log('response', response);
       return response;
