@@ -188,6 +188,27 @@ export class OrdersService {
       });
     }
   }
+
+  async getAllOrders() {
+    try {
+      const orders = await this.db.query.orders.findMany(
+        {
+          columns:{
+            id:true,
+            created_at:true,
+          },
+          
+        }
+      );
+      return orders;
+    } catch (error) {
+      console.error('Error fetching orders:', error);
+      throw new InternalServerErrorException('Failed to fetch orders', {
+        cause: error,
+      });
+    }
+  }
+
   async completeOrderVerification(
     customerDetails: { email: string, first_name: string, last_name: string },
     existingOrder: {

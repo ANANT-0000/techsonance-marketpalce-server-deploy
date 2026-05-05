@@ -13,21 +13,25 @@ import {
   company,
   company as companyTable,
   gst_registrations,
+  orders,
+  product_variants,
+  products,
   tax_profiles,
   tax_rates,
   tax_types,
   user,
   user as userTable,
   user_and_company,
+  user_roles,
   user_roles as user_rolesTable,
   vendor,
   vendor as vendorTable,
   vendor_document as vendor_documentTable,
 } from 'src/drizzle/schema';
-import { eq, or } from 'drizzle-orm';
-import { AccessStatus, UserRole, UserStatus } from 'src/drizzle/types/types';
+import { and, asc, countDistinct, desc, eq, or, sql } from 'drizzle-orm';
+import { AccessStatus, ProductStatus, UserRole, UserStatus } from 'src/drizzle/types/types';
 import bcrypt from 'bcryptjs';
-import express from 'express';
+import express, { response } from 'express';
 import { MailService } from 'src/common/services/mail/mail.service';
 import { CreateVendorDto } from './dto/CreateVendorDto';
 import { LoginDto } from '../users/dto/userAuth.dto.ts';
@@ -159,7 +163,6 @@ export class VendorsService {
             country_code: vendorData.country_code,
             phone_number: vendorData.phone_number,
             password_hash: hashedPassword,
-            role_id: newRole.id,
           })
           .returning({ id: userTable.id, email: userTable.email })
           .catch((error) => {
@@ -177,6 +180,7 @@ export class VendorsService {
             user_id: newUser.id,
             company_id: newCompany.id,
             access_status: AccessStatus.PENDING,
+            role_id: newRole.id,
           })
           .catch((error) => {
             console.error('Error creating user_and_company:', error);
@@ -286,22 +290,37 @@ export class VendorsService {
             console.log('isPasswordValid', isPasswordValid);
             throw new UnauthorizedException('Invalid password');
           }
-          const [vendorRecord]: Partial<VendorType>[] = await tx
+          console.log('password is vaild')
+          const [vendorRecord] = await tx
             .select()
             .from(vendorTable)
             .where(eq(vendorTable.user_id, userRecord.id));
-          const [userAndCompanyRecord] = await tx
-            .select()
-            .from(user_and_company)
-            .where(eq(user_and_company.user_id, userRecord.id));
-          console.log('vendorRecord', vendorRecord);
-          if (!userRecord.role_id) {
+          console.log('vendorRecord', vendorRecord)
+          // uncommit in future
+          // const [userAndCompanyRecord] = await tx
+          //   .select()
+          //   .from(user_and_company)
+          //   .where(eq(user_and_company.user_id, userRecord.id));
+          // console.log('vendorRecord', vendorRecord);
+          if (!userRecord) {
             throw new UnauthorizedException('User role not found');
           }
-          const [roleRecord]: Partial<UserRoleType>[] = await tx
+          // console.log('userAndCompanyRecord', userAndCompanyRecord)
+          //------------------------------------------------------
+          // uncommit in future
+          //------------------------------------------------------
+          // const [roleRecord] = await tx
+          //   .select({ role_name: user_rolesTable.role_name })
+          //   .from(user_rolesTable)
+          //   .where(eq(user_rolesTable.id, userAndCompanyRecord.role_id)).limit(1);
+
+          //-----------------------------------------------------
+          // for bypassing the role check in future comment this and uncommit above
+          //-----------------------------------------------------
+          const [roleRecord] = await tx
             .select({ role_name: user_rolesTable.role_name })
             .from(user_rolesTable)
-            .where(eq(user_rolesTable.id, userRecord.role_id));
+            .where(eq(user_rolesTable.role_name, 'vendor')).limit(1);
           console.log('roleRecord', roleRecord);
           if (!vendorRecord) throw new UnauthorizedException('Vendor not found');
           const isVendorApproved =
@@ -539,7 +558,7 @@ export class VendorsService {
     try {
       const suspendedVendor = await this.db.transaction(async (tx) => {
         const [vendorUser] = await tx
-          .select({ email: userTable.email,store_name:vendorTable.store_name,user_id:userTable.id })
+          .select({ email: userTable.email, store_name: vendorTable.store_name, user_id: userTable.id })
           .from(vendorTable)
           .innerJoin(userTable, eq(vendorTable.user_id, userTable.id))
           .where(eq(vendorTable.id, vendorId))
@@ -555,7 +574,7 @@ export class VendorsService {
           .update(vendorTable)
           .set({ vendor_status: UserStatus.SUSPENDED })
           .where(eq(vendorTable.id, vendorId));
-          await tx
+        await tx
           .update(userTable)
           .set({ user_status: UserStatus.SUSPENDED })
           .where(eq(userTable.id, vendorUser.user_id))
@@ -745,9 +764,22 @@ export class VendorsService {
       });
     }
   }
-  async getAllVendors() {
+  async getAllVendors(offset?: string, limit?: string, status?: string, sort?: string) {
     try {
-      const vendors = await this.db.select().from(vendorTable);
+      const offsetClause = offset ? Number(offset) : 0;
+      const limitClause = limit ? Number(limit) : 10;
+      const statusClause = status ? eq(vendorTable.vendor_status, status as UserStatus) : undefined;
+      const sortClause = sort === 'desc' ? desc(vendorTable.created_at) : asc(vendorTable.created_at);
+      const vendors = await this.db.query.vendor.findMany({
+        where: statusClause,
+        offset: offsetClause,
+        limit: limitClause,
+        orderBy: sortClause,
+        with: {
+          company: true,
+          user: true,
+        },
+      });
       return vendors;
     } catch (error) {
       throw new InternalServerErrorException('Failed to retrieve vendors', {
@@ -795,6 +827,7 @@ export class VendorsService {
   }
   async getVendorById(vendorId: string) {
     try {
+
       const [existingVendor] = await this.db
         .select()
         .from(vendorTable)
@@ -812,6 +845,83 @@ export class VendorsService {
         };
       }
       return existingVendor;
+    } catch (error) {
+      throw new InternalServerErrorException('Failed to retrieve vendor', {
+        cause: error,
+      });
+    }
+  }
+  async getVendorDetails(vendorId: string) {
+    try {
+      // console.log("vendorId", vendorId)
+      const [roleRecord] = await this.db.select().from(user_roles).where(eq(user_roles.role_name, UserRole.CUSTOMER)).limit(1)
+      const vendorDetails = await this.db.query.vendor.findFirst({
+        where: eq(vendorTable.id, vendorId),
+        with: {
+          company: {
+            with: {
+              userAndCompany: {
+                where: eq(user_and_company.role_id, roleRecord?.id),
+                with: {
+                  user: {
+                    columns: {
+                      id: true,
+                      email: true,
+
+                    }
+                  },
+                },
+              },
+
+            }
+          },
+          user: true,
+          documents: true,
+        },
+      }).then(res => {
+        // console.log("res", res)
+        return res
+      })
+        .catch((error) => {
+          console.error('Error fetching vendor details:', error);
+          throw new InternalServerErrorException(
+            'Failed to retrieve vendor details',
+            {
+              cause: error,
+            },
+          );
+        })
+  
+      if (!vendorDetails || !vendorDetails.company_id || !vendorDetails.company) {
+        throw new HttpException(
+          'Vendor not found',
+          HttpStatus.NOT_FOUND,
+        );
+      }
+      const [orderStats] = await this.db
+        .select({
+          totalRevenue: sql<number>`COALESCE(SUM(${orders.total_amount}), 0)`,
+          totalOrders: sql<number>`COUNT(${orders.id})`,
+        })
+        .from(orders)
+        .where(
+          eq(orders.company_id, vendorDetails.company_id)
+        );
+      const [activeProducts] = await this.db.select({ count: countDistinct(product_variants.id) }).from(products).innerJoin(product_variants, and(eq(products.id, product_variants.product_id), eq(product_variants.status, ProductStatus.ACTIVE)))
+        .where(eq(products.company_id, vendorDetails.company_id)).limit(1)
+      const response = {
+        owner: { ...vendorDetails, user: { ...vendorDetails.user, password: undefined }, company: undefined, documents: undefined },
+        company: { ...vendorDetails.company, userAndCompany: undefined, documents: undefined },
+        stats: {
+          total_orders: Number(orderStats.totalOrders),
+          total_revenue: Number(orderStats.totalRevenue),
+          active_products: activeProducts.count,
+          total_customers: vendorDetails.company.userAndCompany.length,
+        },
+        documents: vendorDetails.documents,
+      };
+      // const response = vendorDetails
+      return response;
     } catch (error) {
       throw new InternalServerErrorException('Failed to retrieve vendor', {
         cause: error,

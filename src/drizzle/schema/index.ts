@@ -49,6 +49,7 @@ export const companyRelations = relations(company, ({ one, many }) => ({
     fields: [company.id],
     references: [vendor.company_id],
   }),
+  userAndCompany: many(user_and_company),
   address: many(address),
   coupons: many(coupons),
   carts: many(carts),
@@ -64,10 +65,7 @@ export const companyRelations = relations(company, ({ one, many }) => ({
 
 // --- User Relations ---
 export const userRelations = relations(user, ({ one, many }) => ({
-  role: one(user_roles, {
-    fields: [user.role_id],
-    references: [user_roles.id],
-  }),
+  userAndCompany: many(user_and_company),
   companies: many(user_and_company),
   vendor: one(vendor, {
     fields: [user.id],
@@ -92,12 +90,17 @@ export const userAndCompanyRelations = relations(user_and_company, ({ one }) => 
   company: one(company, {
     fields: [user_and_company.company_id],
     references: [company.id],
+
   }),
+  role: one(user_roles, {
+    fields: [user_and_company.role_id],
+    references: [user_roles.id],
+  })
 }));
 // --- User Roles Relations ---
 export const userRolesRelations = relations(user_roles, ({ many }) => ({
+  userAndCompany: many(user_and_company),
   rolePermissions: many(role_permissions), // Link to the join table
-  users: many(user), // One role can be assigned to multiple users
 }));
 
 // --- Permissions Relations ---

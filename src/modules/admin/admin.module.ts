@@ -5,6 +5,8 @@ import { DrizzleModule } from 'src/drizzle/drizzle.module';
 import { JwtModule } from '@nestjs/jwt';
 import { UsersModule } from '../users/users.module';
 import { VendorsModule } from '../vendors/vendors.module';
+import { OrdersModule } from '../orders/orders.module';
+import { CompanyModule } from '../company/company.module';
 
 @Module({
   imports: [
@@ -15,9 +17,12 @@ import { VendorsModule } from '../vendors/vendors.module';
     }),
     UsersModule,
     VendorsModule,
+    CompanyModule,
+    UsersModule,
+    OrdersModule
   ],
   controllers: [AdminController],
   providers: [AdminService],
   exports: [AdminService],
 })
-export class AdminModule {}
+export class AdminModule { }

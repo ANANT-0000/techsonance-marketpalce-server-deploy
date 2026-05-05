@@ -8,7 +8,7 @@ import {
 import { JwtService } from '@nestjs/jwt';
 import { and, eq } from 'drizzle-orm';
 import { DRIZZLE } from 'src/drizzle/drizzle.module';
-import { user, user_roles } from 'src/drizzle/schema';
+import { company, user, user_and_company, user_roles } from 'src/drizzle/schema';
 import { type DrizzleDB } from 'src/drizzle/types/drizzle';
 import { UserRole } from 'src/drizzle/types/types';
 import express from 'express';
@@ -43,7 +43,7 @@ export class AdminService {
 
         .select()
         .from(user)
-        .where(and(eq(user.email, email), eq(user.role_id, adminRole.id)))
+        .where(eq(user.email, email))
         .limit(1);
       console.log('existing user', existingUser);
       if (!existingUser) {
@@ -53,6 +53,25 @@ export class AdminService {
         );
       }
 
+      //--------------------------------------
+      // for bypass Admin login ,uncommit in production 
+      //--------------------------------------
+      // const [userAndCompany] = await this.db.select().from(user_and_company).where(eq(user_and_company.user_id, existingUser.id)).limit(1);
+      // if (!userAndCompany) {
+      //   throw new HttpException(
+      //     'User and company not found',
+      //     HttpStatus.UNAUTHORIZED,
+      //   );
+      // }
+      // const [companyRecord] = await this.db.select().from(company).where(eq(company.id, userAndCompany.company_id)).limit(1);
+      // if (!companyRecord) {
+      //   throw new HttpException(
+      //     'Company not found',
+      //     HttpStatus.UNAUTHORIZED,
+      //   );
+      // }
+
+      //--------------------------------------
       const isPasswordValid: boolean =
         password === this.configService.get('ADMIN_PASSWORD');
       if (!isPasswordValid) {
@@ -63,18 +82,17 @@ export class AdminService {
         email: string;
         role: string;
       } = { sub: existingUser.id, email: existingUser.email, role: adminRole.role_name };
-      const expiresIn = process.env.JWT_EXPIRES_IN
-        ? parseInt(process.env.JWT_EXPIRES_IN, 10)
-        : 3600;
+
       const accessToken = await this.jwtService.signAsync(payload, {
-        expiresIn,
+        expiresIn: '5h',
         secret: process.env.JWT_SECRET || 'defaultSecret',
       });
       const refreshToken = await this.jwtService.signAsync(payload, {
-        expiresIn,
-        secret: process.env.JWT_REFRESH_SECRET || 'defaultSecret',
+        expiresIn: '7d',
+        secret: process.env.JWT_REFRESH_SECRET || 'defaultRefreshTokenSecret',
       });
       console.log('access token', accessToken);
+      console.log('refresh token', refreshToken);
       const filteredUser = {
         ...existingUser,
         password_hash: undefined,

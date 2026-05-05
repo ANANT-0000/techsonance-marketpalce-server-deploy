@@ -26,7 +26,7 @@ import {
 } from 'src/drizzle/schema/shop.schema';
 import { and, eq } from 'drizzle-orm';
 import { user } from 'src/drizzle/schema/users.schema';
-import { user_roles } from 'src/drizzle/schema';
+import { user_and_company, user_roles } from 'src/drizzle/schema';
 
 @Injectable()
 export class OrderItemsService {
@@ -193,8 +193,9 @@ export class OrderItemsService {
       const companyId = await this.companyService.find(domain);
       console.log('finding user...');
       const [userRecord] = await this.db
-        .select({ id: user.id, role_id: user.role_id })
+        .select({ role_id: user_and_company.role_id, id: user.id })
         .from(user)
+        .innerJoin(user_and_company, eq(user.id, user_and_company.user_id))
         .where(eq(user.id, userId))
         .limit(1)
         .catch((error) => {

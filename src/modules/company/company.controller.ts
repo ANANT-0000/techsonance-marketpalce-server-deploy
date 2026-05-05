@@ -1,4 +1,4 @@
-import { Controller, Get, Headers, Param, Patch, Req, UseGuards } from '@nestjs/common';
+import { Controller, Get, Headers, Param, Patch, Query, Req, UseGuards } from '@nestjs/common';
 import { UsersService } from '../users/users.service';
 import { Request } from 'express';
 import { CompanyService } from './company.service';
@@ -14,19 +14,11 @@ export class CompanyController {
         private readonly usersService: UsersService,
     ) { }
 
-    @Get('customers')
-    @UseGuards(JwtAuthGuard, RoleGuard)
-    @Roles(Role.ADMIN, Role.VENDOR)
-    async getCustomers(@Headers('company-domain') domain: string) {
-        return this.usersService.listCustomersByDomain(domain);
-    }
 
-    @Get()
-    @UseGuards(JwtAuthGuard, RoleGuard)
-    @Roles(Role.ADMIN)
-    async getCompanyLists() {
-        return this.companyService.listCompanies();
-    }
+
+
+
+
 
     @Patch(':company_id/suspend')
     @UseGuards(JwtAuthGuard, RoleGuard)

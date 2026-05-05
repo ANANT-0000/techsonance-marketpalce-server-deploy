@@ -186,7 +186,7 @@ export class AuthService {
   }
 
 
-  async validateOAuthLogin(oauthUser: any, domain: string): Promise<{ access_token: string; refresh_token: string }> {
+  async validateOAuthLogin(oauthUser: any, domain: string): Promise<{ access_token: string; refresh_token: string } | { message: string, status: number, email: string }> {
     try {
       console.log('Validating OAuth login for:', oauthUser.email);
 
@@ -203,10 +203,16 @@ export class AuthService {
         .innerJoin(user_and_company, eq(user.id, user_and_company.user_id))
         .where(
           and(eq(user.email, oauthUser.email), eq(user_and_company.company_id, companyId)),
-        );
+        ).catch((error) => {
+          console.error('Error validating OAuth login:', error);
+          throw new InternalServerErrorException('Failed to validate OAuth login', {
+            cause: error,
+          });
+        })
 
+      console.log("existing user", existingUser)
       // If user exists, log them in
-      if (existingUser.user) {
+      if (existingUser) {
         console.log('Existing user found, logging in:', existingUser.user.email);
 
         // Get user role
@@ -218,7 +224,17 @@ export class AuthService {
         if (!roleRecord) {
           throw new HttpException('User role not found', HttpStatus.NOT_FOUND);
         }
-
+        const [userAndCompany] = await this.db
+          .select()
+          .from(user_and_company)
+          .where(and(eq(user_and_company.user_id, existingUser.user.id), eq(user_and_company.company_id, companyId)));
+        if (!userAndCompany) {
+          throw new HttpException('User and company not found', HttpStatus.NOT_FOUND);
+        }
+        const isDeactivated = userAndCompany.access_status === AccessStatus.INACTIVE;
+        if (isDeactivated) {
+          return { email: existingUser.user.email, message: 'Your account has been deactivated. Please Activate Your Account.', status: 423 };
+        }
 
         const access_payload = {
           user: {
@@ -282,7 +298,6 @@ export class AuthService {
           phone_number: oauthUser.phoneNumber || null,
           password_hash: hashedPassword,
           user_status: UserStatus.ACTIVE,
-          role_id: roleRecord.id,
         })
         .returning()
         .catch((err) => {
@@ -296,6 +311,7 @@ export class AuthService {
         user_id: newUser.id,
         company_id: companyId,
         access_status: AccessStatus.ACTIVE,
+        role_id: roleRecord.id,
       })
       console.log('New user created successfully:', newUser.email);
 

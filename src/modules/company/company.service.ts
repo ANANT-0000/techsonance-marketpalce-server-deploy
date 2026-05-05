@@ -42,6 +42,152 @@ export class CompanyService {
       );
     }
   }
+
+  async activateCompany(id: string) {
+    try {
+      if (!id) {
+        throw new InternalServerErrorException(
+          `Company with ID ${id} not found`,
+        );
+      }
+      const companyId = await this.find(id)
+      const result = await this.db.transaction(async (tx) => {
+
+
+        const [companyRecord] = await tx
+          .update(company)
+          .set({ company_status: UserStatus.ACTIVE })
+          .where(eq(company.id, companyId))
+          .returning({ id: company.id })
+          .catch((error) => {
+            console.error(`Error activating company ${companyId}:`, error);
+            throw new InternalServerErrorException(
+              `Failed to activate company ${companyId}`,
+              {
+                cause: error,
+              },
+            );
+          });
+        if (!companyRecord) {
+          throw new InternalServerErrorException(
+            `Company with ID ${companyId} not found`,
+          );
+        }
+        const userCompanyRecord = await tx.update(user_and_company).set({ access_status: AccessStatus.ACTIVE }).where(eq(user_and_company.company_id, companyId)).returning({ id: user_and_company.id }).catch((error) => {
+          console.error(`Error finding user and company record with company ID ${companyId}:`, error);
+          throw new InternalServerErrorException(
+            `Failed to find user and company record with company ID ${companyId}`,
+            {
+              cause: error,
+            },
+          );
+        });
+        if (!userCompanyRecord) {
+          throw new InternalServerErrorException(
+            `User and company record with company ID ${companyId} not found`,
+          );
+        }
+        await tx.update(vendor).set({ vendor_status: UserStatus.ACTIVE }).where(eq(vendor.company_id, companyId)).catch((error) => {
+          console.error(`Error activating vendor with company ID ${companyId}:`, error);
+          throw new InternalServerErrorException(
+            `Failed to activate vendor with company ID ${companyId}`,
+            {
+              cause: error,
+            },
+          );
+        });
+        return {
+          message: 'Company activated successfully',
+          status: 200,
+          data: null,
+        }
+      })
+      return result;
+    } catch (error) {
+      if (error instanceof InternalServerErrorException) {
+        throw error;
+      }
+      throw new InternalServerErrorException(
+        `Failed to activate company`,
+        {
+          cause: error,
+        },
+      );
+    }
+  }
+
+async deactivateCompany(id: string) {
+    try {
+      if (!id) {
+        throw new InternalServerErrorException(
+          `Company with ID ${id} not found`,
+        );
+      }
+      const companyId = await this.find(id)
+      const result = await this.db.transaction(async (tx) => {
+
+
+        const [companyRecord] = await tx
+          .update(company)
+          .set({ company_status: UserStatus.INACTIVE })
+          .where(eq(company.id, companyId))
+          .returning({ id: company.id })
+          .catch((error) => {
+            console.error(`Error deactivating company ${companyId}:`, error);
+            throw new InternalServerErrorException(
+              `Failed to deactivate company ${companyId}`,
+              {
+                cause: error,
+              },
+            );
+          });
+        if (!companyRecord) {
+          throw new InternalServerErrorException(
+            `Company with ID ${companyId} not found`,
+          );
+        }
+        const userCompanyRecord = await tx.update(user_and_company).set({ access_status: AccessStatus.INACTIVE }).where(eq(user_and_company.company_id, companyId)).returning({ id: user_and_company.id }).catch((error) => {
+          console.error(`Error finding user and company record with company ID ${companyId}:`, error);
+          throw new InternalServerErrorException(
+            `Failed to find user and company record with company ID ${companyId}`,
+            {
+              cause: error,
+            },
+          );
+        });
+        if (!userCompanyRecord) {
+          throw new InternalServerErrorException(
+            `User and company record with company ID ${companyId} not found`,
+          );
+        }
+        await tx.update(vendor).set({ vendor_status: UserStatus.INACTIVE }).where(eq(vendor.company_id, companyId)).catch((error) => {
+          console.error(`Error deactivating vendor with company ID ${companyId}:`, error);
+          throw new InternalServerErrorException(
+            `Failed to deactivate vendor with company ID ${companyId}`,
+            {
+              cause: error,
+            },
+          );
+        });
+        return {
+          message: 'Company deactivated successfully',
+          status: 200,
+          data: null,
+        }
+      })
+      return result;
+    } catch (error) {
+      if (error instanceof InternalServerErrorException) {
+        throw error;
+      }
+      throw new InternalServerErrorException(
+        `Failed to deactivate company`,
+        {
+          cause: error,
+        },
+      );
+    }
+  }
   async suspendCompany(id: string) {
     try {
       if (!id) {
@@ -95,8 +241,13 @@ export class CompanyService {
             },
           );
         });
-        return companyRecord;
+        return {
+          message : 'Company suspended successfully',
+          status : 200,
+          data : null,
+        }
       })
+      return result;
     } catch (error) {
       if (error instanceof InternalServerErrorException) {
         throw error;
@@ -109,6 +260,7 @@ export class CompanyService {
       );
     }
   }
+
   async find(domain: string) {
     try {
       const [companyRecord] = await this.db

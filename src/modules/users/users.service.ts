@@ -7,9 +7,9 @@ import {
   InternalServerErrorException,
   UnauthorizedException,
 } from '@nestjs/common';
-import { user, user_and_company, user_roles } from 'src/drizzle/schema';
+import { company, user, user_and_company, user_roles } from 'src/drizzle/schema';
 import { AccessStatus, UserRole, UserStatus } from 'src/drizzle/types/types';
-import { and, eq, InferSelectModel } from 'drizzle-orm';
+import { and, eq, InferSelectModel, or } from 'drizzle-orm';
 import { DRIZZLE, type DrizzleService } from 'src/drizzle/drizzle.module';
 
 import bcrypt from 'bcryptjs';
@@ -19,6 +19,8 @@ import { CreateUserDto, LoginDto } from './dto/userAuth.dto.ts.js';
 import { UpdateUserDtoTs } from './dto/update-user.dto.ts.js';
 import { MailService } from 'src/common/services/mail/mail.service';
 import { CompanyService } from '../company/company.service.js';
+import { randomInt } from 'crypto';
+import { from } from 'rxjs';
 type UserRecord = InferSelectModel<typeof user>;
 type UserRoleRecord = InferSelectModel<typeof user_roles>;
 @Injectable()
@@ -40,18 +42,65 @@ export class UsersService {
           email: user.email,
           country_code: user.country_code,
           phone_number: user.phone_number,
-          role_id: user.role_id,
         })
         .from(user)
-        .where(eq(user.id, id))
+        .where(and(eq(user.id, id), eq(user.user_status, UserStatus.ACTIVE)))
         .limit(1);
       if (!userRecord) {
-        return new UnauthorizedException('User not found');
+        throw new HttpException('User not found or deactivated', HttpStatus.UNAUTHORIZED);
       }
-
-      return userRecord;
+      const [userAndCompanyRecord] = await this.db.select().from(user_and_company).where(eq(user_and_company.user_id, userRecord.id)).limit(1);
+      if (!userAndCompanyRecord) {
+        throw new HttpException(
+          'User and company not found',
+          HttpStatus.UNAUTHORIZED,
+        );
+      }
+      const [roleRecord] = await this.db.select().from(user_roles).where(eq(user_roles.id, userAndCompanyRecord.role_id)).limit(1);
+      if (!roleRecord) {
+        throw new HttpException(
+          'User role not found',
+          HttpStatus.UNAUTHORIZED,
+        );
+      }
+      return {
+        ...userRecord,
+        role: roleRecord.role_name,
+      };
     } catch (error) {
       throw new InternalServerErrorException('Failed to find user', {
+        cause: error,
+      });
+    }
+  }
+
+  async getAllCustomers() {
+    try {
+      const [customerRole] = await this.db.select().from(user_roles).where(eq(user_roles.role_name, UserRole.CUSTOMER)).limit(1);
+      if (!customerRole) {
+        throw new InternalServerErrorException('Customer role not found');
+      }
+      const customers = await this.db.query.user_and_company.findMany({
+        where: eq(user_and_company.role_id, customerRole?.id),
+        columns: {
+          id: true,
+          user_id: true,
+          company_id: true,
+          role_id: true,
+        },
+        with: {
+          user: {
+            columns: {
+              id: true,
+              first_name: true,
+            }
+          },
+        },
+      });
+
+      return customers;
+    } catch (error) {
+      throw new InternalServerErrorException('Failed to retrieve customers', {
         cause: error,
       });
     }
@@ -154,6 +203,7 @@ export class UsersService {
         await this.db.insert(user_and_company).values({
           user_id: existingUser.id,
           company_id: companyId,
+          role_id: userRole.id,
         });
         return existingUser;
       }
@@ -164,7 +214,6 @@ export class UsersService {
           last_name: userData.last_name,
           email: userData.email,
           password_hash: hashedPassword,
-          role_id: userRole.id,
         })
         .returning()
         .catch((error) => {
@@ -176,6 +225,7 @@ export class UsersService {
       await this.db.insert(user_and_company).values({
         user_id: userRecord.id,
         company_id: companyId,
+        role_id: userRole.id,
       });
       console.log('created user');
 
@@ -210,6 +260,10 @@ export class UsersService {
       const records = await this.findByEmail(login.email);
       if (!records) {
         throw new HttpException('Invalid credentials', HttpStatus.UNAUTHORIZED);
+      }
+      const [userAndCompanyRecord] = await this.db.select().from(user_and_company).where(and(eq(user_and_company.user_id, records.userRecord.id), eq(user_and_company.company_id, companyId)));
+      if (userAndCompanyRecord.access_status === AccessStatus.INACTIVE) {
+        throw new HttpException('Your account has been deactivated. Please Activate Your Account.', HttpStatus.LOCKED);
       }
       const { userRecord, roleRecord } = records;
       const [existingCompanyUser] = await this.db.select().from(user_and_company).where(and(eq(user_and_company.user_id, userRecord.id), eq(user_and_company.company_id, companyId))).limit(1);
@@ -277,17 +331,43 @@ export class UsersService {
       if (!companyId) {
         throw new HttpException('Company not found', HttpStatus.UNAUTHORIZED);
       }
-      const customers = this.db.query.user_and_company.findMany({
-        where: eq(user_and_company.company_id, companyId),
+      console.log("companyId", companyId)
+      const [roleRecord] = await this.db.select().from(user_roles).where(eq(user_roles.role_name, UserRole.CUSTOMER)).catch((error) => {
+        console.error('Error fetching role record:', error);
+        throw new InternalServerErrorException('Failed to fetch role record', {
+          cause: error,
+        });
+      })
+      console.log('role record', roleRecord)
+      if (!roleRecord) {
+        throw new HttpException('Role not found', HttpStatus.INTERNAL_SERVER_ERROR);
+      }
+      const customers = await this.db.query.user_and_company.findMany({
+        where: and(eq(user_and_company.company_id, companyId), eq(user_and_company.role_id, roleRecord.id)),
         with: {
           user: true,
+          role: true
         }
+      }).then((data) => {
+        console.log('user and company data', data)
+        return data.map((item) => {
+          return {
+            id: item.user.id,
+            first_name: item.user.first_name,
+            last_name: item.user.last_name,
+            user_status: item.user.user_status,
+            created_at: item.created_at,
+            role: item.role.role_name,
+          };
+        });
       }).catch((error) => {
         console.error('Error listing customers:', error);
         throw new InternalServerErrorException('Failed to list customers', {
           cause: error,
         });
       })
+
+      console.log("customers", customers)
       return customers;
     } catch (error) {
       throw new InternalServerErrorException('Failed to list customers', {
@@ -305,13 +385,17 @@ export class UsersService {
         .from(user)
         .where(eq(user.email, email))
         .limit(1);
-      if (!userRecord.role_id) {
+      if (!userRecord) {
+        return null;
+      }
+      const [userAndCompanyRecord] = await this.db.select().from(user_and_company).where(eq(user_and_company.user_id, userRecord.id)).limit(1);
+      if (!userAndCompanyRecord) {
         return null;
       }
       const [roleRecord] = await this.db
         .select()
         .from(user_roles)
-        .where(eq(user_roles.id, userRecord.role_id))
+        .where(eq(user_roles.id, userAndCompanyRecord.role_id))
         .limit(1);
       if (!roleRecord) {
         return null;
@@ -341,32 +425,145 @@ export class UsersService {
       });
     }
   }
-  async disableUser(userId: string, domain: string) {
+  async initializeAccountActionOtp(domain: string, actionType: UserStatus, customer_id?: string, email?: string,) {
     try {
+
+      if (!email && !customer_id) {
+        throw new HttpException('Either email or customer_id not provided', HttpStatus.BAD_REQUEST);
+      }
+      console.log('incoming params', domain, actionType, customer_id, email)
+      const isCustomerExists = customer_id ? eq(user.id, customer_id) : null;
+      const isEmailExists = email ? eq(user.email, email) : null;
+      const condition = isCustomerExists || isEmailExists;
+      if (!condition) {
+        throw new HttpException('User not found', HttpStatus.NOT_FOUND);
+      }
+      const [userRecord] = await this.db.select().from(user).where(condition).catch((error) => {
+        console.error('Error fetching user record:', error);
+        throw new InternalServerErrorException('Failed to fetch user record', {
+          cause: error,
+        });
+      })
+      if (!userRecord || userRecord?.id == null) {
+        throw new HttpException('User not found', HttpStatus.NOT_FOUND);
+      }
+      const otp = randomInt(100000, 999999).toString();
+      const companyId = await this.companyService.find(domain);
+      const [companyDetails] = await this.db
+        .select()
+        .from(company)
+        .where(eq(company.id, companyId));
+      if (!companyId || !companyDetails) {
+        throw new HttpException('Domain not found', HttpStatus.NOT_FOUND);
+      }
+      const otpExpires = new Date();
+      otpExpires.setMinutes(otpExpires.getMinutes() + 15); //15 minutes from now
+      await this.db
+        .update(user)
+        .set({ otp: otp, otpExpires: otpExpires })
+        .where(eq(user.id, userRecord.id));
+      const formattedExpireTime = new Intl.DateTimeFormat('en-US', {
+        hour: 'numeric',
+        minute: '2-digit',
+        hour12: true,
+        timeZone: 'Asia/Kolkata',
+      }).format(otpExpires);
+      console.log('sending otp mail')
+      if (actionType === UserStatus.INACTIVE)
+        await this.mailService.sendAccountDeactivationOtp(
+          userRecord?.email,
+          otp,
+          userRecord.first_name + ' ' + userRecord.last_name,
+          formattedExpireTime,
+          companyDetails.company_name,
+        );
+      else if (actionType === UserStatus.ACTIVE)
+        await this.mailService.sendAccountReactivationOtp(
+          userRecord?.email,
+          otp,
+          userRecord.first_name + ' ' + userRecord.last_name,
+          formattedExpireTime,
+          companyDetails.company_name,
+        );
+      console.log('sent otp mail')
+      return {
+        message: actionType === UserStatus.INACTIVE ? 'Confirm Account Deactivation OTP sent to email' : 'Confirm Account Reactivation OTP sent to email',
+      };
+    } catch (error) {
+      if (error instanceof HttpException) {
+        throw error;
+      }
+      throw new InternalServerErrorException('Failed to send OTP to user', {
+        cause: error,
+      });
+    }
+  }
+  async confirmAccountAction(domain: string, actionType: UserStatus, otp: string, customer_id?: string, email?: string) {
+    try {
+      if (!email && !customer_id) {
+        throw new HttpException('Either email or customer_id not provided', HttpStatus.BAD_REQUEST);
+      }
+      console.log('incoming params', domain, actionType, customer_id, email)
+         const isCustomerExists = customer_id ? eq(user.id, customer_id) : null;
+      const isEmailExists = email ? eq(user.email, email) : null;
+      const condition = isCustomerExists || isEmailExists;
+      if (!condition) {
+        throw new HttpException('User not found', HttpStatus.NOT_FOUND);
+      }
+      const [userRecord] = await this.db.select().from(user).where(condition).catch((error) => {
+        console.error('Error fetching user record:', error);
+        throw new InternalServerErrorException('Failed to fetch user record', {
+          cause: error,
+        });
+      })
+      if (!userRecord || userRecord?.id == null) {
+        throw new HttpException('User not found', HttpStatus.NOT_FOUND);
+      }
+      if (!userRecord.otp || userRecord.otp !== otp) {
+        throw new UnauthorizedException('Invalid OTP.');
+      }
+      console.log('otp matches')
+      if (!userRecord.otpExpires) {
+        throw new UnauthorizedException('Invalid OTP');
+      }
+      console.log('otp expires', userRecord.otpExpires)
+      console.log('current date', new Date())
+      if (new Date() > new Date(userRecord.otpExpires)) {
+        await this.db
+          .update(user)
+          .set({ otp: null, otpExpires: null })
+          .where(eq(user.id, userRecord.id));
+        throw new UnauthorizedException(
+          'OTP has expired. Please request a new one.',
+        );
+      }
       const companyId = await this.companyService.find(domain);
       if (!companyId) {
-        throw new HttpException('Company not found', HttpStatus.UNAUTHORIZED);
+        throw new HttpException('You cannot perform this action. Please try again.', HttpStatus.UNAUTHORIZED);
       }
+      console.log('starting to update')
       const [userAndCompany] = await this.db
         .select()
         .from(user_and_company)
-        .where(and(eq(user_and_company.user_id, userId), eq(user_and_company.company_id, companyId)))
+        .where(and(eq(user_and_company.user_id, userRecord.id), eq(user_and_company.company_id, companyId)))
         .limit(1);
       if (!userAndCompany) {
         throw new HttpException('User not found', HttpStatus.NOT_FOUND);
       }
       await this.db
         .update(user_and_company)
-        .set({ access_status: AccessStatus.SUSPENDED })
-        .where(and(eq(user_and_company.user_id, userId), eq(user_and_company.company_id, companyId)));
-
+        .set({ access_status: actionType === UserStatus.INACTIVE ? AccessStatus.INACTIVE : AccessStatus.ACTIVE })
+        .where(and(eq(user_and_company.user_id, userRecord.id), eq(user_and_company.company_id, companyId)));
+      await this.db
+        .update(user)
+        .set({ otp: null, otpExpires: null, })
+        .where(eq(user.id, userRecord.id));
+      console.log('updated successfully')
       return {
-        message: 'User disabled successfully',
-        status: HttpStatus.OK,
-        success: true,
+        message: actionType === UserStatus.INACTIVE ? 'User deactivated successfully' : 'User reactivated successfully'
       };
     } catch (error) {
-      throw new InternalServerErrorException('Failed to disable user', {
+      throw new InternalServerErrorException('Failed to deactivate user', {
         cause: error,
       });
     }

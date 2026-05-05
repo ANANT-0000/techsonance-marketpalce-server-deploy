@@ -19,6 +19,8 @@ import { replacementRequestedTemplate } from './templates/replacement-requested.
 import { orderShippedTemplate } from './templates/order-shipped.template';
 import { passwordResetOtpTemplate } from './templates/password-reset-otp.template';
 import { vendorApprovalTemplate } from './templates/vendor-approval.template';
+import { deactivateAccountOtpTemplate } from './templates/account-deactivation-otp.template';
+import { reactivateAccountOtpTemplate } from './templates/account-reactivate-otp.template';
 @Injectable()
 export class MailService {
   nodeMailerTransporter: nodemailer.Transporter;
@@ -222,5 +224,25 @@ export class MailService {
   ) {
     const html = passwordResetOtpTemplate(name, otp, expireAt, companyName);
     return this.sendEmail(email, `Password Reset OTP - ${companyName}`, html);
+  }
+  async sendAccountDeactivationOtp(
+    email: string,
+    otp: string,
+    name: string,
+    expireAt: string,
+    companyName: string,
+  ) {
+    const html = deactivateAccountOtpTemplate(name, otp, expireAt, companyName);
+    return this.sendEmail(email, `Confirm Account Deactivation - ${companyName}`, html);
+  }
+  async sendAccountReactivationOtp(
+    email: string,
+    otp: string,
+    name: string,
+    expireAt: string,
+    companyName: string,
+  ) {
+    const html = reactivateAccountOtpTemplate(name, otp, expireAt, companyName);
+    return this.sendEmail(email, `Confirm Account Reactivation - ${companyName}`, html);
   }
 }

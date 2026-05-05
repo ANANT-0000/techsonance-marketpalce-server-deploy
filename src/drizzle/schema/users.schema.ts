@@ -23,14 +23,12 @@ export const user = pg.pgTable(
       .notNull()
       .defaultNow()
       .$onUpdate(() => new Date()),
-    role_id: pg.uuid('role_id').references(() => user_roles.id),
   },
   (table) => [
  
     pg.index('idx_user_email').on(table.email),
     pg.index('idx_user_first_name').on(table.first_name),
     pg.index('idx_user_last_name').on(table.last_name),
-    pg.index('idx_user_role_id').on(table.role_id),
     pg.index('idx_user_status').on(table.user_status),
   ],
 );

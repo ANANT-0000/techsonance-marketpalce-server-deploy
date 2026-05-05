@@ -23,6 +23,7 @@ export const UserRoleEnum = pg.pgEnum('user_role_enum', [
 export const user_roles = pg.pgTable('user_roles', {
   id: pg.uuid('id').primaryKey().defaultRandom(),
   role_name: pg.text('role_name').notNull().default(UserRole.ADMIN),
+  description: pg.text('description'),
   created_at: pg.timestamp('created_at').notNull().defaultNow(),
   updated_at: pg
     .timestamp('updated_at')
@@ -41,14 +42,12 @@ export const user_and_company = pg.pgTable(
     company_id: pg.uuid('company_id')
       .notNull()
       .references(() => company.id, { onDelete: 'cascade' }),
+    role_id: pg.uuid('role_id')
+      .notNull()
+      .references(() => user_roles.id),
     access_status: AccessStatusEnum('access_status')
       .notNull()
       .default(AccessStatus.ACTIVE),
-    suspended_by: pg.uuid('suspended_by').references(() => user.id),
-    suspended_at: pg.timestamp('suspended_at'),
-    suspension_reason: pg.text('suspension_reason'),
-    registered_at: pg.timestamp('registered_at').notNull().defaultNow(),
-    last_login_at: pg.timestamp('last_login_at'),
     created_at: pg.timestamp('created_at').notNull().defaultNow(),
     updated_at: pg.timestamp('updated_at').notNull().defaultNow()
       .$onUpdate(() => new Date()),
