@@ -53,6 +53,11 @@ export class AdminController {
   async getVendorApplications() {
     return await this.vendorService.vendorApplications();
   }
+  @Get('vendor-applications-count')
+  @HttpCode(HttpStatus.OK)
+  async getVendorApplicationsCount() {
+    return await this.vendorService.vendorApplicationCount();
+  }
   @Get('vendor/:vendorId')
   @HttpCode(HttpStatus.OK)
   async getVendorById(@Param('vendorId') vendorId: string) {

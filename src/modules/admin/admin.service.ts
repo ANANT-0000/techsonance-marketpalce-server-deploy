@@ -45,13 +45,13 @@ export class AdminService {
         .from(user)
         .where(eq(user.email, email))
         .limit(1);
-      console.log('existing user', existingUser);
       if (!existingUser) {
         throw new HttpException(
           'Admin user not found',
           HttpStatus.UNAUTHORIZED,
         );
       }
+      console.log('existing user', existingUser);
 
       //--------------------------------------
       // for bypass Admin login ,uncommit in production 

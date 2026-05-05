@@ -12,22 +12,13 @@ export class CloudinaryService {
         reject(new Error('No file provided'));
         return;
       }
-      const uploadOptions: Record<string, any> = {
-        resource_type: 'auto',
-      };
-      const mimeParts = file.mimetype.split('/');
-      const fileFormat = mimeParts.length > 1 ? mimeParts[1] : '';
-      if (fileFormat === 'svg+xml' || fileFormat === 'svg') {
-        uploadOptions.resource_type = 'image'; // Force image type
-        uploadOptions.format = 'svg'; // Explicitly define format
-      } else if (fileFormat === 'pdf' || fileFormat === 'application/pdf') {
-        uploadOptions.resource_type = 'raw'; // Force raw type for PDFs
-        uploadOptions.access_control = [{ access_type: 'anonymous' }];
-        uploadOptions.use_filename = true;
-        uploadOptions.unique_filename = false;
-      }
+    
       const uploadStream = cloudinary.uploader.upload_stream(
-        uploadOptions,
+        {
+          resource_type: 'auto',
+          use_filename: true,
+          unique_filename: true,
+        },
         (error, result) => {
           if (error) {
             reject(error as Error);

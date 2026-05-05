@@ -243,7 +243,9 @@ export class VendorsService {
         // Send Welcome Email
         // ─────────────────────────────────────────────────────────────────
         await this.mailService.sendVendorRegistrationEmail(newUser.email, vendorData.company_name)
-        return;
+        return {
+          message: 'Vendor registered successfully',
+        }
       });
     } catch (error) {
       if (
@@ -690,6 +692,33 @@ export class VendorsService {
       );
     }
   }
+  async vendorApplicationCount() {
+    try {
+      const count = await this.db.select().from(vendor)
+        .innerJoin(company, eq(vendor.company_id, company.id))
+        .where(eq(vendor.vendor_status, UserStatus.PENDING))
+        .catch((error) => {
+          console.error('Error counting vendor applications:', error);
+          throw new InternalServerErrorException(
+            'Failed to count vendor applications',
+            {
+              cause: error,
+            },
+          );
+        });
+      return {count:count.length};
+    } catch (error) {
+      if (error instanceof HttpException) {
+        throw error;
+      }
+      throw new InternalServerErrorException(
+        'Failed to count vendor applications',
+        {
+          cause: error,
+        },
+      );
+    }
+  }
   async vendorApplications() {
     try {
       const applications = await this.db.query.vendor
@@ -891,7 +920,7 @@ export class VendorsService {
             },
           );
         })
-  
+
       if (!vendorDetails || !vendorDetails.company_id || !vendorDetails.company) {
         throw new HttpException(
           'Vendor not found',
