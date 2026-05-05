@@ -12,6 +12,7 @@ import { VendorsModule } from '../vendors/vendors.module';
 import { MailModule } from 'src/common/services/mail/mail.module';
 import { CompanyModule } from '../company/company.module';
 import { GoogleStrategy } from './google.strategy';
+import { AdminModule } from '../admin/admin.module';
  
 @Module({
   imports: [
@@ -19,6 +20,7 @@ import { GoogleStrategy } from './google.strategy';
     VendorsModule,
     MailModule,
     DrizzleModule,
+    AdminModule,
     CompanyModule,
     PassportModule.register({
       defaultStrategy: 'jwt',

@@ -23,11 +23,13 @@ import { UploadToCloud } from 'src/common/decorators/upload.decorator';
 import { ParseJsonPipe } from 'src/common/pipes/parseJsonPipe';
 import { AuthGuard } from '@nestjs/passport';
 import { GoogleOAuthGuard } from './google-oauth.guard';
+import { AdminService } from '../admin/admin.service';
 
 @Controller({ version: '1', path: 'auth' })
 export class AuthController {
   constructor(
     private readonly authService: AuthService,
+    private readonly adminService: AdminService,
     private readonly vendorService: VendorsService,
     private readonly userService: UsersService,
   ) { }
@@ -36,7 +38,14 @@ export class AuthController {
   test() {
     return 'Auth controller is working';
   }
-
+  @Post('login')
+  @HttpCode(HttpStatus.OK)
+  async adminLogin(
+    @Body() body: { email: string; password: string },
+  ): Promise<Record<string, unknown>> {
+    console.log(body.email, body.password);
+    return await this.adminService.adminLogin(body.email, body.password);
+  }
   /**
    * Step 1: Initiate Google OAuth flow
    * The frontend redirects here with the domain parameter
@@ -92,83 +101,83 @@ export class AuthController {
       else {
         res.redirect(`${frontendUrl}/auth/authSuccess?message=${result.message}&status=${result.status}&email=${result.email}`);
       }
-    } catch(error) {
-    console.error('Google OAuth callback error:', error);
+    } catch (error) {
+      console.error('Google OAuth callback error:', error);
 
-    // Redirect to error page on failure
-    const errorDomain = req.query.state
-    const frontendUrl = errorDomain.startsWith('http')
-      ? errorDomain
-      : `https://${errorDomain}`;
+      // Redirect to error page on failure
+      const errorDomain = req.query.state
+      const frontendUrl = errorDomain.startsWith('http')
+        ? errorDomain
+        : `https://${errorDomain}`;
 
-    res.redirect(
-      `${frontendUrl}/auth/error?message=${encodeURIComponent(error.message || 'Authentication failed')}&status=${error.status}&email=${error.email}`,
+      res.redirect(
+        `${frontendUrl}/auth/error?message=${encodeURIComponent(error.message || 'Authentication failed')}&status=${error.status}&email=${error.email}`,
+      );
+    }
+  }
+
+  @Post('register-vendor')
+  @UploadToCloud([{ name: 'documents', maxCount: 20 }])
+  @HttpCode(HttpStatus.CREATED)
+  async signUpVendor(
+    @Body('vendor', ParseJsonPipe) body: any,
+    @UploadedFiles() files: Express.Multer.File[],
+  ) {
+    console.log('body', body);
+    const vendor = await this.vendorService.vendorRegister(body, files);
+    return vendor;
+  }
+
+  @Post('login-vendor')
+  @HttpCode(HttpStatus.OK)
+  async loginVendor(@Body() loginDto: LoginDto) {
+    return await this.vendorService.vendorLogin(loginDto);
+  }
+
+  @Post('register-user/:companyId')
+  @HttpCode(HttpStatus.CREATED)
+  async signUpUser(
+    @Param('companyId') companyId: string,
+    @Body('customer_data') createUser: CreateUserDto,
+  ) {
+    console.log(createUser);
+    const result = await this.userService.register(createUser, companyId);
+    return result;
+  }
+
+  @Post('login-user')
+  @HttpCode(HttpStatus.OK)
+  async loginUser(
+    @Body() loginDto: LoginDto,
+    @Headers('company-domain') domain: string,
+  ) {
+    return await this.userService.login(loginDto, domain);
+  }
+
+  @Post('logout')
+  @HttpCode(HttpStatus.OK)
+  logout(@Res({ passthrough: true }) res: express.Response) {
+    return this.authService.logout(res);
+  }
+
+  @Post('request-password-reset')
+  @HttpCode(HttpStatus.OK)
+  async requestPasswordReset(
+    @Body() body: any,
+    @Headers('company-domain') domain: string,
+  ) {
+    return await this.authService.requestPasswordReset(body.email, domain);
+  }
+
+  @Post('reset-password')
+  @HttpCode(HttpStatus.OK)
+  async resetPassword(
+    @Body() body: { email: string; otp: string; newPassword: string },
+  ) {
+    return await this.authService.resetPasswordWithOtp(
+      body.email,
+      body.otp,
+      body.newPassword,
     );
   }
-}
-
-@Post('register-vendor')
-@UploadToCloud([{ name: 'documents', maxCount: 20 }])
-@HttpCode(HttpStatus.CREATED)
-async signUpVendor(
-  @Body('vendor', ParseJsonPipe) body: any,
-  @UploadedFiles() files: Express.Multer.File[],
-) {
-  console.log('body', body);
-  const vendor = await this.vendorService.vendorRegister(body, files);
-  return vendor;
-}
-
-@Post('login-vendor')
-@HttpCode(HttpStatus.OK)
-async loginVendor(@Body() loginDto: LoginDto) {
-  return await this.vendorService.vendorLogin(loginDto);
-}
-
-@Post('register-user/:companyId')
-@HttpCode(HttpStatus.CREATED)
-async signUpUser(
-  @Param('companyId') companyId: string,
-  @Body('customer_data') createUser: CreateUserDto,
-) {
-  console.log(createUser);
-  const result = await this.userService.register(createUser, companyId);
-  return result;
-}
-
-@Post('login-user')
-@HttpCode(HttpStatus.OK)
-async loginUser(
-  @Body() loginDto: LoginDto,
-  @Headers('company-domain') domain: string,
-) {
-  return await this.userService.login(loginDto, domain);
-}
-
-@Post('logout')
-@HttpCode(HttpStatus.OK)
-logout(@Res({ passthrough: true }) res: express.Response) {
-  return this.authService.logout(res);
-}
-
-@Post('request-password-reset')
-@HttpCode(HttpStatus.OK)
-async requestPasswordReset(
-  @Body() body: any,
-  @Headers('company-domain') domain: string,
-) {
-  return await this.authService.requestPasswordReset(body.email, domain);
-}
-
-@Post('reset-password')
-@HttpCode(HttpStatus.OK)
-async resetPassword(
-  @Body() body: { email: string; otp: string; newPassword: string },
-) {
-  return await this.authService.resetPasswordWithOtp(
-    body.email,
-    body.otp,
-    body.newPassword,
-  );
-}
 }

@@ -42,14 +42,7 @@ export class AdminController {
     return 'Admin controller is working';
   }
 
-  @Post('login')
-  @HttpCode(HttpStatus.OK)
-  async adminLogin(
-    @Body() body: { email: string; password: string },
-  ): Promise<Record<string, unknown>> {
-    console.log(body.email, body.password);
-    return await this.adminService.adminLogin(body.email, body.password);
-  }
+
   @Post('create-vendor')
   @HttpCode(HttpStatus.OK)
   async createVendor(@Body() vendorData: any) {
