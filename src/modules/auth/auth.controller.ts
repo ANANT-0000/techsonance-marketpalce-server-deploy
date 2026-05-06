@@ -32,7 +32,7 @@ export class AuthController {
     private readonly adminService: AdminService,
     private readonly vendorService: VendorsService,
     private readonly userService: UsersService,
-  ) { }
+  ) {}
 
   @Get('test')
   test() {
@@ -76,7 +76,9 @@ export class AuthController {
   ) {
     try {
       // Extract domain from state or query parameter
-      const targetDomain = state || req.query.state || process.env.FRONTEND_URL;
+      // @ts-ignore
+      const targetDomain: any =
+        state || req.query.state || process.env.FRONTEND_URL;
 
       if (!targetDomain) {
         throw new Error('Domain parameter is missing');
@@ -87,26 +89,28 @@ export class AuthController {
         req.user,
         targetDomain,
       );
-      const frontendUrl = targetDomain.startsWith('http')
+      const frontendUrl: string = targetDomain.startsWith('http')
         ? targetDomain
         : `https://${targetDomain}`;
       if ('access_token' in result && 'refresh_token' in result) {
         const { access_token, refresh_token } = result;
         // Ensure the domain has proper protocol
 
-
         // Redirect to frontend with token
-        res.redirect(`${frontendUrl}/auth/authSuccess?access_token=${access_token}&refresh_token=${refresh_token}`);
-      }
-      else {
-        res.redirect(`${frontendUrl}/auth/authSuccess?message=${result.message}&status=${result.status}&email=${result.email}`);
+        res.redirect(
+          `${frontendUrl}/auth/authSuccess?access_token=${access_token}&refresh_token=${refresh_token}`,
+        );
+      } else {
+        res.redirect(
+          `${frontendUrl}/auth/authSuccess?message=${result.message}&status=${result.status}&email=${result.email}`,
+        );
       }
     } catch (error) {
       console.error('Google OAuth callback error:', error);
 
       // Redirect to error page on failure
-      const errorDomain = req.query.state
-      const frontendUrl = errorDomain.startsWith('http')
+      const errorDomain: any = req.query.state;
+      const frontendUrl: string = errorDomain.startsWith('http')
         ? errorDomain
         : `https://${errorDomain}`;
 
@@ -163,7 +167,7 @@ export class AuthController {
   @Post('request-password-reset')
   @HttpCode(HttpStatus.OK)
   async requestPasswordReset(
-    @Body() body: any,
+    @Body() body: { email: string },
     @Headers('company-domain') domain: string,
   ) {
     return await this.authService.requestPasswordReset(body.email, domain);

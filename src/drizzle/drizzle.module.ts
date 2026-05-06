@@ -21,6 +21,13 @@ export type DrizzleService = NodePgDatabase<typeof schema>;
         }
         const pool = new Pool({
           connectionString: databaseUrl,
+          
+          ssl:
+            process.env.NODE_ENV === 'production'
+              ? { rejectUnauthorized: false }
+              : false,
+          connectionTimeoutMillis: 5000, // Fails if it can't connect within 5 seconds
+          idleTimeoutMillis: 30000, // Closes idle clients after 30 seconds
         });
         return drizzle(pool, {
           schema: schema,

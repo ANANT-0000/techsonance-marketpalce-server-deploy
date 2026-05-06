@@ -29,7 +29,12 @@ import {
   vendor_document as vendor_documentTable,
 } from 'src/drizzle/schema';
 import { and, asc, countDistinct, desc, eq, or, sql } from 'drizzle-orm';
-import { AccessStatus, ProductStatus, UserRole, UserStatus } from 'src/drizzle/types/types';
+import {
+  AccessStatus,
+  ProductStatus,
+  UserRole,
+  UserStatus,
+} from 'src/drizzle/types/types';
 import bcrypt from 'bcryptjs';
 import express, { response } from 'express';
 import { MailService } from 'src/common/services/mail/mail.service';
@@ -48,7 +53,7 @@ export class VendorsService {
     private jwtService: JwtService,
     private readonly mailService: MailService,
     private readonly uploadToCloudService: UploadToCloudService,
-  ) { }
+  ) {}
   async vendorRegister(
     vendorData: CreateVendorDto,
     files: Express.Multer.File[],
@@ -82,7 +87,7 @@ export class VendorsService {
       console.log('vendorDocuments');
       console.table(vendorDocuments);
       console.log('starting transaction...');
-      return await this.db.transaction(async (tx) => {
+      const result = await this.db.transaction(async (tx) => {
         console.log('transaction started');
         if (!vendorData.confirm_password) {
           console.log(
@@ -242,11 +247,16 @@ export class VendorsService {
         console.log('vendor documents inserted');
         // Send Welcome Email
         // ─────────────────────────────────────────────────────────────────
-        await this.mailService.sendVendorRegistrationEmail(newUser.email, vendorData.company_name)
+        await this.mailService.sendVendorRegistrationEmail(
+          newUser.email,
+          vendorData.company_name,
+        );
+        console.log('mail sended');
         return {
           message: 'Vendor registered successfully',
-        }
+        };
       });
+      return result;
     } catch (error) {
       if (
         error instanceof HttpException ||
@@ -264,78 +274,79 @@ export class VendorsService {
     try {
       const existingUser:
         | {
-          user: Partial<UserType>;
-          vendor: Partial<VendorType>;
-          role: Partial<UserRoleType>;
-        }
+            user: Partial<UserType>;
+            vendor: Partial<VendorType>;
+            role: Partial<UserRoleType>;
+          }
         | HttpException = await this.db.transaction(async (tx) => {
-          if (!loginDto.email || !loginDto.password) {
-            throw new HttpException(
-              'Email and password are required',
-              HttpStatus.BAD_REQUEST,
-            );
-          }
-          const [userRecord]: Partial<UserType>[] = await tx
-            .select()
-            .from(userTable)
-            .where(eq(userTable.email, loginDto.email));
-          console.log('user.email', loginDto.email, 'userRecord', userRecord);
-          if (!userRecord || !userRecord.id || !userRecord.password_hash) {
-            throw new UnauthorizedException('User not found');
-          }
-          console.log(userRecord.email, 'password', userRecord.password_hash);
-          const isPasswordValid = await bcrypt.compare(
-            loginDto.password,
-            userRecord.password_hash,
+        if (!loginDto.email || !loginDto.password) {
+          throw new HttpException(
+            'Email and password are required',
+            HttpStatus.BAD_REQUEST,
           );
-          if (!isPasswordValid) {
-            console.log('isPasswordValid', isPasswordValid);
-            throw new UnauthorizedException('Invalid password');
-          }
-          console.log('password is vaild')
-          const [vendorRecord] = await tx
-            .select()
-            .from(vendorTable)
-            .where(eq(vendorTable.user_id, userRecord.id));
-          console.log('vendorRecord', vendorRecord)
-          // uncommit in future
-          // const [userAndCompanyRecord] = await tx
-          //   .select()
-          //   .from(user_and_company)
-          //   .where(eq(user_and_company.user_id, userRecord.id));
-          // console.log('vendorRecord', vendorRecord);
-          if (!userRecord) {
-            throw new UnauthorizedException('User role not found');
-          }
-          // console.log('userAndCompanyRecord', userAndCompanyRecord)
-          //------------------------------------------------------
-          // uncommit in future
-          //------------------------------------------------------
-          // const [roleRecord] = await tx
-          //   .select({ role_name: user_rolesTable.role_name })
-          //   .from(user_rolesTable)
-          //   .where(eq(user_rolesTable.id, userAndCompanyRecord.role_id)).limit(1);
+        }
+        const [userRecord]: Partial<UserType>[] = await tx
+          .select()
+          .from(userTable)
+          .where(eq(userTable.email, loginDto.email));
+        console.log('user.email', loginDto.email, 'userRecord', userRecord);
+        if (!userRecord || !userRecord.id || !userRecord.password_hash) {
+          throw new UnauthorizedException('User not found');
+        }
+        console.log(userRecord.email, 'password', userRecord.password_hash);
+        const isPasswordValid = await bcrypt.compare(
+          loginDto.password,
+          userRecord.password_hash,
+        );
+        if (!isPasswordValid) {
+          console.log('isPasswordValid', isPasswordValid);
+          throw new UnauthorizedException('Invalid password');
+        }
+        console.log('password is vaild');
+        const [vendorRecord] = await tx
+          .select()
+          .from(vendorTable)
+          .where(eq(vendorTable.user_id, userRecord.id));
+        console.log('vendorRecord', vendorRecord);
+        // uncommit in future
+        // const [userAndCompanyRecord] = await tx
+        //   .select()
+        //   .from(user_and_company)
+        //   .where(eq(user_and_company.user_id, userRecord.id));
+        // console.log('vendorRecord', vendorRecord);
+        if (!userRecord) {
+          throw new UnauthorizedException('User role not found');
+        }
+        // console.log('userAndCompanyRecord', userAndCompanyRecord)
+        //------------------------------------------------------
+        // uncommit in future
+        //------------------------------------------------------
+        // const [roleRecord] = await tx
+        //   .select({ role_name: user_rolesTable.role_name })
+        //   .from(user_rolesTable)
+        //   .where(eq(user_rolesTable.id, userAndCompanyRecord.role_id)).limit(1);
 
-          //-----------------------------------------------------
-          // for bypassing the role check in future comment this and uncommit above
-          //-----------------------------------------------------
-          const [roleRecord] = await tx
-            .select({ role_name: user_rolesTable.role_name })
-            .from(user_rolesTable)
-            .where(eq(user_rolesTable.role_name, 'vendor')).limit(1);
-          console.log('roleRecord', roleRecord);
-          if (!vendorRecord) throw new UnauthorizedException('Vendor not found');
-          const isVendorApproved =
-            vendorRecord.vendor_status === UserStatus.ACTIVE;
-          // const isVendorApproved = vendorRecord.vendor_status === UserStatus.ACTIVE &&  userAndCompanyRecord.access_status === AccessStatus.ACTIVE;
-          console.log('isVendorApproved', isVendorApproved);
-          if (!isVendorApproved)
-            throw new HttpException(
-              'Vendor application is still under review',
-              HttpStatus.UNAUTHORIZED,
-            );
-          return { user: userRecord, vendor: vendorRecord, role: roleRecord };
-        });
+        //-----------------------------------------------------
+        // for bypassing the role check in future comment this and uncommit above
+        //-----------------------------------------------------
+        const [roleRecord] = await tx
+          .select({ role_name: user_rolesTable.role_name })
+          .from(user_rolesTable)
+          .where(eq(user_rolesTable.role_name, 'vendor'))
+          .limit(1);
+        console.log('roleRecord', roleRecord);
+        if (!vendorRecord) throw new UnauthorizedException('Vendor not found');
+        const isVendorApproved =
+          vendorRecord.vendor_status === UserStatus.ACTIVE;
+        // const isVendorApproved = vendorRecord.vendor_status === UserStatus.ACTIVE &&  userAndCompanyRecord.access_status === AccessStatus.ACTIVE;
+        console.log('isVendorApproved', isVendorApproved);
+        if (!isVendorApproved)
+          throw new HttpException(
+            'Vendor application is still under review',
+            HttpStatus.UNAUTHORIZED,
+          );
+        return { user: userRecord, vendor: vendorRecord, role: roleRecord };
+      });
       if (existingUser instanceof HttpException) {
         throw existingUser;
       }
@@ -424,7 +435,12 @@ export class VendorsService {
   async approveVendor(vendorId: string) {
     try {
       const [isVendorExists] = await this.db
-        .select({ id: vendorTable.id, user_id: vendorTable.user_id, email: userTable.email, store_name: vendorTable.store_name })
+        .select({
+          id: vendorTable.id,
+          user_id: vendorTable.user_id,
+          email: userTable.email,
+          store_name: vendorTable.store_name,
+        })
         .from(vendorTable)
         .where(eq(vendorTable.id, vendorId))
         .limit(1);
@@ -445,18 +461,20 @@ export class VendorsService {
           );
         });
 
-
       const [updatedUserAndCompany] = await this.db
         .update(user_and_company)
         .set({ access_status: AccessStatus.ACTIVE })
         .where(eq(user_and_company.user_id, isVendorExists.user_id))
-        .returning({ company_id: user_and_company.company_id })
+        .returning({ company_id: user_and_company.company_id });
       const [companyDetails] = await this.db
         .select({ company_name: company.company_name })
         .from(company)
         .where(eq(company.id, updatedUserAndCompany.company_id))
         .limit(1);
-      await this.mailService.sendVendorApprovalEmail(isVendorExists.email, companyDetails.company_name);
+      await this.mailService.sendVendorApprovalEmail(
+        isVendorExists.email,
+        companyDetails.company_name,
+      );
       return {
         success: true,
         message: 'Vendor approved and notification email sent successfully',
@@ -560,7 +578,11 @@ export class VendorsService {
     try {
       const suspendedVendor = await this.db.transaction(async (tx) => {
         const [vendorUser] = await tx
-          .select({ email: userTable.email, store_name: vendorTable.store_name, user_id: userTable.id })
+          .select({
+            email: userTable.email,
+            store_name: vendorTable.store_name,
+            user_id: userTable.id,
+          })
           .from(vendorTable)
           .innerJoin(userTable, eq(vendorTable.user_id, userTable.id))
           .where(eq(vendorTable.id, vendorId))
@@ -580,12 +602,12 @@ export class VendorsService {
           .update(userTable)
           .set({ user_status: UserStatus.SUSPENDED })
           .where(eq(userTable.id, vendorUser.user_id))
-          .returning({ user_id: userTable.id })
+          .returning({ user_id: userTable.id });
         await tx
           .update(user_and_company)
           .set({ access_status: AccessStatus.SUSPENDED })
           .where(eq(user_and_company.user_id, vendorUser.user_id))
-          .returning({ user_id: user_and_company.user_id })
+          .returning({ user_id: user_and_company.user_id });
         if (!vendorUser.email) {
           throw new UnauthorizedException(
             `User linked to vendor with ID ${vendorId} has no email.`,
@@ -694,7 +716,9 @@ export class VendorsService {
   }
   async vendorApplicationCount() {
     try {
-      const count = await this.db.select().from(vendor)
+      const count = await this.db
+        .select()
+        .from(vendor)
         .innerJoin(company, eq(vendor.company_id, company.id))
         .where(eq(vendor.vendor_status, UserStatus.PENDING))
         .catch((error) => {
@@ -706,7 +730,7 @@ export class VendorsService {
             },
           );
         });
-      return {count:count.length};
+      return { count: count.length };
     } catch (error) {
       if (error instanceof HttpException) {
         throw error;
@@ -793,12 +817,22 @@ export class VendorsService {
       });
     }
   }
-  async getAllVendors(offset?: string, limit?: string, status?: string, sort?: string) {
+  async getAllVendors(
+    offset?: string,
+    limit?: string,
+    status?: string,
+    sort?: string,
+  ) {
     try {
       const offsetClause = offset ? Number(offset) : 0;
       const limitClause = limit ? Number(limit) : 10;
-      const statusClause = status ? eq(vendorTable.vendor_status, status as UserStatus) : undefined;
-      const sortClause = sort === 'desc' ? desc(vendorTable.created_at) : asc(vendorTable.created_at);
+      const statusClause = status
+        ? eq(vendorTable.vendor_status, status as UserStatus)
+        : undefined;
+      const sortClause =
+        sort === 'desc'
+          ? desc(vendorTable.created_at)
+          : asc(vendorTable.created_at);
       const vendors = await this.db.query.vendor.findMany({
         where: statusClause,
         offset: offsetClause,
@@ -856,7 +890,6 @@ export class VendorsService {
   }
   async getVendorById(vendorId: string) {
     try {
-
       const [existingVendor] = await this.db
         .select()
         .from(vendorTable)
@@ -883,34 +916,38 @@ export class VendorsService {
   async getVendorDetails(vendorId: string) {
     try {
       // console.log("vendorId", vendorId)
-      const [roleRecord] = await this.db.select().from(user_roles).where(eq(user_roles.role_name, UserRole.CUSTOMER)).limit(1)
-      const vendorDetails = await this.db.query.vendor.findFirst({
-        where: eq(vendorTable.id, vendorId),
-        with: {
-          company: {
-            with: {
-              userAndCompany: {
-                where: eq(user_and_company.role_id, roleRecord?.id),
-                with: {
-                  user: {
-                    columns: {
-                      id: true,
-                      email: true,
-
-                    }
+      const [roleRecord] = await this.db
+        .select()
+        .from(user_roles)
+        .where(eq(user_roles.role_name, UserRole.CUSTOMER))
+        .limit(1);
+      const vendorDetails = await this.db.query.vendor
+        .findFirst({
+          where: eq(vendorTable.id, vendorId),
+          with: {
+            company: {
+              with: {
+                userAndCompany: {
+                  where: eq(user_and_company.role_id, roleRecord?.id),
+                  with: {
+                    user: {
+                      columns: {
+                        id: true,
+                        email: true,
+                      },
+                    },
                   },
                 },
               },
-
-            }
+            },
+            user: true,
+            documents: true,
           },
-          user: true,
-          documents: true,
-        },
-      }).then(res => {
-        // console.log("res", res)
-        return res
-      })
+        })
+        .then((res) => {
+          // console.log("res", res)
+          return res;
+        })
         .catch((error) => {
           console.error('Error fetching vendor details:', error);
           throw new InternalServerErrorException(
@@ -919,13 +956,14 @@ export class VendorsService {
               cause: error,
             },
           );
-        })
+        });
 
-      if (!vendorDetails || !vendorDetails.company_id || !vendorDetails.company) {
-        throw new HttpException(
-          'Vendor not found',
-          HttpStatus.NOT_FOUND,
-        );
+      if (
+        !vendorDetails ||
+        !vendorDetails.company_id ||
+        !vendorDetails.company
+      ) {
+        throw new HttpException('Vendor not found', HttpStatus.NOT_FOUND);
       }
       const [orderStats] = await this.db
         .select({
@@ -933,14 +971,31 @@ export class VendorsService {
           totalOrders: sql<number>`COUNT(${orders.id})`,
         })
         .from(orders)
-        .where(
-          eq(orders.company_id, vendorDetails.company_id)
-        );
-      const [activeProducts] = await this.db.select({ count: countDistinct(product_variants.id) }).from(products).innerJoin(product_variants, and(eq(products.id, product_variants.product_id), eq(product_variants.status, ProductStatus.ACTIVE)))
-        .where(eq(products.company_id, vendorDetails.company_id)).limit(1)
+        .where(eq(orders.company_id, vendorDetails.company_id));
+      const [activeProducts] = await this.db
+        .select({ count: countDistinct(product_variants.id) })
+        .from(products)
+        .innerJoin(
+          product_variants,
+          and(
+            eq(products.id, product_variants.product_id),
+            eq(product_variants.status, ProductStatus.ACTIVE),
+          ),
+        )
+        .where(eq(products.company_id, vendorDetails.company_id))
+        .limit(1);
       const response = {
-        owner: { ...vendorDetails, user: { ...vendorDetails.user, password: undefined }, company: undefined, documents: undefined },
-        company: { ...vendorDetails.company, userAndCompany: undefined, documents: undefined },
+        owner: {
+          ...vendorDetails,
+          user: { ...vendorDetails.user, password: undefined },
+          company: undefined,
+          documents: undefined,
+        },
+        company: {
+          ...vendorDetails.company,
+          userAndCompany: undefined,
+          documents: undefined,
+        },
         stats: {
           total_orders: Number(orderStats.totalOrders),
           total_revenue: Number(orderStats.totalRevenue),
