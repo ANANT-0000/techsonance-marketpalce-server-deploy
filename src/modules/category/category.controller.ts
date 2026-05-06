@@ -8,22 +8,29 @@ import {
   Param,
   Patch,
   Post,
+  UseGuards,
 } from '@nestjs/common';
 import { CategoryService } from './category.service';
 import { CreateCategoryDto } from './dto/CreateCategory.dto';
+import { JwtAuthGuard } from '../auth/jwt-auth.guard';
+import { RoleGuard } from 'src/guards/role.guard';
+import { Role } from 'src/enums/role.enum';
+import { Roles } from 'src/common/decorators/roles.decorator';
 
 @Controller({
   version: '1',
   path: 'categories',
 })
 export class CategoryController {
-  constructor(private readonly categoryService: CategoryService) {}
+  constructor(private readonly categoryService: CategoryService) { }
   @Get(':vendorId')
   findByVendorId(@Param('vendorId') vendorId: string) {
     return this.categoryService.findByVendorId(vendorId);
   }
   @Post(':vendorId')
   @HttpCode(HttpStatus.CREATED)
+  @UseGuards(JwtAuthGuard, RoleGuard)
+  @Roles(Role.ADMIN, Role.VENDOR)
   create(
     @Param('vendorId') vendorId: string,
     @Body('companyId') companyId: string,

@@ -9,10 +9,13 @@ import { eq, or } from 'drizzle-orm';
 import { DRIZZLE, type DrizzleService } from 'src/drizzle/drizzle.module';
 import { company, user, user_and_company, vendor } from 'src/drizzle/schema';
 import { AccessStatus, UserStatus } from 'src/drizzle/types/types';
-
+import { ConfigService } from '@nestjs/config';
 @Injectable()
 export class CompanyService {
-  constructor(@Inject(DRIZZLE) private readonly db: DrizzleService) {}
+  constructor(
+    @Inject(DRIZZLE) private readonly db: DrizzleService,
+    private configService: ConfigService,
+  ) {}
   async listCompanies() {
     try {
       const companies = await this.db
@@ -289,9 +292,9 @@ export class CompanyService {
   async find(domain: string) {
     try {
       const whereClause =
-        process.env.NODE_ENV === 'production'
+        process.env.NODE_ENV == 'production'
           ? eq(company.company_domain, domain)
-          : or(eq(company.company_domain, domain), eq(company.id, domain));
+          : eq(company.id, domain);
       const [companyRecord] = await this.db
         .select({ id: company.id })
         .from(company)

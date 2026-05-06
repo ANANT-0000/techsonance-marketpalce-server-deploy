@@ -33,18 +33,20 @@ export class ProductsService {
     private uploadToCloudService: UploadToCloudService,
     private inventoryService: InventoryService,
     private readonly companyService: CompanyService,
-  ) {}
+  ) { }
 
   async getAllProducts(domain: string) {
     try {
       console.log('companyId', domain);
       const filteredDomain = domainExtractor(domain);
       const companyId = await this.companyService.find(filteredDomain);
+      const testSelect = await this.db.select({id:products.id,name:products.name}).from(products).where(eq(products.company_id,companyId));
+      console.log("testSelect",testSelect)
       const product = await this.db.query.products.findMany({
         where: (products) => eq(products.company_id, companyId),
         with: {
           variants: {
-            orderBy: (variants, { desc }) => desc(variants.created_at),
+            // orderBy: (variants, { desc }) => desc(variants.created_at),
             // where: eq(product_variants.status, ProductStatus.ACTIVE),
             columns: {
               id: true,
@@ -67,8 +69,11 @@ export class ProductsService {
             },
           },
         },
-      });
-      console.log('response product ', product[1].variants);
+      }).catch(e=>{
+        console.log('error in fetching products',e)
+        return []
+      })
+      console.log('response product ', product);
       return product;
     } catch (error) {
       throw new InternalServerErrorException('Failed to fetch products', {
@@ -251,7 +256,7 @@ export class ProductsService {
         },
       });
       const response = result.map((product) => product.variants).flat();
-      // console.log('response', response)
+      console.log('response', response)
       return response;
     } catch (error) {
       throw new InternalServerErrorException(

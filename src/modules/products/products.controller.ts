@@ -35,8 +35,8 @@ export class ProductsController {
   constructor(private productsService: ProductsService) { }
 
   @Post(':vendor_id')
-  @UseGuards(RoleGuard, JwtAuthGuard)
-  @Roles(Role.ADMIN, Role.VENDOR)
+  // @UseGuards(RoleGuard, JwtAuthGuard)
+  // @Roles(Role.ADMIN, Role.VENDOR)
   @UploadToCloud([
     { name: 'product', maxCount: 1 },
     { name: 'product_spec', maxCount: 20 },

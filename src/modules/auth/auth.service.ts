@@ -35,7 +35,7 @@ export class AuthService {
     private vendorService: VendorsService,
     private mail: MailService,
     private readonly companyService: CompanyService,
-  ) {}
+  ) { }
 
   async validateUser(userId: string, email: string) {
     const user = await this.usersService.findByPayload({
@@ -360,8 +360,10 @@ export class AuthService {
 
       // Generate JWT token for new user
       const payload = {
-        sub: newUser.id,
-        email: newUser.email,
+        user: {
+          id: newUser.id,
+          email: newUser.email,
+        },
         role: roleRecord.role_name,
       };
 

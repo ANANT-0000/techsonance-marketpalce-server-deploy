@@ -26,7 +26,7 @@ export type DrizzleService = NodePgDatabase<typeof schema>;
 
         const pool = new Pool({
           connectionString: databaseUrl,
-          ssl: true,
+          ssl: configService.get<string>('NODE_ENV') === 'development' ? false : true,
 
           connectionTimeoutMillis: 5000, // Fails if it can't connect within 5 seconds
           idleTimeoutMillis: 30000, // Closes idle clients after 30 seconds
@@ -40,4 +40,4 @@ export type DrizzleService = NodePgDatabase<typeof schema>;
   ],
   exports: [DRIZZLE],
 })
-export class DrizzleModule {}
+export class DrizzleModule { }
