@@ -23,6 +23,7 @@ import { type ProductFiles } from 'src/common/Types/index.type';
 import { CompanyService } from '../company/company.service';
 import { InventoryService } from '../inventory/inventory.service';
 import { warehouse } from 'src/drizzle/schema';
+import { domainExtractor } from 'src/common/filters/domainExtractor.filter';
 
 @Injectable()
 export class ProductsService {
@@ -32,12 +33,13 @@ export class ProductsService {
     private uploadToCloudService: UploadToCloudService,
     private inventoryService: InventoryService,
     private readonly companyService: CompanyService,
-  ) { }
+  ) {}
 
   async getAllProducts(domain: string) {
     try {
       console.log('companyId', domain);
-      const companyId = await this.companyService.find(domain);
+      const filteredDomain = domainExtractor(domain);
+      const companyId = await this.companyService.find(filteredDomain);
       const product = await this.db.query.products.findMany({
         where: (products) => eq(products.company_id, companyId),
         with: {
@@ -112,7 +114,8 @@ export class ProductsService {
 
   async getProductById(productId: string, domain: string) {
     try {
-      const companyId = await this.companyService.find(domain);
+      const filteredDomain = domainExtractor(domain);
+      const companyId = await this.companyService.find(filteredDomain);
       const productRecord = await this.db.query.products
         .findFirst({
           where: and(
@@ -164,7 +167,8 @@ export class ProductsService {
           );
         });
       console.log('isProductVariantExist', isProductVariantExist);
-      // const companyId = await this.companyService.find(domain);
+      // const filteredDomain = domainExtractor(domain);
+      // const companyId = await this.companyService.find(filteredDomain);
       const productVariant = await this.db.query.product_variants
         .findFirst({
           where: eq(product_variants.id, productVariantId),
@@ -228,14 +232,13 @@ export class ProductsService {
   }
   async getActiveProducts(domain: string) {
     try {
-      const companyId = await this.companyService.find(domain)
+      const filteredDomain = domainExtractor(domain);
+      const companyId = await this.companyService.find(filteredDomain);
       const result = await this.db.query.products.findMany({
-        where: and(
-          eq(products.company_id, companyId),
-        ),
+        where: and(eq(products.company_id, companyId)),
         columns: {
           id: true,
-          created_at: true
+          created_at: true,
         },
         with: {
           variants: {
@@ -246,18 +249,18 @@ export class ProductsService {
             },
           },
         },
-      })
-      const response = result.map(product => (
-        product.variants
-      )).flat()
-      // console.log('response', response)
-      return response
-    } catch (error) {
-      throw new InternalServerErrorException('Failed to fetch active products', {
-        cause: error,
       });
+      const response = result.map((product) => product.variants).flat();
+      // console.log('response', response)
+      return response;
+    } catch (error) {
+      throw new InternalServerErrorException(
+        'Failed to fetch active products',
+        {
+          cause: error,
+        },
+      );
     }
-
   }
   async createProduct(
     productDto: CreateProductDto,
@@ -293,8 +296,8 @@ export class ProductsService {
     }
     console.log('domain', domain);
     try {
-      const companyId = await this.companyService.find(domain);
-
+      const filteredDomain = domainExtractor(domain);
+      const companyId = await this.companyService.find(filteredDomain);
       return await this.db.transaction(async (tx) => {
         console.log('productDto.category_id', productDto.category_id);
         console.log('productDto.name', productDto.name);

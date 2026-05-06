@@ -11,6 +11,7 @@ import { DRIZZLE, type DrizzleService } from 'src/drizzle/drizzle.module';
 import { product_reviews, product_variants } from 'src/drizzle/schema';
 import { eq, and } from 'drizzle-orm';
 import { CompanyService } from '../company/company.service';
+import { domainExtractor } from 'src/common/filters/domainExtractor.filter';
 @Injectable()
 export class ProductReviewService {
   constructor(
@@ -23,7 +24,8 @@ export class ProductReviewService {
     userId: string,
     domain: string,
   ) {
-    const companyId = await this.companyService.find(domain);
+    const filteredDomain = domainExtractor(domain);
+    const companyId = await this.companyService.find(filteredDomain);
     const [newReview] = await this.db
       .insert(product_reviews)
       .values({

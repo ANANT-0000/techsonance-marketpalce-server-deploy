@@ -21,6 +21,7 @@ import {
   refundStatusEnum,
 } from 'src/drizzle/types/types';
 import { CompanyService } from '../company/company.service';
+import { domainExtractor } from 'src/common/filters/domainExtractor.filter';
 
 @Injectable()
 export class RefundsService {
@@ -28,7 +29,7 @@ export class RefundsService {
     @Inject(DRIZZLE) private readonly db: DrizzleService,
     private readonly mailService: MailService,
     private readonly companyService: CompanyService,
-  ) { }
+  ) {}
 
   async initiateRefund({
     orderId,
@@ -43,7 +44,8 @@ export class RefundsService {
   }) {
     try {
       // domain can be a domain string OR a company UUID (called internally from returns.service)
-      const companyId = await this.companyService.find(domain);
+      const filteredDomain = domainExtractor(domain);
+      const companyId = await this.companyService.find(filteredDomain);
 
       // ── 1. Validate order belongs to company ─────────────────────────
       const [order] = await this.db
@@ -110,9 +112,9 @@ export class RefundsService {
         }
 
         // item refund amount = unit price × quantity
-        refundAmount = (
-          Number(orderItem.price) * orderItem.quantity
-        ).toFixed(2);
+        refundAmount = (Number(orderItem.price) * orderItem.quantity).toFixed(
+          2,
+        );
         resolvedOrderItemId = orderItem.id;
       } else {
         // Whole-order refund — guard against duplicate order-level refund
@@ -133,11 +135,14 @@ export class RefundsService {
         // (item-level refunds on the same order are fine to coexist)
         const orderLevelExists = existingOrderRefund
           ? await this.db
-            .select({ id: refunds.id, order_items_id: refunds.order_items_id })
-            .from(refunds)
-            .where(eq(refunds.id, existingOrderRefund.id))
-            .limit(1)
-            .then(([r]) => r?.order_items_id === null)
+              .select({
+                id: refunds.id,
+                order_items_id: refunds.order_items_id,
+              })
+              .from(refunds)
+              .where(eq(refunds.id, existingOrderRefund.id))
+              .limit(1)
+              .then(([r]) => r?.order_items_id === null)
           : false;
 
         if (orderLevelExists) {
@@ -245,7 +250,8 @@ export class RefundsService {
   // ── Get refund status for a specific order ───────────────────────────────
   async getRefundStatus(orderId: string, domain: string) {
     try {
-      const companyId = await this.companyService.find(domain);
+      const filteredDomain = domainExtractor(domain);
+      const companyId = await this.companyService.find(filteredDomain);
 
       const refundRecords = await this.db.query.refunds.findMany({
         where: and(
@@ -316,14 +322,15 @@ export class RefundsService {
   // ── Mark a refund as processed (vendor confirms money sent) ─────────────
   async processRefund(refundId: string, domain: string) {
     try {
-      const companyId = await this.companyService.find(domain);
-      console.log("refundId", refundId)
+      const filteredDomain = domainExtractor(domain);
+      const companyId = await this.companyService.find(filteredDomain);
+      console.log('refundId', refundId);
       const [existingRefund] = await this.db
         .select()
         .from(refunds)
         .where(and(eq(refunds.id, refundId), eq(refunds.company_id, companyId)))
         .limit(1);
-      console.log("existingRefund", existingRefund)
+      console.log('existingRefund', existingRefund);
       if (!existingRefund) {
         throw new HttpException('Refund not found', HttpStatus.NOT_FOUND);
       }
@@ -341,7 +348,7 @@ export class RefundsService {
           HttpStatus.BAD_REQUEST,
         );
       }
-      console.log('traction is starting')
+      console.log('traction is starting');
       return await this.db.transaction(async (tx) => {
         const [updatedRefund] = await tx
           .update(refunds)
@@ -354,7 +361,7 @@ export class RefundsService {
               { cause: error },
             );
           });
-        console.log('updatedRefund', updatedRefund)
+        console.log('updatedRefund', updatedRefund);
 
         const isOrderLevelRefund = existingRefund.order_items_id === null;
         if (existingRefund.payment_id && isOrderLevelRefund) {
@@ -425,7 +432,8 @@ export class RefundsService {
 
   async getCompanyRefunds(domain: string) {
     try {
-      const companyId = await this.companyService.find(domain);
+      const filteredDomain = domainExtractor(domain);
+      const companyId = await this.companyService.find(filteredDomain);
 
       // 1. Fetch raw data
       const refundRecords = await this.db.query.refunds.findMany({
@@ -444,9 +452,9 @@ export class RefundsService {
                   first_name: true,
                   last_name: true,
                   email: true,
-                }
-              }
-            }
+                },
+              },
+            },
           },
           orderItem: {
             columns: {
@@ -460,8 +468,8 @@ export class RefundsService {
                 columns: {
                   id: true,
                   reason: true,
-                  cancelled_by: true
-                }
+                  cancelled_by: true,
+                },
               },
               return_request: {
                 columns: {
@@ -470,9 +478,9 @@ export class RefundsService {
                   status: true,
                   created_at: true,
                   updated_at: true,
-                }
-              }
-            }
+                },
+              },
+            },
           },
           payment: {
             columns: {
@@ -503,8 +511,8 @@ export class RefundsService {
             new Date(b.created_at).getTime() - new Date(a.created_at).getTime(),
         ),
       };
-      console.log('rufund reponse', reponse)
-      return reponse
+      console.log('rufund reponse', reponse);
+      return reponse;
     } catch (error) {
       if (
         error instanceof HttpException ||

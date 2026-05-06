@@ -7,7 +7,12 @@ import {
   InternalServerErrorException,
   UnauthorizedException,
 } from '@nestjs/common';
-import { company, user, user_and_company, user_roles } from 'src/drizzle/schema';
+import {
+  company,
+  user,
+  user_and_company,
+  user_roles,
+} from 'src/drizzle/schema';
 import { AccessStatus, UserRole, UserStatus } from 'src/drizzle/types/types';
 import { and, eq, InferSelectModel, or } from 'drizzle-orm';
 import { DRIZZLE, type DrizzleService } from 'src/drizzle/drizzle.module';
@@ -21,6 +26,7 @@ import { MailService } from 'src/common/services/mail/mail.service';
 import { CompanyService } from '../company/company.service.js';
 import { randomInt } from 'crypto';
 import { from } from 'rxjs';
+import { domainExtractor } from 'src/common/filters/domainExtractor.filter.js';
 type UserRecord = InferSelectModel<typeof user>;
 type UserRoleRecord = InferSelectModel<typeof user_roles>;
 @Injectable()
@@ -30,7 +36,7 @@ export class UsersService {
     private readonly jwtService: JwtService,
     private readonly companyService: CompanyService,
     private readonly mailService: MailService,
-  ) { }
+  ) {}
   // Find user by ID
   async findById(id: string) {
     try {
@@ -47,21 +53,29 @@ export class UsersService {
         .where(and(eq(user.id, id), eq(user.user_status, UserStatus.ACTIVE)))
         .limit(1);
       if (!userRecord) {
-        throw new HttpException('User not found or deactivated', HttpStatus.UNAUTHORIZED);
+        throw new HttpException(
+          'User not found or deactivated',
+          HttpStatus.UNAUTHORIZED,
+        );
       }
-      const [userAndCompanyRecord] = await this.db.select().from(user_and_company).where(eq(user_and_company.user_id, userRecord.id)).limit(1);
+      const [userAndCompanyRecord] = await this.db
+        .select()
+        .from(user_and_company)
+        .where(eq(user_and_company.user_id, userRecord.id))
+        .limit(1);
       if (!userAndCompanyRecord) {
         throw new HttpException(
           'User and company not found',
           HttpStatus.UNAUTHORIZED,
         );
       }
-      const [roleRecord] = await this.db.select().from(user_roles).where(eq(user_roles.id, userAndCompanyRecord.role_id)).limit(1);
+      const [roleRecord] = await this.db
+        .select()
+        .from(user_roles)
+        .where(eq(user_roles.id, userAndCompanyRecord.role_id))
+        .limit(1);
       if (!roleRecord) {
-        throw new HttpException(
-          'User role not found',
-          HttpStatus.UNAUTHORIZED,
-        );
+        throw new HttpException('User role not found', HttpStatus.UNAUTHORIZED);
       }
       return {
         ...userRecord,
@@ -76,7 +90,11 @@ export class UsersService {
 
   async getAllCustomers() {
     try {
-      const [customerRole] = await this.db.select().from(user_roles).where(eq(user_roles.role_name, UserRole.CUSTOMER)).limit(1);
+      const [customerRole] = await this.db
+        .select()
+        .from(user_roles)
+        .where(eq(user_roles.role_name, UserRole.CUSTOMER))
+        .limit(1);
       if (!customerRole) {
         throw new InternalServerErrorException('Customer role not found');
       }
@@ -93,7 +111,7 @@ export class UsersService {
             columns: {
               id: true,
               first_name: true,
-            }
+            },
           },
         },
       });
@@ -171,14 +189,30 @@ export class UsersService {
   // Register a new user
   async register(userData: CreateUserDto, domain: string) {
     try {
-      const companyId = await this.companyService.find(domain);
+      const filteredDomain = domainExtractor(domain);
+      const companyId = await this.companyService.find(filteredDomain);
       if (!companyId) {
         throw new HttpException('Company not found', HttpStatus.NOT_FOUND);
       }
-      const [existingUser] = await this.db.select().from(user).where(eq(user.email, userData.email)).limit(1);
-      const existingCompanyUser = await this.db.select().from(user_and_company).where(and(eq(user_and_company.user_id, existingUser.id), eq(user_and_company.company_id, companyId))).limit(1);
+      const [existingUser] = await this.db
+        .select()
+        .from(user)
+        .where(eq(user.email, userData.email))
+        .limit(1);
+      const existingCompanyUser = await this.db
+        .select()
+        .from(user_and_company)
+        .where(
+          and(
+            eq(user_and_company.user_id, existingUser.id),
+            eq(user_and_company.company_id, companyId),
+          ),
+        )
+        .limit(1);
       if (existingUser && existingCompanyUser) {
-        throw new ConflictException('User with this email already exists in this company');
+        throw new ConflictException(
+          'User with this email already exists in this company',
+        );
       }
 
       const [userRole] = await this.db
@@ -233,7 +267,10 @@ export class UsersService {
       // ─────────────────────────────────────────────────────────────────
       // Send Customer Welcome Email
       // ─────────────────────────────────────────────────────────────────
-      await this.mailService.sendUserWelcomeEmail(userData.email, userData.first_name)
+      await this.mailService.sendUserWelcomeEmail(
+        userData.email,
+        userData.first_name,
+      );
 
       return userRecord;
     } catch (error) {
@@ -251,8 +288,9 @@ export class UsersService {
   }
   async login(login: LoginDto, domain: string) {
     try {
-      console.log(domain)
-      const companyId = await this.companyService.find(domain)
+      console.log(domain);
+      const filteredDomain = domainExtractor(domain);
+      const companyId = await this.companyService.find(filteredDomain);
       if (!companyId) {
         throw new HttpException('Company not found', HttpStatus.UNAUTHORIZED);
       }
@@ -261,12 +299,32 @@ export class UsersService {
       if (!records) {
         throw new HttpException('Invalid credentials', HttpStatus.UNAUTHORIZED);
       }
-      const [userAndCompanyRecord] = await this.db.select().from(user_and_company).where(and(eq(user_and_company.user_id, records.userRecord.id), eq(user_and_company.company_id, companyId)));
+      const [userAndCompanyRecord] = await this.db
+        .select()
+        .from(user_and_company)
+        .where(
+          and(
+            eq(user_and_company.user_id, records.userRecord.id),
+            eq(user_and_company.company_id, companyId),
+          ),
+        );
       if (userAndCompanyRecord.access_status === AccessStatus.INACTIVE) {
-        throw new HttpException('Your account has been deactivated. Please Activate Your Account.', HttpStatus.LOCKED);
+        throw new HttpException(
+          'Your account has been deactivated. Please Activate Your Account.',
+          HttpStatus.LOCKED,
+        );
       }
       const { userRecord, roleRecord } = records;
-      const [existingCompanyUser] = await this.db.select().from(user_and_company).where(and(eq(user_and_company.user_id, userRecord.id), eq(user_and_company.company_id, companyId))).limit(1);
+      const [existingCompanyUser] = await this.db
+        .select()
+        .from(user_and_company)
+        .where(
+          and(
+            eq(user_and_company.user_id, userRecord.id),
+            eq(user_and_company.company_id, companyId),
+          ),
+        )
+        .limit(1);
       if (!existingCompanyUser) {
         throw new ConflictException('User is not registered to this company');
       }
@@ -288,7 +346,11 @@ export class UsersService {
         );
       }
 
-      const payload = { sub: userRecord?.id, email: userRecord?.email, role: roleRecord.role_name };
+      const payload = {
+        sub: userRecord?.id,
+        email: userRecord?.email,
+        role: roleRecord.role_name,
+      };
       const expiresIn = process.env.JWT_EXPIRES_IN
         ? parseInt(process.env.JWT_EXPIRES_IN, 10)
         : 3600;
@@ -311,10 +373,13 @@ export class UsersService {
         user: filteredUser,
         role: roleRecord.role_name,
         access_token: accessToken,
-        refresh_token: refreshToken
+        refresh_token: refreshToken,
       };
     } catch (error) {
-      if (error instanceof HttpException || error instanceof InternalServerErrorException) {
+      if (
+        error instanceof HttpException ||
+        error instanceof InternalServerErrorException
+      ) {
         throw error;
       }
       throw new InternalServerErrorException('Failed to login user', {
@@ -323,51 +388,66 @@ export class UsersService {
     }
   }
 
-  async listCustomersByDomain(
-    domain: string,
-  ) {
+  async listCustomersByDomain(domain: string) {
     try {
-      const companyId = await this.companyService.find(domain);
+      const filteredDomain = domainExtractor(domain);
+      const companyId = await this.companyService.find(filteredDomain);
       if (!companyId) {
         throw new HttpException('Company not found', HttpStatus.UNAUTHORIZED);
       }
-      console.log("companyId", companyId)
-      const [roleRecord] = await this.db.select().from(user_roles).where(eq(user_roles.role_name, UserRole.CUSTOMER)).catch((error) => {
-        console.error('Error fetching role record:', error);
-        throw new InternalServerErrorException('Failed to fetch role record', {
-          cause: error,
+      console.log('companyId', companyId);
+      const [roleRecord] = await this.db
+        .select()
+        .from(user_roles)
+        .where(eq(user_roles.role_name, UserRole.CUSTOMER))
+        .catch((error) => {
+          console.error('Error fetching role record:', error);
+          throw new InternalServerErrorException(
+            'Failed to fetch role record',
+            {
+              cause: error,
+            },
+          );
         });
-      })
-      console.log('role record', roleRecord)
+      console.log('role record', roleRecord);
       if (!roleRecord) {
-        throw new HttpException('Role not found', HttpStatus.INTERNAL_SERVER_ERROR);
+        throw new HttpException(
+          'Role not found',
+          HttpStatus.INTERNAL_SERVER_ERROR,
+        );
       }
-      const customers = await this.db.query.user_and_company.findMany({
-        where: and(eq(user_and_company.company_id, companyId), eq(user_and_company.role_id, roleRecord.id)),
-        with: {
-          user: true,
-          role: true
-        }
-      }).then((data) => {
-        console.log('user and company data', data)
-        return data.map((item) => {
-          return {
-            id: item.user.id,
-            first_name: item.user.first_name,
-            last_name: item.user.last_name,
-            user_status: item.user.user_status,
-            created_at: item.created_at,
-            role: item.role.role_name,
-          };
+      const customers = await this.db.query.user_and_company
+        .findMany({
+          where: and(
+            eq(user_and_company.company_id, companyId),
+            eq(user_and_company.role_id, roleRecord.id),
+          ),
+          with: {
+            user: true,
+            role: true,
+          },
+        })
+        .then((data) => {
+          console.log('user and company data', data);
+          return data.map((item) => {
+            return {
+              id: item.user.id,
+              first_name: item.user.first_name,
+              last_name: item.user.last_name,
+              user_status: item.user.user_status,
+              created_at: item.created_at,
+              role: item.role.role_name,
+            };
+          });
+        })
+        .catch((error) => {
+          console.error('Error listing customers:', error);
+          throw new InternalServerErrorException('Failed to list customers', {
+            cause: error,
+          });
         });
-      }).catch((error) => {
-        console.error('Error listing customers:', error);
-        throw new InternalServerErrorException('Failed to list customers', {
-          cause: error,
-        });
-      })
 
-      console.log("customers", customers)
+      console.log('customers', customers);
       return customers;
     } catch (error) {
       throw new InternalServerErrorException('Failed to list customers', {
@@ -388,7 +468,11 @@ export class UsersService {
       if (!userRecord) {
         return null;
       }
-      const [userAndCompanyRecord] = await this.db.select().from(user_and_company).where(eq(user_and_company.user_id, userRecord.id)).limit(1);
+      const [userAndCompanyRecord] = await this.db
+        .select()
+        .from(user_and_company)
+        .where(eq(user_and_company.user_id, userRecord.id))
+        .limit(1);
       if (!userAndCompanyRecord) {
         return null;
       }
@@ -425,30 +509,45 @@ export class UsersService {
       });
     }
   }
-  async initializeAccountActionOtp(domain: string, actionType: UserStatus, customer_id?: string, email?: string,) {
+  async initializeAccountActionOtp(
+    domain: string,
+    actionType: UserStatus,
+    customer_id?: string,
+    email?: string,
+  ) {
     try {
-
       if (!email && !customer_id) {
-        throw new HttpException('Either email or customer_id not provided', HttpStatus.BAD_REQUEST);
+        throw new HttpException(
+          'Either email or customer_id not provided',
+          HttpStatus.BAD_REQUEST,
+        );
       }
-      console.log('incoming params', domain, actionType, customer_id, email)
+      console.log('incoming params', domain, actionType, customer_id, email);
       const isCustomerExists = customer_id ? eq(user.id, customer_id) : null;
       const isEmailExists = email ? eq(user.email, email) : null;
       const condition = isCustomerExists || isEmailExists;
       if (!condition) {
         throw new HttpException('User not found', HttpStatus.NOT_FOUND);
       }
-      const [userRecord] = await this.db.select().from(user).where(condition).catch((error) => {
-        console.error('Error fetching user record:', error);
-        throw new InternalServerErrorException('Failed to fetch user record', {
-          cause: error,
+      const [userRecord] = await this.db
+        .select()
+        .from(user)
+        .where(condition)
+        .catch((error) => {
+          console.error('Error fetching user record:', error);
+          throw new InternalServerErrorException(
+            'Failed to fetch user record',
+            {
+              cause: error,
+            },
+          );
         });
-      })
       if (!userRecord || userRecord?.id == null) {
         throw new HttpException('User not found', HttpStatus.NOT_FOUND);
       }
       const otp = randomInt(100000, 999999).toString();
-      const companyId = await this.companyService.find(domain);
+      const filteredDomain = domainExtractor(domain);
+      const companyId = await this.companyService.find(filteredDomain);
       const [companyDetails] = await this.db
         .select()
         .from(company)
@@ -468,7 +567,7 @@ export class UsersService {
         hour12: true,
         timeZone: 'Asia/Kolkata',
       }).format(otpExpires);
-      console.log('sending otp mail')
+      console.log('sending otp mail');
       if (actionType === UserStatus.INACTIVE)
         await this.mailService.sendAccountDeactivationOtp(
           userRecord?.email,
@@ -485,9 +584,12 @@ export class UsersService {
           formattedExpireTime,
           companyDetails.company_name,
         );
-      console.log('sent otp mail')
+      console.log('sent otp mail');
       return {
-        message: actionType === UserStatus.INACTIVE ? 'Confirm Account Deactivation OTP sent to email' : 'Confirm Account Reactivation OTP sent to email',
+        message:
+          actionType === UserStatus.INACTIVE
+            ? 'Confirm Account Deactivation OTP sent to email'
+            : 'Confirm Account Reactivation OTP sent to email',
       };
     } catch (error) {
       if (error instanceof HttpException) {
@@ -498,36 +600,52 @@ export class UsersService {
       });
     }
   }
-  async confirmAccountAction(domain: string, actionType: UserStatus, otp: string, customer_id?: string, email?: string) {
+  async confirmAccountAction(
+    domain: string,
+    actionType: UserStatus,
+    otp: string,
+    customer_id?: string,
+    email?: string,
+  ) {
     try {
       if (!email && !customer_id) {
-        throw new HttpException('Either email or customer_id not provided', HttpStatus.BAD_REQUEST);
+        throw new HttpException(
+          'Either email or customer_id not provided',
+          HttpStatus.BAD_REQUEST,
+        );
       }
-      console.log('incoming params', domain, actionType, customer_id, email)
-         const isCustomerExists = customer_id ? eq(user.id, customer_id) : null;
+      console.log('incoming params', domain, actionType, customer_id, email);
+      const isCustomerExists = customer_id ? eq(user.id, customer_id) : null;
       const isEmailExists = email ? eq(user.email, email) : null;
       const condition = isCustomerExists || isEmailExists;
       if (!condition) {
         throw new HttpException('User not found', HttpStatus.NOT_FOUND);
       }
-      const [userRecord] = await this.db.select().from(user).where(condition).catch((error) => {
-        console.error('Error fetching user record:', error);
-        throw new InternalServerErrorException('Failed to fetch user record', {
-          cause: error,
+      const [userRecord] = await this.db
+        .select()
+        .from(user)
+        .where(condition)
+        .catch((error) => {
+          console.error('Error fetching user record:', error);
+          throw new InternalServerErrorException(
+            'Failed to fetch user record',
+            {
+              cause: error,
+            },
+          );
         });
-      })
       if (!userRecord || userRecord?.id == null) {
         throw new HttpException('User not found', HttpStatus.NOT_FOUND);
       }
       if (!userRecord.otp || userRecord.otp !== otp) {
         throw new UnauthorizedException('Invalid OTP.');
       }
-      console.log('otp matches')
+      console.log('otp matches');
       if (!userRecord.otpExpires) {
         throw new UnauthorizedException('Invalid OTP');
       }
-      console.log('otp expires', userRecord.otpExpires)
-      console.log('current date', new Date())
+      console.log('otp expires', userRecord.otpExpires);
+      console.log('current date', new Date());
       if (new Date() > new Date(userRecord.otpExpires)) {
         await this.db
           .update(user)
@@ -537,30 +655,52 @@ export class UsersService {
           'OTP has expired. Please request a new one.',
         );
       }
-      const companyId = await this.companyService.find(domain);
+      const filteredDomain = domainExtractor(domain);
+      const companyId = await this.companyService.find(filteredDomain);
       if (!companyId) {
-        throw new HttpException('You cannot perform this action. Please try again.', HttpStatus.UNAUTHORIZED);
+        throw new HttpException(
+          'You cannot perform this action. Please try again.',
+          HttpStatus.UNAUTHORIZED,
+        );
       }
-      console.log('starting to update')
+      console.log('starting to update');
       const [userAndCompany] = await this.db
         .select()
         .from(user_and_company)
-        .where(and(eq(user_and_company.user_id, userRecord.id), eq(user_and_company.company_id, companyId)))
+        .where(
+          and(
+            eq(user_and_company.user_id, userRecord.id),
+            eq(user_and_company.company_id, companyId),
+          ),
+        )
         .limit(1);
       if (!userAndCompany) {
         throw new HttpException('User not found', HttpStatus.NOT_FOUND);
       }
       await this.db
         .update(user_and_company)
-        .set({ access_status: actionType === UserStatus.INACTIVE ? AccessStatus.INACTIVE : AccessStatus.ACTIVE })
-        .where(and(eq(user_and_company.user_id, userRecord.id), eq(user_and_company.company_id, companyId)));
+        .set({
+          access_status:
+            actionType === UserStatus.INACTIVE
+              ? AccessStatus.INACTIVE
+              : AccessStatus.ACTIVE,
+        })
+        .where(
+          and(
+            eq(user_and_company.user_id, userRecord.id),
+            eq(user_and_company.company_id, companyId),
+          ),
+        );
       await this.db
         .update(user)
-        .set({ otp: null, otpExpires: null, })
+        .set({ otp: null, otpExpires: null })
         .where(eq(user.id, userRecord.id));
-      console.log('updated successfully')
+      console.log('updated successfully');
       return {
-        message: actionType === UserStatus.INACTIVE ? 'User deactivated successfully' : 'User reactivated successfully'
+        message:
+          actionType === UserStatus.INACTIVE
+            ? 'User deactivated successfully'
+            : 'User reactivated successfully',
       };
     } catch (error) {
       throw new InternalServerErrorException('Failed to deactivate user', {

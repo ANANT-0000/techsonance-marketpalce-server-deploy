@@ -8,10 +8,14 @@ import {
 import { JwtService } from '@nestjs/jwt';
 import { and, eq } from 'drizzle-orm';
 import { DRIZZLE } from 'src/drizzle/drizzle.module';
-import { company, user, user_and_company, user_roles } from 'src/drizzle/schema';
+import {
+  company,
+  user,
+  user_and_company,
+  user_roles,
+} from 'src/drizzle/schema';
 import { type DrizzleDB } from 'src/drizzle/types/drizzle';
 import { UserRole } from 'src/drizzle/types/types';
-import express from 'express';
 import { ConfigService } from '@nestjs/config';
 @Injectable()
 export class AdminService {
@@ -19,7 +23,7 @@ export class AdminService {
     @Inject(DRIZZLE) private readonly db: DrizzleDB,
     private jwtService: JwtService,
     private configService: ConfigService,
-  ) { }
+  ) {}
 
   async adminLogin(
     email: string,
@@ -54,7 +58,7 @@ export class AdminService {
       console.log('existing user', existingUser);
 
       //--------------------------------------
-      // for bypass Admin login ,uncommit in production 
+      // for bypass Admin login ,uncommit in production
       //--------------------------------------
       // const [userAndCompany] = await this.db.select().from(user_and_company).where(eq(user_and_company.user_id, existingUser.id)).limit(1);
       // if (!userAndCompany) {
@@ -81,7 +85,11 @@ export class AdminService {
         sub: string;
         email: string;
         role: string;
-      } = { sub: existingUser.id, email: existingUser.email, role: adminRole.role_name };
+      } = {
+        sub: existingUser.id,
+        email: existingUser.email,
+        role: adminRole.role_name,
+      };
 
       const accessToken = await this.jwtService.signAsync(payload, {
         expiresIn: '5h',

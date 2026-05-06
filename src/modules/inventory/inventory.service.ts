@@ -19,6 +19,7 @@ import {
 } from 'src/drizzle/schema';
 import { and, eq, sql } from 'drizzle-orm';
 import { productImageType } from 'src/drizzle/types/types';
+import { domainExtractor } from 'src/common/filters/domainExtractor.filter';
 export const LOW_STOCK_THRESHOLD = 5; // configurable
 
 @Injectable()
@@ -26,10 +27,11 @@ export class InventoryService {
   constructor(
     @Inject(DRIZZLE) private readonly db: DrizzleService,
     private readonly companyService: CompanyService,
-  ) { }
+  ) {}
   async create(dto: CreateInventoryDto, domain: string) {
     try {
-      const companyId = await this.companyService.find(domain);
+      const filteredDomain = domainExtractor(domain);
+      const companyId = await this.companyService.find(filteredDomain);
       const [existingInventory] = await this.db
         .select({ id: inventory.id })
         .from(inventory)
@@ -73,7 +75,8 @@ export class InventoryService {
 
   async findAll(domain: string) {
     try {
-      const companyId = await this.companyService.find(domain);
+      const filteredDomain = domainExtractor(domain);
+      const companyId = await this.companyService.find(filteredDomain);
       console.log(companyId);
 
       const rows = await this.db.query.inventory
@@ -299,7 +302,8 @@ export class InventoryService {
     domain: string,
   ) {
     try {
-      const companyId = await this.companyService.find(domain);
+      const filteredDomain = domainExtractor(domain);
+      const companyId = await this.companyService.find(filteredDomain);
       console.log(
         'start updating stock',
         newQuantity,
@@ -510,7 +514,8 @@ export class InventoryService {
   }
   async remove(id: string, domain: string) {
     try {
-      const companyId = await this.companyService.find(domain);
+      const filteredDomain = domainExtractor(domain);
+      const companyId = await this.companyService.find(filteredDomain);
       const [existing] = await this.db
         .select({ id: inventory.id })
         .from(inventory)

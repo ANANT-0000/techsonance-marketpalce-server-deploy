@@ -21,6 +21,7 @@ import { ProductFiles } from 'src/common/Types/index.type';
 import { UpdateProductVariantDto } from './dto/update-product-variant.dto';
 import { CompanyService } from '../company/company.service';
 import { InventoryService } from '../inventory/inventory.service';
+import { domainExtractor } from 'src/common/filters/domainExtractor.filter';
 @Injectable()
 export class ProductVariantService {
   constructor(
@@ -28,7 +29,7 @@ export class ProductVariantService {
     private readonly uploadToCloudService: UploadToCloudService,
     private inventoryService: InventoryService,
     private readonly companyService: CompanyService,
-  ) { }
+  ) {}
   async create(
     createProductVariantDto: CreateProductVariantDto,
     domain: string,
@@ -47,7 +48,8 @@ export class ProductVariantService {
         cause: new Error('Product ID is required'),
       });
     }
-    const companyId = await this.companyService.find(domain);
+    const filteredDomain = domainExtractor(domain);
+    const companyId = await this.companyService.find(filteredDomain);
     console.log('creating product variant..');
     const [productId] = await this.db
       .select({ id: products.id })
@@ -306,7 +308,8 @@ export class ProductVariantService {
           HttpStatus.BAD_REQUEST,
         );
       }
-      const companyId = await this.companyService.find(domain);
+      const filteredDomain = domainExtractor(domain);
+      const companyId = await this.companyService.find(filteredDomain);
       const result = await this.db.transaction(async (tx) => {
         const [existingVariant] = await tx
           .select({
@@ -414,13 +417,15 @@ export class ProductVariantService {
         HttpStatus.BAD_REQUEST,
       );
     }
-    console.log('Product variant status updating')
+    console.log('Product variant status updating');
 
     try {
       const result = await this.db
         .update(product_variants)
         .set({ status })
-        .where(eq(product_variants.id, productId)).returning().catch((err) => {
+        .where(eq(product_variants.id, productId))
+        .returning()
+        .catch((err) => {
           console.error('Error updating product variant status:', err);
           throw new InternalServerErrorException(
             'Failed to update product variant status',
@@ -428,8 +433,8 @@ export class ProductVariantService {
               cause: err,
             },
           );
-        })
-      console.log('Product variant status updated', result)
+        });
+      console.log('Product variant status updated', result);
       return {
         message: 'Product variant status updated successfully',
         status: HttpStatus.OK,

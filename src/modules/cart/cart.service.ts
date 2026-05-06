@@ -17,6 +17,7 @@ import {
 } from 'src/drizzle/schema';
 import { and, eq, or, sql } from 'drizzle-orm';
 import { CompanyService } from '../company/company.service';
+import { domainExtractor } from 'src/common/filters/domainExtractor.filter';
 
 @Injectable()
 export class CartService {
@@ -30,7 +31,8 @@ export class CartService {
     domain: string,
   ) {
     try {
-      const companyId = await this.companyService.find(domain);
+      const filteredDomain = domainExtractor(domain);
+      const companyId = await this.companyService.find(filteredDomain);
       if (!companyId) {
         throw new HttpException('Company not found', HttpStatus.NOT_FOUND);
       }
@@ -137,7 +139,8 @@ export class CartService {
   async findAll(customerId: string, domain: string) {
     try {
       console.log('customerId', customerId);
-      const companyId = await this.companyService.find(domain);
+      const filteredDomain = domainExtractor(domain);
+      const companyId = await this.companyService.find(filteredDomain);
       const [isUserCartExits] = await this.db
         .select({ id: carts.id })
         .from(carts)
@@ -216,7 +219,9 @@ export class CartService {
 
   async findOne(productVariantId: string, customerId: string, domain: string) {
     try {
-      const companyId = await this.companyService.find(domain);
+      const filteredDomain = domainExtractor(domain);
+
+      const companyId = await this.companyService.find(filteredDomain);
       const [isUserCartExits] = await this.db
         .select({ id: carts.id })
         .from(carts)
@@ -316,7 +321,8 @@ export class CartService {
     domain: string,
   ) {
     try {
-      const companyId = await this.companyService.find(domain);
+      const filteredDomain = domainExtractor(domain);
+      const companyId = await this.companyService.find(filteredDomain);
       const [isUserCartExits] = await this.db
         .select({ id: carts.id })
         .from(carts)

@@ -1,14 +1,10 @@
 import { HttpException, HttpStatus, Inject, Injectable } from '@nestjs/common';
 
 import { DRIZZLE, type DrizzleService } from 'src/drizzle/drizzle.module';
-import {
-  company,
-  product_variants,
-  wishlist,
-  wishlist_items,
-} from 'src/drizzle/schema';
+import { product_variants, wishlist, wishlist_items } from 'src/drizzle/schema';
 import { and, eq, or } from 'drizzle-orm';
 import { CompanyService } from '../company/company.service';
+import { domainExtractor } from 'src/common/filters/domainExtractor.filter';
 
 @Injectable()
 export class WishlistService {
@@ -25,7 +21,8 @@ export class WishlistService {
     }
     console.log('productVariantId', productVariantId);
     console.log('customerId', customerId);
-    const companyId = await this.companyService.find(domain);
+    const filteredDomain = domainExtractor(domain);
+    const companyId = await this.companyService.find(filteredDomain);
     const [variantExists] = await this.db
       .select({ id: product_variants.id })
       .from(product_variants)
@@ -158,7 +155,8 @@ export class WishlistService {
       );
     }
     try {
-      const companyId = await this.companyService.find(domain);
+      const filteredDomain = domainExtractor(domain);
+      const companyId = await this.companyService.find(filteredDomain);
       const wishlistData = await this.db.query.wishlist.findMany({
         where: and(
           eq(wishlist.user_id, customerId),
@@ -206,7 +204,8 @@ export class WishlistService {
       );
     }
 
-    const companyId = await this.companyService.find(domain);
+    const filteredDomain = domainExtractor(domain);
+    const companyId = await this.companyService.find(filteredDomain);
     try {
       const [wishlistRecord] = await this.db
         .select({ id: wishlist.id })

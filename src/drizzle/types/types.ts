@@ -13,11 +13,11 @@ export enum UserStatus {
   REJECTED = 'rejected',
 }
 export enum AccessStatus {
-  ACTIVE    = 'active',
+  ACTIVE = 'active',
   INACTIVE = 'inactive',
-  PENDING   = 'pending',
+  PENDING = 'pending',
   SUSPENDED = 'suspended',
-  BLOCKED   = 'blocked',
+  BLOCKED = 'blocked',
 }
 export enum SupportTicketStatus {
   OPEN = 'open',
@@ -52,7 +52,7 @@ export enum PaymentStatus {
   COMPLETED = 'completed',
   FAILED = 'failed',
   REFUNDED = 'refunded',
-  CANCELLED='cancelled'
+  CANCELLED = 'cancelled',
 }
 export enum ShippingStatus {
   PENDING = 'pending',
@@ -62,9 +62,9 @@ export enum ShippingStatus {
   CANCELLED = 'cancelled',
 }
 export enum ReturnType {
-  RETURN = "return",
-  REFUND = "refund",
-  REPLACEMENT = "replacement"
+  RETURN = 'return',
+  REFUND = 'refund',
+  REPLACEMENT = 'replacement',
 }
 export enum ReturnStatus {
   PENDING = 'pending',
@@ -74,7 +74,7 @@ export enum ReturnStatus {
   DELIVERED = 'delivered',
   QC_PASSED = 'qc_passed',
   QC_FAILED = 'qc_failed',
-  COMPLETED = 'completed'
+  COMPLETED = 'completed',
 }
 export type KeyValuePair = {
   key: string;

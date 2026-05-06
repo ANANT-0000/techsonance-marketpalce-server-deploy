@@ -8,6 +8,7 @@ import { eq, desc } from 'drizzle-orm';
 import { DRIZZLE, type DrizzleService } from 'src/drizzle/drizzle.module';
 import { orders, vendor } from 'src/drizzle/schema';
 import { CompanyService } from '../company/company.service';
+import { domainExtractor } from 'src/common/filters/domainExtractor.filter';
 
 @Injectable()
 export class FinancesService {
@@ -18,7 +19,8 @@ export class FinancesService {
 
     async getVendorEarnings(domain: string) {
         try {
-            const companyId = await this.companyService.find(domain);
+                  const filteredDomain = domainExtractor(domain);
+            const companyId = await this.companyService.find(filteredDomain);
 
             // Using Drizzle's Relational Query API
             // This automatically checks your schema relations and connects the IDs

@@ -13,6 +13,7 @@ import {
 } from './dto/warehouse.dto';
 import { address, warehouse } from 'src/drizzle/schema';
 import { and, eq } from 'drizzle-orm';
+import { domainExtractor } from 'src/common/filters/domainExtractor.filter';
 
 @Injectable()
 export class WarehouseService {
@@ -22,7 +23,8 @@ export class WarehouseService {
   ) {}
   async create(warehouseAddressDto: warehouseAddressDto, domain: string) {
     try {
-      const companyId = await this.companyService.find(domain);
+      const filteredDomain = domainExtractor(domain);
+      const companyId = await this.companyService.find(filteredDomain);
       console.log('creating warehouse', warehouseAddressDto);
       return await this.db.transaction(async (tx) => {
         const [existingWarehouse] = await tx
@@ -98,7 +100,8 @@ export class WarehouseService {
 
   async findAll(domain: string) {
     try {
-      const companyId = await this.companyService.find(domain);
+      const filteredDomain = domainExtractor(domain);
+      const companyId = await this.companyService.find(filteredDomain);
       return await this.db.query.warehouse
         .findMany({
           where: eq(warehouse.company_id, companyId),
@@ -129,7 +132,8 @@ export class WarehouseService {
   }
   async findOptions(domain: string) {
     try {
-      const companyId = await this.companyService.find(domain);
+      const filteredDomain = domainExtractor(domain);
+      const companyId = await this.companyService.find(filteredDomain);
       return await this.db.query.warehouse
         .findMany({
           where: eq(warehouse.company_id, companyId),
@@ -157,7 +161,8 @@ export class WarehouseService {
   }
   async findOne(id: string, domain: string) {
     try {
-      const companyId = await this.companyService.find(domain);
+      const filteredDomain = domainExtractor(domain);
+      const companyId = await this.companyService.find(filteredDomain);
       const warehouseRecord = await this.db.query.warehouse
         .findFirst({
           where: and(eq(warehouse.id, id), eq(warehouse.company_id, companyId)),
@@ -194,7 +199,8 @@ export class WarehouseService {
     updateWarehouseDto: updateWarehouseAddressDto,
     domain: string,
   ) {
-    const companyId = await this.companyService.find(domain);
+    const filteredDomain = domainExtractor(domain);
+    const companyId = await this.companyService.find(filteredDomain);
     console.log('updating warehouse', updateWarehouseAddressDto);
     try {
       const [existingWarehouse] = await this.db
@@ -289,7 +295,8 @@ export class WarehouseService {
 
   async remove(id: string, domain: string) {
     try {
-      const companyId = await this.companyService.find(domain);
+      const filteredDomain = domainExtractor(domain);
+      const companyId = await this.companyService.find(filteredDomain);
       console.log('deleting warehouse');
       const deleted = await this.db
         .delete(warehouse)

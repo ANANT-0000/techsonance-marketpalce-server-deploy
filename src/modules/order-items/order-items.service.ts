@@ -27,6 +27,7 @@ import {
 import { and, eq } from 'drizzle-orm';
 import { user } from 'src/drizzle/schema/users.schema';
 import { user_and_company, user_roles } from 'src/drizzle/schema';
+import { domainExtractor } from 'src/common/filters/domainExtractor.filter';
 
 @Injectable()
 export class OrderItemsService {
@@ -39,7 +40,8 @@ export class OrderItemsService {
 
   async getOrderItemDetails(orderItemId: string, domain: string) {
     try {
-      const companyId = await this.companyService.find(domain);
+            const filteredDomain = domainExtractor(domain);
+      const companyId = await this.companyService.find(filteredDomain);
       const itemExists = await this.db
         .select({ id: order_items.id })
         .from(order_items)
@@ -102,10 +104,11 @@ export class OrderItemsService {
     newStatus: OrderStatus,
     domain: string,
   ) {
-    const companyId = await this.companyService.find(domain);
+    const filteredDomain = domainExtractor(domain);
+    const companyId = await this.companyService.find(filteredDomain);
     if (!companyId) {
       throw new HttpException(
-        `Company not found ${domain}`,
+        `Company not found ${filteredDomain}`,
         HttpStatus.NOT_FOUND,
       );
     }
@@ -190,7 +193,8 @@ export class OrderItemsService {
       console.log(
         `Cancelling order item ${orderItemId} for user ${userId} with reason: ${cancelReason} in company ${domain}`,
       );
-      const companyId = await this.companyService.find(domain);
+      const filteredDomain = domainExtractor(domain);
+      const companyId = await this.companyService.find(filteredDomain);
       console.log('finding user...');
       const [userRecord] = await this.db
         .select({ role_id: user_and_company.role_id, id: user.id })

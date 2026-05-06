@@ -24,10 +24,14 @@ import { UploadToCloudService } from 'src/utils/upload-to-cloud/upload-to-cloud.
 import { RefundsService } from '../refunds/refunds.service';
 import { InventoryService } from '../inventory/inventory.service';
 import { MailService } from 'src/common/services/mail/mail.service';
+import { domainExtractor } from 'src/common/filters/domainExtractor.filter';
 
 // ── Valid transitions per return type ──────────────────────────────────────
 // Prevents arbitrary status jumps (e.g. PENDING → QC_PASSED directly)
-const VALID_TRANSITIONS: Record<ReturnType, Record<ReturnStatus, ReturnStatus[]>> = {
+const VALID_TRANSITIONS: Record<
+  ReturnType,
+  Record<ReturnStatus, ReturnStatus[]>
+> = {
   [ReturnType.RETURN]: {
     [ReturnStatus.PENDING]: [ReturnStatus.APPROVED, ReturnStatus.REJECTED],
     [ReturnStatus.APPROVED]: [ReturnStatus.IN_TRANSIT],
@@ -70,7 +74,7 @@ export class ReturnsService {
     private readonly inventoryService: InventoryService,
     private readonly companyService: CompanyService,
     private readonly mailService: MailService,
-  ) { }
+  ) {}
 
   // ── Create return request ─────────────────────────────────────────────────
   async createReturnRequest(
@@ -81,29 +85,36 @@ export class ReturnsService {
   ) {
     // console.log(" inservce dto",dto, "files",files)
     try {
-      const company_id = await this.companyService.find(domain);
-      console.log('serching orderitem')
-      const [userDetails] = await this.db.select({ first_name: user.first_name, last_name: user.last_name, email: user.email }).from(user).where(eq(user.id, userId));
+      const filteredDomain = domainExtractor(domain);
+      const companyId = await this.companyService.find(filteredDomain);
+      console.log('serching orderitem');
+      const [userDetails] = await this.db
+        .select({
+          first_name: user.first_name,
+          last_name: user.last_name,
+          email: user.email,
+        })
+        .from(user)
+        .where(eq(user.id, userId));
       if (!userDetails) {
         throw new NotFoundException('User not found');
       }
-      console.log('userDetails', userDetails)
+      console.log('userDetails', userDetails);
       const orderItem = await this.db.query.order_items
         .findFirst({
           where: eq(order_items.id, dto.order_item_id),
           with: { order: true },
         })
         .catch((error) => {
-          throw new InternalServerErrorException(
-            'Failed to find order item',
-            { cause: error },
-          );
+          throw new InternalServerErrorException('Failed to find order item', {
+            cause: error,
+          });
         });
 
       if (!orderItem || !orderItem.order) {
         throw new NotFoundException('Order item not found');
       }
-      console.log('found orderitem', orderItem)
+      console.log('found orderitem', orderItem);
 
       // Only delivered items can be returned/replaced/refunded
       if (orderItem.order_status !== OrderStatus.DELIVERED) {
@@ -111,8 +122,8 @@ export class ReturnsService {
           `Cannot raise a return request for an item with status: ${orderItem.order_status}. Item must be delivered first.`,
         );
       }
-      console.log('orderItem.order_status ', orderItem.order_status)
-      console.log('serching return request')
+      console.log('orderItem.order_status ', orderItem.order_status);
+      console.log('serching return request');
       const existingReturn = await this.db.query.return_requests
         .findFirst({
           where: eq(return_requests.order_item_id, dto.order_item_id),
@@ -129,26 +140,26 @@ export class ReturnsService {
           'A return or replacement request already exists for this item.',
         );
       }
-      console.log('existingReturn ', existingReturn)
+      console.log('existingReturn ', existingReturn);
       // Upload evidence images if provided
       const finalResults: { url: string }[] = [];
       if (files?.evidence_images && files.evidence_images.length > 0) {
-        console.log('evidence_images found')
+        console.log('evidence_images found');
         const uploaded = await this.uploadToCloudService.uploadEvidenceFiles(
           files.evidence_images,
         );
         finalResults.push(...uploaded.map((res) => ({ url: res.secure_url })));
       }
-      console.log('evidence_images uploaded', finalResults)
+      console.log('evidence_images uploaded', finalResults);
 
-      console.log('creating return request')
+      console.log('creating return request');
       const [newReturn] = await this.db
         .insert(return_requests)
         .values({
           order_item_id: dto.order_item_id,
           user_id: userId,
-          company_id,
-          type: dto.type as ReturnType,
+          company_id: companyId,
+          type: dto.type,
           status: ReturnStatus.PENDING,
           reason: dto.reason,
           customer_note: dto.customer_note,
@@ -156,18 +167,26 @@ export class ReturnsService {
         })
         .returning()
         .catch((error) => {
-          console.log("Failed to create return request", error)
+          console.log('Failed to create return request', error);
           throw new InternalServerErrorException(
             'Failed to create return request',
             { cause: error },
           );
         });
-      console.log('newReturn ', newReturn)
+      console.log('newReturn ', newReturn);
       // Notify vendor (via mail) that a new return request has been raised
       if (newReturn.type == ReturnType.RETURN) {
-        await this.mailService.sendReturnRequestedEmail(userDetails.first_name + ' ' + userDetails.last_name, userDetails.email, orderItem.order_id ?? '')
+        await this.mailService.sendReturnRequestedEmail(
+          userDetails.first_name + ' ' + userDetails.last_name,
+          userDetails.email,
+          orderItem.order_id ?? '',
+        );
       } else if (newReturn.type == ReturnType.REPLACEMENT) {
-        await this.mailService.sendReplacementRequestedEmail(userDetails.first_name + ' ' + userDetails.last_name, userDetails.email, orderItem.order_id ?? '')
+        await this.mailService.sendReplacementRequestedEmail(
+          userDetails.first_name + ' ' + userDetails.last_name,
+          userDetails.email,
+          orderItem.order_id ?? '',
+        );
       }
       return newReturn;
     } catch (error) {
@@ -188,7 +207,8 @@ export class ReturnsService {
   // ── Get customer returns ──────────────────────────────────────────────────
   async getCustomerReturns(userId: string, domain: string) {
     try {
-      const companyId = await this.companyService.find(domain);
+      const filteredDomain = domainExtractor(domain);
+      const companyId = await this.companyService.find(filteredDomain);
 
       return await this.db.query.return_requests
         .findMany({
@@ -206,17 +226,17 @@ export class ReturnsService {
         });
     } catch (error) {
       if (error instanceof InternalServerErrorException) throw error;
-      throw new InternalServerErrorException(
-        'Failed to get customer returns',
-        { cause: error },
-      );
+      throw new InternalServerErrorException('Failed to get customer returns', {
+        cause: error,
+      });
     }
   }
 
   // ── Get vendor returns list ───────────────────────────────────────────────
   async getVendorReturns(domain: string) {
     try {
-      const companyId = await this.companyService.find(domain);
+      const filteredDomain = domainExtractor(domain);
+      const companyId = await this.companyService.find(filteredDomain);
 
       return await this.db.query.return_requests
         .findMany({
@@ -271,17 +291,17 @@ export class ReturnsService {
         });
     } catch (error) {
       if (error instanceof InternalServerErrorException) throw error;
-      throw new InternalServerErrorException(
-        'Failed to get vendor returns',
-        { cause: error },
-      );
+      throw new InternalServerErrorException('Failed to get vendor returns', {
+        cause: error,
+      });
     }
   }
 
   // ── Get single vendor return by ID ────────────────────────────────────────
   async getVendorReturnById(returnId: string, domain: string) {
     try {
-      const companyId = await this.companyService.find(domain);
+      const filteredDomain = domainExtractor(domain);
+      const companyId = await this.companyService.find(filteredDomain);
 
       const requestDetails = await this.db.query.return_requests
         .findFirst({
@@ -347,10 +367,9 @@ export class ReturnsService {
       ) {
         throw error;
       }
-      throw new InternalServerErrorException(
-        'Failed to fetch return details',
-        { cause: error },
-      );
+      throw new InternalServerErrorException('Failed to fetch return details', {
+        cause: error,
+      });
     }
   }
 
@@ -361,7 +380,8 @@ export class ReturnsService {
     dto: UpdateReturnDto,
   ) {
     try {
-      const companyId = await this.companyService.find(domain);
+      const filteredDomain = domainExtractor(domain);
+      const companyId = await this.companyService.find(filteredDomain);
 
       // ── Fetch the full return request ──────────────────────────────────
       const [returnRequest] = await this.db
@@ -405,7 +425,7 @@ export class ReturnsService {
       if (!allowedNext.includes(newStatus)) {
         throw new BadRequestException(
           `Invalid status transition for ${returnType}: ${currentStatus} → ${newStatus}. ` +
-          `Allowed next statuses: [${allowedNext.join(', ') || 'none'}]`,
+            `Allowed next statuses: [${allowedNext.join(', ') || 'none'}]`,
         );
       }
 
@@ -434,8 +454,6 @@ export class ReturnsService {
         .where(eq(order_items.id, returnRequest.order_item_id))
         .limit(1);
 
-
-
       // ── Fetch customer email for notifications ─────────────────────────
       const customerEmail = await this._getCustomerEmailByUserId(
         returnRequest.user_id,
@@ -448,7 +466,8 @@ export class ReturnsService {
           .update(return_requests)
           .set({
             status: newStatus,
-            store_owner_note: dto.store_owner_note ?? returnRequest.store_owner_note,
+            store_owner_note:
+              dto.store_owner_note ?? returnRequest.store_owner_note,
             tracking_id: dto.tracking_id ?? returnRequest.tracking_id,
           })
           .where(eq(return_requests.id, returnId))
@@ -458,7 +477,12 @@ export class ReturnsService {
               { cause: error },
             );
           });
-        if (!orderItemRecord || !orderItemRecord.order_id || !orderItemRecord.product_variant_id || !orderItemRecord.company_id) {
+        if (
+          !orderItemRecord ||
+          !orderItemRecord.order_id ||
+          !orderItemRecord.product_variant_id ||
+          !orderItemRecord.company_id
+        ) {
           throw new InternalServerErrorException(
             'Order item data is incomplete',
           );
@@ -470,7 +494,7 @@ export class ReturnsService {
           quantity: orderItemRecord.quantity,
           price: orderItemRecord.price,
           company_id: orderItemRecord.company_id,
-        }
+        };
         // 2. Run side effects based on type + newStatus
         await this._handleSideEffects({
           tx: tx as DrizzleService,
@@ -499,10 +523,9 @@ export class ReturnsService {
       ) {
         throw error;
       }
-      throw new InternalServerErrorException(
-        'Failed to update return status',
-        { cause: error },
-      );
+      throw new InternalServerErrorException('Failed to update return status', {
+        cause: error,
+      });
     }
   }
 
@@ -557,7 +580,7 @@ export class ReturnsService {
           if (customerEmail) {
             await this.mailService.sendEmail(
               customerEmail,
-              'We\'ve Confirmed Your Return Shipment',
+              "We've Confirmed Your Return Shipment",
               `<div style="font-family:sans-serif;max-width:600px;margin:auto">
                 <h2>Return Shipment Confirmed</h2>
                 <p>We have marked your return as in transit.</p>
@@ -722,7 +745,7 @@ export class ReturnsService {
           ) {
             throw new BadRequestException(
               `Cannot approve replacement: insufficient stock. ` +
-              `Available: ${inventoryRecord?.stock_quantity ?? 0}, Required: ${orderItem.quantity}`,
+                `Available: ${inventoryRecord?.stock_quantity ?? 0}, Required: ${orderItem.quantity}`,
             );
           }
 
@@ -978,18 +1001,14 @@ export class ReturnsService {
     }
   }
 
-  private async _notifyCustomer(
-    userId: string,
-    subject: string,
-    html: string,
-  ) {
+  private async _notifyCustomer(userId: string, subject: string, html: string) {
     try {
       const email = await this._getCustomerEmailByUserId(userId);
       if (email) {
         await this.mailService.sendEmail(email, subject, html);
       }
     } catch (error) {
-      console.log('feiled to sned mail', error)
+      console.log('feiled to sned mail', error);
     }
   }
 }

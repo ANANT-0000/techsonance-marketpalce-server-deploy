@@ -7,6 +7,7 @@ import { DRIZZLE, type DrizzleService } from 'src/drizzle/drizzle.module';
 import { and, eq, or } from 'drizzle-orm';
 import { coupon_usage, coupons } from 'src/drizzle/schema';
 import { CompanyService } from '../company/company.service';
+import { domainExtractor } from 'src/common/filters/domainExtractor.filter';
 
 @Injectable()
 export class CouponService {
@@ -16,7 +17,8 @@ export class CouponService {
   ) {}
   async verifyCoupon(code: string, userId: string, domain: string) {
     try {
-      const companyId = await this.companyService.find(domain);
+            const filteredDomain = domainExtractor(domain);
+      const companyId = await this.companyService.find(filteredDomain);
 
       console.log('coupon verifying');
       const couponRecord = await this.db

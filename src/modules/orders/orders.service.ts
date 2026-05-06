@@ -27,6 +27,7 @@ import { CompanyService } from '../company/company.service';
 import { InventoryService } from '../inventory/inventory.service';
 import { MailService } from 'src/common/services/mail/mail.service';
 import { response } from 'express';
+import { domainExtractor } from 'src/common/filters/domainExtractor.filter';
 
 @Injectable()
 export class OrdersService {
@@ -35,7 +36,7 @@ export class OrdersService {
     private readonly companyService: CompanyService,
     private readonly inventoryService: InventoryService,
     private readonly mailService: MailService,
-  ) { }
+  ) {}
 
   async createOrder({
     userId,
@@ -159,7 +160,8 @@ export class OrdersService {
           HttpStatus.BAD_REQUEST,
         );
       }
-      const companyId = await this.companyService.find(domain);
+      const filteredDomain = domainExtractor(domain);
+      const companyId = await this.companyService.find(filteredDomain);
 
       const [orderResult] = await this.db.query.orders.findMany({
         where: and(eq(orders.id, orderId), eq(orders.company_id, companyId)),
@@ -191,15 +193,12 @@ export class OrdersService {
 
   async getAllOrders() {
     try {
-      const orders = await this.db.query.orders.findMany(
-        {
-          columns:{
-            id:true,
-            created_at:true,
-          },
-          
-        }
-      );
+      const orders = await this.db.query.orders.findMany({
+        columns: {
+          id: true,
+          created_at: true,
+        },
+      });
       return orders;
     } catch (error) {
       console.error('Error fetching orders:', error);
@@ -210,7 +209,7 @@ export class OrdersService {
   }
 
   async completeOrderVerification(
-    customerDetails: { email: string, first_name: string, last_name: string },
+    customerDetails: { email: string; first_name: string; last_name: string },
     existingOrder: {
       id: string;
       total_amount: string;
@@ -230,14 +229,14 @@ export class OrdersService {
     if (!companyId) {
       throw new HttpException('Company ID is required', HttpStatus.BAD_REQUEST);
     }
-    console.log('order id in completeOrderVerification', orderId)
+    console.log('order id in completeOrderVerification', orderId);
     try {
       if (!existingOrder || !existingOrder.user_id) {
         throw new HttpException('Order not found', HttpStatus.NOT_FOUND);
       }
-      console.log("===================")
-      console.log("existingOrder", existingOrder)
-      console.log("===================")
+      console.log('===================');
+      console.log('existingOrder', existingOrder);
+      console.log('===================');
       const orderLines = await this.db
         .select({
           variantId: order_items.product_variant_id,
@@ -245,16 +244,19 @@ export class OrdersService {
         })
         .from(order_items)
         .where(eq(order_items.order_id, orderId));
-      console.log('starting transaction of order complete,cusomter detials', customerDetails);
+      console.log(
+        'starting transaction of order complete,cusomter detials',
+        customerDetails,
+      );
       return this.db.transaction(async (tx) => {
         if (isSuccess) {
           const orderItemsRecord = await tx
             .select()
             .from(order_items)
-            .where(eq(order_items.order_id, orderId))
-          console.log('===================')
-          console.log('orderItemsRecord', orderItemsRecord)
-          console.log('===================')
+            .where(eq(order_items.order_id, orderId));
+          console.log('===================');
+          console.log('orderItemsRecord', orderItemsRecord);
+          console.log('===================');
 
           if (orderItemsRecord.length > 0) {
             const updateItem = orderItemsRecord.map(async (item) => {
@@ -286,10 +288,11 @@ export class OrdersService {
           const paymentResult = await tx
             .update(payments)
             .set({ payment_status: PaymentStatus.COMPLETED })
-            .where(eq(payments.order_id, orderItemsRecord[0].order_id)).returning()
+            .where(eq(payments.order_id, orderItemsRecord[0].order_id))
+            .returning()
             .then((result) => {
               console.log('payment status updated to completed', result);
-              return result
+              return result;
             })
             .catch((error) => {
               console.error('Error updating payment status:', error);
@@ -300,11 +303,16 @@ export class OrdersService {
                 },
               );
             });
-          console.log('===================')
-          console.log('paymentResult', paymentResult)
-          console.log('===================')
+          console.log('===================');
+          console.log('paymentResult', paymentResult);
+          console.log('===================');
           if (customerDetails.email) {
-            this.mailService.sendOrderPlacedEmail(customerDetails.email, `${customerDetails.first_name} ${customerDetails.last_name}`, orderId, Number(existingOrder.total_amount));
+            this.mailService.sendOrderPlacedEmail(
+              customerDetails.email,
+              `${customerDetails.first_name} ${customerDetails.last_name}`,
+              orderId,
+              Number(existingOrder.total_amount),
+            );
           }
           return {
             success: true,
@@ -394,7 +402,8 @@ export class OrdersService {
       if (!userId) {
         throw new HttpException('User ID is required', HttpStatus.BAD_REQUEST);
       }
-      const companyId = await this.companyService.find(domain);
+      const filteredDomain = domainExtractor(domain);
+      const companyId = await this.companyService.find(filteredDomain);
 
       const ordersList = await this.db.query.orders
         .findMany({
@@ -486,7 +495,13 @@ export class OrdersService {
       });
     }
   }
-  async getUserOrderDetails(orderId: string, domain: string, offset: number = 0, limit: number = 10, status?: OrderStatus) {
+  async getUserOrderDetails(
+    orderId: string,
+    domain: string,
+    offset: number = 0,
+    limit: number = 10,
+    status?: OrderStatus,
+  ) {
     try {
       if (!orderId || !domain) {
         throw new HttpException(
@@ -494,7 +509,8 @@ export class OrdersService {
           HttpStatus.BAD_REQUEST,
         );
       }
-      const companyId = await this.companyService.find(domain);
+      const filteredDomain = domainExtractor(domain);
+      const companyId = await this.companyService.find(filteredDomain);
 
       const orderDetails = await this.db.query.orders.findFirst({
         where: and(eq(orders.id, orderId), eq(orders.company_id, companyId)),
@@ -534,10 +550,10 @@ export class OrdersService {
                   status: true,
                   store_owner_note: true,
                   tracking_id: true,
-                  type: true
-                }
+                  type: true,
+                },
               },
-              cancelledRecord: true
+              cancelledRecord: true,
             },
           },
           address: {
@@ -574,10 +590,20 @@ export class OrdersService {
       );
     }
   }
-  async getOrdersList(domain: string, offset: number = 0, limit: number = 50, status?: OrderStatus | undefined) {
+  async getOrdersList(
+    domain: string,
+    offset: number = 0,
+    limit: number = 50,
+    status?: OrderStatus | undefined,
+  ) {
     try {
-      const companyId = await this.companyService.find(domain);
-      console.log('order status \n', status, Object.values(OrderStatus).includes(status as OrderStatus))
+      const filteredDomain = domainExtractor(domain);
+      const companyId = await this.companyService.find(filteredDomain);
+      console.log(
+        'order status \n',
+        status,
+        Object.values(OrderStatus).includes(status as OrderStatus),
+      );
 
       // Step 1: Get order IDs that have matching items (for proper pagination)
       const validOrderIdsQuery = this.db
@@ -589,12 +615,12 @@ export class OrdersService {
             eq(order_items.order_id, orders.id),
             Object.values(OrderStatus).includes(status as OrderStatus)
               ? and(
-                // @ts-ignore
-                eq(order_items.order_status, status),
-                gt(order_items.quantity, 0)
-              )
-              : undefined
-          )
+                  // @ts-ignore
+                  eq(order_items.order_status, status),
+                  gt(order_items.quantity, 0),
+                )
+              : undefined,
+          ),
         )
         .where(eq(orders.company_id, companyId))
         .orderBy(desc(orders.created_at))
@@ -611,7 +637,7 @@ export class OrdersService {
       const ordersList = await this.db.query.orders.findMany({
         where: and(
           eq(orders.company_id, companyId),
-          inArray(orders.id, validOrderIds)
+          inArray(orders.id, validOrderIds),
         ),
         orderBy: desc(orders.created_at),
         columns: {
@@ -623,10 +649,10 @@ export class OrdersService {
           items: {
             where: Object.values(OrderStatus).includes(status as OrderStatus)
               ? and(
-                // @ts-ignore
-                eq(order_items.order_status, status),
-                gt(order_items.quantity, 0)
-              )
+                  // @ts-ignore
+                  eq(order_items.order_status, status),
+                  gt(order_items.quantity, 0),
+                )
               : undefined,
             columns: {
               order_status: true,
@@ -655,8 +681,8 @@ export class OrdersService {
           payment: true,
         },
       });
-      console.log(ordersList)
-      return ordersList
+      console.log(ordersList);
+      return ordersList;
     } catch (error) {
       console.error('Error fetching orders list:', error);
       if (error instanceof HttpException) {
@@ -675,7 +701,8 @@ export class OrdersService {
           HttpStatus.BAD_REQUEST,
         );
       }
-      const companyId = await this.companyService.find(domain);
+      const filteredDomain = domainExtractor(domain);
+      const companyId = await this.companyService.find(filteredDomain);
       const row = await this.db.query.orders.findFirst({
         where: and(eq(orders.id, orderId), eq(orders.company_id, companyId)),
 
@@ -803,20 +830,20 @@ export class OrdersService {
             cancel: item?.cancelledRecord,
             warehouse: warehouse
               ? {
-                id: inventory?.warehouse_id ?? null,
-                name: warehouse.warehouse_name,
-                address: warehouse.address
-                  ? {
-                    address_line_1: warehouse.address.address_line_1,
-                    address_line_2:
-                      warehouse.address.address_line_2 ?? null,
-                    city: warehouse.address.city,
-                    state: warehouse.address.state,
-                    postal_code: warehouse.address.postal_code,
-                    country: warehouse.address.country,
-                  }
-                  : null,
-              }
+                  id: inventory?.warehouse_id ?? null,
+                  name: warehouse.warehouse_name,
+                  address: warehouse.address
+                    ? {
+                        address_line_1: warehouse.address.address_line_1,
+                        address_line_2:
+                          warehouse.address.address_line_2 ?? null,
+                        city: warehouse.address.city,
+                        state: warehouse.address.state,
+                        postal_code: warehouse.address.postal_code,
+                        country: warehouse.address.country,
+                      }
+                    : null,
+                }
               : null,
 
             product_variant: {
@@ -830,21 +857,21 @@ export class OrdersService {
 
         shipping_address: row.address
           ? {
-            name: row.address.name,
-            address_line_1: row.address.address_line_1,
-            address_line_2: row.address.address_line_2 ?? null,
-            city: row.address.city,
-            state: row.address.state,
-            postal_code: row.address.postal_code,
-            country: row.address.country,
-          }
+              name: row.address.name,
+              address_line_1: row.address.address_line_1,
+              address_line_2: row.address.address_line_2 ?? null,
+              city: row.address.city,
+              state: row.address.state,
+              postal_code: row.address.postal_code,
+              country: row.address.country,
+            }
           : null,
 
         payment: row.payment
           ? {
-            amount: row.payment.amount,
-            payment_method: row.payment.payment_method,
-          }
+              amount: row.payment.amount,
+              payment_method: row.payment.payment_method,
+            }
           : null,
         shipping: {
           tracking_url: row.shipping?.tracking_url ?? null,
@@ -871,7 +898,8 @@ export class OrdersService {
     newStatus: OrderStatus,
     domain: string,
   ) {
-    const companyId = await this.companyService.find(domain);
+    const filteredDomain = domainExtractor(domain);
+    const companyId = await this.companyService.find(filteredDomain);
     if (!companyId) {
       throw new HttpException(
         `Company not found ${domain}`,
@@ -952,27 +980,29 @@ export class OrdersService {
   }
   async getPendingOrders(domain: string) {
     try {
-      const companyId = await this.companyService.find(domain)
+      const filteredDomain = domainExtractor(domain);
+      const companyId = await this.companyService.find(filteredDomain);
       const result = await this.db.query.orders.findMany({
         where: eq(orders.company_id, companyId),
         with: {
           items: {
-            where: or(eq(order_items.order_status, OrderStatus.PENDING), eq(order_items.order_status, OrderStatus.PROCESSING)),
+            where: or(
+              eq(order_items.order_status, OrderStatus.PENDING),
+              eq(order_items.order_status, OrderStatus.PROCESSING),
+            ),
             columns: {
               id: true,
               order_id: true,
               order_status: true,
               created_at: true,
               updated_at: true,
-            }
-          }
-        }
+            },
+          },
+        },
       });
-      const reponse = result.map(order => (
-        order.items
-      )).flat()
-      console.log(response)
-      return reponse
+      const reponse = result.map((order) => order.items).flat();
+      console.log(response);
+      return reponse;
     } catch (error) {
       console.error('Error fetching pending orders:', error);
       throw new InternalServerErrorException('Failed to fetch pending orders', {

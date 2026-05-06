@@ -15,6 +15,7 @@ import { and, eq, or } from 'drizzle-orm';
 import { OrdersService } from '../orders/orders.service';
 import { CompanyService } from '../company/company.service';
 import { MailService } from 'src/common/services/mail/mail.service';
+import { domainExtractor } from 'src/common/filters/domainExtractor.filter';
 
 @Injectable()
 export class CheckoutService {
@@ -23,8 +24,7 @@ export class CheckoutService {
     private readonly ordersService: OrdersService,
     private readonly companyService: CompanyService,
     private readonly mailService: MailService,
-
-  ) { }
+  ) {}
   async initiateCheckout(
     userId: string,
     initiateCheckoutDto: InitiateCheckoutDto,
@@ -46,7 +46,8 @@ export class CheckoutService {
         HttpStatus.BAD_REQUEST,
       );
     }
-    const companyId = await this.companyService.find(domain);
+    const filteredDomain = domainExtractor(domain);
+    const companyId = await this.companyService.find(filteredDomain);
 
     const addressRecord = await this.db
       .select()
@@ -86,15 +87,21 @@ export class CheckoutService {
 
   async verifyCheckout(dto: VerifyCheckoutDto, domain: string) {
     const { orderId, isSuccess, cartId, productVariantId } = dto;
-    console.log(orderId, "==orderId")
-    console.log("verifyCheckoutDto check", dto);
+    console.log(orderId, '==orderId');
+    console.log('verifyCheckoutDto check', dto);
 
-    const companyId = await this.companyService.find(domain);
+    const filteredDomain = domainExtractor(domain);
+    
+    const companyId = await this.companyService.find(filteredDomain);
     if (!companyId) {
       throw new HttpException('Company not found', HttpStatus.NOT_FOUND);
     }
 
-    const [existingOrder] = await this.db.select().from(orders).where(and(eq(orders.id, orderId), eq(orders.company_id, companyId))).limit(1);
+    const [existingOrder] = await this.db
+      .select()
+      .from(orders)
+      .where(and(eq(orders.id, orderId), eq(orders.company_id, companyId)))
+      .limit(1);
     if (!existingOrder.user_id) {
       throw new HttpException('user not found', HttpStatus.BAD_REQUEST);
     }
@@ -103,19 +110,24 @@ export class CheckoutService {
         .select({
           email: user.email,
           first_name: user.first_name,
-          last_name: user.last_name
+          last_name: user.last_name,
         })
         .from(user)
         .where(eq(user.id, existingOrder.user_id))
         .limit(1);
-      if (!customerRecord || (!customerRecord.first_name && !customerRecord.last_name && !customerRecord.email)) {
+      if (
+        !customerRecord ||
+        (!customerRecord.first_name &&
+          !customerRecord.last_name &&
+          !customerRecord.email)
+      ) {
         throw new HttpException('customer not found', HttpStatus.NOT_FOUND);
       }
       const customerDetails = {
         email: customerRecord.email,
         first_name: customerRecord.first_name || '',
-        last_name: customerRecord.last_name || ''
-      }
+        last_name: customerRecord.last_name || '',
+      };
       const verificationResult =
         await this.ordersService.completeOrderVerification(
           customerDetails,

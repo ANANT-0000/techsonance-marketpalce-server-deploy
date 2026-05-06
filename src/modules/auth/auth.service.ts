@@ -11,7 +11,12 @@ import { JwtService } from '@nestjs/jwt';
 import { DRIZZLE, type DrizzleService } from 'src/drizzle/drizzle.module';
 import { UsersService } from '../users/users.service';
 import { VendorsService } from '../vendors/vendors.service';
-import { company, user, user_and_company, user_roles } from 'src/drizzle/schema';
+import {
+  company,
+  user,
+  user_and_company,
+  user_roles,
+} from 'src/drizzle/schema';
 import { and, eq } from 'drizzle-orm';
 import { MailService } from 'src/common/services/mail/mail.service';
 import express from 'express';
@@ -19,6 +24,7 @@ import { CompanyService } from '../company/company.service';
 import { randomInt } from 'crypto';
 import bcrypt from 'bcrypt';
 import { AccessStatus, UserRole, UserStatus } from 'src/drizzle/types/types';
+import { domainExtractor } from 'src/common/filters/domainExtractor.filter';
 
 @Injectable()
 export class AuthService {
@@ -29,7 +35,7 @@ export class AuthService {
     private vendorService: VendorsService,
     private mail: MailService,
     private readonly companyService: CompanyService,
-  ) { }
+  ) {}
 
   async validateUser(userId: string, email: string) {
     const user = await this.usersService.findByPayload({
@@ -106,7 +112,8 @@ export class AuthService {
         throw new HttpException('User not found', HttpStatus.NOT_FOUND);
       }
       const otp = randomInt(100000, 999999).toString();
-      const companyId = await this.companyService.find(domain);
+      const filteredDomain = domainExtractor(domain);
+      const companyId = await this.companyService.find(filteredDomain);
       const [companyDetails] = await this.db
         .select()
         .from(company)
@@ -143,11 +150,7 @@ export class AuthService {
     }
   }
 
-  async resetPasswordWithOtp(
-    email: string,
-    otp: string,
-    newPassword: string,
-  ) {
+  async resetPasswordWithOtp(email: string, otp: string, newPassword: string) {
     const [userRecord] = await this.db
       .select()
       .from(user)
@@ -185,35 +188,49 @@ export class AuthService {
     return { message: 'Password reset successfully!' };
   }
 
-
-  async validateOAuthLogin(oauthUser: any, domain: string): Promise<{ access_token: string; refresh_token: string } | { message: string, status: number, email: string }> {
+  async validateOAuthLogin(
+    oauthUser: any,
+    domain: string,
+  ): Promise<
+    | { access_token: string; refresh_token: string }
+    | { message: string; status: number; email: string }
+  > {
     try {
       console.log('Validating OAuth login for:', oauthUser.email);
-
+      const filteredDomain = domainExtractor(domain);
       // Find company by domain
-      const companyId = await this.companyService.find(domain);
+      const companyId = await this.companyService.find(filteredDomain);
       if (!companyId) {
         throw new HttpException('Domain not found', HttpStatus.NOT_FOUND);
       }
-
 
       const [existingUser] = await this.db
         .select()
         .from(user)
         .innerJoin(user_and_company, eq(user.id, user_and_company.user_id))
         .where(
-          and(eq(user.email, oauthUser.email), eq(user_and_company.company_id, companyId)),
-        ).catch((error) => {
+          and(
+            eq(user.email, oauthUser.email),
+            eq(user_and_company.company_id, companyId),
+          ),
+        )
+        .catch((error) => {
           console.error('Error validating OAuth login:', error);
-          throw new InternalServerErrorException('Failed to validate OAuth login', {
-            cause: error,
-          });
-        })
+          throw new InternalServerErrorException(
+            'Failed to validate OAuth login',
+            {
+              cause: error,
+            },
+          );
+        });
 
-      console.log("existing user", existingUser)
+      console.log('existing user', existingUser);
       // If user exists, log them in
       if (existingUser) {
-        console.log('Existing user found, logging in:', existingUser.user.email);
+        console.log(
+          'Existing user found, logging in:',
+          existingUser.user.email,
+        );
 
         // Get user role
         const [roleRecord] = await this.db
@@ -227,13 +244,27 @@ export class AuthService {
         const [userAndCompany] = await this.db
           .select()
           .from(user_and_company)
-          .where(and(eq(user_and_company.user_id, existingUser.user.id), eq(user_and_company.company_id, companyId)));
+          .where(
+            and(
+              eq(user_and_company.user_id, existingUser.user.id),
+              eq(user_and_company.company_id, companyId),
+            ),
+          );
         if (!userAndCompany) {
-          throw new HttpException('User and company not found', HttpStatus.NOT_FOUND);
+          throw new HttpException(
+            'User and company not found',
+            HttpStatus.NOT_FOUND,
+          );
         }
-        const isDeactivated = userAndCompany.access_status === AccessStatus.INACTIVE;
+        const isDeactivated =
+          userAndCompany.access_status === AccessStatus.INACTIVE;
         if (isDeactivated) {
-          return { email: existingUser.user.email, message: 'Your account has been deactivated. Please Activate Your Account.', status: 423 };
+          return {
+            email: existingUser.user.email,
+            message:
+              'Your account has been deactivated. Please Activate Your Account.',
+            status: 423,
+          };
         }
 
         const access_payload = {
@@ -257,7 +288,7 @@ export class AuthService {
             email: existingUser.user.email,
           },
           role: roleRecord.role_name,
-        }
+        };
 
         const accessToken = this.jwtService.sign(access_payload, {
           secret: process.env.JWT_SECRET,
@@ -271,9 +302,7 @@ export class AuthService {
         return { access_token: accessToken, refresh_token: refreshToken };
       }
 
-
       console.log('New user, registering:', oauthUser.email);
-
 
       const [roleRecord] = await this.db
         .select({ id: user_roles.id, role_name: user_roles.role_name })
@@ -281,7 +310,10 @@ export class AuthService {
         .where(eq(user_roles.role_name, UserRole.CUSTOMER));
 
       if (!roleRecord) {
-        throw new HttpException('Customer role not found', HttpStatus.NOT_FOUND);
+        throw new HttpException(
+          'Customer role not found',
+          HttpStatus.NOT_FOUND,
+        );
       }
 
       const randomPassword = Math.random().toString(36).slice(-10);
@@ -312,7 +344,7 @@ export class AuthService {
         company_id: companyId,
         access_status: AccessStatus.ACTIVE,
         role_id: roleRecord.id,
-      })
+      });
       console.log('New user created successfully:', newUser.email);
 
       // Send welcome email
@@ -341,7 +373,6 @@ export class AuthService {
         secret: process.env.JWT_REFRESH_SECRET,
         expiresIn: '7d',
       });
-
 
       return { access_token: accessToken, refresh_token: refreshToken };
     } catch (error) {

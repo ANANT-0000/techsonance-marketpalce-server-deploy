@@ -10,6 +10,7 @@ import { CompanyService } from '../company/company.service';
 import { and, eq } from 'drizzle-orm';
 import { orders, shipping_details } from 'src/drizzle/schema';
 import { MailService } from 'src/common/services/mail/mail.service';
+import { domainExtractor } from 'src/common/filters/domainExtractor.filter';
 
 @Injectable()
 export class ShippingService {
@@ -17,10 +18,11 @@ export class ShippingService {
     @Inject(DRIZZLE) private readonly db: DrizzleService,
     private readonly companyService: CompanyService,
     private readonly mailService: MailService,
-  ) { }
+  ) {}
   async addTrackingUrl(orderId: string, trackingUrl: string, domain: string) {
     console.log('adding tracking Url');
-    const companyId = await this.companyService.find(domain);
+    const filteredDomain = domainExtractor(domain);
+    const companyId = await this.companyService.find(filteredDomain);
     console.log(companyId);
     if (!companyId) {
       throw new HttpException(
@@ -72,7 +74,10 @@ export class ShippingService {
       }
       const firstItem = orderDetail.items[0];
       const productName = firstItem?.variant?.variant_name || 'Item';
-      const itemName = orderDetail.items.length > 1 ? `${productName} +${orderDetail.items.length - 1} more items` : productName;
+      const itemName =
+        orderDetail.items.length > 1
+          ? `${productName} +${orderDetail.items.length - 1} more items`
+          : productName;
       await this.mailService.sendOrderShippedEmail(
         orderDetail?.customer?.email,
         `${orderDetail?.customer?.first_name} ${orderDetail?.customer?.last_name}`,
@@ -97,7 +102,8 @@ export class ShippingService {
     trackingUrl: string,
     domain: string,
   ) {
-    const companyId = await this.companyService.find(domain);
+    const filteredDomain = domainExtractor(domain);
+    const companyId = await this.companyService.find(filteredDomain);
     if (!companyId) {
       throw new HttpException(
         `Company with domain ${domain} not found`,
