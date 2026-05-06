@@ -245,10 +245,21 @@ export class VendorsService {
             });
         }
         console.log('vendor documents inserted');
-        // Send Welcome Email
-        // ─────────────────────────────────────────────────────────────────
+
+        return {
+          vendorMail: newUser.email,
+          vendorCompany_name: vendorData.company_name,
+          message: 'Vendor registered successfully',
+        };
+      });
+
+      try {
+        console.log('Attempting to send registration email...');
         await this.mailService
-          .sendVendorRegistrationEmail(newUser.email, vendorData.company_name)
+          .sendVendorRegistrationEmail(
+            result.vendorMail,
+            result.vendorCompany_name,
+          )
           .catch((error) => {
             console.error('Error sending registration email:', error);
             throw new InternalServerErrorException(
@@ -258,12 +269,16 @@ export class VendorsService {
               },
             );
           });
-        console.log('mail sended');
-        return {
-          message: 'Vendor registered successfully',
-        };
-      });
-      return result;
+        console.log('Mail sent successfully');
+      } catch (emailError) {
+        console.error(
+          'Failed to send welcome email, but vendor is registered:',
+          emailError,
+        );
+      }
+      return {
+        message: 'Vendor registered successfully',
+      };
     } catch (error) {
       if (
         error instanceof HttpException ||
@@ -581,7 +596,7 @@ export class VendorsService {
       });
     }
   }
-  async supandedVendor(vendorId: string) {
+  async suspendedVendor(vendorId: string) {
     try {
       const suspendedVendor = await this.db.transaction(async (tx) => {
         const [vendorUser] = await tx

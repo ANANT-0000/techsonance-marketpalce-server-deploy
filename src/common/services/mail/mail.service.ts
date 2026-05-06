@@ -99,7 +99,7 @@ export class MailService {
   }
   public verifyResetToken(token: string): string {
     try {
-      const decoded = this.jwtService.verify(token, {
+      const decoded: any = this.jwtService.verify(token, {
         secret: this.configService.get<string>('JWT_SECRET'),
       });
       if (
@@ -133,7 +133,7 @@ export class MailService {
 
   public async sendVendorRegistrationEmail(email: string, storeName: string) {
     const html = vendorRegistrationTemplate(storeName);
-    return this.sendEmail(
+    return await this.sendEmail(
       email,
       'Vendor Registration Received - Techsonance',
       html,
