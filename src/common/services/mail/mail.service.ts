@@ -90,7 +90,12 @@ export class MailService {
       html,
     };
     // eslint-disable-next-line @typescript-eslint/no-unsafe-return
-    return await this.nodeMailerTransporter.sendMail(mailOptions);
+    return await this.nodeMailerTransporter
+      .sendMail(mailOptions)
+      .catch((error) => {
+        console.error('Error sending email:', error);
+        throw new Error('Failed to send email. Please try again later.');
+      });
   }
   public verifyResetToken(token: string): string {
     try {
@@ -233,7 +238,11 @@ export class MailService {
     companyName: string,
   ) {
     const html = deactivateAccountOtpTemplate(name, otp, expireAt, companyName);
-    return this.sendEmail(email, `Confirm Account Deactivation - ${companyName}`, html);
+    return this.sendEmail(
+      email,
+      `Confirm Account Deactivation - ${companyName}`,
+      html,
+    );
   }
   async sendAccountReactivationOtp(
     email: string,
@@ -243,6 +252,10 @@ export class MailService {
     companyName: string,
   ) {
     const html = reactivateAccountOtpTemplate(name, otp, expireAt, companyName);
-    return this.sendEmail(email, `Confirm Account Reactivation - ${companyName}`, html);
+    return this.sendEmail(
+      email,
+      `Confirm Account Reactivation - ${companyName}`,
+      html,
+    );
   }
 }

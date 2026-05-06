@@ -247,10 +247,17 @@ export class VendorsService {
         console.log('vendor documents inserted');
         // Send Welcome Email
         // ─────────────────────────────────────────────────────────────────
-        await this.mailService.sendVendorRegistrationEmail(
-          newUser.email,
-          vendorData.company_name,
-        );
+        await this.mailService
+          .sendVendorRegistrationEmail(newUser.email, vendorData.company_name)
+          .catch((error) => {
+            console.error('Error sending registration email:', error);
+            throw new InternalServerErrorException(
+              'Failed to send registration email',
+              {
+                cause: error,
+              },
+            );
+          });
         console.log('mail sended');
         return {
           message: 'Vendor registered successfully',
