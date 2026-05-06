@@ -288,10 +288,14 @@ export class CompanyService {
 
   async find(domain: string) {
     try {
+      const whereClause =
+        process.env.NODE_ENV === 'production'
+          ? eq(company.company_domain, domain)
+          : or(eq(company.company_domain, domain), eq(company.id, domain));
       const [companyRecord] = await this.db
         .select({ id: company.id })
         .from(company)
-        .where(or(eq(company.company_domain, domain), eq(company.id, domain)))
+        .where(whereClause)
         .limit(1)
         .catch((error) => {
           console.error(`Error finding company with domain ${domain}:`, error);
