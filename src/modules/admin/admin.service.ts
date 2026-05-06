@@ -11,7 +11,6 @@ import { DRIZZLE } from 'src/drizzle/drizzle.module';
 import {
   company,
   user,
-  user_and_company,
   user_roles,
 } from 'src/drizzle/schema';
 import { type DrizzleDB } from 'src/drizzle/types/drizzle';

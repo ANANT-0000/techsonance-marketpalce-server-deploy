@@ -26,7 +26,7 @@ import { MailService } from 'src/common/services/mail/mail.service';
 import { CompanyService } from '../company/company.service.js';
 import { randomInt } from 'crypto';
 import { from } from 'rxjs';
-import { domainExtractor } from 'src/common/filters/domainExtractor.filter.js';
+import { domainExtractor } from '../../common/filters/domainExtractor.filter.js';
 type UserRecord = InferSelectModel<typeof user>;
 type UserRoleRecord = InferSelectModel<typeof user_roles>;
 @Injectable()

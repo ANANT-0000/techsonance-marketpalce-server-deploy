@@ -17,7 +17,7 @@ export class CouponService {
   ) {}
   async verifyCoupon(code: string, userId: string, domain: string) {
     try {
-            const filteredDomain = domainExtractor(domain);
+      const filteredDomain = domainExtractor(domain);
       const companyId = await this.companyService.find(filteredDomain);
 
       console.log('coupon verifying');

@@ -36,11 +36,11 @@ export class OrderItemsService {
     private readonly companyService: CompanyService,
     private readonly inventoryService: InventoryService,
     private readonly mailService: MailService,
-  ) { }
+  ) {}
 
   async getOrderItemDetails(orderItemId: string, domain: string) {
     try {
-            const filteredDomain = domainExtractor(domain);
+      const filteredDomain = domainExtractor(domain);
       const companyId = await this.companyService.find(filteredDomain);
       const itemExists = await this.db
         .select({ id: order_items.id })
@@ -478,7 +478,9 @@ export class OrderItemsService {
         const allItemsNowCancelled = remainingActiveItems.length === 0;
 
         if (allItemsNowCancelled) {
-          const finalPaymentStatus = isPrepaid ? PaymentStatus.REFUNDED : PaymentStatus.CANCELLED;
+          const finalPaymentStatus = isPrepaid
+            ? PaymentStatus.REFUNDED
+            : PaymentStatus.CANCELLED;
           await tx
             .update(payments)
             .set({ payment_status: finalPaymentStatus })
@@ -496,13 +498,22 @@ export class OrderItemsService {
         // Send Order Cancellation Email
         // ─────────────────────────────────────────────────────────────────
         const [customerRecord] = await tx
-          .select({ email: user.email, first_name: user.first_name, last_name: user.last_name })
+          .select({
+            email: user.email,
+            first_name: user.first_name,
+            last_name: user.last_name,
+          })
           .from(user)
           .where(eq(user.id, order.user_id ?? ''))
           .limit(1);
 
         if (customerRecord?.email) {
-          await this.mailService.sendOrderCancelledEmail(customerRecord.email, `${customerRecord.first_name} ${customerRecord.last_name} `, order.id, true)
+          await this.mailService.sendOrderCancelledEmail(
+            customerRecord.email,
+            `${customerRecord.first_name} ${customerRecord.last_name} `,
+            order.id,
+            true,
+          );
         }
         // ─────────────────────────────────────────────────────────────────`
         return {
