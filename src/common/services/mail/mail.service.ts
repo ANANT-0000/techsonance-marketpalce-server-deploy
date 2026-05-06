@@ -21,6 +21,7 @@ import { passwordResetOtpTemplate } from './templates/password-reset-otp.templat
 import { vendorApprovalTemplate } from './templates/vendor-approval.template';
 import { deactivateAccountOtpTemplate } from './templates/account-deactivation-otp.template';
 import { reactivateAccountOtpTemplate } from './templates/account-reactivate-otp.template';
+import { Resend } from 'resend';
 @Injectable()
 export class MailService {
   nodeMailerTransporter: nodemailer.Transporter;
@@ -40,7 +41,7 @@ export class MailService {
       },
     });
   }
-  public async sendResetPasswordEmail(email: string): Promise<void> {
+  public async sendResetPasswordEmail(email: string) {
     const expiresIn = parseInt(
       this.configService.get<string>('JWT_EXPIRES_IN') || '3600',
       10,
@@ -74,7 +75,7 @@ export class MailService {
       )
       .returning();
     // eslint-disable-next-line @typescript-eslint/no-unsafe-return
-    return this.sendEmail(
+    return await this.sendEmail(
       email,
       'Password Reset Request',
       `<p>You requested a password reset. Click the link below to reset your password:</p>
@@ -89,16 +90,22 @@ export class MailService {
       subject,
       html,
     };
+    const resend = new Resend(this.configService.get<string>('RESEND_KEY'));
     // eslint-disable-next-line @typescript-eslint/no-unsafe-return
-    return await this.nodeMailerTransporter
-      .sendMail(mailOptions)
-      .catch((error) => {
-        console.error('Error sending email:', error);
-        throw new Error('Failed to send email. Please try again later.');
-      });
+    return await resend.emails.send(mailOptions).catch((error) => {
+      console.error('Error sending email:', error);
+      throw new Error('Failed to send email. Please try again later.');
+    });
+    // return await this.nodeMailerTransporter
+    //   .sendMail(mailOptions)
+    //   .catch((error) => {
+    //     console.error('Error sending email:', error);
+    //     throw new Error('Failed to send email. Please try again later.');
+    //   });
   }
   public verifyResetToken(token: string): string {
     try {
+      // @ts-ignore
       const decoded: any = this.jwtService.verify(token, {
         secret: this.configService.get<string>('JWT_SECRET'),
       });
