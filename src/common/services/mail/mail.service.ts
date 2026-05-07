@@ -1,4 +1,9 @@
-import { Inject, Injectable, UnauthorizedException } from '@nestjs/common';
+import {
+  Inject,
+  Injectable,
+  Logger,
+  UnauthorizedException,
+} from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
 import { and, eq } from 'drizzle-orm';
@@ -6,7 +11,6 @@ import { DRIZZLE } from 'src/drizzle/drizzle.module';
 import { refresh_tokens } from 'src/drizzle/schema';
 import { user } from 'src/drizzle/schema/users.schema';
 import { type DrizzleDB } from 'src/drizzle/types/drizzle';
-import * as nodemailer from 'nodemailer';
 import { BadRequestException } from '@nestjs/common';
 import { userRegistrationTemplate } from './templates/user-registration.template';
 import { vendorRegistrationTemplate } from './templates/vendor-registration.template';
@@ -22,22 +26,66 @@ import { vendorApprovalTemplate } from './templates/vendor-approval.template';
 import { deactivateAccountOtpTemplate } from './templates/account-deactivation-otp.template';
 import { reactivateAccountOtpTemplate } from './templates/account-reactivate-otp.template';
 import { Resend } from 'resend';
+import { google } from 'googleapis';
+import * as nodemailer from 'nodemailer';
 @Injectable()
 export class MailService {
-  nodeMailerTransporter: nodemailer.Transporter;
+  // nodeMailerTransporter: nodemailer.Transporter;
+  private readonly logger = new Logger(MailService.name);
+  private readonly fromEmail: string;
+  private readonly oauth2Client;
   constructor(
     @Inject(DRIZZLE) private readonly drizzle: DrizzleDB,
     private readonly jwtService: JwtService,
     private readonly configService: ConfigService,
   ) {
     // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-call
-    this.nodeMailerTransporter = nodemailer.createTransport({
-      host: configService.get<string>('MAIL_HOST'),
-      port: configService.get<number>('MAIL_PORT'),
-      secure: configService.get<boolean>('MAIL_SECURE'),
+    // this.nodeMailerTransporter = nodemailer.createTransport({
+    //   host: configService.get<string>('MAIL_HOST'),
+    //   port: configService.get<number>('MAIL_PORT'),
+    //   secure: configService.get<boolean>('MAIL_SECURE'),
+    //   auth: {
+    //     user: configService.get<string>('MAIL_USER'),
+    //     pass: configService.get<string>('MAIL_PASS'),
+    //   },
+    // });
+
+    this.fromEmail = this.configService.getOrThrow<string>('MAIL_USER');
+
+    // Uses HTTPS under the hood — not blocked by Render
+    this.oauth2Client = new google.auth.OAuth2(
+      this.configService.getOrThrow<string>('OAUTH_CLIENT_ID'),
+      this.configService.getOrThrow<string>('OAUTH_CLIENT_SECRET'),
+      'https://developers.google.com/oauthplayground',
+    );
+
+    this.oauth2Client.setCredentials({
+      refresh_token: this.configService.getOrThrow<string>(
+        'OAUTH_REFRESH_TOKEN',
+      ),
+    });
+  }
+  private async createTransporter(): Promise<nodemailer.Transporter> {
+    // Fetches a fresh access token via HTTPS each time — never expires
+    const { token: accessToken } = await this.oauth2Client.getAccessToken();
+
+    if (!accessToken) {
+      throw new Error('Failed to get Gmail OAuth access token');
+    }
+
+    return nodemailer.createTransport({
+      service: 'gmail',
       auth: {
-        user: configService.get<string>('MAIL_USER'),
-        pass: configService.get<string>('MAIL_PASS'),
+        type: 'OAuth2',
+        user: this.fromEmail,
+        clientId: this.configService.getOrThrow<string>('OAUTH_CLIENT_ID'),
+        clientSecret: this.configService.getOrThrow<string>(
+          'OAUTH_CLIENT_SECRET',
+        ),
+        refreshToken: this.configService.getOrThrow<string>(
+          'OAUTH_REFRESH_TOKEN',
+        ),
+        accessToken,
       },
     });
   }
@@ -90,9 +138,11 @@ export class MailService {
       subject,
       html,
     };
-    const resend = new Resend(this.configService.get<string>('RESEND_KEY'));
+    const transporter = await this.createTransporter();
+
+    // const resend = new Resend(this.configService.get<string>('RESEND_KEY'));
     // eslint-disable-next-line @typescript-eslint/no-unsafe-return
-    return await resend.emails.send(mailOptions).catch((error) => {
+    return await transporter.sendMail(mailOptions).catch((error) => {
       console.error('Error sending email:', error);
       throw new Error('Failed to send email. Please try again later.');
     });

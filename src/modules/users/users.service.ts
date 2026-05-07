@@ -189,58 +189,71 @@ export class UsersService {
   // Register a new user
   async register(userData: CreateUserDto, domain: string) {
     try {
+      // ── 1. Resolve company ──────────────────────────────────────────
       const filteredDomain = domainExtractor(domain);
       const companyId = await this.companyService.find(filteredDomain);
+
       if (!companyId) {
         throw new HttpException('Company not found', HttpStatus.NOT_FOUND);
       }
+
+      // ── 2. Check if user already exists ────────────────────────────
       const [existingUser] = await this.db
         .select()
         .from(user)
         .where(eq(user.email, userData.email))
-        .limit(1);
-      const existingCompanyUser = await this.db
-        .select()
-        .from(user_and_company)
-        .where(
-          and(
-            eq(user_and_company.user_id, existingUser.id),
-            eq(user_and_company.company_id, companyId),
-          ),
-        )
-        .limit(1);
-      if (existingUser && existingCompanyUser) {
-        throw new ConflictException(
-          'User with this email already exists in this company',
-        );
-      }
-
-      const [userRole] = await this.db
-        .select()
-        .from(user_roles)
-        .where(eq(user_roles.role_name, UserRole.CUSTOMER))
-        .limit(1)
         .catch((error) => {
-          console.error('Error fetching user role:', error);
-          throw new InternalServerErrorException('Failed to fetch user role', {
-            cause: error,
-          });
+          console.error('Error checking existing user:', error);
+          throw new InternalServerErrorException(
+            'Failed to check existing user',
+            {
+              cause: error,
+            },
+          );
         });
 
-      if (!userRole) {
-        throw new InternalServerErrorException('Customer role not found');
-      }
-
-      const hashedPassword = await bcrypt.hash(userData.password, 10);
-      console.log('creating user');
+      // ── 3. FIXED: Only query user_and_company if user exists ────────
+      //    Previously crashed with existingUser.id when existingUser = undefined
       if (existingUser) {
+        const [existingCompanyUser] = await this.db
+          .select()
+          .from(user_and_company)
+          .where(
+            and(
+              eq(user_and_company.user_id, existingUser.id),
+              eq(user_and_company.company_id, companyId),
+            ),
+          )
+          .catch((error) => {
+            console.error('Error checking existing company user:', error);
+            throw new InternalServerErrorException(
+              'Failed to check existing company user',
+              { cause: error },
+            );
+          });
+
+        if (existingCompanyUser) {
+          // User exists AND is already in this company → conflict
+          throw new ConflictException(
+            'User with this email already exists in this company',
+          );
+        }
+
+        // User exists but NOT in this company → just link them
+        const [userRole] = await this.getCustomerRole();
         await this.db.insert(user_and_company).values({
           user_id: existingUser.id,
           company_id: companyId,
           role_id: userRole.id,
         });
-        return existingUser;
+
+        return existingUser; // Return early, no welcome email (already registered)
       }
+
+      // ── 4. Brand-new user: fetch role, hash password, create ────────
+      const [userRole] = await this.getCustomerRole();
+      const hashedPassword = await bcrypt.hash(userData.password, 10);
+
       const [userRecord] = await this.db
         .insert(user)
         .values({
@@ -256,17 +269,14 @@ export class UsersService {
             cause: error,
           });
         });
+
       await this.db.insert(user_and_company).values({
         user_id: userRecord.id,
         company_id: companyId,
         role_id: userRole.id,
       });
-      console.log('created user');
 
-      // ─────────────────────────────────────────────────────────────────
-      // ─────────────────────────────────────────────────────────────────
-      // Send Customer Welcome Email
-      // ─────────────────────────────────────────────────────────────────
+      // ── 5. Send welcome email (non-blocking on failure) ──────────────
       await this.mailService.sendUserWelcomeEmail(
         userData.email,
         userData.first_name,
@@ -280,11 +290,31 @@ export class UsersService {
       ) {
         throw error;
       }
-
       throw new InternalServerErrorException('Failed to register user', {
         cause: error,
       });
     }
+  }
+
+  // ── Extracted helper to avoid repeating role fetch logic ────────────
+  private async getCustomerRole() {
+    const result = await this.db
+      .select()
+      .from(user_roles)
+      .where(eq(user_roles.role_name, UserRole.CUSTOMER))
+      .limit(1)
+      .catch((error) => {
+        console.error('Error fetching user role:', error);
+        throw new InternalServerErrorException('Failed to fetch user role', {
+          cause: error,
+        });
+      });
+
+    if (!result[0]) {
+      throw new InternalServerErrorException('Customer role not found');
+    }
+
+    return result;
   }
   async login(login: LoginDto, domain: string) {
     try {

@@ -134,18 +134,18 @@ export class AuthController {
 
   @Post('login-vendor')
   @HttpCode(HttpStatus.OK)
-  async loginVendor(@Body() loginDto: LoginDto) {
+  async loginVendor(@Body() loginDto: LoginDto,) {
     return await this.vendorService.vendorLogin(loginDto);
   }
 
-  @Post('register-user/:companyId')
+  @Post('register-user')
   @HttpCode(HttpStatus.CREATED)
   async signUpUser(
     @Param('companyId') companyId: string,
     @Body('customer_data') createUser: CreateUserDto,
+    @Headers('company-domain') domain: string,
   ) {
-    console.log(createUser);
-    const result = await this.userService.register(createUser, companyId);
+    const result = await this.userService.register(createUser, domain);
     return result;
   }
 
