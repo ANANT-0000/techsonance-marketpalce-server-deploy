@@ -12,7 +12,6 @@ export class CloudinaryService {
         reject(new Error('No file provided'));
         return;
       }
-    
       const uploadStream = cloudinary.uploader.upload_stream(
         {
           resource_type: 'auto',

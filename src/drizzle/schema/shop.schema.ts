@@ -461,3 +461,24 @@ export const return_requests = pg.pgTable(
     pg.index('idx_return_requests_status').on(table.status),
   ],
 );
+export const invoices = pg.pgTable('invoices', {
+  id: pg.uuid('id').primaryKey().defaultRandom(),
+  invoice_number: pg
+    .varchar('invoice_number', { length: 100 })
+    .notNull()
+    .unique(),
+  invoice_url: pg.text('invoice_url').notNull(),
+  order_id: pg
+    .uuid('order_id')
+    .references(() => orders.id, { onDelete: 'cascade' })
+    .notNull(),
+  order_item_id: pg
+    .uuid('order_item_id')
+    .references(() => order_items.id, { onDelete: 'cascade' })
+    .notNull(),
+  company_id: pg
+    .uuid('company_id')
+    .references(() => company.id, { onDelete: 'cascade' })
+    .notNull(),
+  created_at: pg.timestamp('created_at').notNull().defaultNow(),
+});

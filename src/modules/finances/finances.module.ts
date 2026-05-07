@@ -5,7 +5,7 @@ import { DrizzleModule } from 'src/drizzle/drizzle.module';
 import { CompanyModule } from '../company/company.module';
 
 @Module({
-  imports:[DrizzleModule,CompanyModule],
+  imports: [DrizzleModule, CompanyModule],
   controllers: [FinancesController],
   providers: [FinancesService],
 })

@@ -141,7 +141,6 @@ export class AuthController {
   @Post('register-user')
   @HttpCode(HttpStatus.CREATED)
   async signUpUser(
-    @Param('companyId') companyId: string,
     @Body('customer_data') createUser: CreateUserDto,
     @Headers('company-domain') domain: string,
   ) {

@@ -1,10 +1,11 @@
 import { Injectable } from '@nestjs/common';
 import { productImageType } from 'src/drizzle/types/types';
 import { CloudinaryService } from '../cloudinary/cloudinary.service';
-
+import { v2 as cloudinary } from 'cloudinary';
+import streamifier from 'streamifier';
 @Injectable()
 export class UploadToCloudService {
-  constructor(private cloudinaryService: CloudinaryService) { }
+  constructor(private cloudinaryService: CloudinaryService) {}
   async uploadFile(
     file: Express.Multer.File,
   ): Promise<{ secure_url: string; type: string }> {
@@ -24,6 +25,7 @@ export class UploadToCloudService {
       .uploadFiles(files)
       .then((data) => {
         return data.map((item) => ({
+          // @ts-ignore
           secure_url: item.secure_url,
           type: productImageType.GALLERY,
         }));
@@ -39,6 +41,7 @@ export class UploadToCloudService {
     return await this.cloudinaryService
       .uploadFile(file)
       .then((data) => {
+        // @ts-ignore
         return { secure_url: data.secure_url, type: fileType };
       })
       .catch((err) => {
@@ -47,7 +50,7 @@ export class UploadToCloudService {
   }
   async uploadEvidenceFiles(
     files: Express.Multer.File[],
-  ): Promise<{ secure_url: string; }[]> {
+  ): Promise<{ secure_url: string }[]> {
     return await this.cloudinaryService
       .uploadFiles(files)
       .then((data) => {
@@ -58,5 +61,21 @@ export class UploadToCloudService {
       .catch((err) => {
         throw new Error(err);
       });
+  }
+  async uploadInvoice(buffer: Buffer, orderId: string): Promise<string> {
+    return new Promise((resolve, reject) => {
+      const uploadStream = cloudinary.uploader.upload_stream(
+        {
+          folder: 'techsonance_invoices',
+          resource_type: 'auto',
+          public_id: `invoice_${orderId}`,
+        },
+        (error, result) => {
+          if (result) resolve(result.secure_url);
+          else reject(error);
+        },
+      );
+      streamifier.createReadStream(buffer).pipe(uploadStream);
+    });
   }
 }

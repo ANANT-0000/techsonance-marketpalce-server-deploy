@@ -10,6 +10,7 @@ import {
   categories,
   coupon_usage,
   coupons,
+  invoices,
   order_item_cancelled,
   order_items,
   orders,
@@ -61,6 +62,10 @@ export const companyRelations = relations(company, ({ one, many }) => ({
   payments: many(payments),
   shipping_details: many(shipping_details),
   refunds: many(refunds),
+  invoices: many(invoices),
+  audit_logs: many(audit_logs),
+  inventory: many(inventory),
+  warehouse: many(warehouse),
 }));
 
 // --- User Relations ---
@@ -82,21 +87,23 @@ export const userRelations = relations(user, ({ one, many }) => ({
   carts: many(carts),
 }));
 
-export const userAndCompanyRelations = relations(user_and_company, ({ one }) => ({
-  user: one(user, {
-    fields: [user_and_company.user_id],
-    references: [user.id],
+export const userAndCompanyRelations = relations(
+  user_and_company,
+  ({ one }) => ({
+    user: one(user, {
+      fields: [user_and_company.user_id],
+      references: [user.id],
+    }),
+    company: one(company, {
+      fields: [user_and_company.company_id],
+      references: [company.id],
+    }),
+    role: one(user_roles, {
+      fields: [user_and_company.role_id],
+      references: [user_roles.id],
+    }),
   }),
-  company: one(company, {
-    fields: [user_and_company.company_id],
-    references: [company.id],
-
-  }),
-  role: one(user_roles, {
-    fields: [user_and_company.role_id],
-    references: [user_roles.id],
-  })
-}));
+);
 // --- User Roles Relations ---
 export const userRolesRelations = relations(user_roles, ({ many }) => ({
   userAndCompany: many(user_and_company),
@@ -252,6 +259,10 @@ export const ordersRelations = relations(orders, ({ one, many }) => ({
     fields: [orders.id],
     references: [shipping_details.order_id],
   }),
+  invoice: one(invoices, {
+    fields: [orders.id],
+    references: [invoices.order_id],
+  }),
 }));
 export const orderItemsRelations = relations(order_items, ({ one }) => ({
   order: one(orders, {
@@ -273,6 +284,10 @@ export const orderItemsRelations = relations(order_items, ({ one }) => ({
   return_request: one(return_requests, {
     fields: [order_items.id],
     references: [return_requests.order_item_id],
+  }),
+  invoice: one(invoices, {
+    fields: [order_items.id],
+    references: [invoices.order_item_id],
   }),
 }));
 
@@ -415,6 +430,21 @@ export const paymentRelations = relations(payments, ({ one }) => ({
   }),
   company: one(company, {
     fields: [payments.company_id],
+    references: [company.id],
+  }),
+}));
+
+export const invoiceRelations = relations(invoices, ({ one }) => ({
+  order: one(orders, {
+    fields: [invoices.order_id],
+    references: [orders.id],
+  }),
+  orderItem: one(order_items, {
+    fields: [invoices.order_item_id],
+    references: [order_items.id],
+  }),
+  company: one(company, {
+    fields: [invoices.company_id],
     references: [company.id],
   }),
 }));

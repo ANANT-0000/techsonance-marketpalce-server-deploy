@@ -8,26 +8,18 @@ import {
 import { and, desc, eq, gt, inArray, or } from 'drizzle-orm';
 import { DRIZZLE, type DrizzleService } from 'src/drizzle/drizzle.module';
 import {
-  company,
-  order_item_cancelled,
   order_items,
   orders,
   payments,
   product_images,
-  refunds,
-  user,
 } from 'src/drizzle/schema';
-import {
-  CancelledByEnum,
-  OrderStatus,
-  PaymentStatus,
-  refundStatusEnum,
-} from 'src/drizzle/types/types';
+import { OrderStatus, PaymentStatus } from 'src/drizzle/types/types';
 import { CompanyService } from '../company/company.service';
 import { InventoryService } from '../inventory/inventory.service';
 import { MailService } from 'src/common/services/mail/mail.service';
 import { response } from 'express';
 import { domainExtractor } from 'src/common/filters/domainExtractor.filter';
+import { InvoiceService } from '../invoice/invoice.service';
 
 @Injectable()
 export class OrdersService {
@@ -36,6 +28,7 @@ export class OrdersService {
     private readonly companyService: CompanyService,
     private readonly inventoryService: InventoryService,
     private readonly mailService: MailService,
+    private readonly invoiceService: InvoiceService,
   ) {}
 
   async createOrder({
@@ -307,13 +300,14 @@ export class OrdersService {
           console.log('paymentResult', paymentResult);
           console.log('===================');
           if (customerDetails.email) {
-            this.mailService.sendOrderPlacedEmail(
+            await this.mailService.sendOrderPlacedEmail(
               customerDetails.email,
               `${customerDetails.first_name} ${customerDetails.last_name}`,
               orderId,
               Number(existingOrder.total_amount),
             );
           }
+
           return {
             success: true,
             orderId,
@@ -373,6 +367,13 @@ export class OrdersService {
                 },
               );
             });
+          this.invoiceService.createInvoice(orderId).catch((err) => {
+            console.error(
+              'Background invoice generation failed for order:',
+              orderId,
+              err,
+            );
+          });
           return {
             success: false,
             orderId: existingOrder.id,
