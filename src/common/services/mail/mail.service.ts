@@ -25,70 +25,68 @@ import { passwordResetOtpTemplate } from './templates/password-reset-otp.templat
 import { vendorApprovalTemplate } from './templates/vendor-approval.template';
 import { deactivateAccountOtpTemplate } from './templates/account-deactivation-otp.template';
 import { reactivateAccountOtpTemplate } from './templates/account-reactivate-otp.template';
-import { Resend } from 'resend';
-import { google } from 'googleapis';
 import * as nodemailer from 'nodemailer';
 @Injectable()
 export class MailService {
-  // nodeMailerTransporter: nodemailer.Transporter;
+  nodeMailerTransporter: nodemailer.Transporter;
   private readonly logger = new Logger(MailService.name);
-  private readonly fromEmail: string;
-  private readonly oauth2Client;
+  // private readonly fromEmail: string;
+  // private readonly oauth2Client;
   constructor(
     @Inject(DRIZZLE) private readonly drizzle: DrizzleDB,
     private readonly jwtService: JwtService,
     private readonly configService: ConfigService,
   ) {
     // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-call
-    // this.nodeMailerTransporter = nodemailer.createTransport({
-    //   host: configService.get<string>('MAIL_HOST'),
-    //   port: configService.get<number>('MAIL_PORT'),
-    //   secure: configService.get<boolean>('MAIL_SECURE'),
-    //   auth: {
-    //     user: configService.get<string>('MAIL_USER'),
-    //     pass: configService.get<string>('MAIL_PASS'),
-    //   },
-    // });
-
-    this.fromEmail = this.configService.getOrThrow<string>('MAIL_USER');
-
-    // Uses HTTPS under the hood — not blocked by Render
-    this.oauth2Client = new google.auth.OAuth2(
-      this.configService.getOrThrow<string>('OAUTH_CLIENT_ID'),
-      this.configService.getOrThrow<string>('OAUTH_CLIENT_SECRET'),
-      'https://developers.google.com/oauthplayground',
-    );
-
-    this.oauth2Client.setCredentials({
-      refresh_token: this.configService.getOrThrow<string>(
-        'OAUTH_REFRESH_TOKEN',
-      ),
-    });
-  }
-  private async createTransporter(): Promise<nodemailer.Transporter> {
-    // Fetches a fresh access token via HTTPS each time — never expires
-    const { token: accessToken } = await this.oauth2Client.getAccessToken();
-
-    if (!accessToken) {
-      throw new Error('Failed to get Gmail OAuth access token');
-    }
-
-    return nodemailer.createTransport({
-      service: 'gmail',
+    this.nodeMailerTransporter = nodemailer.createTransport({
+      host: configService.get<string>('MAIL_HOST'),
+      port: configService.get<number>('MAIL_PORT'),
+      secure: configService.get<boolean>('MAIL_SECURE'),
       auth: {
-        type: 'OAuth2',
-        user: this.fromEmail,
-        clientId: this.configService.getOrThrow<string>('OAUTH_CLIENT_ID'),
-        clientSecret: this.configService.getOrThrow<string>(
-          'OAUTH_CLIENT_SECRET',
-        ),
-        refreshToken: this.configService.getOrThrow<string>(
-          'OAUTH_REFRESH_TOKEN',
-        ),
-        accessToken,
+        user: configService.get<string>('MAIL_USER'),
+        pass: configService.get<string>('MAIL_PASS'),
       },
     });
+
+    // this.fromEmail = this.configService.getOrThrow<string>('MAIL_USER');
+
+    // Uses HTTPS under the hood — not blocked by Render
+    // this.oauth2Client = new google.auth.OAuth2(
+    //   this.configService.getOrThrow<string>('OAUTH_CLIENT_ID'),
+    //   this.configService.getOrThrow<string>('OAUTH_CLIENT_SECRET'),
+    //   'https://developers.google.com/oauthplayground',
+    // );
+
+    // this.oauth2Client.setCredentials({
+    //   refresh_token: this.configService.getOrThrow<string>(
+    //     'OAUTH_REFRESH_TOKEN',
+    //   ),
+    // });
   }
+  // private async createTransporter(): Promise<nodemailer.Transporter> {
+  //   // Fetches a fresh access token via HTTPS each time — never expires
+  //   const { token: accessToken } = await this.oauth2Client.getAccessToken();
+
+  //   if (!accessToken) {
+  //     throw new Error('Failed to get Gmail OAuth access token');
+  //   }
+
+  //   return nodemailer.createTransport({
+  //     service: 'gmail',
+  //     auth: {
+  //       type: 'OAuth2',
+  //       user: this.fromEmail,
+  //       clientId: this.configService.getOrThrow<string>('OAUTH_CLIENT_ID'),
+  //       clientSecret: this.configService.getOrThrow<string>(
+  //         'OAUTH_CLIENT_SECRET',
+  //       ),
+  //       refreshToken: this.configService.getOrThrow<string>(
+  //         'OAUTH_REFRESH_TOKEN',
+  //       ),
+  //       accessToken,
+  //     },
+  //   });
+  // }
   public async sendResetPasswordEmail(email: string) {
     const expiresIn = parseInt(
       this.configService.get<string>('JWT_EXPIRES_IN') || '3600',
@@ -138,20 +136,20 @@ export class MailService {
       subject,
       html,
     };
-    const transporter = await this.createTransporter();
+    // const transporter = await this.createTransporter();
 
     // const resend = new Resend(this.configService.get<string>('RESEND_KEY'));
     // eslint-disable-next-line @typescript-eslint/no-unsafe-return
-    return await transporter.sendMail(mailOptions).catch((error) => {
-      console.error('Error sending email:', error);
-      throw new Error('Failed to send email. Please try again later.');
-    });
-    // return await this.nodeMailerTransporter
-    //   .sendMail(mailOptions)
-    //   .catch((error) => {
-    //     console.error('Error sending email:', error);
-    //     throw new Error('Failed to send email. Please try again later.');
-    //   });
+    // return await transporter.sendMail(mailOptions).catch((error) => {
+    //   console.error('Error sending email:', error);
+    //   throw new Error('Failed to send email. Please try again later.');
+    // });
+    return await this.nodeMailerTransporter
+      .sendMail(mailOptions)
+      .catch((error) => {
+        console.error('Error sending email:', error);
+        throw new Error('Failed to send email. Please try again later.');
+      });
   }
   public verifyResetToken(token: string): string {
     try {

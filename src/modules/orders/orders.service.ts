@@ -300,14 +300,35 @@ export class OrdersService {
           console.log('paymentResult', paymentResult);
           console.log('===================');
           if (customerDetails.email) {
-            await this.mailService.sendOrderPlacedEmail(
-              customerDetails.email,
-              `${customerDetails.first_name} ${customerDetails.last_name}`,
-              orderId,
-              Number(existingOrder.total_amount),
-            );
+            await this.mailService
+              .sendOrderPlacedEmail(
+                customerDetails.email,
+                `${customerDetails.first_name} ${customerDetails.last_name}`,
+                orderId,
+                Number(existingOrder.total_amount),
+              )
+              .catch((error) => {
+                console.error('Error sending order placed email:', error);
+              });
           }
-
+          console.log('===================');
+          console.log('sended mail success');
+          console.log('===================');
+          this.invoiceService
+            .createInvoice(orderId)
+            .then(() => {
+              console.log(
+                'Invoice generation initiated for failed order:',
+                orderId,
+              );
+            })
+            .catch((err) => {
+              console.error(
+                'Background invoice generation failed for order:',
+                orderId,
+                err,
+              );
+            });
           return {
             success: true,
             orderId,
@@ -367,13 +388,7 @@ export class OrdersService {
                 },
               );
             });
-          this.invoiceService.createInvoice(orderId).catch((err) => {
-            console.error(
-              'Background invoice generation failed for order:',
-              orderId,
-              err,
-            );
-          });
+
           return {
             success: false,
             orderId: existingOrder.id,
@@ -555,6 +570,7 @@ export class OrdersService {
                 },
               },
               cancelledRecord: true,
+              invoice: true,
             },
           },
           address: {
@@ -663,6 +679,7 @@ export class OrdersService {
             with: {
               cancelledRecord: true,
               return_request: true,
+              invoice: true,
               order: {
                 with: {
                   payment: true,
@@ -721,6 +738,7 @@ export class OrdersService {
               price: true,
             },
             with: {
+              invoice: true,
               return_request: true,
               cancelledRecord: true,
               refund: true,

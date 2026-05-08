@@ -36,20 +36,26 @@ export const user_and_company = pg.pgTable(
   'user_and_company',
   {
     id: pg.uuid('id').primaryKey().defaultRandom(),
-    user_id: pg.uuid('user_id')
+    user_id: pg
+      .uuid('user_id')
       .notNull()
       .references(() => user.id, { onDelete: 'cascade' }),
-    company_id: pg.uuid('company_id')
+    company_id: pg
+      .uuid('company_id')
       .notNull()
       .references(() => company.id, { onDelete: 'cascade' }),
-    role_id: pg.uuid('role_id')
+    role_id: pg
+      .uuid('role_id')
       .notNull()
       .references(() => user_roles.id),
     access_status: AccessStatusEnum('access_status')
       .notNull()
       .default(AccessStatus.ACTIVE),
     created_at: pg.timestamp('created_at').notNull().defaultNow(),
-    updated_at: pg.timestamp('updated_at').notNull().defaultNow()
+    updated_at: pg
+      .timestamp('updated_at')
+      .notNull()
+      .defaultNow()
       .$onUpdate(() => new Date()),
   },
   (t) => [

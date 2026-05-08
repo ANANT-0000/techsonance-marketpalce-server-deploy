@@ -126,22 +126,24 @@ export class InvoiceService {
 
   async createInvoice(orderId: string): Promise<void> {
     // ── Step 1: Fetch order + all deep relations in ONE query ──────────────────
-    const orderData = (await this.db.query.orders.findFirst({
-      where: eq(orders.id, orderId),
-      with: {
-        customer: true,
-        address: true,
-        items: {
-          with: {
-            variant: {
-              with: {
-                product: {
-                  with: { vendor: true },
-                },
-                inventory: {
-                  with: {
-                    warehouse: {
-                      with: { address: true },
+    const orderData = (await this.db.query.orders
+      .findFirst({
+        where: eq(orders.id, orderId),
+        with: {
+          customer: true,
+          address: true,
+          items: {
+            with: {
+              variant: {
+                with: {
+                  product: {
+                    with: { vendor: true },
+                  },
+                  inventory: {
+                    with: {
+                      warehouse: {
+                        with: { address: true },
+                      },
                     },
                   },
                 },
@@ -149,8 +151,19 @@ export class InvoiceService {
             },
           },
         },
-      },
-    })) as OrderWithRelations | undefined;
+      })
+      .catch((err) => {
+        console.error(
+          `[InvoiceService] Failed to fetch order ${orderId}:`,
+          err,
+        );
+        throw new InternalServerErrorException(
+          `Failed to fetch order ${orderId}.`,
+          {
+            cause: err,
+          },
+        );
+      })) as OrderWithRelations | undefined;
 
     if (!orderData) {
       throw new NotFoundException(`Order ${orderId} not found`);
@@ -186,6 +199,9 @@ export class InvoiceService {
     if (assigned.size === 0) {
       throw new InternalServerErrorException(
         `No items in order ${orderId} have a valid warehouse. Cannot generate any invoices.`,
+        {
+          cause: new Error(`No valid warehouses found for order ${orderId}`),
+        },
       );
     }
 
@@ -234,6 +250,10 @@ export class InvoiceService {
 
     for (const result of results) {
       if (result.status === 'fulfilled') {
+        console.log(
+          '=======================================\n url \n==================\n====================\n',
+          result.value,
+        );
         invoiceInsertions.push(...result.value);
       } else {
         console.error(
@@ -250,7 +270,24 @@ export class InvoiceService {
     }
 
     // ── Step 7: Single bulk insert for all invoice rows ────────────────────────
-    await this.db.insert(invoices).values(invoiceInsertions);
+    await this.db
+      .insert(invoices)
+      .values(invoiceInsertions)
+      .catch((err) => {
+        console.error(
+          `[InvoiceService] Failed to insert invoice records for order ${orderId}:`,
+          err,
+        );
+        throw new InternalServerErrorException(
+          `Failed to save invoice records for order ${orderId}.`,
+          {
+            cause: err,
+          },
+        );
+      });
+    console.log(
+      `[InvoiceService] Successfully generated ${invoiceInsertions.length} invoice(s) for order ${orderId}.`,
+    );
   }
 
   // ─── Group items by warehouse ─────────────────────────────────────────────────

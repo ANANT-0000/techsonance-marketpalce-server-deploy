@@ -1,10 +1,6 @@
 import * as pg from 'drizzle-orm/pg-core';
 import { address, company, product_variants, user, vendor } from '.';
-import {
-  SupportTicketPriority,
-  SupportTicketStatus,
-  // VendorDocumentType,
-} from '../types/types';
+import { SupportTicketPriority, SupportTicketStatus } from '../types/types';
 
 export const support_tickets_status_enum = pg.pgEnum(
   'support_tickets_status_enum',
@@ -14,11 +10,6 @@ export const support_tickets_priority_enum = pg.pgEnum(
   'support_tickets_priority_enum',
   SupportTicketPriority,
 );
-
-// export const documentTypeEnum = pg.pgEnum(
-//   'vendor_document_type_enum',
-//   VendorDocumentType,
-// );
 
 export const vendor_document = pg.pgTable('vendor_document', {
   id: pg.uuid('id').primaryKey().defaultRandom(),
@@ -67,10 +58,6 @@ export const inventory = pg.pgTable(
       .timestamp('restocked_at')
       .$onUpdate(() => new Date())
       .notNull(),
-    // updated_at: pg
-    //   .timestamp('updated_at')
-    //   .$onUpdate(() => new Date())
-    //   .notNull(),
     product_variant_id: pg
       .uuid('product_variant_id')
       .references(() => product_variants.id, { onDelete: 'cascade' })
@@ -163,3 +150,21 @@ export const audit_logs = pg.pgTable(
     pg.index('idx_audit_logs_created_at').on(table.created_at),
   ],
 );
+export const invoiceTemplate = pg.pgTable('invoiceTemplate', {
+  id: pg.uuid('id').primaryKey().defaultRandom(),
+  template_name: pg.text('template_name').notNull(),
+  template_url: pg.text('template_url'),
+  created_at: pg.timestamp('created_at').notNull().defaultNow(),
+  updated_at: pg
+    .timestamp('updated_at')
+    .notNull()
+    .defaultNow()
+    .$onUpdate(() => new Date()),
+  company_id: pg
+    .uuid('company_id')
+    .references(() => company.id, { onDelete: 'cascade' })
+    .notNull(),
+  vendor_id: pg
+    .uuid('vendor_id')
+    .references(() => vendor.id, { onDelete: 'cascade' }),
+});

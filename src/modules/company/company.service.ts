@@ -291,8 +291,12 @@ export class CompanyService {
 
   async find(domain: string) {
     try {
+      // const whereClause = eq(
+      //   company.id,
+      //   'cbbed76f-7f72-4266-9912-afd63b903833',
+      // );
       const whereClause =
-        process.env.NODE_ENV == 'production'
+        process.env.NODE_ENV !== 'production'
           ? eq(company.company_domain, domain)
           : eq(company.id, domain);
       const [companyRecord] = await this.db
