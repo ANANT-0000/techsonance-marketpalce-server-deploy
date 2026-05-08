@@ -37,9 +37,12 @@ export class ProductsService {
 
   async getAllProducts(domain: string) {
     try {
-      console.log('companyId', domain);
       const filteredDomain = domainExtractor(domain);
+      
+      console.log('companyId domain', filteredDomain);
       const companyId = await this.companyService.find(filteredDomain);
+      console.log('companyId', companyId);
+
       const testSelect = await this.db.select({id:products.id,name:products.name}).from(products).where(eq(products.company_id,companyId));
       console.log("testSelect",testSelect)
       const product = await this.db.query.products.findMany({
