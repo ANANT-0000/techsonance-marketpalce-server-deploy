@@ -5,15 +5,15 @@ import {
   Injectable,
   InternalServerErrorException,
 } from '@nestjs/common';
-import { DRIZZLE, type DrizzleService } from 'src/drizzle/drizzle.module';
+import { DRIZZLE, type DrizzleService } from '../../drizzle/drizzle.module';
 import { CompanyService } from '../company/company.service';
 import {
   updateWarehouseAddressDto,
   warehouseAddressDto,
 } from './dto/warehouse.dto';
-import { address, warehouse } from 'src/drizzle/schema';
+import { address, warehouse } from '../../drizzle/schema';
 import { and, eq } from 'drizzle-orm';
-import { domainExtractor } from 'src/common/filters/domainExtractor.filter';
+import { domainExtractor } from '../../common/filters/domainExtractor.filter';
 
 @Injectable()
 export class WarehouseService {

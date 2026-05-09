@@ -13,11 +13,11 @@ import {
 } from '@nestjs/common';
 import { ProductVariantService } from './product-variant.service';
 // import { CreateProductVariantDto } from './dto/create-product-variant.dto';
-import { UploadToCloud } from 'src/common/decorators/upload.decorator';
-import { ParseJsonPipe } from 'src/common/pipes/parseJsonPipe';
+import { UploadToCloud } from '../../common/decorators/upload.decorator';
+import { ParseJsonPipe } from '../../common/pipes/parseJsonPipe';
 import { UpdateProductVariantDto } from './dto/update-product-variant.dto';
-import { type ProductFiles } from 'src/common/Types/index.type';
-import { ProductStatus } from 'src/drizzle/types/types';
+import { type ProductFiles } from '../../common/Types/index.type';
+import { ProductStatus } from '../../drizzle/types/types';
 
 @Controller({
   version: '1',

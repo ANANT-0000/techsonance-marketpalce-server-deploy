@@ -1,7 +1,7 @@
 import { HttpException, HttpStatus, Inject, Injectable } from '@nestjs/common';
 import { InitiateCheckoutDto, VerifyCheckoutDto } from './dto/checkout.dto';
-import { type DrizzleDB } from 'src/drizzle/types/drizzle';
-import { DRIZZLE } from 'src/drizzle/drizzle.module';
+import { type DrizzleDB } from '../../drizzle/types/drizzle';
+import { DRIZZLE } from '../../drizzle/drizzle.module';
 import {
   address,
   cart_items,
@@ -10,12 +10,12 @@ import {
   orders,
   product_variants,
   user,
-} from 'src/drizzle/schema';
+} from '../../drizzle/schema';
 import { and, eq, or } from 'drizzle-orm';
 import { OrdersService } from '../orders/orders.service';
 import { CompanyService } from '../company/company.service';
-import { MailService } from 'src/common/services/mail/mail.service';
-import { domainExtractor } from 'src/common/filters/domainExtractor.filter';
+import { MailService } from '../../common/services/mail/mail.service';
+import { domainExtractor } from '../../common/filters/domainExtractor.filter';
 
 @Injectable()
 export class CheckoutService {

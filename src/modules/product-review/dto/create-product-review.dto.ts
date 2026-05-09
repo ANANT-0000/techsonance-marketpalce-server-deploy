@@ -1,4 +1,4 @@
-// src/modules/product-review/dto/create-product-review.dto.ts
+// ../../modules/product-review/dto/create-product-review.dto.ts
 import {
   IsNotEmpty,
   IsNumber,

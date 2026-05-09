@@ -1,5 +1,5 @@
 import { IsEnum, IsNotEmpty, IsOptional, IsString, IsUUID, IsArray } from 'class-validator';
-import { ReturnType } from 'src/drizzle/types/types';
+import { ReturnType } from '../../../drizzle/types/types';
 
 
 export class CreateReturnDto {

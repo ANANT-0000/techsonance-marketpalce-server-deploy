@@ -11,11 +11,11 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import { UsersService } from './users.service';
-import { RoleGuard } from 'src/guards/role.guard';
+import { RoleGuard } from '../../guards/role.guard';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
-import { Roles } from 'src/common/decorators/roles.decorator';
-import { Role } from 'src/enums/role.enum';
-import { UserStatus } from 'src/drizzle/types/types';
+import { Roles } from '../../common/decorators/roles.decorator';
+import { Role } from '../../enums/role.enum';
+import { UserStatus } from '../../drizzle/types/types';
 
 @Controller({ version: '1', path: 'users' })
 export class UsersController {

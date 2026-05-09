@@ -5,17 +5,17 @@ import {
   Injectable,
   InternalServerErrorException,
 } from '@nestjs/common';
-import { DRIZZLE, type DrizzleService } from 'src/drizzle/drizzle.module';
+import { DRIZZLE, type DrizzleService } from '../../drizzle/drizzle.module';
 import {
   CancelledByEnum,
   OrderStatus,
   PaymentStatus,
   productImageType,
   refundStatusEnum,
-} from 'src/drizzle/types/types';
+} from '../../drizzle/types/types';
 import { CompanyService } from '../company/company.service';
 import { InventoryService } from '../inventory/inventory.service';
-import { MailService } from 'src/common/services/mail/mail.service';
+import { MailService } from '../../common/services/mail/mail.service';
 import {
   order_item_cancelled,
   order_items,
@@ -23,11 +23,11 @@ import {
   payments,
   product_images,
   refunds,
-} from 'src/drizzle/schema/shop.schema';
+} from '../../drizzle/schema/shop.schema';
 import { and, eq } from 'drizzle-orm';
-import { user } from 'src/drizzle/schema/users.schema';
-import { user_and_company, user_roles } from 'src/drizzle/schema';
-import { domainExtractor } from 'src/common/filters/domainExtractor.filter';
+import { user } from '../../drizzle/schema/users.schema';
+import { user_and_company, user_roles } from '../../drizzle/schema';
+import { domainExtractor } from '../../common/filters/domainExtractor.filter';
 
 @Injectable()
 export class OrderItemsService {

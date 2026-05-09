@@ -7,9 +7,9 @@ import {
   InternalServerErrorException,
 } from '@nestjs/common';
 import { and, eq, InferSelectModel } from 'drizzle-orm';
-import { DRIZZLE } from 'src/drizzle/drizzle.module';
-import { permissions, role_permissions, user_roles } from 'src/drizzle/schema';
-import { type DrizzleDB } from 'src/drizzle/types/drizzle';
+import { DRIZZLE } from '../../drizzle/drizzle.module';
+import { permissions, role_permissions, user_roles } from '../../drizzle/schema';
+import { type DrizzleDB } from '../../drizzle/types/drizzle';
 type Role = InferSelectModel<typeof user_roles>['role_name'];
 @Injectable()
 export class RolesService {

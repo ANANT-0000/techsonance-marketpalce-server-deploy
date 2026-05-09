@@ -8,7 +8,7 @@ import {
   Post,
 } from '@nestjs/common';
 import { RolesService } from './roles.service';
-import { user_roles } from 'src/drizzle/schema';
+import { user_roles } from '../../drizzle/schema';
 
 import { InferSelectModel } from 'drizzle-orm';
 type userRole = InferSelectModel<typeof user_roles>['role_name'];

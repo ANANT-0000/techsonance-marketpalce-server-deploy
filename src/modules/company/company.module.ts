@@ -1,6 +1,6 @@
 import { forwardRef, Module } from '@nestjs/common';
 import { CompanyService } from './company.service';
-import { DrizzleModule } from 'src/drizzle/drizzle.module';
+import { DrizzleModule } from '../../drizzle/drizzle.module';
 import { CompanyController } from './company.controller';
 import { UsersModule } from '../users/users.module';
 

@@ -5,12 +5,12 @@ import {
   Injectable,
   InternalServerErrorException,
 } from '@nestjs/common';
-import { DRIZZLE, type DrizzleService } from 'src/drizzle/drizzle.module';
+import { DRIZZLE, type DrizzleService } from '../../drizzle/drizzle.module';
 import { CompanyService } from '../company/company.service';
 import { and, eq } from 'drizzle-orm';
-import { orders, shipping_details } from 'src/drizzle/schema';
-import { MailService } from 'src/common/services/mail/mail.service';
-import { domainExtractor } from 'src/common/filters/domainExtractor.filter';
+import { orders, shipping_details } from '../../drizzle/schema';
+import { MailService } from '../../common/services/mail/mail.service';
+import { domainExtractor } from '../../common/filters/domainExtractor.filter';
 
 @Injectable()
 export class ShippingService {

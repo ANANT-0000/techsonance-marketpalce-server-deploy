@@ -1,4 +1,4 @@
-// src/modules/product-review/product-review.service.ts
+// ../../modules/product-review/product-review.service.ts
 import {
   Inject,
   Injectable,
@@ -7,11 +7,11 @@ import {
 } from '@nestjs/common';
 import { CreateProductReviewDto } from './dto/create-product-review.dto';
 import { UpdateProductReviewDto } from './dto/update-product-review.dto';
-import { DRIZZLE, type DrizzleService } from 'src/drizzle/drizzle.module';
-import { product_reviews, product_variants } from 'src/drizzle/schema';
+import { DRIZZLE, type DrizzleService } from '../../drizzle/drizzle.module';
+import { product_reviews, product_variants } from '../../drizzle/schema';
 import { eq, and } from 'drizzle-orm';
 import { CompanyService } from '../company/company.service';
-import { domainExtractor } from 'src/common/filters/domainExtractor.filter';
+import { domainExtractor } from '../../common/filters/domainExtractor.filter';
 @Injectable()
 export class ProductReviewService {
   constructor(

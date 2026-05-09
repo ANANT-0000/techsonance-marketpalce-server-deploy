@@ -2,8 +2,8 @@ import { Controller, Post, Body, Get, Patch, Param, UseGuards, Req, Headers, Htt
 import { ReturnsService } from './returns.service';
 import { CreateReturnDto } from './dto/create-return.dto';
 import { UpdateReturnDto } from './dto/update-return.dto';
-import { ParseJsonPipe } from 'src/common/pipes/parseJsonPipe';
-import { UploadToCloud } from 'src/common/decorators/upload.decorator';
+import { ParseJsonPipe } from '../../common/pipes/parseJsonPipe';
+import { UploadToCloud } from '../../common/decorators/upload.decorator';
 
 @Controller({ path: 'returns', version: '1' })
 

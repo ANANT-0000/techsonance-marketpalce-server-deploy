@@ -3,11 +3,11 @@ import {
   Injectable,
   InternalServerErrorException,
 } from '@nestjs/common';
-import { DRIZZLE, type DrizzleService } from 'src/drizzle/drizzle.module';
+import { DRIZZLE, type DrizzleService } from '../../drizzle/drizzle.module';
 import { and, eq, or } from 'drizzle-orm';
-import { coupon_usage, coupons } from 'src/drizzle/schema';
+import { coupon_usage, coupons } from '../../drizzle/schema';
 import { CompanyService } from '../company/company.service';
-import { domainExtractor } from 'src/common/filters/domainExtractor.filter';
+import { domainExtractor } from '../../common/filters/domainExtractor.filter';
 
 @Injectable()
 export class CouponService {

@@ -1,7 +1,7 @@
 import { Module } from '@nestjs/common';
 import { RolesService } from './roles.service';
 import { RolesController } from './roles.controller';
-import { DrizzleModule } from 'src/drizzle/drizzle.module';
+import { DrizzleModule } from '../../drizzle/drizzle.module';
 
 @Module({
   imports: [DrizzleModule],

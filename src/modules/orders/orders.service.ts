@@ -6,19 +6,19 @@ import {
   InternalServerErrorException,
 } from '@nestjs/common';
 import { and, desc, eq, gt, inArray, or } from 'drizzle-orm';
-import { DRIZZLE, type DrizzleService } from 'src/drizzle/drizzle.module';
+import { DRIZZLE, type DrizzleService } from '../../drizzle/drizzle.module';
 import {
   order_items,
   orders,
   payments,
   product_images,
-} from 'src/drizzle/schema';
-import { OrderStatus, PaymentStatus } from 'src/drizzle/types/types';
+} from '../../drizzle/schema';
+import { OrderStatus, PaymentStatus } from '../../drizzle/types/types';
 import { CompanyService } from '../company/company.service';
 import { InventoryService } from '../inventory/inventory.service';
-import { MailService } from 'src/common/services/mail/mail.service';
+import { MailService } from '../../common/services/mail/mail.service';
 import { response } from 'express';
-import { domainExtractor } from 'src/common/filters/domainExtractor.filter';
+import { domainExtractor } from '../../common/filters/domainExtractor.filter';
 import { InvoiceService } from '../invoice/invoice.service';
 
 @Injectable()

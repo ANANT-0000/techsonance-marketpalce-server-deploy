@@ -7,21 +7,21 @@ import {
   InternalServerErrorException,
 } from '@nestjs/common';
 import { CreateProductVariantDto } from './dto/create-product-variant.dto';
-import { DRIZZLE, type DrizzleService } from 'src/drizzle/drizzle.module';
+import { DRIZZLE, type DrizzleService } from '../../drizzle/drizzle.module';
 import { and, eq, inArray } from 'drizzle-orm';
 import {
   inventory,
   product_images,
   product_variants,
   products,
-} from 'src/drizzle/schema';
-import { productImageType, ProductStatus } from 'src/drizzle/types/types';
-import { UploadToCloudService } from 'src/utils/upload-to-cloud/upload-to-cloud.service';
-import { ProductFiles } from 'src/common/Types/index.type';
+} from '../../drizzle/schema';
+import { productImageType, ProductStatus } from '../../drizzle/types/types';
+import { UploadToCloudService } from '../../utils/upload-to-cloud/upload-to-cloud.service';
+import { ProductFiles } from '../../common/Types/index.type';
 import { UpdateProductVariantDto } from './dto/update-product-variant.dto';
 import { CompanyService } from '../company/company.service';
 import { InventoryService } from '../inventory/inventory.service';
-import { domainExtractor } from 'src/common/filters/domainExtractor.filter';
+import { domainExtractor } from '../../common/filters/domainExtractor.filter';
 @Injectable()
 export class ProductVariantService {
   constructor(

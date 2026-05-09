@@ -10,7 +10,7 @@ import {
   IsObject,
 } from 'class-validator';
 import { Transform, Type } from 'class-transformer';
-import { ProductStatus } from 'src/drizzle/types/types';
+import { ProductStatus } from '../../../drizzle/types/types';
 
 class FeatureDto {
   @IsString()

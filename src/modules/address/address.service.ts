@@ -6,9 +6,9 @@ import {
   InternalServerErrorException,
 } from '@nestjs/common';
 import { and, count, eq } from 'drizzle-orm';
-import { DRIZZLE } from 'src/drizzle/drizzle.module';
-import { address } from 'src/drizzle/schema';
-import { type DrizzleDB } from 'src/drizzle/types/drizzle';
+import { DRIZZLE } from '../../drizzle/drizzle.module';
+import { address } from '../../drizzle/schema';
+import { type DrizzleDB } from '../../drizzle/types/drizzle';
 import { CreateAddressDto } from './dto/createAddress.dto';
 import { UpdateAddressDto } from './dto/updateAddress.dto';
 @Injectable()

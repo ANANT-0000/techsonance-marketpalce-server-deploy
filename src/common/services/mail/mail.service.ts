@@ -7,10 +7,10 @@ import {
 import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
 import { and, eq } from 'drizzle-orm';
-import { DRIZZLE } from 'src/drizzle/drizzle.module';
-import { refresh_tokens } from 'src/drizzle/schema';
-import { user } from 'src/drizzle/schema/users.schema';
-import { type DrizzleDB } from 'src/drizzle/types/drizzle';
+import { DRIZZLE } from '../../../drizzle/drizzle.module';
+import { refresh_tokens } from '../../../drizzle/schema';
+import { user } from '../../../drizzle/schema/users.schema';
+import { type DrizzleDB } from '../../../drizzle/types/drizzle';
 import { BadRequestException } from '@nestjs/common';
 import { userRegistrationTemplate } from './templates/user-registration.template';
 import { vendorRegistrationTemplate } from './templates/vendor-registration.template';

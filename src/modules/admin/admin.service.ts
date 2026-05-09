@@ -7,14 +7,14 @@ import {
 } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { and, eq } from 'drizzle-orm';
-import { DRIZZLE } from 'src/drizzle/drizzle.module';
+import { DRIZZLE } from '../../drizzle/drizzle.module';
 import {
   company,
   user,
   user_roles,
-} from 'src/drizzle/schema';
-import { type DrizzleDB } from 'src/drizzle/types/drizzle';
-import { UserRole } from 'src/drizzle/types/types';
+} from '../../drizzle/schema';
+import { type DrizzleDB } from '../../drizzle/types/drizzle';
+import { UserRole } from '../../drizzle/types/types';
 import { ConfigService } from '@nestjs/config';
 @Injectable()
 export class AdminService {

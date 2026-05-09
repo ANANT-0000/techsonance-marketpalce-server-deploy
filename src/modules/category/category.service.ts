@@ -5,9 +5,9 @@ import {
   InternalServerErrorException,
 } from '@nestjs/common';
 import { CreateCategoryDto } from './dto/CreateCategory.dto';
-import { DRIZZLE } from 'src/drizzle/drizzle.module';
-import { type DrizzleDB } from 'src/drizzle/types/drizzle';
-import { categories, company } from 'src/drizzle/schema';
+import { DRIZZLE } from '../../drizzle/drizzle.module';
+import { type DrizzleDB } from '../../drizzle/types/drizzle';
+import { categories, company } from '../../drizzle/schema';
 import { and, eq, or } from 'drizzle-orm';
 @Injectable()
 export class CategoryService {

@@ -10,21 +10,21 @@ import {
   UploadedFiles,
   UseGuards,
 } from '@nestjs/common';
-import { UploadToCloud } from 'src/common/decorators/upload.decorator';
+import { UploadToCloud } from '../../common/decorators/upload.decorator';
 import { ProductsService } from './products.service';
 import { CreateProductDto } from './dto/createProduct.dto';
 import { Param } from '@nestjs/common';
-import { ProductStatus, UserRole } from 'src/drizzle/types/types';
-import { ParseJsonPipe } from 'src/common/pipes/parseJsonPipe';
+import { ProductStatus, UserRole } from '../../drizzle/types/types';
+import { ParseJsonPipe } from '../../common/pipes/parseJsonPipe';
 import { plainToInstance } from 'class-transformer';
 import { validate } from 'class-validator';
-import { type ProductFiles } from 'src/common/Types/index.type';
+import { type ProductFiles } from '../../common/Types/index.type';
 import { AuthGuard } from '@nestjs/passport';
-import { RoleGuard } from 'src/guards/role.guard';
+import { RoleGuard } from '../../guards/role.guard';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
-import { Roles } from 'src/common/decorators/roles.decorator';
-import { Role } from 'src/enums/role.enum';
-// import { ParseJsonPipe } from 'src/common/pipes/parseJsonPipe';
+import { Roles } from '../../common/decorators/roles.decorator';
+import { Role } from '../../enums/role.enum';
+// import { ParseJsonPipe } from '../../common/pipes/parseJsonPipe';
 // import { validate } from 'class-validator';
 // import { plainToInstance } from 'class-transformer';
 @Controller({

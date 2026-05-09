@@ -5,7 +5,7 @@ import {
   Injectable,
   InternalServerErrorException,
 } from '@nestjs/common';
-import { DRIZZLE, type DrizzleService } from 'src/drizzle/drizzle.module';
+import { DRIZZLE, type DrizzleService } from '../../drizzle/drizzle.module';
 import { CreateProductDto } from './dto/createProduct.dto';
 import {
   categories,
@@ -13,17 +13,17 @@ import {
   product_reviews,
   product_variants,
   products,
-} from 'src/drizzle/schema/shop.schema';
-import { productImageType, ProductStatus } from 'src/drizzle/types/types';
+} from '../../drizzle/schema/shop.schema';
+import { productImageType, ProductStatus } from '../../drizzle/types/types';
 import { and, desc, eq, or } from 'drizzle-orm';
 
-import { UploadToCloudService } from 'src/utils/upload-to-cloud/upload-to-cloud.service';
+import { UploadToCloudService } from '../../utils/upload-to-cloud/upload-to-cloud.service';
 import { UpdateProductDto } from './dto/updatedProduct.dto';
-import { type ProductFiles } from 'src/common/Types/index.type';
+import { type ProductFiles } from '../../common/Types/index.type';
 import { CompanyService } from '../company/company.service';
 import { InventoryService } from '../inventory/inventory.service';
-import { warehouse } from 'src/drizzle/schema';
-import { domainExtractor } from 'src/common/filters/domainExtractor.filter';
+import { warehouse } from '../../drizzle/schema';
+import { domainExtractor } from '../../common/filters/domainExtractor.filter';
 
 @Injectable()
 export class ProductsService {

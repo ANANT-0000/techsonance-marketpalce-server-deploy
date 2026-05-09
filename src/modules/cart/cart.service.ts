@@ -8,16 +8,16 @@ import {
 } from '@nestjs/common';
 import { CreateCartDto } from './dto/create-cart.dto';
 import { UpdateCartDto } from './dto/update-cart.dto';
-import { DRIZZLE, type DrizzleService } from 'src/drizzle/drizzle.module';
+import { DRIZZLE, type DrizzleService } from '../../drizzle/drizzle.module';
 import {
   cart_items,
   carts,
   company,
   product_variants,
-} from 'src/drizzle/schema';
+} from '../../drizzle/schema';
 import { and, eq, or, sql } from 'drizzle-orm';
 import { CompanyService } from '../company/company.service';
-import { domainExtractor } from 'src/common/filters/domainExtractor.filter';
+import { domainExtractor } from '../../common/filters/domainExtractor.filter';
 
 @Injectable()
 export class CartService {

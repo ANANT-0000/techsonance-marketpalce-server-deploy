@@ -8,7 +8,7 @@ import {
 } from '@nestjs/common';
 
 import { JwtService } from '@nestjs/jwt';
-import { DRIZZLE, type DrizzleService } from 'src/drizzle/drizzle.module';
+import { DRIZZLE, type DrizzleService } from '../../drizzle/drizzle.module';
 import { UsersService } from '../users/users.service';
 import { VendorsService } from '../vendors/vendors.service';
 import {
@@ -16,15 +16,15 @@ import {
   user,
   user_and_company,
   user_roles,
-} from 'src/drizzle/schema';
+} from '../../drizzle/schema';
 import { and, eq } from 'drizzle-orm';
-import { MailService } from 'src/common/services/mail/mail.service';
+import { MailService } from '../../common/services/mail/mail.service';
 import express from 'express';
 import { CompanyService } from '../company/company.service';
 import { randomInt } from 'crypto';
 import bcrypt from 'bcrypt';
-import { AccessStatus, UserRole, UserStatus } from 'src/drizzle/types/types';
-import { domainExtractor } from 'src/common/filters/domainExtractor.filter';
+import { AccessStatus, UserRole, UserStatus } from '../../drizzle/types/types';
+import { domainExtractor } from '../../common/filters/domainExtractor.filter';
 
 @Injectable()
 export class AuthService {

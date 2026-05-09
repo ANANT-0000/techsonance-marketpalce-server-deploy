@@ -1,5 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import { productImageType } from 'src/drizzle/types/types';
+import { productImageType } from '../../drizzle/types/types';
 import { CloudinaryService } from '../cloudinary/cloudinary.service';
 import { v2 as cloudinary } from 'cloudinary';
 import streamifier from 'streamifier';

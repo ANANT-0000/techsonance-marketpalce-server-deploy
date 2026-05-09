@@ -6,9 +6,9 @@ import {
 import { eq, or } from 'drizzle-orm';
 // import { CreateCompanyDto } from './dto/create-company.dto';
 // import { UpdateCompanyDto } from './dto/update-company.dto';
-import { DRIZZLE, type DrizzleService } from 'src/drizzle/drizzle.module';
-import { company, user, user_and_company, vendor } from 'src/drizzle/schema';
-import { AccessStatus, UserStatus } from 'src/drizzle/types/types';
+import { DRIZZLE, type DrizzleService } from '../../drizzle/drizzle.module';
+import { company, user, user_and_company, vendor } from '../../drizzle/schema';
+import { AccessStatus, UserStatus } from '../../drizzle/types/types';
 import { ConfigService } from '@nestjs/config';
 @Injectable()
 export class CompanyService {

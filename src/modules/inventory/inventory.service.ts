@@ -6,7 +6,7 @@ import {
   InternalServerErrorException,
 } from '@nestjs/common';
 // import { UpdateInventoryDto } from './dto/update-inventory.dto';
-import { DRIZZLE, type DrizzleService } from 'src/drizzle/drizzle.module';
+import { DRIZZLE, type DrizzleService } from '../../drizzle/drizzle.module';
 import { CompanyService } from '../company/company.service';
 import { CreateInventoryDto } from './dto/inventory.dto';
 import {
@@ -16,10 +16,10 @@ import {
   productImageTypeEnum,
   products,
   warehouse,
-} from 'src/drizzle/schema';
+} from '../../drizzle/schema';
 import { and, eq, sql } from 'drizzle-orm';
-import { productImageType } from 'src/drizzle/types/types';
-import { domainExtractor } from 'src/common/filters/domainExtractor.filter';
+import { productImageType } from '../../drizzle/types/types';
+import { domainExtractor } from '../../common/filters/domainExtractor.filter';
 export const LOW_STOCK_THRESHOLD = 5; // configurable
 
 @Injectable()

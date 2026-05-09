@@ -7,7 +7,7 @@ import {
 } from '@nestjs/common';
 import { CreateReturnDto } from './dto/create-return.dto';
 import { eq, and } from 'drizzle-orm';
-import { DRIZZLE, type DrizzleService } from 'src/drizzle/drizzle.module';
+import { DRIZZLE, type DrizzleService } from '../../drizzle/drizzle.module';
 import { CompanyService } from '../company/company.service';
 import {
   inventory,
@@ -16,15 +16,15 @@ import {
   refunds,
   return_requests,
   shipping_details,
-} from 'src/drizzle/schema';
-import { orders, user } from 'src/drizzle/schema';
+} from '../../drizzle/schema';
+import { orders, user } from '../../drizzle/schema';
 import { UpdateReturnDto } from './dto/update-return.dto';
-import { OrderStatus, ReturnStatus, ReturnType } from 'src/drizzle/types/types';
-import { UploadToCloudService } from 'src/utils/upload-to-cloud/upload-to-cloud.service';
+import { OrderStatus, ReturnStatus, ReturnType } from '../../drizzle/types/types';
+import { UploadToCloudService } from '../../utils/upload-to-cloud/upload-to-cloud.service';
 import { RefundsService } from '../refunds/refunds.service';
 import { InventoryService } from '../inventory/inventory.service';
-import { MailService } from 'src/common/services/mail/mail.service';
-import { domainExtractor } from 'src/common/filters/domainExtractor.filter';
+import { MailService } from '../../common/services/mail/mail.service';
+import { domainExtractor } from '../../common/filters/domainExtractor.filter';
 
 // ── Valid transitions per return type ──────────────────────────────────────
 // Prevents arbitrary status jumps (e.g. PENDING → QC_PASSED directly)

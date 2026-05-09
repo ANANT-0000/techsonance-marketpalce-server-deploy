@@ -7,7 +7,7 @@ import {
   UnauthorizedException,
 } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
-import { DRIZZLE, type DrizzleService } from 'src/drizzle/drizzle.module';
+import { DRIZZLE, type DrizzleService } from '../../drizzle/drizzle.module';
 import {
   address as addressTable,
   company,
@@ -27,21 +27,21 @@ import {
   vendor,
   vendor as vendorTable,
   vendor_document as vendor_documentTable,
-} from 'src/drizzle/schema';
+} from '../../drizzle/schema';
 import { and, asc, countDistinct, desc, eq, or, sql } from 'drizzle-orm';
 import {
   AccessStatus,
   ProductStatus,
   UserRole,
   UserStatus,
-} from 'src/drizzle/types/types';
+} from '../../drizzle/types/types';
 import bcrypt from 'bcryptjs';
 import express, { response } from 'express';
-import { MailService } from 'src/common/services/mail/mail.service';
+import { MailService } from '../../common/services/mail/mail.service';
 import { CreateVendorDto } from './dto/CreateVendorDto';
 import { LoginDto } from '../users/dto/userAuth.dto.ts';
-import { UploadToCloudService } from 'src/utils/upload-to-cloud/upload-to-cloud.service';
-import { formatCompanyDomain } from 'src/common/filters/formatDomain.filter';
+import { UploadToCloudService } from '../../utils/upload-to-cloud/upload-to-cloud.service';
+import { formatCompanyDomain } from '../../common/filters/formatDomain.filter';
 const SALT_ROUNDS = 10;
 type UserType = typeof userTable.$inferSelect;
 type VendorType = typeof vendorTable.$inferSelect;

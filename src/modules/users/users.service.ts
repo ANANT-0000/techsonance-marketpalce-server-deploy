@@ -12,17 +12,17 @@ import {
   user,
   user_and_company,
   user_roles,
-} from 'src/drizzle/schema';
-import { AccessStatus, UserRole, UserStatus } from 'src/drizzle/types/types';
+} from '../../drizzle/schema';
+import { AccessStatus, UserRole, UserStatus } from '../../drizzle/types/types';
 import { and, eq, InferSelectModel, or } from 'drizzle-orm';
-import { DRIZZLE, type DrizzleService } from 'src/drizzle/drizzle.module';
+import { DRIZZLE, type DrizzleService } from '../../drizzle/drizzle.module';
 
 import bcrypt from 'bcryptjs';
 import { JwtService } from '@nestjs/jwt';
 
 import { CreateUserDto, LoginDto } from './dto/userAuth.dto.ts.js';
 import { UpdateUserDtoTs } from './dto/update-user.dto.ts.js';
-import { MailService } from 'src/common/services/mail/mail.service';
+import { MailService } from '../../common/services/mail/mail.service';
 import { CompanyService } from '../company/company.service.js';
 import { randomInt } from 'crypto';
 import { from } from 'rxjs';

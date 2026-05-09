@@ -8,7 +8,7 @@ import {
   IsString,
 } from 'class-validator';
 import { Transform } from 'class-transformer';
-import { ProductStatus } from 'src/drizzle/types/types';
+import { ProductStatus } from '../../../drizzle/types/types';
 
 export class UpdateProductVariantDto {
   @IsOptional()

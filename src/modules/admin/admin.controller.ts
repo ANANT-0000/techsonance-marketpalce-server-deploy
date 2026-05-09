@@ -12,14 +12,14 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import { AdminService } from './admin.service';
-import { UserStatus } from 'src/drizzle/types/types';
+import { UserStatus } from '../../drizzle/types/types';
 import { VendorsService } from '../vendors/vendors.service';
 import { UsersService } from '../users/users.service';
 import { OrdersService } from '../orders/orders.service';
-import { Roles } from 'src/common/decorators/roles.decorator';
-import { Role } from 'src/enums/role.enum';
+import { Roles } from '../../common/decorators/roles.decorator';
+import { Role } from '../../enums/role.enum';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
-import { RoleGuard } from 'src/guards/role.guard';
+import { RoleGuard } from '../../guards/role.guard';
 import { CompanyService } from '../company/company.service';
 
 @Controller({

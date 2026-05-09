@@ -5,10 +5,10 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { eq, desc } from 'drizzle-orm';
-import { DRIZZLE, type DrizzleService } from 'src/drizzle/drizzle.module';
-import { orders, vendor } from 'src/drizzle/schema';
+import { DRIZZLE, type DrizzleService } from '../../drizzle/drizzle.module';
+import { orders, vendor } from '../../drizzle/schema';
 import { CompanyService } from '../company/company.service';
-import { domainExtractor } from 'src/common/filters/domainExtractor.filter';
+import { domainExtractor } from '../../common/filters/domainExtractor.filter';
 
 @Injectable()
 export class FinancesService {

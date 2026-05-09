@@ -1,10 +1,10 @@
 import { HttpException, HttpStatus, Inject, Injectable } from '@nestjs/common';
 
-import { DRIZZLE, type DrizzleService } from 'src/drizzle/drizzle.module';
-import { product_variants, wishlist, wishlist_items } from 'src/drizzle/schema';
+import { DRIZZLE, type DrizzleService } from '../../drizzle/drizzle.module';
+import { product_variants, wishlist, wishlist_items } from '../../drizzle/schema';
 import { and, eq, or } from 'drizzle-orm';
 import { CompanyService } from '../company/company.service';
-import { domainExtractor } from 'src/common/filters/domainExtractor.filter';
+import { domainExtractor } from '../../common/filters/domainExtractor.filter';
 
 @Injectable()
 export class WishlistService {

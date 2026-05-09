@@ -5,9 +5,9 @@ import {
   InternalServerErrorException,
 } from '@nestjs/common';
 import { eq } from 'drizzle-orm';
-import { DRIZZLE } from 'src/drizzle/drizzle.module';
-import { permissions } from 'src/drizzle/schema';
-import { type DrizzleDB } from 'src/drizzle/types/drizzle';
+import { DRIZZLE } from '../../drizzle/drizzle.module';
+import { permissions } from '../../drizzle/schema';
+import { type DrizzleDB } from '../../drizzle/types/drizzle';
 
 @Injectable()
 export class PermissionsService {

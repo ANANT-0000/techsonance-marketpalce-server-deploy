@@ -1,4 +1,4 @@
-// src/modules/product-review/product-review.controller.ts
+// ../../modules/product-review/product-review.controller.ts
 import {
   Controller,
   Get,
@@ -14,7 +14,7 @@ import {
 import { ProductReviewService } from './product-review.service';
 import { CreateProductReviewDto } from './dto/create-product-review.dto';
 import { UpdateProductReviewDto } from './dto/update-product-review.dto';
-// import { JwtAuthGuard } from 'src/guards/jwt-auth.guard'; // Import your authentication guard here
+// import { JwtAuthGuard } from '../../guards/jwt-auth.guard'; // Import your authentication guard here
 
 @Controller(['product-review', 'reviews']) // Allows both routes
 export class ProductReviewController {

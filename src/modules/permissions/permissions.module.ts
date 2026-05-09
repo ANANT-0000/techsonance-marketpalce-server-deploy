@@ -1,7 +1,7 @@
 import { Module } from '@nestjs/common';
 import { PermissionsService } from './permissions.service';
 import { PermissionsController } from './permissions.controller';
-import { DrizzleModule } from 'src/drizzle/drizzle.module';
+import { DrizzleModule } from '../../drizzle/drizzle.module';
 
 @Module({
   imports: [DrizzleModule],

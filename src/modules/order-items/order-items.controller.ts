@@ -8,7 +8,7 @@ import {
   Post,
 } from '@nestjs/common';
 import { OrderItemsService } from './order-items.service';
-import { CancelledByEnum } from 'src/drizzle/types/types';
+import { CancelledByEnum } from '../../drizzle/types/types';
 
 @Controller({ version: '1', path: 'order-items' })
 export class OrderItemsController {

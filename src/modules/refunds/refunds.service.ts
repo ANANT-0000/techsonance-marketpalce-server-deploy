@@ -6,22 +6,22 @@ import {
   InternalServerErrorException,
 } from '@nestjs/common';
 import { and, eq } from 'drizzle-orm';
-import { MailService } from 'src/common/services/mail/mail.service';
-import { DRIZZLE, type DrizzleService } from 'src/drizzle/drizzle.module';
+import { MailService } from '../../common/services/mail/mail.service';
+import { DRIZZLE, type DrizzleService } from '../../drizzle/drizzle.module';
 import {
   order_items,
   orders,
   payments,
   refunds,
   user,
-} from 'src/drizzle/schema';
+} from '../../drizzle/schema';
 import {
   OrderStatus,
   PaymentStatus,
   refundStatusEnum,
-} from 'src/drizzle/types/types';
+} from '../../drizzle/types/types';
 import { CompanyService } from '../company/company.service';
-import { domainExtractor } from 'src/common/filters/domainExtractor.filter';
+import { domainExtractor } from '../../common/filters/domainExtractor.filter';
 
 @Injectable()
 export class RefundsService {
