@@ -8,4 +8,8 @@ export class AppController {
   getHello() {
     return this.appService.getHello();
   }
+  @Get('hello')
+  getHelloEndpoint() {
+    return this.appService.getHello();
+  }
 }
