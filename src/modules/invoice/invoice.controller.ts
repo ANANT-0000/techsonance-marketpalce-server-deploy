@@ -1,15 +1,23 @@
-import { Body, Controller, Headers, Post } from '@nestjs/common';
+import { Body, Controller, Headers, Post, UseGuards } from '@nestjs/common';
 import { InvoiceService } from './invoice.service';
-
+import { Roles } from '../../common/decorators/roles.decorator';
+import { RoleGuard } from 'src/guards/role.guard';
+import { JwtAuthGuard } from '../auth/jwt-auth.guard';
+import { Role } from 'src/enums/role.enum';
 @Controller({ version: '1', path: 'invoice' })
 export class InvoiceController {
   constructor(private readonly invoiceService: InvoiceService) {}
   @Post('bulk-download')
+  @UseGuards(JwtAuthGuard, RoleGuard)
+  @Roles(Role.ADMIN, Role.VENDOR)
   async getBulkInvoiceUrls(
     @Headers('company-domain') domain: string,
     @Body() payload: { orderIds: string[] },
   ) {
-    console.log('Received request for bulk invoice URLs with payload:', payload);
+    console.log(
+      'Received request for bulk invoice URLs with payload:',
+      payload,
+    );
     return this.invoiceService.getBulkInvoiceUrls(domain, payload.orderIds);
   }
 }

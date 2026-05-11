@@ -45,7 +45,7 @@ export class FinancesController {
   ) {
     return this.financesService.createTaxRate(domain, payload);
   }
-  @Post('taxes/product-mapping')
+  @Post('product-tax-mappings')
   async assignProductTax(
     @Headers('company-domain') domain: string,
     @Body() payload: { product_id: string; tax_rate_id: string },

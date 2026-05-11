@@ -21,3 +21,4 @@ lerna-debug.log*
 .temp
 .tmp
 src/drizzle/migrations/*
+.vercel

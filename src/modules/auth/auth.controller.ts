@@ -77,7 +77,7 @@ export class AuthController {
     try {
       // Extract domain from state or query parameter
       // @ts-ignore
-      const targetDomain: any =
+      const targetDomain: string =
         state || req.query.state || process.env.FRONTEND_URL;
 
       if (!targetDomain) {
@@ -109,7 +109,7 @@ export class AuthController {
       console.error('Google OAuth callback error:', error);
 
       // Redirect to error page on failure
-      const errorDomain: any = req.query.state;
+      const errorDomain: string = req.query.state;
       const frontendUrl: string = errorDomain.startsWith('http')
         ? errorDomain
         : `https://${errorDomain}`;
@@ -134,7 +134,7 @@ export class AuthController {
 
   @Post('login-vendor')
   @HttpCode(HttpStatus.OK)
-  async loginVendor(@Body() loginDto: LoginDto,) {
+  async loginVendor(@Body() loginDto: LoginDto) {
     return await this.vendorService.vendorLogin(loginDto);
   }
 
