@@ -3,10 +3,13 @@ import {
   InternalServerErrorException,
   Inject,
   NotFoundException,
+  HttpException,
+  HttpStatus,
 } from '@nestjs/common';
 import { eq, desc, sql, and } from 'drizzle-orm';
 import { DRIZZLE, type DrizzleService } from '../../drizzle/drizzle.module';
 import {
+  address,
   gst_invoices,
   gst_registrations,
   orders,
@@ -20,6 +23,7 @@ import {
 } from '../../drizzle/schema';
 import { CompanyService } from '../company/company.service';
 import { domainExtractor } from '../../common/filters/domainExtractor.filter';
+import { getStateByCode } from 'src/common/state_code';
 
 @Injectable()
 export class FinancesService {
@@ -494,5 +498,141 @@ export class FinancesService {
         data: inserted,
       };
     }
+  }
+  async calculateOrderTaxes(
+    tx: DrizzleService,
+    companyId: string,
+    customerAddressId: string,
+    cartItems: {
+      variantId: string;
+      quantity: number;
+      price: number;
+    }[],
+  ) {
+    // 1. Fetch Customer's State
+    const [customerAddr] = await tx
+      .select({ state: address.state })
+      .from(address)
+      .where(eq(address.id, customerAddressId))
+      .limit(1);
+    if (!customerAddr || !customerAddr.state) {
+      throw new HttpException(
+        'Invalid customer address or missing state',
+        HttpStatus.BAD_REQUEST,
+      );
+    }
+    const customerState = customerAddr.state.trim().toLowerCase();
+
+    // 2. Fetch Vendor's Active GST Registration State
+    const [vendorGst] = await tx
+      .select()
+      .from(gst_registrations)
+      .where(
+        and(
+          eq(gst_registrations.company_id, companyId),
+          eq(gst_registrations.is_default, true),
+        ),
+      )
+      .catch((err) => {
+        console.error('Error fetching vendor GST registration:', err);
+        throw new HttpException(
+          'Error fetching vendor GST registration',
+          HttpStatus.INTERNAL_SERVER_ERROR,
+          { cause: err },
+        );
+      });
+    if (!vendorGst || !vendorGst.state_code) {
+      throw new HttpException(
+        'Vendor GST configuration is missing',
+        HttpStatus.BAD_REQUEST,
+      );
+    }
+
+    // In India, state_code in GSTIN indicates the state.
+    const vendorState = getStateByCode(vendorGst.state_code)
+      ?.state.trim()
+      .toLowerCase();
+
+    const isIntraState = customerState === vendorState;
+
+    // 3. Initialize Math Variables
+    let subTotal = 0;
+    let totalCgst = 0;
+    let totalSgst = 0;
+    let totalIgst = 0;
+    let totalTax = 0;
+
+    // We need to collect the unique tax_types applied to this order
+    // to insert into your `orders_tax` table later.
+    const appliedTaxTypeIds = new Set<string>();
+
+    // 4. Loop through cart items and calculate
+    for (const item of cartItems) {
+      const baseItemTotal = Number(item.price) * item.quantity;
+      subTotal += baseItemTotal;
+      const [variantRecord] = await tx
+        .select({ product_id: product_variants.product_id })
+        .from(product_variants)
+        .where(eq(product_variants.id, item.variantId))
+        .catch((err) => {
+          console.error(
+            'Error fetching product variant for tax calculation:',
+            err,
+          );
+          throw new HttpException(
+            `Error fetching product variant for tax calculation: ${err.message}`,
+            HttpStatus.INTERNAL_SERVER_ERROR,
+            { cause: err },
+          );
+        });
+
+      if (!variantRecord || !variantRecord.product_id) {
+        throw new HttpException(
+          `Product variant not found for ID: ${item.variantId}`,
+          HttpStatus.BAD_REQUEST,
+        );
+      }
+      // Fetch the tax rate mapped to this specific product, INCLUDING the tax_type_id
+      const productTaxMapping = await tx
+        .select({
+          rate: tax_rates.tax_rate_value,
+          taxTypeId: tax_rates.tax_type_id,
+        })
+        .from(product_tax)
+        .leftJoin(tax_rates, eq(product_tax.tax_rate_id, tax_rates.id))
+        .where(eq(product_tax.product_id, variantRecord.product_id))
+        .limit(1);
+
+      const mapping = productTaxMapping[0];
+      const taxPercentage = mapping ? Number(mapping.rate) : 0;
+
+      if (mapping && mapping.taxTypeId) {
+        appliedTaxTypeIds.add(mapping.taxTypeId);
+      }
+
+      const itemTaxAmount = (baseItemTotal * taxPercentage) / 100;
+
+      // Apply the GST Rules
+      if (isIntraState) {
+        totalCgst += itemTaxAmount / 2;
+        totalSgst += itemTaxAmount / 2;
+      } else {
+        totalIgst += itemTaxAmount;
+      }
+
+      totalTax += itemTaxAmount;
+    }
+
+    // 5. Return the finalized financial breakdown shaped for your schema
+    return {
+      subTotal: Number(subTotal.toFixed(2)),
+      totalCgst: Number(totalCgst.toFixed(2)),
+      totalSgst: Number(totalSgst.toFixed(2)),
+      totalIgst: Number(totalIgst.toFixed(2)),
+      totalTax: Number(totalTax.toFixed(2)),
+      grandTotal: Number((subTotal + totalTax).toFixed(2)),
+      vendorGstId: vendorGst.id,
+      appliedTaxTypeIds: Array.from(appliedTaxTypeIds),
+    };
   }
 }

@@ -8,9 +8,11 @@ import {
 import { and, desc, eq, gt, inArray, or } from 'drizzle-orm';
 import { DRIZZLE, type DrizzleService } from '../../drizzle/drizzle.module';
 import {
+  gst_invoices,
   invoices,
   order_items,
   orders,
+  orders_tax,
   payments,
   product_images,
 } from '../../drizzle/schema';
@@ -21,6 +23,7 @@ import { MailService } from '../../common/services/mail/mail.service';
 import { response } from 'express';
 import { domainExtractor } from '../../common/filters/domainExtractor.filter';
 import { InvoiceService } from '../invoice/invoice.service';
+import { FinancesService } from '../finances/finances.service';
 
 @Injectable()
 export class OrdersService {
@@ -30,6 +33,7 @@ export class OrdersService {
     private readonly inventoryService: InventoryService,
     private readonly mailService: MailService,
     private readonly invoiceService: InvoiceService,
+    private readonly financesService: FinancesService,
   ) {}
 
   async createOrder({
@@ -63,13 +67,22 @@ export class OrdersService {
           tx as DrizzleService,
         );
         console.log('creating order ...');
-        const [createdOrder] = await tx
+
+        const taxData = await this.financesService.calculateOrderTaxes(
+          tx as DrizzleService,
+          companyId,
+          addressId,
+          orderLines,
+        );
+
+        // 2. Create the main Order
+        const [newOrder] = await this.db
           .insert(orders)
           .values({
-            user_id: userId,
             company_id: companyId,
+            user_id: userId,
             address_id: addressId,
-            total_amount: String(totalAmount),
+            total_amount: String(taxData.grandTotal),
           })
           .returning({
             id: orders.id,
@@ -80,9 +93,36 @@ export class OrdersService {
               cause: error,
             });
           });
-        console.log('Order created:', createdOrder);
+        console.log('Order created:', newOrder);
+
+        // 3. Populate orders_tax table
+        // This matches your schema: order_id + tax_types_id
+        if (taxData.appliedTaxTypeIds.length > 0) {
+          const orderTaxInserts = taxData.appliedTaxTypeIds.map(
+            (taxTypeId) => ({
+              order_id: newOrder.id, // Use the ID from the newly created order
+              tax_types_id: taxTypeId,
+            }),
+          );
+          await this.db.insert(orders_tax).values(orderTaxInserts);
+        }
+
+        // 4. Create the GST Invoice record
+        // This matches your gst_invoices schema exactly
+        await this.db.insert(gst_invoices).values({
+          company_id: companyId,
+          order_id: newOrder.id,
+          gst_registration_id: taxData.vendorGstId,
+          invoice_number: `INV-${Date.now()}`,
+          invoice_date: new Date().toISOString().split('T')[0],
+          cgst_amount: String(taxData.totalCgst),
+          sgst_amount: String(taxData.totalSgst),
+          igst_amount: String(taxData.totalIgst),
+          total_tax: String(taxData.totalTax),
+          gst_amount: String(taxData.totalTax),
+        });
         const orderItemsData = orderLines.map((line) => ({
-          order_id: createdOrder.id,
+          order_id: newOrder.id,
           product_variant_id: line.variantId,
           quantity: line.quantity,
           price: String(line.price),
@@ -127,6 +167,7 @@ export class OrdersService {
               },
             );
           });
+
         return {
           orderId: createdOrder.id,
           totalAmount: String(totalAmount),
