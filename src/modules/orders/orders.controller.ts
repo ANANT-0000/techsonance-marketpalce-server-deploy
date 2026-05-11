@@ -22,20 +22,25 @@ import { Roles } from '../../common/decorators/roles.decorator';
   path: 'orders',
 })
 export class OrdersController {
-  constructor(private readonly ordersService: OrdersService) { }
+  constructor(private readonly ordersService: OrdersService) {}
 
   @Get()
-  @UseGuards(JwtAuthGuard, RoleGuard)
-  @Roles(Role.ADMIN, Role.VENDOR)
+  // @UseGuards(JwtAuthGuard, RoleGuard)
+  // @Roles(Role.ADMIN, Role.VENDOR)
   async getOrdersList(
     @Headers('company-domain') domain: string,
     @Query('offset') offset?: string,
     @Query('limit') limit?: string,
     @Query('status') status?: OrderStatus,
   ) {
-    return this.ordersService.getOrdersList(domain, Number(offset), Number(limit), status);
+    console.log('orderlist');
+    return this.ordersService.getOrdersList(
+      domain,
+      Number(offset),
+      Number(limit),
+      status,
+    );
   }
-
 
   @Get('pending')
   @UseGuards(JwtAuthGuard, RoleGuard)
@@ -46,7 +51,7 @@ export class OrdersController {
 
   @Get(':orderId')
   @UseGuards(JwtAuthGuard, RoleGuard)
-  @Roles(Role.ADMIN, Role.VENDOR, Role.USER)
+  @Roles(Role.CUSTOMER)
   async getUserOrderDetails(
     @Param('orderId') orderId: string,
     @Headers('company-domain') domain: string,
@@ -55,7 +60,7 @@ export class OrdersController {
   }
   @Get('user/:userId')
   @UseGuards(JwtAuthGuard, RoleGuard)
-  @Roles(Role.ADMIN, Role.VENDOR, Role.USER)
+  @Roles(Role.CUSTOMER)
   async getUserOrders(
     @Param('userId') userId: string,
     @Headers('company-domain') domain: string,
@@ -63,8 +68,8 @@ export class OrdersController {
     return this.ordersService.getUserOrders(userId, domain);
   }
   @Get(':orderid/details')
-  @UseGuards(JwtAuthGuard, RoleGuard)
-  @Roles(Role.ADMIN, Role.VENDOR)
+  // @UseGuards(JwtAuthGuard, RoleGuard)
+  // @Roles(Role.ADMIN, Role.VENDOR)
   async getOrderDetails(
     @Param('orderid') orderId: string,
     @Headers('company-domain') domain: string,
@@ -72,8 +77,8 @@ export class OrdersController {
     return this.ordersService.getOrderDetails(orderId, domain);
   }
   @Patch(':orderid/status')
-    @UseGuards(JwtAuthGuard, RoleGuard)
-  @Roles(Role.ADMIN, Role.VENDOR,)
+  @UseGuards(JwtAuthGuard, RoleGuard)
+  @Roles(Role.ADMIN, Role.VENDOR)
   async setOrderStatus(
     @Param('orderid') orderId: string,
     @Body('status') newStatus: OrderStatus,

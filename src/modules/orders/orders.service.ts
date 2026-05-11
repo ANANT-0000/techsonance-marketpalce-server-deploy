@@ -8,6 +8,7 @@ import {
 import { and, desc, eq, gt, inArray, or } from 'drizzle-orm';
 import { DRIZZLE, type DrizzleService } from '../../drizzle/drizzle.module';
 import {
+  invoices,
   order_items,
   orders,
   payments,
@@ -317,10 +318,7 @@ export class OrdersService {
           this.invoiceService
             .createInvoice(orderId)
             .then(() => {
-              console.log(
-                'Invoice generation initiated for failed order:',
-                orderId,
-              );
+              console.log('Invoice generation initiated for order:', orderId);
             })
             .catch((err) => {
               console.error(
@@ -590,6 +588,7 @@ export class OrdersService {
               tracking_url: true,
             },
           },
+          invoice: true,
         },
       });
       if (!orderDetails) {
@@ -713,6 +712,7 @@ export class OrdersService {
   }
   async getOrderDetails(orderId: string, domain: string) {
     try {
+      console.log('order id in getOrderDetails', orderId);
       if (!orderId || !domain) {
         throw new HttpException(
           'Order ID and domain are required',
@@ -723,7 +723,6 @@ export class OrdersService {
       const companyId = await this.companyService.find(filteredDomain);
       const row = await this.db.query.orders.findFirst({
         where: and(eq(orders.id, orderId), eq(orders.company_id, companyId)),
-
         columns: {
           id: true,
           total_amount: true,
@@ -811,8 +810,10 @@ export class OrdersService {
               tracking_url: true,
             },
           },
+          invoice: true,
         },
       });
+
       if (!row) {
         throw new HttpException('Order not found', HttpStatus.NOT_FOUND);
       }
@@ -834,6 +835,7 @@ export class OrdersService {
           email: row.customer?.email ?? null,
           phone_number: row.customer?.phone_number ?? null,
         },
+        invoice: row.invoice ? row.invoice : null,
         items: row.items.map((item) => {
           const inventory = item?.variant?.inventory ?? null;
           const warehouse = inventory?.warehouse ?? null;
@@ -847,6 +849,7 @@ export class OrdersService {
             refund: item?.refund,
             return: item?.return_request,
             cancel: item?.cancelledRecord,
+            invoice: item.invoice ? item.invoice : null,
             warehouse: warehouse
               ? {
                   id: inventory?.warehouse_id ?? null,

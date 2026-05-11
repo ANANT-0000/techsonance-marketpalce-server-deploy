@@ -28,32 +28,24 @@ export const product_policies = pg.pgTable(
   'product_policies',
   {
     id: pg.uuid('id').primaryKey().defaultRandom(),
-
     policy_name: pg.text('policy_name').notNull(),
     // e.g. "1 Year Manufacturer Warranty", "6 Month Guarantee", "No Return Policy"
-
     policy_type: policyTypeEnum('policy_type').notNull(),
-
     // Duration — only relevant for WARRANTY, GUARANTEE, EXTENDED_SUPPORT
     duration_value: pg.integer('duration_value'), // e.g. 1, 6, 30
     duration_unit: policy_duration_unit_enum('duration_unit'), // YEARS, MONTHS, DAYS, LIFETIME
-
     // What is covered — printed on the policy document / warranty card
     coverage_description: pg.text('coverage_description'),
     // e.g. "Covers manufacturing defects. Does not cover physical damage or water damage."
-
     // What is NOT covered — explicit exclusions printed on document
     exclusions: pg.text('exclusions'),
-
     // Who services the claim — vendor themselves or manufacturer
     service_provider: pg.text('service_provider'),
     // e.g. "Vendor", "Brand Service Center", "Authorized Partner"
-
     // Contact for claims
     claim_contact_email: pg.text('claim_contact_email'),
     claim_contact_phone: pg.text('claim_contact_phone'),
     claim_process_description: pg.text('claim_process_description'),
-
     // Whether this policy generates a physical/PDF document on order
     generates_document: pg
       .boolean('generates_document')
@@ -61,12 +53,9 @@ export const product_policies = pg.pgTable(
       .default(false),
     // WARRANTY → true (prints warranty card)
     // NO_RETURN → false (just a label on invoice)
-
     // Document template URL (if generates_document = true)
     document_template_url: pg.text('document_template_url'),
-
     is_active: pg.boolean('is_active').notNull().default(true),
-
     // Owner — policy belongs to either a company or a vendor
     // Both nullable — application logic enforces at least one is set
     company_id: pg
@@ -75,7 +64,6 @@ export const product_policies = pg.pgTable(
     vendor_id: pg
       .uuid('vendor_id')
       .references(() => vendor.id, { onDelete: 'cascade' }),
-
     created_at: pg.timestamp('created_at').notNull().defaultNow(),
     updated_at: pg
       .timestamp('updated_at')
@@ -99,7 +87,6 @@ export const category_policy = pg.pgTable(
   'category_policy',
   {
     id: pg.uuid('id').primaryKey().defaultRandom(),
-
     category_id: pg
       .uuid('category_id')
       .notNull()
@@ -108,11 +95,9 @@ export const category_policy = pg.pgTable(
       .uuid('policy_id')
       .notNull()
       .references(() => product_policies.id, { onDelete: 'cascade' }),
-
     // Priority — if a category has multiple policies (e.g. warranty + no-return on accessories)
     // lower number = higher priority when resolving which policy applies
     priority: pg.integer('priority').notNull().default(1),
-
     created_at: pg.timestamp('created_at').notNull().defaultNow(),
   },
   (table) => [
@@ -132,7 +117,6 @@ export const product_policy_override = pg.pgTable(
   'product_policy_override',
   {
     id: pg.uuid('id').primaryKey().defaultRandom(),
-
     product_id: pg
       .uuid('product_id')
       .notNull()
@@ -141,13 +125,11 @@ export const product_policy_override = pg.pgTable(
       .uuid('policy_id')
       .notNull()
       .references(() => product_policies.id, { onDelete: 'cascade' }),
-
     // Explicitly marks this as overriding the category default
     overrides_category: pg
       .boolean('overrides_category')
       .notNull()
       .default(true),
-
     created_at: pg.timestamp('created_at').notNull().defaultNow(),
   },
   (table) => [
@@ -164,7 +146,6 @@ export const order_item_policy = pg.pgTable(
   'order_item_policy',
   {
     id: pg.uuid('id').primaryKey().defaultRandom(),
-
     order_item_id: pg
       .uuid('order_item_id')
       .notNull()
@@ -173,7 +154,6 @@ export const order_item_policy = pg.pgTable(
       .uuid('policy_id')
       .notNull()
       .references(() => product_policies.id),
-
     // Snapshot of policy at time of purchase — immutable after creation
     policy_snapshot: pg.jsonb('policy_snapshot').notNull(),
     // Stores the full resolved policy as JSON so future edits don't affect this order:

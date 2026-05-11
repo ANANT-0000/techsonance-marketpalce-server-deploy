@@ -5,11 +5,13 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { DRIZZLE, type DrizzleService } from '../../drizzle/drizzle.module';
-import { eq } from 'drizzle-orm';
+import { and, eq, inArray } from 'drizzle-orm';
 import { orders, invoices, gst_registrations } from '../../drizzle/schema';
 import { PdfService } from '../../utils/pdf/pdf.service';
 import { UploadToCloudService } from '../../utils/upload-to-cloud/upload-to-cloud.service';
 import { randomUUID } from 'crypto';
+import { domainExtractor } from '../../common/filters/domainExtractor.filter';
+import { CompanyService } from '../company/company.service';
 
 // ─── Strict Interfaces (mirrors Drizzle relational query shape) ────────────────
 
@@ -122,6 +124,7 @@ export class InvoiceService {
     @Inject(DRIZZLE) private readonly db: DrizzleService,
     private readonly pdfService: PdfService,
     private readonly uploadToCloudService: UploadToCloudService,
+    private readonly companyService: CompanyService,
   ) {}
 
   async createInvoice(orderId: string): Promise<void> {
@@ -131,7 +134,7 @@ export class InvoiceService {
         where: eq(orders.id, orderId),
         with: {
           customer: true,
-          address: true,
+          address: true, // orders shipping address
           items: {
             with: {
               variant: {
@@ -142,7 +145,7 @@ export class InvoiceService {
                   inventory: {
                     with: {
                       warehouse: {
-                        with: { address: true },
+                        with: { address: true }, //address of the warehouse fulfilling this item
                       },
                     },
                   },
@@ -254,7 +257,12 @@ export class InvoiceService {
           '=======================================\n url \n==================\n====================\n',
           result.value,
         );
-        invoiceInsertions.push(...result.value);
+        if (Array.isArray(result.value)) {
+          invoiceInsertions.push(...result.value);
+        } else {
+          // If it's a single object, just push it directly without the spread operator
+          invoiceInsertions.push(result.value);
+        }
       } else {
         console.error(
           `[InvoiceService] Warehouse invoice generation failed for order ${orderId}:`,
@@ -289,7 +297,26 @@ export class InvoiceService {
       `[InvoiceService] Successfully generated ${invoiceInsertions.length} invoice(s) for order ${orderId}.`,
     );
   }
+  async getBulkInvoiceUrls(domain: string, orderIds: string[]) {
+    const filteredDomain = domainExtractor(domain);
+    const companyId = await this.companyService.find(filteredDomain);
 
+    const invoicesRecords = await this.db
+      .select({
+        invoice_url: invoices.invoice_url,
+        invoice_number: invoices.invoice_number,
+        order_id: invoices.order_id,
+      })
+      .from(invoices)
+      .where(
+        and(
+          inArray(invoices.order_id, orderIds),
+          eq(invoices.company_id, companyId),
+        ),
+      );
+    console.log(invoicesRecords);
+    return invoicesRecords;
+  }
   // ─── Group items by warehouse ─────────────────────────────────────────────────
   //
   // Iterates each order item once — O(n).
@@ -298,7 +325,10 @@ export class InvoiceService {
   private groupItemsByWarehouse(items: OrderItem[]): GroupingResult {
     const assigned = new Map<string, WarehouseGroup>();
     const unresolved: OrderItem[] = [];
-
+    console.log('======================================');
+    console.log('======================================');
+    console.log(items[0].variant?.inventory);
+    console.log('======================================');
     for (const item of items) {
       // Walk the relation chain safely
       const warehouse = item.variant?.inventory?.warehouse ?? null;
@@ -319,6 +349,14 @@ export class InvoiceService {
         assigned.set(warehouse.id, { warehouse, items: [item] });
       }
     }
+    console.log('======================================');
+    console.log('======================================');
+    console.log('======================================');
+
+    console.log('assigend', assigned);
+    console.log('======================================');
+    console.log('======================================');
+    console.log('======================================');
 
     return { assigned, unresolved };
   }
@@ -330,7 +368,7 @@ export class InvoiceService {
     group: WarehouseGroup,
     orderInfo: MappedOrderInfo,
     vendorInfo: MappedVendorInfo,
-  ): Promise<(typeof invoices.$inferInsert)[]> {
+  ): Promise<(typeof invoices.$inferInsert)[] | typeof invoices.$inferInsert> {
     const invoiceNumber = this.buildInvoiceNumber(group.warehouse.id);
 
     const warehouseAddress: MappedWarehouseAddress = group.warehouse.address
@@ -371,13 +409,18 @@ export class InvoiceService {
     );
 
     // One DB row per order item — each item points back to its invoice
-    return group.items.map((item) => ({
-      invoice_number: invoiceNumber,
-      invoice_url: invoiceUrl,
-      order_id: orderId,
-      order_item_id: item.id,
-      company_id: item.company_id,
-    }));
+
+    const generatedInvoices = [
+      {
+        invoice_number: invoiceNumber,
+        invoice_url: invoiceUrl,
+        order_id: orderId,
+        order_item_id: group.items[0].id,
+        company_id: group.items[0].company_id,
+      },
+    ];
+    console.log('Generated invoices for group:', generatedInvoices);
+    return generatedInvoices;
   }
 
   // ─── Helpers ──────────────────────────────────────────────────────────────────
