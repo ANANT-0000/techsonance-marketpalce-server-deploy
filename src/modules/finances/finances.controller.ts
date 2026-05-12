@@ -52,6 +52,13 @@ export class FinancesController {
   ) {
     return this.financesService.assignTaxToProduct(domain, payload);
   }
+  @Post('product-tax-bulk-mappings')
+  async bulkAssignProductTax(
+    @Headers('company-domain') domain: string,
+    @Body() payload: { product_ids: string[]; tax_rate_id: string },
+  ) {
+    return this.financesService.bulkAssignProductTax(domain, payload);
+  }
   @Get('tax-profiles')
   async getTaxProfiles(@Headers('company-domain') domain: string) {
     return this.financesService.getTaxProfiles(domain);
@@ -60,6 +67,10 @@ export class FinancesController {
   @Get('tax-rates')
   async getTaxRates(@Headers('company-domain') domain: string) {
     return this.financesService.getTaxRates(domain);
+  }
+  @Get('tax-rate-options')
+  async getTaxRateOptions(@Headers('company-domain') domain: string) {
+    return this.financesService.getTaxRateOptions(domain);
   }
 
   @Get('product-tax-mappings')

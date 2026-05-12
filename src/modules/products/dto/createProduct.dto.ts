@@ -29,7 +29,10 @@ export class ProductImgDto {
 export class CreateProductDto {
   @IsString()
   warehouse_id!: string;
-  
+
+  @IsString()
+  tax_rate_id!: string;
+
   @IsString()
   name!: string;
 

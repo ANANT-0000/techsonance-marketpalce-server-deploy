@@ -330,7 +330,18 @@ export class FinancesService {
       where: eq(tax_rates.company_id, companyId),
       orderBy: [desc(tax_rates.created_at)],
     });
-    return { success: true, data: records };
+    return records;
+  }
+  async getTaxRateOptions(domain: string) {
+    const filteredDomain = domainExtractor(domain);
+    const companyId = await this.companyService.find(filteredDomain);
+
+    const records = await this.db.query.tax_rates.findMany({
+      where: eq(tax_rates.company_id, companyId),
+      orderBy: [desc(tax_rates.created_at)],
+      columns: { id: true, tax_rate_name: true },
+    });
+    return records;
   }
 
   // 4. Product Tax Mapping (The Bridge)
@@ -498,6 +509,39 @@ export class FinancesService {
         data: inserted,
       };
     }
+  }
+  async bulkAssignProductTax(
+    domain: string,
+    data: { product_ids: string[]; tax_rate_id: string },
+  ) {
+    const filteredDomain = domainExtractor(domain);
+    const companyId = await this.companyService.find(filteredDomain);
+
+    // Prepare the batch data
+    const valuesToUpsert = data.product_ids.map((id) => ({
+      product_id: id,
+      tax_rate_id: data.tax_rate_id,
+    }));
+
+    if (valuesToUpsert.length === 0) {
+      return { success: false, message: 'No product IDs provided' };
+    }
+
+    // Use Upsert: Insert new ones, or update tax_rate_id if product_id already exists
+    const results = await this.db
+      .insert(product_tax)
+      .values(valuesToUpsert)
+      .onConflictDoUpdate({
+        target: product_tax.product_id, // Ensure you have a UNIQUE constraint on product_id
+        set: { tax_rate_id: data.tax_rate_id },
+      })
+      .returning();
+
+    return {
+      success: true,
+      message: `Successfully processed ${results.length} products`,
+      data: results,
+    };
   }
   async calculateOrderTaxes(
     tx: DrizzleService,

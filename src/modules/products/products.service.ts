@@ -22,7 +22,7 @@ import { UpdateProductDto } from './dto/updatedProduct.dto';
 import { type ProductFiles } from '../../common/Types/index.type';
 import { CompanyService } from '../company/company.service';
 import { InventoryService } from '../inventory/inventory.service';
-import { warehouse } from '../../drizzle/schema';
+import { product_tax, warehouse } from '../../drizzle/schema';
 import { domainExtractor } from '../../common/filters/domainExtractor.filter';
 
 @Injectable()
@@ -33,46 +33,51 @@ export class ProductsService {
     private uploadToCloudService: UploadToCloudService,
     private inventoryService: InventoryService,
     private readonly companyService: CompanyService,
-  ) { }
+  ) {}
 
   async getAllProducts(domain: string) {
     try {
       console.log('companyId', domain);
       const filteredDomain = domainExtractor(domain);
       const companyId = await this.companyService.find(filteredDomain);
-      const testSelect = await this.db.select({id:products.id,name:products.name}).from(products).where(eq(products.company_id,companyId));
-      console.log("testSelect",testSelect)
-      const product = await this.db.query.products.findMany({
-        where: (products) => eq(products.company_id, companyId),
-        with: {
-          variants: {
-            // orderBy: (variants, { desc }) => desc(variants.created_at),
-            // where: eq(product_variants.status, ProductStatus.ACTIVE),
-            columns: {
-              id: true,
-              variant_name: true,
-              price: true,
-              sku: true,
-              status: true,
-            },
-            with: {
-              images: {
-                limit: 1,
-                where: (images) => eq(images.is_primary, true),
+      const testSelect = await this.db
+        .select({ id: products.id, name: products.name })
+        .from(products)
+        .where(eq(products.company_id, companyId));
+      console.log('testSelect', testSelect);
+      const product = await this.db.query.products
+        .findMany({
+          where: (products) => eq(products.company_id, companyId),
+          with: {
+            variants: {
+              // orderBy: (variants, { desc }) => desc(variants.created_at),
+              // where: eq(product_variants.status, ProductStatus.ACTIVE),
+              columns: {
+                id: true,
+                variant_name: true,
+                price: true,
+                sku: true,
+                status: true,
               },
-              inventory: {
-                columns: {
-                  stock_quantity: true,
-                  warehouse_id: true,
+              with: {
+                images: {
+                  limit: 1,
+                  where: (images) => eq(images.is_primary, true),
+                },
+                inventory: {
+                  columns: {
+                    stock_quantity: true,
+                    warehouse_id: true,
+                  },
                 },
               },
             },
           },
-        },
-      }).catch(e=>{
-        console.log('error in fetching products',e)
-        return []
-      })
+        })
+        .catch((e) => {
+          console.log('error in fetching products', e);
+          return [];
+        });
       console.log('response product ', product);
       return product;
     } catch (error) {
@@ -256,7 +261,7 @@ export class ProductsService {
         },
       });
       const response = result.map((product) => product.variants).flat();
-      console.log('response', response)
+      console.log('response', response);
       return response;
     } catch (error) {
       throw new InternalServerErrorException(
@@ -400,6 +405,21 @@ export class ProductsService {
           );
           console.log('inventoryResult', inventoryResult);
         }
+        await tx
+          .insert(product_tax)
+          .values({
+            product_id: createdProduct.id,
+            tax_rate_id: productDto.tax_rate_id,
+          })
+          .catch((error) => {
+            console.error('Error inserting product tax mapping:', error);
+            throw new InternalServerErrorException(
+              'Failed to create product tax mapping',
+              {
+                cause: error,
+              },
+            );
+          });
         return {
           id: variantRecords?.id,
           message: 'Product created successfully',

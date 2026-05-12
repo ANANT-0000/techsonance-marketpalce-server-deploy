@@ -6,6 +6,7 @@ import { CompanyModule } from '../company/company.module';
 import { InventoryModule } from '../inventory/inventory.module';
 import { MailModule } from '../../common/services/mail/mail.module';
 import { InvoiceModule } from '../invoice/invoice.module';
+import { FinancesModule } from '../finances/finances.module';
 
 @Module({
   imports: [
@@ -14,6 +15,7 @@ import { InvoiceModule } from '../invoice/invoice.module';
     InventoryModule,
     MailModule,
     InvoiceModule,
+    FinancesModule,
   ],
   controllers: [OrdersController],
   providers: [OrdersService],

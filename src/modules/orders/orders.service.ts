@@ -9,7 +9,6 @@ import { and, desc, eq, gt, inArray, or } from 'drizzle-orm';
 import { DRIZZLE, type DrizzleService } from '../../drizzle/drizzle.module';
 import {
   gst_invoices,
-  invoices,
   order_items,
   orders,
   orders_tax,
@@ -57,7 +56,9 @@ export class OrdersService {
       if (totalAmount <= 0) {
         throw new Error('Total amount must be greater than zero');
       }
+
       const orderResult = await this.db.transaction(async (tx) => {
+        // 1. Deduct stock
         await this.inventoryService.deductStockForOrder(
           orderLines.map((l) => ({
             variantId: l.variantId,
@@ -66,8 +67,8 @@ export class OrdersService {
           companyId,
           tx as DrizzleService,
         );
-        console.log('creating order ...');
 
+        // 2. Calculate taxes
         const taxData = await this.financesService.calculateOrderTaxes(
           tx as DrizzleService,
           companyId,
@@ -75,8 +76,8 @@ export class OrdersService {
           orderLines,
         );
 
-        // 2. Create the main Order
-        const [newOrder] = await this.db
+        // 3. Create the main Order
+        const [newOrder] = await tx
           .insert(orders)
           .values({
             company_id: companyId,
@@ -84,32 +85,29 @@ export class OrdersService {
             address_id: addressId,
             total_amount: String(taxData.grandTotal),
           })
-          .returning({
-            id: orders.id,
-          })
+          .returning({ id: orders.id })
           .catch((error) => {
             console.error('Error inserting order:', error);
             throw new InternalServerErrorException('Failed to create order', {
               cause: error,
             });
           });
-        console.log('Order created:', newOrder);
 
-        // 3. Populate orders_tax table
-        // This matches your schema: order_id + tax_types_id
+        console.log('Order created:', newOrder.id);
+
+        // 4. Insert orders_tax rows
         if (taxData.appliedTaxTypeIds.length > 0) {
           const orderTaxInserts = taxData.appliedTaxTypeIds.map(
             (taxTypeId) => ({
-              order_id: newOrder.id, // Use the ID from the newly created order
+              order_id: newOrder.id,
               tax_types_id: taxTypeId,
             }),
           );
-          await this.db.insert(orders_tax).values(orderTaxInserts);
+          await tx.insert(orders_tax).values(orderTaxInserts);
         }
 
-        // 4. Create the GST Invoice record
-        // This matches your gst_invoices schema exactly
-        await this.db.insert(gst_invoices).values({
+        // 5. Create GST Invoice record
+        await tx.insert(gst_invoices).values({
           company_id: companyId,
           order_id: newOrder.id,
           gst_registration_id: taxData.vendorGstId,
@@ -121,6 +119,8 @@ export class OrdersService {
           total_tax: String(taxData.totalTax),
           gst_amount: String(taxData.totalTax),
         });
+
+        // 6. Create order items
         const orderItemsData = orderLines.map((line) => ({
           order_id: newOrder.id,
           product_variant_id: line.variantId,
@@ -129,7 +129,7 @@ export class OrdersService {
           order_status: OrderStatus.PENDING,
           company_id: companyId,
         }));
-        console.log('creating order item...');
+
         await tx
           .insert(order_items)
           .values(orderItemsData)
@@ -137,43 +137,39 @@ export class OrdersService {
             console.error('Error inserting order items:', error);
             throw new InternalServerErrorException(
               'Failed to create order items',
-              {
-                cause: error,
-              },
+              { cause: error },
             );
           });
-        console.log('created order item...');
 
-        console.log('creating payment ');
+        // 7. Create payment record (PENDING — confirmed later via verifyCheckout)
         await tx
           .insert(payments)
           .values({
-            order_id: createdOrder.id,
+            order_id: newOrder.id, // ← was `createdOrder.id`
             company_id: companyId,
-            amount: String(totalAmount),
+            amount: String(taxData.grandTotal),
             payment_status: PaymentStatus.PENDING,
             payment_method: paymentMethod,
-            transaction_ref: `txn_${createdOrder.id}_${Date.now()}`,
+            transaction_ref: `txn_${newOrder.id}_${Date.now()}`, // ← was `createdOrder.id`
           })
           .then((result) => {
-            console.log('payment record created', result);
+            console.log('Payment record created');
           })
           .catch((error) => {
             console.error('Error inserting payment record:', error);
             throw new InternalServerErrorException(
               'Failed to create payment record',
-              {
-                cause: error,
-              },
+              { cause: error },
             );
           });
 
         return {
-          orderId: createdOrder.id,
-          totalAmount: String(totalAmount),
+          orderId: newOrder.id,
+          totalAmount: String(taxData.grandTotal),
           itemCount: orderLines.length,
         };
       });
+
       return orderResult;
     } catch (error) {
       if (
@@ -187,6 +183,7 @@ export class OrdersService {
       });
     }
   }
+
   async getOrderById(orderId: string, domain?: string) {
     try {
       if (!orderId || !domain) {
@@ -264,14 +261,12 @@ export class OrdersService {
     if (!companyId) {
       throw new HttpException('Company ID is required', HttpStatus.BAD_REQUEST);
     }
-    console.log('order id in completeOrderVerification', orderId);
+
     try {
       if (!existingOrder || !existingOrder.user_id) {
         throw new HttpException('Order not found', HttpStatus.NOT_FOUND);
       }
-      console.log('===================');
-      console.log('existingOrder', existingOrder);
-      console.log('===================');
+
       const orderLines = await this.db
         .select({
           variantId: order_items.product_variant_id,
@@ -279,19 +274,14 @@ export class OrdersService {
         })
         .from(order_items)
         .where(eq(order_items.order_id, orderId));
-      console.log(
-        'starting transaction of order complete,cusomter detials',
-        customerDetails,
-      );
+
       return this.db.transaction(async (tx) => {
         if (isSuccess) {
+          // Set all order items to PROCESSING
           const orderItemsRecord = await tx
             .select()
             .from(order_items)
             .where(eq(order_items.order_id, orderId));
-          console.log('===================');
-          console.log('orderItemsRecord', orderItemsRecord);
-          console.log('===================');
 
           if (orderItemsRecord.length > 0) {
             const updateItem = orderItemsRecord.map(async (item) => {
@@ -305,42 +295,33 @@ export class OrdersService {
                   ),
                 )
                 .catch((error) => {
-                  console.error('Error updating order status:', error);
                   throw new InternalServerErrorException(
                     'Failed to update order status',
-                    {
-                      cause: error,
-                    },
+                    { cause: error },
                   );
                 });
             });
-            const updateResults = await Promise.all(updateItem);
-            console.log('order items updated to processing', updateResults);
+            await Promise.all(updateItem);
           }
-          if (!orderItemsRecord[0].order_id) {
+
+          if (!orderItemsRecord[0]?.order_id) {
             throw new HttpException('Order not found', HttpStatus.NOT_FOUND);
           }
-          const paymentResult = await tx
+
+          // Mark payment COMPLETED
+          await tx
             .update(payments)
             .set({ payment_status: PaymentStatus.COMPLETED })
             .where(eq(payments.order_id, orderItemsRecord[0].order_id))
             .returning()
-            .then((result) => {
-              console.log('payment status updated to completed', result);
-              return result;
-            })
             .catch((error) => {
-              console.error('Error updating payment status:', error);
               throw new InternalServerErrorException(
                 'Failed to update payment status',
-                {
-                  cause: error,
-                },
+                { cause: error },
               );
             });
-          console.log('===================');
-          console.log('paymentResult', paymentResult);
-          console.log('===================');
+
+          // Send order confirmation email (non-blocking on failure)
           if (customerDetails.email) {
             await this.mailService
               .sendOrderPlacedEmail(
@@ -353,27 +334,29 @@ export class OrdersService {
                 console.error('Error sending order placed email:', error);
               });
           }
-          console.log('===================');
-          console.log('sended mail success');
-          console.log('===================');
+
           this.invoiceService
             .createInvoice(orderId)
             .then(() => {
-              console.log('Invoice generation initiated for order:', orderId);
+              console.log(
+                `[OrdersService] Invoice PDF generated for order ${orderId}`,
+              );
             })
             .catch((err) => {
               console.error(
-                'Background invoice generation failed for order:',
-                orderId,
+                `[OrdersService] Background PDF generation failed for order ${orderId}:`,
                 err,
               );
+              // TODO: push to a retry queue (Bull/BullMQ) in production
             });
+
           return {
             success: true,
             orderId,
             message: 'Order placed successfully',
           };
         } else {
+          // Payment failed — roll back stock
           await this.inventoryService.rollbackStockForOrder(
             orderLines.map((l) => ({
               variantId: l.variantId ?? '',
@@ -382,12 +365,14 @@ export class OrdersService {
             companyId,
             tx as DrizzleService,
           );
+
+          // Cancel order items
           const orderItemsRecord = await tx
             .select({ id: order_items.id })
             .from(order_items)
-            .where(eq(order_items.order_id, orderId))
-            .limit(1);
-          if (orderItemsRecord.length === 0) {
+            .where(eq(order_items.order_id, orderId));
+
+          if (orderItemsRecord.length > 0) {
             const updateItem = orderItemsRecord.map(async (item) => {
               return await tx
                 .update(order_items)
@@ -399,32 +384,24 @@ export class OrdersService {
                   ),
                 )
                 .catch((error) => {
-                  console.error('Error updating order status:', error);
                   throw new InternalServerErrorException(
                     'Failed to update order status',
-                    {
-                      cause: error,
-                    },
+                    { cause: error },
                   );
                 });
             });
-            const updateResults = await Promise.all(updateItem);
-            console.log('order items updated to cancelled', updateResults);
+            await Promise.all(updateItem);
           }
+
+          // Mark payment FAILED
           await tx
             .update(payments)
             .set({ payment_status: PaymentStatus.FAILED })
             .where(eq(payments.order_id, existingOrder.id))
-            .then((result) => {
-              console.log('payment status updated to failed', result);
-            })
             .catch((error) => {
-              console.error('Error updating payment status:', error);
               throw new InternalServerErrorException(
                 'Failed to update payment status',
-                {
-                  cause: error,
-                },
+                { cause: error },
               );
             });
 
@@ -440,14 +417,11 @@ export class OrdersService {
         error instanceof HttpException ||
         error instanceof InternalServerErrorException
       ) {
-        console.error('Error completing order verification:', error);
         throw error;
       }
       throw new InternalServerErrorException(
         'Failed to complete order verification',
-        {
-          cause: error,
-        },
+        { cause: error },
       );
     }
   }
