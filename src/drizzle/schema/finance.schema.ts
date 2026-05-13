@@ -1,5 +1,6 @@
 import * as pg from 'drizzle-orm/pg-core';
-import { company, orders, products } from '.';
+import { company } from './main.schema';
+import { orders, products } from './shop.schema';
 import { relations } from 'drizzle-orm';
 
 export const tax_profiles = pg.pgTable('tax_profiles', {

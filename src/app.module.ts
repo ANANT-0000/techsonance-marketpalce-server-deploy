@@ -36,9 +36,11 @@ import { RefundsModule } from './modules/refunds/refunds.module';
 import { OrderItemsModule } from './modules/order-items/order-items.module';
 import { ReturnsModule } from './modules/returns/returns.module';
 import { FinancesModule } from './modules/finances/finances.module';
-import { PdfService } from './utils/pdf/pdf.service';
+// import { PdfService } from './utils/pdf/pdf.service';
 import { InvoiceModule } from './modules/invoice/invoice.module';
-import { PdfModule } from './utils/pdf/pdf.module';
+// import { PdfModule } from './utils/pdf/pdf.module';
+import { ProductPoliciesModule } from './modules/product-policies/product-policies.module';
+import { CompanyIdentityModule } from './modules/company-identity/company-identity.module';
 @Module({
   imports: [
     DrizzleModule,
@@ -74,7 +76,9 @@ import { PdfModule } from './utils/pdf/pdf.module';
     ReturnsModule,
     FinancesModule,
     InvoiceModule,
-    PdfModule,
+    // PdfModule,
+    ProductPoliciesModule,
+    CompanyIdentityModule,
     // ThrottlerModule.forRoot([
     //   {
     //     name: "short",
@@ -94,6 +98,6 @@ import { PdfModule } from './utils/pdf/pdf.module';
     // ]),
   ],
   controllers: [AppController, UsersController],
-  providers: [AppService, UsersService, PdfService],
+  providers: [AppService, UsersService],
 })
 export class AppModule {}

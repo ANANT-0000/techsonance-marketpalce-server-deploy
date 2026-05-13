@@ -50,8 +50,8 @@ export class OrdersController {
   }
 
   @Get(':orderId')
-  @UseGuards(JwtAuthGuard, RoleGuard)
-  @Roles(Role.CUSTOMER)
+  // @UseGuards(JwtAuthGuard, RoleGuard)
+  // @Roles(Role.CUSTOMER)
   async getUserOrderDetails(
     @Param('orderId') orderId: string,
     @Headers('company-domain') domain: string,
@@ -59,8 +59,8 @@ export class OrdersController {
     return this.ordersService.getUserOrderDetails(orderId, domain);
   }
   @Get('user/:userId')
-  @UseGuards(JwtAuthGuard, RoleGuard)
-  @Roles(Role.CUSTOMER)
+  // @UseGuards(JwtAuthGuard, RoleGuard)
+  // @Roles(Role.CUSTOMER)
   async getUserOrders(
     @Param('userId') userId: string,
     @Headers('company-domain') domain: string,

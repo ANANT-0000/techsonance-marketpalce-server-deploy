@@ -1,5 +1,5 @@
 import { Transform } from 'class-transformer';
-import { IsBoolean, IsNotEmpty, IsString } from 'class-validator';
+import { IsBoolean, IsNotEmpty, IsOptional, IsString } from 'class-validator';
 
 export class CreateAddressDto {
   @IsNotEmpty()
@@ -17,14 +17,13 @@ export class CreateAddressDto {
   @IsString()
   @Transform(({ value }: { value: string }) => value.trim())
   phone!: string;
-  //   @IsNotEmpty()
-  //   @IsString()
-  //   @Transform(({ value }: { value: string }) => value.trim())
-  //   country_code!: string;
+
   @IsNotEmpty()
   @IsString()
   @Transform(({ value }: { value: string }) => value.trim())
   address_line_1!: string;
+
+  @IsOptional()
   @IsString()
   @Transform(({ value }: { value: string }) => value.trim())
   address_line_2!: string;

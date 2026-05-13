@@ -17,7 +17,7 @@ import {
 import { AuthService } from './auth.service';
 import { VendorsService } from '../vendors/vendors.service';
 import { UsersService } from '../users/users.service';
-import express from 'express';
+import express, { Request } from 'express';
 import { CreateUserDto, LoginDto } from '../users/dto/userAuth.dto.ts';
 import { UploadToCloud } from '../../common/decorators/upload.decorator';
 import { ParseJsonPipe } from '../../common/pipes/parseJsonPipe';
@@ -70,13 +70,13 @@ export class AuthController {
   @SetMetadata('skipAuthGuard', true)
   @UseGuards(AuthGuard('google'))
   async googleAuthRedirect(
-    @Req() req: any,
+    @Req() req: express.Request,
     @Res() res: express.Response,
     @Query('state') state: string,
   ) {
     try {
       // Extract domain from state or query parameter
-      // @ts-ignore
+      // @ts-expect-error - state is expected to be a string, but can be undefined
       const targetDomain: string =
         state || req.query.state || process.env.FRONTEND_URL;
 
@@ -109,7 +109,7 @@ export class AuthController {
       console.error('Google OAuth callback error:', error);
 
       // Redirect to error page on failure
-      const errorDomain: string = req.query.state;
+      const errorDomain: string = req.query.state as string;
       const frontendUrl: string = errorDomain.startsWith('http')
         ? errorDomain
         : `https://${errorDomain}`;

@@ -1,5 +1,7 @@
 import * as pg from 'drizzle-orm/pg-core';
-import { address, company, product_variants, user, vendor } from '.';
+import { company } from './main.schema';
+import { address, user, vendor } from './users.schema';
+import { product_variants } from './shop.schema';
 import { SupportTicketPriority, SupportTicketStatus } from '../types/types';
 
 export const support_tickets_status_enum = pg.pgEnum(
@@ -27,6 +29,7 @@ export const vendor_document = pg.pgTable('vendor_document', {
     .references(() => vendor.id, { onDelete: 'cascade' })
     .notNull(),
 });
+
 export const warehouse = pg.pgTable('warehouse', {
   id: pg.uuid('id').primaryKey().defaultRandom(),
   warehouse_name: pg.text('warehouse_name').notNull(),

@@ -36,12 +36,18 @@ import {
   UserStatus,
 } from '../../drizzle/types/types';
 import bcrypt from 'bcryptjs';
-import express, { response } from 'express';
 import { MailService } from '../../common/services/mail/mail.service';
 import { CreateVendorDto } from './dto/CreateVendorDto';
 import { LoginDto } from '../users/dto/userAuth.dto.ts';
 import { UploadToCloudService } from '../../utils/upload-to-cloud/upload-to-cloud.service';
 import { formatCompanyDomain } from '../../common/filters/formatDomain.filter';
+import { company_compliance } from 'src/drizzle/schema/company_identity.schema';
+import { CreateAddressDto } from '../address/dto/createAddress.dto';
+import { AddressType } from 'src/common/Types/index.type';
+import { find } from 'pdfkit';
+import { CompanyService } from '../company/company.service';
+import { domainExtractor } from 'src/common/filters/domainExtractor.filter';
+
 const SALT_ROUNDS = 10;
 type UserType = typeof userTable.$inferSelect;
 type VendorType = typeof vendorTable.$inferSelect;
@@ -52,6 +58,7 @@ export class VendorsService {
     @Inject(DRIZZLE) private db: DrizzleService,
     private jwtService: JwtService,
     private readonly mailService: MailService,
+    private readonly companyService: CompanyService,
     private readonly uploadToCloudService: UploadToCloudService,
   ) {}
   async vendorRegister(
@@ -232,19 +239,80 @@ export class VendorsService {
             HttpStatus.INTERNAL_SERVER_ERROR,
           );
         }
+
+        // After vendor documents are inserted, collect their IDs
+        const insertedDocs: { id: string; document_type: string }[] = [];
+
         for (const doc of vendorDocuments) {
-          await tx
+          const [insertedDoc] = await tx
             .insert(vendor_documentTable)
             .values({
               document_url: doc.secure_url,
               document_type: doc.type,
               vendor_id: newVendor.id,
             })
+            .returning({
+              id: vendor_documentTable.id,
+              document_type: vendor_documentTable.document_type,
+            })
             .catch((error) => {
               console.error('Error inserting vendor document record:', error);
+              throw new InternalServerErrorException(
+                'Failed to insert vendor document',
+                { cause: error },
+              );
+            });
+
+          if (insertedDoc) insertedDocs.push(insertedDoc);
+        }
+
+        console.log('vendor documents inserted');
+
+        // Build a lookup map: document_type -> document_id
+        const docTypeToIdMap = new Map(
+          insertedDocs.map((doc) => [doc.document_type, doc.id]),
+        );
+
+        // Map compliance entries, matching field_key to document type
+        const compliancePayloads = vendorData.company_compliance.map(
+          (compliance) => {
+            const matchedDocId =
+              docTypeToIdMap.get(compliance.field_key) ?? null;
+
+            return {
+              company_id: newCompany.id,
+              country_code: vendorData.country_code,
+              field_key: compliance.field_key,
+              field_value: compliance.field_value,
+              is_active: compliance.is_active ?? true,
+              valid_until: compliance.valid_until ?? null,
+              document_id: matchedDocId, // null if no matching doc
+            };
+          },
+        );
+
+        // Bulk insert all compliance records at once, skip duplicates
+        if (compliancePayloads.length > 0) {
+          await tx
+            .insert(company_compliance)
+            .values(compliancePayloads)
+            .onConflictDoNothing({
+              target: [
+                company_compliance.company_id,
+                company_compliance.country_code,
+                company_compliance.field_key,
+              ],
+            })
+            .catch((error) => {
+              console.error('Error inserting company compliance:', error);
+              throw new InternalServerErrorException(
+                'Failed to insert company compliance',
+                { cause: error },
+              );
             });
         }
-        console.log('vendor documents inserted');
+
+        console.log('company compliance inserted');
 
         return {
           vendorMail: newUser.email,
@@ -656,86 +724,7 @@ export class VendorsService {
       });
     }
   }
-  async completeVendorProfile(vendorId: string, data: any) {
-    if (
-      !data.addressData &&
-      !data.gstData &&
-      !data.taxProfileData &&
-      !data.tax_typeData &&
-      !data.tax_ratesData
-    ) {
-      throw new InternalServerErrorException('No data provided for update', {
-        cause: 'vendor profile update failed',
-      });
-    }
-    try {
-      return await this.db.transaction(async (tx) => {
-        const [vendorRecord] = await tx
-          .select()
-          .from(vendorTable)
-          .where(eq(vendorTable.id, vendorId))
-          .limit(1);
-        if (!vendorRecord.company_id) {
-          return {
-            success: false,
-            message: `Vendor with ID ${vendorId} does not have an associated company.`,
-            status: HttpStatus.UNAUTHORIZED,
-          };
-        }
-        await tx.insert(gst_registrations).values({
-          ...data.gstData,
-          company_id: vendorRecord.company_id,
-        });
-
-        const [taxProfileResult] = await tx
-          .insert(tax_profiles)
-          .values({
-            ...data.taxProfileData,
-            company_id: vendorRecord.company_id,
-          })
-          .returning({ id: tax_profiles.id });
-        await tx.insert(tax_types).values({
-          ...data.tax_typeData,
-          company_id: vendorRecord.company_id,
-          tax_profile_id: taxProfileResult.id,
-        });
-        if (!taxProfileResult.id) {
-          return {
-            success: false,
-            message: 'Failed to create tax profile',
-            status: HttpStatus.INTERNAL_SERVER_ERROR,
-          };
-        }
-        await tx.insert(tax_rates).values({
-          ...data.tax_ratesData,
-          company_id: vendorRecord.company_id,
-          tax_type_id: taxProfileResult.id,
-        });
-        if (!vendorRecord.user_id) {
-          return {
-            success: false,
-            message: `Vendor with ID ${vendorId} not found.`,
-            status: HttpStatus.NOT_FOUND,
-          };
-        }
-        await tx.insert(addressTable).values({
-          ...data.addressData,
-          user_id: vendorRecord.user_id,
-        });
-        return;
-      });
-    } catch (error) {
-      if (error instanceof HttpException) {
-        throw error;
-      }
-      throw new InternalServerErrorException(
-        'Failed to complete vendor profile',
-        {
-          cause: error,
-        },
-      );
-    }
-  }
+  
   async vendorApplicationCount() {
     try {
       const count = await this.db
@@ -1032,6 +1021,100 @@ export class VendorsService {
       throw new InternalServerErrorException('Failed to retrieve vendor', {
         cause: error,
       });
+    }
+  }
+  async createRegistrationAddress(
+    domain: string,
+    addressData: CreateAddressDto,
+  ) {
+    const filteredDomain = domainExtractor(domain);
+    const companyId = await this.companyService.find(filteredDomain);
+    try {
+      const payload = {
+        company_id: companyId,
+        name: addressData.name,
+        number: addressData.phone,
+        address_type: AddressType.BUSINESS,
+        address_line_1: addressData.address_line_1,
+        address_line_2: addressData.address_line_2,
+        street: addressData.street,
+        city: addressData.city,
+        state: addressData.state,
+        postal_code: addressData.postal_code,
+        country: addressData.country,
+        landmark: addressData.landmark,
+        is_default: addressData.is_default,
+      };
+      const [createdAddress] = await this.db
+        .insert(addressTable)
+        .values(payload)
+        .returning({ id: addressTable.id })
+        .catch((error) => {
+          console.error('Error creating registration address:', error);
+          throw new InternalServerErrorException(
+            'Failed to create registration address',
+            {
+              cause: error,
+            },
+          );
+        });
+
+      if (!createdAddress || !createdAddress.id) {
+        throw new HttpException(
+          'Failed to create registration address',
+          HttpStatus.INTERNAL_SERVER_ERROR,
+        );
+      }
+      return {
+        message: 'Registration address created successfully',
+        address_id: createdAddress.id,
+      };
+    } catch (error) {
+      if (
+        error instanceof HttpException ||
+        error instanceof InternalServerErrorException
+      ) {
+        throw error;
+      }
+      throw new InternalServerErrorException(
+        'Failed to create registration address',
+        {
+          cause: error,
+        },
+      );
+    }
+  }
+  async getCompanyAddresses(domain: string) {
+    const filteredDomain = domainExtractor(domain);
+    const companyId = await this.companyService.find(filteredDomain);
+    try {
+      const addresses = await this.db
+        .select()
+        .from(addressTable)
+        .where(eq(addressTable.company_id, companyId))
+        .catch((error) => {
+          console.error('Error fetching company addresses:', error);
+          throw new InternalServerErrorException(
+            'Failed to retrieve company addresses',
+            {
+              cause: error,
+            },
+          );
+        });
+      return addresses;
+    } catch (error) {
+      if (
+        error instanceof HttpException ||
+        error instanceof InternalServerErrorException
+      ) {
+        throw error;
+      }
+      throw new InternalServerErrorException(
+        'Failed to retrieve company addresses',
+        {
+          cause: error,
+        },
+      );
     }
   }
 }

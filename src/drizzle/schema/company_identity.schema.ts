@@ -2,7 +2,6 @@ import * as pg from 'drizzle-orm/pg-core';
 import { company } from './main.schema';
 import { address } from './users.schema';
 import { invoiceTemplate, vendor_document } from './utils.schema';
-import { relations } from 'drizzle-orm';
 
 // ================================================================
 // COMPANY IDENTITY SCHEMA
@@ -243,51 +242,3 @@ export const company_document_config = pg.pgTable('company_document_config', {
 // ================================================================
 // RELATIONS
 // ================================================================
-
-export const companyBrandingRelations = relations(
-  company_branding,
-  ({ one }) => ({
-    company: one(company, {
-      fields: [company_branding.company_id],
-      references: [company.id],
-    }),
-  }),
-);
-
-export const companyLegalProfileRelations = relations(
-  company_legal_profile,
-  ({ one }) => ({
-    company: one(company, {
-      fields: [company_legal_profile.company_id],
-      references: [company.id],
-    }),
-    registered_address: one(address, {
-      fields: [company_legal_profile.registered_address_id],
-      references: [address.id],
-    }),
-  }),
-);
-
-export const companyComplianceRelations = relations(
-  company_compliance,
-  ({ one }) => ({
-    company: one(company, {
-      fields: [company_compliance.company_id],
-      references: [company.id],
-    }),
-  }),
-);
-
-export const companyDocumentConfigRelations = relations(
-  company_document_config,
-  ({ one }) => ({
-    company: one(company, {
-      fields: [company_document_config.company_id],
-      references: [company.id],
-    }),
-    default_invoice_template: one(invoiceTemplate, {
-      fields: [company_document_config.default_invoice_template_id],
-      references: [invoiceTemplate.id],
-    }),
-  }),
-);

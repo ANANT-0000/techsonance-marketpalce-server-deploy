@@ -1,13 +1,40 @@
-import { Transform } from 'class-transformer';
+import { Transform, Type } from 'class-transformer';
 import {
+  IsArray,
+  IsBoolean,
   IsEmail,
   IsNotEmpty,
   IsOptional,
   IsString,
   Length,
+  ValidateNested,
 } from 'class-validator';
-import { Role } from '../../../enums/role.enum';
+export class CompanyComplianceItemDto {
+  @IsString()
+  @IsNotEmpty()
+  @Transform(({ value }: { value: string }) =>
+    typeof value === 'string' ? value.trim() : value,
+  )
+  field_key!: string;
 
+  @IsString()
+  @IsNotEmpty()
+  @Transform(({ value }: { value: string }) =>
+    typeof value === 'string' ? value.trim() : value,
+  )
+  field_value!: string;
+
+  @IsBoolean()
+  @IsOptional()
+  is_active?: boolean;
+
+  @IsString()
+  @IsOptional()
+  @Transform(({ value }: { value: string }) =>
+    typeof value === 'string' ? value.trim() : value,
+  )
+  valid_until?: string;
+}
 export class CreateVendorDto {
   @IsString()
   @IsNotEmpty()
@@ -63,6 +90,10 @@ export class CreateVendorDto {
   @Length(2, 100)
   @Transform(({ value }: { value: string }) => value.trim())
   last_name!: string;
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => CompanyComplianceItemDto)
+  company_compliance!: CompanyComplianceItemDto[];
   @IsEmail()
   @IsNotEmpty()
   email!: string;

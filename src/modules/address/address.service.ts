@@ -6,14 +6,18 @@ import {
   InternalServerErrorException,
 } from '@nestjs/common';
 import { and, count, eq } from 'drizzle-orm';
-import { DRIZZLE } from '../../drizzle/drizzle.module';
-import { address } from '../../drizzle/schema';
-import { type DrizzleDB } from '../../drizzle/types/drizzle';
+import { DRIZZLE, type DrizzleService } from '../../drizzle/drizzle.module';
+import { address, user, vendor } from '../../drizzle/schema';
 import { CreateAddressDto } from './dto/createAddress.dto';
 import { UpdateAddressDto } from './dto/updateAddress.dto';
+import { domainExtractor } from 'src/common/filters/domainExtractor.filter';
+import { CompanyService } from '../company/company.service';
 @Injectable()
 export class AddressService {
-  constructor(@Inject(DRIZZLE) private readonly db: DrizzleDB) {}
+  constructor(
+    @Inject(DRIZZLE) private readonly db: DrizzleService,
+    private readonly companyService: CompanyService,
+  ) {}
   async findAddressesByUserId(userId: string) {
     if (!userId) {
       console.log('**************************** user ', userId);
@@ -82,6 +86,117 @@ export class AddressService {
       if (error instanceof HttpException) {
         throw error;
       }
+      throw new InternalServerErrorException('Failed to find addresses', {
+        cause: error,
+      });
+    }
+  }
+  async findCompanyAddress(domain: string) {
+    if (!domain) {
+      return new HttpException('Domain is required', HttpStatus.BAD_REQUEST);
+    }
+
+    const filteredDomain = domainExtractor(domain);
+    const companyId = await this.companyService.find(filteredDomain);
+    try {
+      const vendorUserId = await this.db.query.vendor.findFirst({
+        where: eq(vendor.company_id, companyId),
+        columns: { id: true },
+        with: {
+          user: {
+            columns: { id: true },
+          },
+        },
+      });
+      if (!vendorUserId || !vendorUserId.user) {
+        throw new HttpException(
+          'Vendor not found for the given company domain',
+          HttpStatus.NOT_FOUND,
+        );
+      }
+
+      const addressRecord= await this.db
+        .select()
+        .from(address)
+        .where(
+          and(
+            eq(address.user_id, vendorUserId?.user.id || ''),
+            eq(address.company_id, companyId),
+          ),
+        );
+      console.log('founded address', addressRecord);
+      return addressRecord;
+    } catch (error) {
+      if (error instanceof HttpException) {
+        throw error;
+      }
+      throw new InternalServerErrorException('Failed to find addresses', {
+        cause: error,
+      });
+    }
+  }
+  async createCompanyAddress(domain: string, addressData: CreateAddressDto) {
+    try {
+      console.log('recived', addressData);
+      const filteredDomain = domainExtractor(domain);
+      const companyId = await this.companyService.find(filteredDomain);
+      const vendorRecord = await this.db.query.vendor.findFirst({
+        where: eq(vendor.company_id, companyId),
+
+        columns: { id: true },
+        with: {
+          company: {
+            columns: { id: true, company_name: true },
+          },
+          user: {
+            columns: { id: true, phone_number: true },
+          },
+        },
+      });
+
+      const newAddress = await this.db.transaction(async (tx) => {
+        if (!vendorRecord || !vendorRecord.user || !vendorRecord.company) {
+          throw new HttpException(
+            'Vendor not found for the given company domain',
+            HttpStatus.NOT_FOUND,
+          );
+        }
+        if (addressData.is_default) {
+          await tx
+            .update(address)
+            .set({ is_default: false })
+            .where(eq(address.company_id, companyId));
+        }
+        const [insertedAddress] = await tx
+          .insert(address)
+          .values({
+            user_id: vendorRecord?.user.id || '',
+            address_type: addressData.address_for,
+            name: vendorRecord.company.company_name,
+            number: vendorRecord.user.phone_number || '',
+            address_line_1: addressData.address_line_1,
+            address_line_2: addressData.address_line_2,
+            street: addressData.street,
+            city: addressData.city,
+            state: addressData.state,
+            postal_code: addressData.postal_code,
+            country: addressData.country,
+            is_default: addressData.is_default,
+            landmark: addressData.landmark,
+            company_id: companyId || '',
+          })
+          .returning()
+          .catch((error) => {
+            console.error('Error inserting address:', error);
+            throw new InternalServerErrorException('Failed to create address', {
+              cause: error,
+            });
+          });
+        return insertedAddress;
+      });
+      console.log('newAddress ********', newAddress);
+      return newAddress;
+    } catch (error) {
       throw new InternalServerErrorException('Failed to find addresses', {
         cause: error,
       });

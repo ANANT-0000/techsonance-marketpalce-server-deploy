@@ -1,8 +1,9 @@
+export * from './users.schema';
+export * from './main.schema';
+export * from './utils.schema';
 export * from './finance.schema';
 export * from './shop.schema';
-export * from './users.schema';
-export * from './utils.schema';
-export * from './main.schema';
+export * from './company_identity.schema';
 import { address, user, vendor } from './users.schema';
 import {
   cart_items,
@@ -38,9 +39,16 @@ import {
 import {
   audit_logs,
   inventory,
+  invoiceTemplate,
   vendor_document,
   warehouse,
 } from './utils.schema';
+import {
+  company_branding,
+  company_compliance,
+  company_document_config,
+  company_legal_profile,
+} from './company_identity.schema';
 
 export const companyRelations = relations(company, ({ one, many }) => ({
   roles: many(user_roles),
@@ -448,3 +456,55 @@ export const invoiceRelations = relations(invoices, ({ one }) => ({
     references: [company.id],
   }),
 }));
+
+export const companyBrandingRelations = relations(
+  company_branding,
+  ({ one }) => ({
+    company: one(company, {
+      fields: [company_branding.company_id],
+      references: [company.id],
+    }),
+  }),
+);
+
+export const companyLegalProfileRelations = relations(
+  company_legal_profile,
+  ({ one }) => ({
+    company: one(company, {
+      fields: [company_legal_profile.company_id],
+      references: [company.id],
+    }),
+    registered_address: one(address, {
+      fields: [company_legal_profile.registered_address_id],
+      references: [address.id],
+    }),
+  }),
+);
+
+export const companyComplianceRelations = relations(
+  company_compliance,
+  ({ one }) => ({
+    company: one(company, {
+      fields: [company_compliance.company_id],
+      references: [company.id],
+    }),
+    document: one(vendor_document, {
+      fields: [company_compliance.document_id],
+      references: [vendor_document.id],
+    }),
+  }),
+);
+
+export const companyDocumentConfigRelations = relations(
+  company_document_config,
+  ({ one }) => ({
+    company: one(company, {
+      fields: [company_document_config.company_id],
+      references: [company.id],
+    }),
+    default_invoice_template: one(invoiceTemplate, {
+      fields: [company_document_config.default_invoice_template_id],
+      references: [invoiceTemplate.id],
+    }),
+  }),
+);

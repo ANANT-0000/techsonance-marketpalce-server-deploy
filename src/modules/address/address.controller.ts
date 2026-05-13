@@ -3,6 +3,7 @@ import {
   Controller,
   Delete,
   Get,
+  Headers,
   HttpCode,
   HttpStatus,
   Param,
@@ -17,6 +18,19 @@ import { UpdateAddressDto } from './dto/updateAddress.dto';
 export class AddressController {
   constructor(private readonly addressService: AddressService) {}
 
+  @Post('company')
+  @HttpCode(HttpStatus.CREATED)
+  async createCompanyAddress(
+    @Headers('company-domain') domain: string,
+    @Body() addressData: any,
+  ) {
+    return this.addressService.createCompanyAddress(domain, addressData);
+  }
+  @Get('company')
+  @HttpCode(HttpStatus.OK)
+  async getCompanyAddresses(@Headers('company-domain') domain: string) {
+    return this.addressService.findCompanyAddress(domain);
+  }
   @Get('customer/:customerId')
   @HttpCode(HttpStatus.OK)
   async getAddressesByCustomerId(@Param('customerId') customerId: string) {
