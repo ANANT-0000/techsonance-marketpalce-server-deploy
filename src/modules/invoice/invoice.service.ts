@@ -1,138 +1,63 @@
 // src/modules/invoice/invoice.service.ts
 import {
   Injectable,
-  Inject,
   InternalServerErrorException,
-  NotFoundException,
+  Logger,
 } from '@nestjs/common';
+import { InvoicePayloadBuilderService } from './invoice-payload-builder.service';
+import { InvoiceTemplateRegistry } from './template.registry';
+import { UploadToCloudService } from '../../utils/upload-to-cloud/upload-to-cloud.service';
+import { CompanyService } from '../company/company.service';
+import { domainExtractor } from '../../common/filters/domainExtractor.filter';
+import { Inject } from '@nestjs/common';
 import { DRIZZLE, type DrizzleService } from '../../drizzle/drizzle.module';
 import { and, eq, inArray } from 'drizzle-orm';
-import {
-  orders,
-  invoices,
-  gst_registrations,
-  company_document_config,
-  company_branding,
-  company_legal_profile,
-} from '../../drizzle/schema';
-import { UploadToCloudService } from '../../utils/upload-to-cloud/upload-to-cloud.service';
-import { randomUUID } from 'crypto';
-import { domainExtractor } from '../../common/filters/domainExtractor.filter';
-import { CompanyService } from '../company/company.service';
-import { InvoiceTemplateRegistry } from './template.registry';
-import {
-  StandardizedInvoicePayload,
-  // InvoiceAddress,
-} from './interfaces/invoice.interface';
-
-// ─── Strict Nested Drizzle Interfaces ──────────────────────────────────────────
-
-interface DbAddress {
-  address_line_1: string;
-  city: string;
-  state: string;
-  postal_code: string;
-}
-
-interface Warehouse {
-  id: string;
-  warehouse_name: string;
-  address: DbAddress | null;
-}
-
-interface OrderItem {
-  id: string;
-  quantity: number;
-  price: string; // Drizzle returns decimals as strings
-  company_id: string;
-  variant: {
-    product: {
-      name: string;
-      description: string | null;
-      vendor: {
-        store_name: string;
-      } | null;
-    };
-    inventory: {
-      warehouse: Warehouse;
-    } | null;
-  } | null;
-}
-
-interface OrderWithRelations {
-  id: string;
-  company_id: string;
-  customer: {
-    first_name: string | null;
-    last_name: string | null;
-    phone_number: string | null;
-    email: string;
-  };
-  address: DbAddress;
-  items: OrderItem[];
-}
-
-interface WarehouseGroup {
-  warehouse: Warehouse;
-  items: OrderItem[];
-}
-
-// ─── Service ───────────────────────────────────────────────────────────────────
+import { invoices } from '../../drizzle/schema';
 
 @Injectable()
 export class InvoiceService {
+  private readonly logger = new Logger(InvoiceService.name);
+
   constructor(
     @Inject(DRIZZLE) private readonly db: DrizzleService,
+    private readonly payloadBuilder: InvoicePayloadBuilderService,
+    private readonly templateRegistry: InvoiceTemplateRegistry,
     private readonly uploadToCloudService: UploadToCloudService,
     private readonly companyService: CompanyService,
-    private readonly templateRegistry: InvoiceTemplateRegistry,
   ) {}
 
+  // ══════════════════════════════════════════════════════════════════
+  // PUBLIC: entry point — called from OrdersService after payment
+  // ══════════════════════════════════════════════════════════════════
+
   async createInvoice(orderId: string): Promise<void> {
-    const orderData = (await this.db.query.orders.findFirst({
-      where: eq(orders.id, orderId),
-      with: {
-        customer: true,
-        address: true,
-        items: {
-          with: {
-            variant: {
-              with: {
-                product: { with: { vendor: true } },
-                inventory: { with: { warehouse: { with: { address: true } } } },
-              },
-            },
-          },
-        },
-      },
-    })) as OrderWithRelations | undefined;
-
-    if (!orderData) throw new NotFoundException(`Order ${orderId} not found`);
-    if (!orderData.items.length)
-      throw new NotFoundException(`Order ${orderId} has no items`);
-
+    // ── 1. Fetch full order with all relations ────────────────────
+    const orderData =
+      await this.payloadBuilder.fetchOrderWithRelations(orderId);
     const companyId = orderData.company_id;
 
-    // Fetch Configurations
-    const [gstDetails, config, branding, legal] = await Promise.all([
-      this.db.query.gst_registrations.findFirst({
-        where: eq(gst_registrations.company_id, companyId),
-      }),
-      this.db.query.company_document_config.findFirst({
-        where: eq(company_document_config.company_id, companyId),
-        with: { default_invoice_template: true },
-      }),
-      this.db.query.company_branding.findFirst({
-        where: eq(company_branding.company_id, companyId),
-      }),
-      this.db.query.company_legal_profile.findFirst({
-        where: eq(company_legal_profile.company_id, companyId),
-      }),
-    ]);
+    // ── 2. Fetch company context (branding / legal / config) ──────
+    const context = await this.payloadBuilder.fetchCompanyContext(companyId);
 
-    const { assigned, unresolved } = this.groupItemsByWarehouse(
+    // ── 3. Fetch GST data already stored in gst_invoices for this order ──
+    const gstData = await this.payloadBuilder.fetchGstDataForOrder(
+      orderId,
+      companyId,
+    );
+
+    // ── 4. Fetch payment info for footer ──────────────────────────
+    const paymentInfo = await this.payloadBuilder.fetchPaymentInfo(orderId);
+
+    // ── 5. Group order items by warehouse → one invoice per warehouse ──
+    const { assigned, unresolved } = this.payloadBuilder.groupItemsByWarehouse(
       orderData.items,
     );
+
+    if (unresolved.length > 0) {
+      this.logger.warn(
+        `[InvoiceService] ${unresolved.length} item(s) have no warehouse for order ${orderId}`,
+      );
+    }
 
     if (assigned.size === 0) {
       throw new InternalServerErrorException(
@@ -140,49 +65,39 @@ export class InvoiceService {
       );
     }
 
-    // Prepare shared info
-    const customerName =
-      [orderData.customer.first_name, orderData.customer.last_name]
-        .filter(Boolean)
-        .join(' ') || 'Customer';
-    const shippingAddress: any = {
-      addressLine1: orderData.address.address_line_1,
-      city: orderData.address.city,
-      state: orderData.address.state,
-      pincode: orderData.address.postal_code,
-    };
+    // ── 6. Map shared order-level info once ───────────────────────
+    const orderInfo = this.payloadBuilder.mapOrderInfo(orderData);
+    const vendorInfo = this.payloadBuilder.mapVendorInfo(assigned, gstData);
 
-    const vendorName = this.resolveVendorName(assigned);
+    // ── 7. Resolve template ID ────────────────────────────────────
+    const templateId =
+      context.config?.default_invoice_template?.template_name ?? 'standard-gst';
 
-    // Generate in parallel
+    // ── 8. Generate one invoice per warehouse group, in parallel ──
     const results = await Promise.allSettled(
-      Array.from(assigned.values()).map((group) =>
-        this.generateInvoiceForGroup(
-          orderData.id,
+      Array.from(assigned.entries()).map(([warehouseId, group]) =>
+        this._generateOneInvoice(
+          orderId,
+          warehouseId,
           group,
-          {
-            name: customerName,
-            phone: orderData.customer.phone_number ?? 'N/A',
-            email: orderData.customer.email,
-            address: shippingAddress,
-          },
-          { name: vendorName, gst: gstDetails?.gst_number ?? 'N/A' },
-          {
-            config: config ?? null,
-            branding: branding ?? null,
-            legal: legal ?? null,
-          },
+          orderInfo,
+          vendorInfo,
+          context,
+          templateId,
+          gstData,
+          paymentInfo,
         ),
       ),
     );
 
+    // ── 9. Collect successful DB rows ─────────────────────────────
     const invoiceInsertions: (typeof invoices.$inferInsert)[] = [];
     for (const result of results) {
       if (result.status === 'fulfilled') {
-        invoiceInsertions.push(...result.value);
+        invoiceInsertions.push(result.value);
       } else {
-        console.error(
-          `[InvoiceService] Warehouse invoice failed for order ${orderId}:`,
+        this.logger.error(
+          `[InvoiceService] Invoice generation failed for order ${orderId}`,
           result.reason,
         );
       }
@@ -194,13 +109,21 @@ export class InvoiceService {
       );
     }
 
+    // ── 10. Persist invoice records ───────────────────────────────
     await this.db.insert(invoices).values(invoiceInsertions);
+    this.logger.log(
+      `[InvoiceService] ${invoiceInsertions.length} invoice(s) saved for order ${orderId}`,
+    );
   }
+
+  // ══════════════════════════════════════════════════════════════════
+  // PUBLIC: bulk fetch invoice URLs for admin / orders listing
+  // ══════════════════════════════════════════════════════════════════
 
   async getBulkInvoiceUrls(domain: string, orderIds: string[]) {
     const filteredDomain = domainExtractor(domain);
     const companyId = await this.companyService.find(filteredDomain);
-    return await this.db
+    return this.db
       .select({
         invoice_url: invoices.invoice_url,
         invoice_number: invoices.invoice_number,
@@ -215,171 +138,59 @@ export class InvoiceService {
       );
   }
 
-  private groupItemsByWarehouse(items: OrderItem[]): {
-    assigned: Map<string, WarehouseGroup>;
-    unresolved: OrderItem[];
-  } {
-    const assigned = new Map<string, WarehouseGroup>();
-    const unresolved: OrderItem[] = [];
+  // ══════════════════════════════════════════════════════════════════
+  // PRIVATE: render + upload one invoice for one warehouse group
+  // ══════════════════════════════════════════════════════════════════
 
-    for (const item of items) {
-      const warehouse = item.variant?.inventory?.warehouse ?? null;
-      if (!warehouse) {
-        unresolved.push(item);
-        continue;
-      }
-      const existing = assigned.get(warehouse.id);
-      if (existing) {
-        existing.items.push(item);
-      } else {
-        assigned.set(warehouse.id, { warehouse, items: [item] });
-      }
-    }
-    return { assigned, unresolved };
-  }
-
-  private async generateInvoiceForGroup(
+  private async _generateOneInvoice(
     orderId: string,
-    group: WarehouseGroup,
-    customerData: {
-      name: string;
-      phone: string;
-      email: string;
-      address: any;
-    },
-    vendorData: { name: string; gst: string },
-    companyContext: { config: any; branding: any; legal: any },
-  ): Promise<(typeof invoices.$inferInsert)[]> {
-    const { config, branding, legal } = companyContext;
-    const invoiceNumber = this.buildInvoiceNumber(group.warehouse.id);
-    const templateName =
-      config?.default_invoice_template?.template_name || 'standard-gst';
-
-    let subTotal = 0;
-    let totalTax = 0;
-
-    // Strict item mapping
-    const itemsPayload = group.items.map((item) => {
-      const price = Number(item.price);
-      const qty = item.quantity;
-      const taxableValue = price * qty;
-
-      // TODO: Connect this to your actual tax tables. Defaults used here to prevent NaN errors.
-      const taxRate = 0;
-      const taxAmount = 0;
-      const totalAmount = taxableValue + taxAmount;
-
-      subTotal += taxableValue;
-      totalTax += taxAmount;
-
-      return {
-        name: item.variant?.product?.name ?? 'Unknown Product',
-        description: item.variant?.product?.description ?? '',
-        hsnCode: '', // Map when added to schema
-        quantity: qty,
-        unitPrice: price,
-        taxableValue: taxableValue,
-        taxRate: taxRate,
-        taxAmount: taxAmount,
-        totalAmount: totalAmount,
-      };
-    });
-
-    const warehouseAddress: any = group.warehouse.address
-      ? {
-          addressLine1: group.warehouse.address.address_line_1,
-          city: group.warehouse.address.city,
-          state: group.warehouse.address.state,
-          pincode: group.warehouse.address.postal_code,
-        }
-      : {
-          addressLine1: group.warehouse.warehouse_name,
-          city: '',
-          state: '',
-          pincode: '',
-        };
-
-    // Format the payload exactly to the strict interface
-    const payload: StandardizedInvoicePayload = {
-      meta: {
-        invoiceNumber,
-        invoiceDate: new Date(), // Safe serializable date
-      },
-      branding: {
-        logoUrl: branding?.logo_url || undefined,
-        primaryColor: branding?.primary_color || '#000000',
-        watermarkUrl: branding?.watermark_url || undefined,
-      },
-      legal: {
-        legalName: legal?.legal_name || vendorData.name,
-        tradeName: legal?.trade_name || vendorData.name,
-        supportEmail: legal?.support_email || '',
-        supportPhone: legal?.support_phone || '',
-        taxIds: [{ key: 'GSTIN', value: vendorData.gst }],
-      },
-      customer: {
-        name: customerData.name,
-        phone: customerData.phone,
-        email: customerData.email,
-        shippingAddress: customerData.address,
-        billingAddress: customerData.address, // Usually identical unless split in checkout
-      },
-      warehouse: {
-        name: group.warehouse.warehouse_name,
-        address: warehouseAddress,
-      },
-      items: itemsPayload,
-      totals: {
-        subTotal,
-        totalTax,
-        grandTotal: subTotal + totalTax,
-        currency: config?.default_currency || 'INR',
-      },
-      footer: {
-        termsAndConditions: config?.invoice_terms_and_conditions || undefined,
-        notes: config?.invoice_footer_text || undefined,
-        signatoryName: config?.signatory_name || undefined,
-        signatorySignatureUrl: config?.signatory_signature_url || undefined,
-      },
-    };
-
-    // Render using Puppeteer Template
-    const template = this.templateRegistry.getTemplate(templateName);
-    const pdfBuffer = await template.render(payload);
-
-    // Upload to Cloudinary
-    const invoiceUrl: string = await this.uploadToCloudService.uploadInvoice(
-      pdfBuffer,
-      `invoice_${orderId}_${group.warehouse.id}`,
+    warehouseId: string,
+    group: import('./interfaces/invoice.interface').WarehouseGroup,
+    orderInfo: import('./interfaces/invoice.interface').MappedOrderInfo,
+    vendorInfo: import('./interfaces/invoice.interface').MappedVendorInfo,
+    context: import('./interfaces/invoice.interface').CompanyContext,
+    templateId: string,
+    gstData: Awaited<
+      ReturnType<InvoicePayloadBuilderService['fetchGstDataForOrder']>
+    >,
+    paymentInfo: Awaited<
+      ReturnType<InvoicePayloadBuilderService['fetchPaymentInfo']>
+    >,
+  ): Promise<typeof invoices.$inferInsert> {
+    const invoiceNumber = this.payloadBuilder.buildInvoiceNumber(
+      warehouseId,
+      context.config?.invoice_number_prefix ?? 'INV',
     );
 
-    return [
-      {
-        invoice_number: invoiceNumber,
-        invoice_url: invoiceUrl,
-        order_id: orderId,
-        order_item_id: group.items[0].id,
-        company_id: group.items[0].company_id,
-      },
-    ];
-  }
+    // Build the fully-typed, DB-free payload
+    const payload = await this.payloadBuilder.buildPayload(
+      orderId,
+      group,
+      orderInfo,
+      vendorInfo,
+      context,
+      invoiceNumber,
+      templateId,
+      gstData,
+      paymentInfo,
+    );
 
-  // Helpers
-  private buildInvoiceNumber(warehouseId: string): string {
-    const date = new Date().toISOString().slice(0, 10).replace(/-/g, '');
-    const unique = randomUUID().replace(/-/g, '').slice(0, 6).toUpperCase();
-    const whSuffix = warehouseId.replace(/-/g, '').slice(0, 4).toUpperCase();
-    return `INV-${date}-${unique}-${whSuffix}`;
-  }
+    // Render to PDF buffer via the registered template
+    const template = this.templateRegistry.getTemplate(templateId);
+    const pdfBuffer = await template.render(payload);
 
-  private resolveVendorName(assigned: Map<string, WarehouseGroup>): string {
-    for (const group of assigned.values()) {
-      for (const item of group.items) {
-        if (item.variant?.product?.vendor?.store_name) {
-          return item.variant.product.vendor.store_name;
-        }
-      }
-    }
-    return 'Vendor Store';
+    // Upload to cloud storage
+    const invoiceUrl = await this.uploadToCloudService.uploadInvoice(
+      pdfBuffer,
+      `invoice_${orderId}_${warehouseId}`,
+    );
+
+    return {
+      invoice_number: invoiceNumber,
+      invoice_url: invoiceUrl,
+      order_id: orderId,
+      order_item_id: group.items[0].id,
+      company_id: group.items[0].company_id,
+    };
   }
 }

@@ -1,3 +1,4 @@
+// src/modules/invoice/invoice-payload-builder.service.ts
 import {
   Injectable,
   Inject,
@@ -8,23 +9,27 @@ import {
 import { eq } from 'drizzle-orm';
 import { DRIZZLE, type DrizzleService } from '../../drizzle/drizzle.module';
 import {
-  gst_registrations,
   company_branding,
+  company_compliance,
   company_document_config,
   company_legal_profile,
-  company_compliance,
+  gst_invoices,
+  gst_registrations,
   orders,
-  product_images,
+  payments,
 } from '../../drizzle/schema';
 import {
   CompanyContext,
+  DbAddress,
   GroupingResult,
+  InvoiceAddress,
   InvoiceBranding,
   InvoiceCustomer,
   InvoiceFooter,
-  InvoiceLegal,
   InvoiceLineItem,
   InvoiceMeta,
+  InvoicePaymentInfo,
+  InvoiceSeller,
   InvoiceTotals,
   MappedOrderInfo,
   MappedVendorInfo,
@@ -36,8 +41,54 @@ import {
 import { randomUUID } from 'crypto';
 import { fetchImageAsBuffer } from 'src/utils/image-fetcher.util';
 
-// ─── tiny helper ────────────────────────────────────────────────
+// ─── helpers ────────────────────────────────────────────────────
+
+/** Indian state code map — first two chars of GSTIN = state code */
+const STATE_CODE_MAP: Record<string, string> = {
+  '01': 'Jammu & Kashmir',
+  '02': 'Himachal Pradesh',
+  '03': 'Punjab',
+  '04': 'Chandigarh',
+  '05': 'Uttarakhand',
+  '06': 'Haryana',
+  '07': 'Delhi',
+  '08': 'Rajasthan',
+  '09': 'Uttar Pradesh',
+  '10': 'Bihar',
+  '11': 'Sikkim',
+  '12': 'Arunachal Pradesh',
+  '13': 'Nagaland',
+  '14': 'Manipur',
+  '15': 'Mizoram',
+  '16': 'Tripura',
+  '17': 'Meghalaya',
+  '18': 'Assam',
+  '19': 'West Bengal',
+  '20': 'Jharkhand',
+  '21': 'Odisha',
+  '22': 'Chhattisgarh',
+  '23': 'Madhya Pradesh',
+  '24': 'Gujarat',
+  '26': 'Dadra & Nagar Haveli and Daman & Diu',
+  '27': 'Maharashtra',
+  '28': 'Andhra Pradesh',
+  '29': 'Karnataka',
+  '30': 'Goa',
+  '31': 'Lakshadweep',
+  '32': 'Kerala',
+  '33': 'Tamil Nadu',
+  '34': 'Puducherry',
+  '35': 'Andaman & Nicobar Islands',
+  '36': 'Telangana',
+  '37': 'Andhra Pradesh (New)',
+};
+
+function getStateCodeFromGstin(gstin: string): string | undefined {
+  return gstin?.length >= 2 ? gstin.slice(0, 2) : undefined;
+}
+
 function numberToWords(num: number): string {
+  if (num === 0) return 'Zero only';
   const ones = [
     '',
     'One',
@@ -72,50 +123,65 @@ function numberToWords(num: number): string {
     'Eighty',
     'Ninety',
   ];
-  if (num === 0) return 'Zero';
   const convert = (n: number): string => {
     if (n < 20) return ones[n];
     if (n < 100)
       return tens[Math.floor(n / 10)] + (n % 10 ? ' ' + ones[n % 10] : '');
-    if (n < 1000)
+    if (n < 1_000)
       return (
         ones[Math.floor(n / 100)] +
         ' Hundred' +
         (n % 100 ? ' ' + convert(n % 100) : '')
       );
-    if (n < 100_000)
+    if (n < 1_00_000)
       return (
-        convert(Math.floor(n / 1000)) +
+        convert(Math.floor(n / 1_000)) +
         ' Thousand' +
-        (n % 1000 ? ' ' + convert(n % 1000) : '')
+        (n % 1_000 ? ' ' + convert(n % 1_000) : '')
       );
-    if (n < 10_000_000)
+    if (n < 1_00_00_000)
       return (
-        convert(Math.floor(n / 100_000)) +
+        convert(Math.floor(n / 1_00_000)) +
         ' Lakh' +
-        (n % 100_000 ? ' ' + convert(n % 100_000) : '')
+        (n % 1_00_000 ? ' ' + convert(n % 1_00_000) : '')
       );
     return (
-      convert(Math.floor(n / 10_000_000)) +
+      convert(Math.floor(n / 1_00_00_000)) +
       ' Crore' +
-      (n % 10_000_000 ? ' ' + convert(n % 10_000_000) : '')
+      (n % 1_00_00_000 ? ' ' + convert(n % 1_00_00_000) : '')
     );
   };
-  const [intPart, decPart] = num.toFixed(2).split('.');
-  const words = convert(parseInt(intPart));
-  const paise = parseInt(decPart);
-  return `${words}${paise ? ' And ' + convert(paise) + ' Paise' : ''} Only`;
+  const [intStr, decStr] = num.toFixed(2).split('.');
+  const words = convert(parseInt(intStr, 10));
+  const paise = parseInt(decStr, 10);
+  return `${words}${paise ? ' and ' + convert(paise) + ' Paise' : ''} only`;
 }
 
-/**
- * InvoicePayloadBuilderService
- *
- * Single responsibility: query the DB for everything an invoice needs
- * and produce a clean, typed StandardizedInvoicePayload.
- *
- * InvoiceService calls this once, then passes the result to the chosen template.
- * Templates NEVER touch the database.
- */
+function formatDbAddress(
+  addr: DbAddress,
+  recipientName?: string,
+): InvoiceAddress {
+  return {
+    recipientName: recipientName ?? addr.name ?? '',
+    addressLine1: addr.address_line_1,
+    addressLine2: addr.address_line_2 || undefined,
+    street: addr.street || undefined,
+    city: addr.city,
+    state: addr.state,
+    postalCode: addr.postal_code,
+    country: addr.country,
+  };
+}
+
+function isInterState(sellerGstin: string, buyerState: string): boolean {
+  const sellerStateCode = getStateCodeFromGstin(sellerGstin);
+  if (!sellerStateCode) return false;
+  const sellerState = STATE_CODE_MAP[sellerStateCode]?.toUpperCase();
+  return sellerState !== buyerState.toUpperCase();
+}
+
+// ──────────────────────────────────────────────────────────────────
+
 @Injectable()
 export class InvoicePayloadBuilderService {
   private readonly logger = new Logger(InvoicePayloadBuilderService.name);
@@ -123,153 +189,7 @@ export class InvoicePayloadBuilderService {
   constructor(@Inject(DRIZZLE) private readonly db: DrizzleService) {}
 
   // ══════════════════════════════════════════════════════════════════
-  // PUBLIC: build the full payload for one order + one warehouse group
-  // ══════════════════════════════════════════════════════════════════
-
-  async buildPayload(
-    orderId: string,
-    group: WarehouseGroup,
-    orderInfo: MappedOrderInfo,
-    vendorInfo: MappedVendorInfo,
-    context: CompanyContext,
-    invoiceNumber: string,
-    templateId: string,
-    gstData: {
-      totalCgst: number;
-      totalSgst: number;
-      totalIgst: number;
-      totalTax: number;
-      subTotal: number;
-      grandTotal: number;
-      vendorGstId?: string;
-    } | null,
-  ): Promise<StandardizedInvoicePayload> {
-    const { config, branding, legal } = context;
-
-    // ── 1. Compliance fields (GSTIN, PAN, CIN …) ──────────────────
-    const complianceRows = await this.db
-      .select()
-      .from(company_compliance)
-      .where(eq(company_compliance.company_id, group.items[0].company_id))
-      .catch(() => []);
-
-    const taxIds = complianceRows.length
-      ? complianceRows.map((r) => ({
-          key: r.field_key.toUpperCase(),
-          value: r.field_value,
-        }))
-      : vendorInfo.gstNumber !== 'N/A'
-        ? [{ key: 'GSTIN', value: vendorInfo.gstNumber }]
-        : [];
-
-    // ── 2. Line items ──────────────────────────────────────────────
-    let subTotal = 0;
-    const items: InvoiceLineItem[] = group.items.map((item) => {
-      const unitPrice = Number(item.price);
-      const lineTotal = unitPrice * item.quantity;
-      subTotal += lineTotal;
-      return {
-        name: item.variant?.product?.name ?? 'Unknown Product',
-        quantity: item.quantity,
-        unitPrice,
-        taxAmount: 0, // individual line tax; overridden by gstData totals below
-        taxRate: 0,
-        totalAmount: lineTotal,
-      };
-    });
-
-    // ── 3. Totals ──────────────────────────────────────────────────
-    const currency = config?.default_currency ?? 'INR';
-    const resolvedSubTotal = gstData?.subTotal ?? subTotal;
-    const grandTotal = gstData?.grandTotal ?? subTotal;
-    const totalTax = gstData?.totalTax ?? 0;
-
-    const totals: InvoiceTotals = {
-      subTotal: resolvedSubTotal,
-      totalCgst: gstData?.totalCgst ?? 0,
-      totalSgst: gstData?.totalSgst ?? 0,
-      totalIgst: gstData?.totalIgst ?? 0,
-      totalTax,
-      grandTotal,
-      currency,
-      grandTotalInWords: numberToWords(grandTotal),
-    };
-
-    // ── 4. Branding ────────────────────────────────────────────────
-    const brandingPayload: InvoiceBranding = {
-      logoUrl: branding?.logo_url,
-      logoBuffer: branding?.logo_url
-        ? ((await fetchImageAsBuffer(branding?.logo_url)) ?? undefined)
-        : undefined,
-      primaryColor: branding?.primary_color ?? '#232F3E', // Amazon dark blue fallback
-      secondaryColor: branding?.secondary_color ?? undefined,
-      accentColor: branding?.accent_color ?? undefined,
-      watermarkUrl: branding?.watermark_url,
-    };
-
-    // ── 5. Legal ───────────────────────────────────────────────────
-    const legalPayload: InvoiceLegal = {
-      legalName: legal?.legal_name ?? vendorInfo.companyName,
-      tradeName: legal?.trade_name ?? vendorInfo.companyName,
-      supportEmail: legal?.support_email ?? vendorInfo.email,
-      supportPhone: legal?.support_phone ?? vendorInfo.mobileNumber,
-      websiteUrl: legal?.website_url ?? undefined,
-      taxIds,
-    };
-
-    // ── 6. Customer ────────────────────────────────────────────────
-    const { shippingAddress } = orderInfo;
-    const formattedAddress =
-      `${shippingAddress.addressLine1}, ${shippingAddress.city}, ` +
-      `${shippingAddress.state} - ${shippingAddress.pincode}`;
-
-    const customerPayload: InvoiceCustomer = {
-      name: orderInfo.customerName,
-      phone:
-        orderInfo.customerPhone !== 'N/A' ? orderInfo.customerPhone : undefined,
-      shippingAddress: formattedAddress,
-      billingAddress: formattedAddress,
-      placeOfSupply: shippingAddress.state
-        ? `${shippingAddress.state}`
-        : undefined,
-    };
-
-    // ── 7. Footer ──────────────────────────────────────────────────
-    const footerPayload: InvoiceFooter = {
-      termsAndConditions:
-        config?.invoice_terms_and_conditions ??
-        [
-          'Goods once sold cannot be taken back or exchanged.',
-          'We are not the manufacturers; the company will stand for warranty as per their terms.',
-          'Interest @24% p.a. will be charged for uncleared bills beyond 15 days.',
-          'Subject to local jurisdiction.',
-        ].join('\n'),
-      notes: config?.invoice_footer_text ?? 'Thank you for the Business',
-      signatoryName: config?.signatory_name ?? 'Authorized Signatory',
-      signatoryDesignation: config?.signatory_designation ?? undefined,
-      // signatoryUrl: config?.signatory_signature_url,
-    };
-
-    // ── 8. Meta ────────────────────────────────────────────────────
-    const meta: InvoiceMeta = {
-      invoiceNumber,
-      invoiceDate: new Date(),
-      templateId,
-    };
-
-    return {
-      meta,
-      branding: brandingPayload,
-      legal: legalPayload,
-      customer: customerPayload,
-      items,
-      totals,
-      footer: footerPayload,
-    };
-  }
-
-  // ══════════════════════════════════════════════════════════════════
-  // PUBLIC: fetch full order with all relations needed for invoice
+  // PUBLIC: fetch order + all needed relations
   // ══════════════════════════════════════════════════════════════════
 
   async fetchOrderWithRelations(orderId: string): Promise<OrderWithRelations> {
@@ -308,13 +228,13 @@ export class InvoicePayloadBuilderService {
       })) as OrderWithRelations | undefined;
 
     if (!orderData) throw new NotFoundException(`Order ${orderId} not found`);
-    if (!orderData.items.length)
+    if (!orderData.items?.length)
       throw new NotFoundException(`Order ${orderId} has no items`);
     return orderData;
   }
 
   // ══════════════════════════════════════════════════════════════════
-  // PUBLIC: fetch company identity data in one parallel call
+  // PUBLIC: fetch company branding / legal / config in one shot
   // ══════════════════════════════════════════════════════════════════
 
   async fetchCompanyContext(companyId: string): Promise<CompanyContext> {
@@ -338,7 +258,120 @@ export class InvoicePayloadBuilderService {
   }
 
   // ══════════════════════════════════════════════════════════════════
-  // PUBLIC: group order items by warehouse (unchanged from your code)
+  // PUBLIC: fetch GST amounts already computed + saved at order creation
+  // ══════════════════════════════════════════════════════════════════
+
+  async fetchGstDataForOrder(
+    orderId: string,
+    companyId: string,
+  ): Promise<{
+    totalCgst: number;
+    totalSgst: number;
+    totalIgst: number;
+    totalTax: number;
+    vendorGstin: string | null;
+  } | null> {
+    const row = await this.db.query.gst_invoices
+      .findFirst({
+        where: eq(gst_invoices.order_id, orderId),
+        with: { registration: true },
+      })
+      .catch(() => null);
+
+    if (!row) return null;
+
+    return {
+      totalCgst: Number(row.cgst_amount),
+      totalSgst: Number(row.sgst_amount),
+      totalIgst: Number(row.igst_amount),
+      totalTax: Number(row.total_tax),
+      vendorGstin: row.registration?.gst_number ?? null,
+    };
+  }
+
+  // ══════════════════════════════════════════════════════════════════
+  // PUBLIC: fetch payment record for the order (optional footer info)
+  // ══════════════════════════════════════════════════════════════════
+
+  async fetchPaymentInfo(
+    orderId: string,
+  ): Promise<InvoicePaymentInfo | undefined> {
+    const row = await this.db.query.payments
+      .findFirst({ where: eq(payments.order_id, orderId) })
+      .catch(() => null);
+
+    if (!row) return undefined;
+    return {
+      transactionId: row.transaction_ref ?? undefined,
+      paymentMethod: row.payment_method ?? undefined,
+      invoiceValue: Number(row.amount),
+      paidAt: row.updated_at ? new Date(row.updated_at) : undefined,
+    };
+  }
+
+  // ══════════════════════════════════════════════════════════════════
+  // PUBLIC: map raw DB order → clean MappedOrderInfo
+  // ══════════════════════════════════════════════════════════════════
+
+  mapOrderInfo(order: OrderWithRelations): MappedOrderInfo {
+    const customerName =
+      [order.customer.first_name, order.customer.last_name]
+        .filter(Boolean)
+        .join(' ') || 'Customer';
+
+    const addr = order.address;
+    return {
+      id: order.id,
+      orderDate: order.created_at,
+      customerName,
+      customerPhone: order.customer.phone_number ?? undefined,
+      customerEmail: order.customer.email,
+      shippingAddress: {
+        recipientName: customerName,
+        addressLine1: addr.address_line_1,
+        addressLine2: addr.address_line_2 || undefined,
+        street: addr.street || undefined,
+        city: addr.city,
+        state: addr.state.toUpperCase(),
+        pincode: addr.postal_code,
+        country: addr.country || 'IN',
+      },
+    };
+  }
+
+  // ══════════════════════════════════════════════════════════════════
+  // PUBLIC: map warehouse groups → vendor info (with GST from gst_invoices)
+  // ══════════════════════════════════════════════════════════════════
+
+  mapVendorInfo(
+    assigned: Map<string, WarehouseGroup>,
+    gstData: { vendorGstin: string | null } | null,
+  ): MappedVendorInfo {
+    for (const group of assigned.values()) {
+      for (const item of group.items) {
+        const vendor = item.variant?.product?.vendor;
+        if (vendor) {
+          return {
+            companyName: vendor.store_name,
+            gstNumber: gstData?.vendorGstin ?? 'N/A',
+            panNumber: 'N/A', // pulled from compliance table in buildPayload
+            mobileNumber: vendor.user?.phone_number ?? undefined,
+            email: vendor.user?.email ?? '',
+          };
+        }
+      }
+    }
+    return {
+      companyName: 'Vendor Store',
+      gstNumber: gstData?.vendorGstin ?? 'N/A',
+      panNumber: 'N/A',
+      mobileNumber: undefined,
+      email: '',
+    };
+  }
+
+  // ══════════════════════════════════════════════════════════════════
+  // PUBLIC: group order items by warehouse
   // ══════════════════════════════════════════════════════════════════
 
   groupItemsByWarehouse(items: OrderItem[]): GroupingResult {
@@ -358,7 +391,7 @@ export class InvoicePayloadBuilderService {
   }
 
   // ══════════════════════════════════════════════════════════════════
-  // PUBLIC: deterministic invoice number builder
+  // PUBLIC: build invoice number from config prefix + date + random
   // ══════════════════════════════════════════════════════════════════
 
   buildInvoiceNumber(warehouseId: string, prefix = 'INV'): string {
@@ -368,11 +401,281 @@ export class InvoicePayloadBuilderService {
     return `${prefix}-${date}-${unique}-${wh}`;
   }
 
-  resolveVendorName(assigned: Map<string, WarehouseGroup>): string {
-    for (const group of assigned.values())
-      for (const item of group.items)
-        if (item.variant?.product?.vendor?.store_name)
-          return item.variant.product.vendor.store_name;
-    return 'Vendor Store';
+  // ══════════════════════════════════════════════════════════════════
+  // PUBLIC: build the full StandardizedInvoicePayload
+  // This is the main method — all data assembly lives here.
+  // ══════════════════════════════════════════════════════════════════
+
+  async buildPayload(
+    orderId: string,
+    group: WarehouseGroup,
+    orderInfo: MappedOrderInfo,
+    vendorInfo: MappedVendorInfo,
+    context: CompanyContext,
+    invoiceNumber: string,
+    templateId: string,
+    gstData: {
+      totalCgst: number;
+      totalSgst: number;
+      totalIgst: number;
+      totalTax: number;
+      vendorGstin: string | null;
+    } | null,
+    paymentInfo: InvoicePaymentInfo | undefined,
+  ): Promise<StandardizedInvoicePayload> {
+    const { config, branding, legal } = context;
+
+    // ── 1. Compliance IDs (GSTIN, PAN, CIN, FSSAI …) ─────────────
+    const complianceRows = await this.db
+      .select()
+      .from(company_compliance)
+      .where(eq(company_compliance.company_id, group.items[0].company_id))
+      .catch(() => []);
+
+    // Build taxIds from compliance table first; fall back to GST registration row
+    let taxIds: Array<{ key: string; value: string }> = complianceRows
+      .filter((r) => r.is_active)
+      .map((r) => ({ key: r.field_key.toUpperCase(), value: r.field_value }));
+
+    // If no compliance rows, try gst_registrations table directly
+    if (taxIds.length === 0) {
+      const gstRow = await this.db.query.gst_registrations
+        .findFirst({
+          where: eq(gst_registrations.company_id, group.items[0].company_id),
+        })
+        .catch(() => null);
+      if (gstRow?.gst_number) {
+        taxIds.push({ key: 'GST Registration No', value: gstRow.gst_number });
+      }
+      // Vendor GST from gst_invoices
+      if (gstData?.vendorGstin && gstData.vendorGstin !== 'N/A') {
+        const alreadyHasGst = taxIds.some(
+          (t) => t.value === gstData.vendorGstin,
+        );
+        if (!alreadyHasGst) {
+          taxIds.unshift({
+            key: 'GST Registration No',
+            value: gstData.vendorGstin,
+          });
+        }
+      }
+    }
+
+    // Determine intra/inter state from seller GSTIN vs buyer state
+    const sellerGstin =
+      gstData?.vendorGstin ??
+      taxIds.find((t) => t.key.includes('GST'))?.value ??
+      '';
+    const buyerState = orderInfo.shippingAddress.state;
+    const isInterStateSupply = isInterState(sellerGstin, buyerState);
+
+    // ── 2. Line items with per-line tax breakdown ─────────────────
+    let runningSubTotal = 0;
+    let runningDiscount = 0;
+
+    const items: InvoiceLineItem[] = group.items.map((item) => {
+      const unitPrice = Number(item.price);
+      const qty = item.quantity;
+      const discount = 0; // extend here when discount schema is added
+      const netAmount = unitPrice * qty - discount;
+
+      // Distribute total tax proportionally across lines
+      // until per-product tax rates are in the schema
+      const taxRate = gstData
+        ? (gstData.totalTax /
+            (gstData.totalCgst + gstData.totalSgst + gstData.totalIgst || 1)) *
+          100
+        : 0;
+      const lineTaxAmount = gstData
+        ? Math.round(
+            (netAmount / (runningSubTotal || 1)) * gstData.totalTax * 100,
+          ) / 100
+        : 0;
+
+      runningSubTotal += netAmount;
+      runningDiscount += discount;
+
+      return {
+        name: item.variant?.product?.name ?? 'Unknown Product',
+        sku: item.variant?.sku ?? undefined,
+        description: item.variant?.product?.description ?? undefined,
+        quantity: qty,
+        unitPrice,
+        discount,
+        netAmount,
+        taxRate,
+        taxType: isInterStateSupply ? 'IGST' : 'CGST+SGST',
+        taxAmount: lineTaxAmount,
+        totalAmount: netAmount + lineTaxAmount,
+      };
+    });
+
+    // Recompute line tax amounts proportionally now we have final subTotal
+    if (gstData && runningSubTotal > 0) {
+      let taxAssigned = 0;
+      for (let i = 0; i < items.length; i++) {
+        if (i === items.length - 1) {
+          // Last item gets the remainder to avoid rounding drift
+          items[i].taxAmount =
+            Math.round((gstData.totalTax - taxAssigned) * 100) / 100;
+        } else {
+          const share =
+            Math.round(
+              (items[i].netAmount / runningSubTotal) * gstData.totalTax * 100,
+            ) / 100;
+          items[i].taxAmount = share;
+          taxAssigned += share;
+        }
+        // Also tag individual CGST / SGST rates on the item label
+        if (!isInterStateSupply && gstData.totalCgst > 0) {
+          const cgstRate = (gstData.totalCgst / runningSubTotal) * 100;
+          items[i].taxRate = Math.round(cgstRate * 2 * 100) / 100; // total GST % = CGST% + SGST%
+        } else if (isInterStateSupply && gstData.totalIgst > 0) {
+          items[i].taxRate =
+            Math.round((gstData.totalIgst / runningSubTotal) * 100 * 100) / 100;
+        }
+        items[i].totalAmount = items[i].netAmount + items[i].taxAmount;
+      }
+    }
+
+    // ── 3. Totals ─────────────────────────────────────────────────
+    const currency = config?.default_currency ?? 'INR';
+    const totalTax = gstData?.totalTax ?? 0;
+    const grandTotal = runningSubTotal + totalTax;
+
+    const totals: InvoiceTotals = {
+      subTotal: runningSubTotal + runningDiscount,
+      totalDiscount: runningDiscount,
+      netAmount: runningSubTotal,
+      totalCgst: gstData?.totalCgst ?? 0,
+      totalSgst: gstData?.totalSgst ?? 0,
+      totalIgst: gstData?.totalIgst ?? 0,
+      totalTax,
+      grandTotal,
+      currency,
+      grandTotalInWords: numberToWords(grandTotal),
+      reverseCharge: false,
+    };
+
+    // ── 4. Branding ───────────────────────────────────────────────
+    const brandingPayload: InvoiceBranding = {
+      logoUrl: branding?.logo_url ?? undefined,
+      logoBuffer: branding?.logo_url
+        ? ((await fetchImageAsBuffer(branding.logo_url)) ?? undefined)
+        : undefined,
+      primaryColor: branding?.primary_color ?? '#131921', // Amazon dark
+      secondaryColor: branding?.secondary_color ?? undefined,
+      accentColor: branding?.accent_color ?? undefined,
+      watermarkUrl: branding?.watermark_url ?? null,
+      fontFamily: branding?.font_family ?? undefined,
+    };
+
+    // ── 5. Seller block ───────────────────────────────────────────
+    // Use warehouse address as dispatch address (Amazon "Sold By" address)
+    const warehouseAddr = group.warehouse.address;
+    const sellerAddress: InvoiceAddress = warehouseAddr
+      ? {
+          recipientName: legal?.legal_name ?? vendorInfo.companyName,
+          addressLine1: warehouseAddr.address_line_1,
+          addressLine2: warehouseAddr.address_line_2 || undefined,
+          street: warehouseAddr.street || undefined,
+          city: warehouseAddr.city,
+          state: warehouseAddr.state,
+          postalCode: warehouseAddr.postal_code,
+          country: warehouseAddr.country || 'IN',
+          stateCode: getStateCodeFromGstin(sellerGstin),
+        }
+      : {
+          recipientName: legal?.legal_name ?? vendorInfo.companyName,
+          addressLine1: group.warehouse.warehouse_name,
+          city: '',
+          state: '',
+          postalCode: '',
+          country: 'IN',
+        };
+
+    const seller: InvoiceSeller = {
+      legalName: legal?.legal_name ?? vendorInfo.companyName,
+      tradeName: legal?.trade_name ?? vendorInfo.companyName,
+      address: sellerAddress,
+      taxIds,
+      supportEmail: legal?.support_email ?? vendorInfo.email ?? undefined,
+      supportPhone:
+        legal?.support_phone ?? vendorInfo.mobileNumber ?? undefined,
+      websiteUrl: legal?.website_url ?? undefined,
+    };
+
+    // ── 6. Customer block ─────────────────────────────────────────
+    const sa = orderInfo.shippingAddress;
+    const shippingAddress: InvoiceAddress = {
+      recipientName: sa.recipientName,
+      addressLine1: sa.addressLine1,
+      addressLine2: sa.addressLine2,
+      street: sa.street,
+      city: sa.city,
+      state: sa.state,
+      postalCode: sa.pincode,
+      country: sa.country,
+      stateCode: sa.stateCode,
+    };
+
+    const customer: InvoiceCustomer = {
+      name: orderInfo.customerName,
+      phone: orderInfo.customerPhone,
+      email: orderInfo.customerEmail,
+      billingAddress: { ...shippingAddress }, // same as shipping unless you split it
+      shippingAddress,
+      placeOfSupply: sa.state,
+      placeOfDelivery: sa.state,
+    };
+
+    // ── 7. Footer ─────────────────────────────────────────────────
+    let signatoryDataUri: string | undefined;
+    if (config?.signatory_signature_url) {
+      const sigBuf = await fetchImageAsBuffer(
+        config.signatory_signature_url,
+      ).catch(() => null);
+      if (sigBuf) {
+        signatoryDataUri = `data:image/png;base64,${sigBuf.toString('base64')}`;
+      }
+    }
+
+    const defaultTerms = [
+      'Goods once sold cannot be taken back or exchanged.',
+      'We are not the manufacturers; the company will stand for warranty as per their terms.',
+      'Interest @24% p.a. will be charged for uncleared bills beyond 15 days.',
+      'Subject to local jurisdiction.',
+    ].join('\n');
+
+    const footer: InvoiceFooter = {
+      termsAndConditions: config?.invoice_terms_and_conditions ?? defaultTerms,
+      notes: config?.invoice_footer_text ?? 'Thank you for your business.',
+      signatoryName: config?.signatory_name ?? 'Authorized Signatory',
+      signatoryDesignation: config?.signatory_designation ?? undefined,
+      signatorySignatureDataUri: signatoryDataUri,
+      footerDisclaimer:
+        'Please note that this invoice is not a demand for payment.',
+    };
+
+    // ── 8. Meta ───────────────────────────────────────────────────
+    const meta: InvoiceMeta = {
+      invoiceNumber,
+      invoiceDate: new Date(),
+      orderNumber: orderId,
+      orderDate: orderInfo.orderDate,
+      templateId,
+    };
+
+    return {
+      meta,
+      branding: brandingPayload,
+      seller,
+      customer,
+      legal,
+      items,
+      totals,
+      payment: paymentInfo,
+      footer,
+    };
   }
 }

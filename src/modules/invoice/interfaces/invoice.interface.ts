@@ -1,37 +1,47 @@
 import { Buffer } from 'buffer';
 
 // ================================================================
-// RAW DB RELATION TYPES  (unchanged from your existing code)
+// RAW DB SHAPE TYPES
+// Mirror the Drizzle schema exactly — used in fetchOrderWithRelations
 // ================================================================
 
-export interface WarehouseAddress {
+export interface DbAddress {
   address_line_1: string;
+  address_line_2: string;
+  street: string;
   city: string;
   state: string;
   postal_code: string;
+  country: string;
+  landmark?: string;
+  name?: string; // recipient name stored on address row
+  number?: string; // phone stored on address row
 }
 
 export interface Warehouse {
   id: string;
   warehouse_name: string;
-  address: WarehouseAddress | null;
+  address: DbAddress | null;
 }
 
 export interface OrderItem {
   id: string;
   quantity: number;
-  price: string;
+  price: string; // Drizzle returns decimals as strings
   company_id: string;
   variant: {
+    sku: string;
     product: {
       name: string;
+      description: string;
       vendor: {
         store_name: string;
         user: {
-          phone_number: string;
+          phone_number: string | null;
+          email: string;
         };
-      };
-    };
+      } | null;
+    } | null;
     inventory: {
       warehouse: Warehouse;
     } | null;
@@ -41,18 +51,14 @@ export interface OrderItem {
 export interface OrderWithRelations {
   id: string;
   company_id: string;
+  created_at: Date;
   customer: {
     first_name: string | null;
     last_name: string | null;
     phone_number: string | null;
     email: string;
   };
-  address: {
-    address_line_1: string;
-    city: string;
-    state: string;
-    postal_code: string;
-  };
+  address: DbAddress;
   items: OrderItem[];
 }
 
@@ -66,24 +72,36 @@ export interface GroupingResult {
   unresolved: OrderItem[];
 }
 
+// ── Mapped (cleaned) info objects passed into buildPayload ────────
+
 export interface MappedOrderInfo {
   id: string;
+  orderDate: Date;
   customerName: string;
-  customerPhone: string;
+  customerPhone: string | undefined;
+  customerEmail: string;
   shippingAddress: {
+    recipientName: string;
     addressLine1: string;
+    addressLine2?: string;
+    street?: string;
     city: string;
     state: string;
     pincode: string;
+    country: string;
+    stateCode?: string; // e.g. "24" for Gujarat
   };
 }
 
 export interface MappedVendorInfo {
   companyName: string;
   gstNumber: string;
-  mobileNumber: string;
+  panNumber: string;
+  mobileNumber: string | undefined;
   email: string;
 }
+
+// ── Company context fetched from DB ──────────────────────────────
 
 export interface companyConfig {
   id: string;
@@ -151,49 +169,128 @@ export interface CompanyContext {
 
 // ================================================================
 // STANDARDIZED INVOICE PAYLOAD
-// Single DTO passed into every template — templates never touch the DB
+// The ONE object every template receives. Templates never touch DB.
 // ================================================================
 
+/**
+ * Per-line GST breakdown — matches Amazon invoice format:
+ *   unitPrice (excl tax) | discount | qty | netAmount | taxRate | taxType | taxAmount | totalAmount
+ */
 export interface InvoiceLineItem {
-  /** Product name (variant name if multi-variant) */
+  /** Product display name */
   name: string;
-  /** Optional: HSN/SAC code for GST compliance */
+  /** HSN / SAC code */
   hsnCode?: string;
-  /** Optional: variant description, color, size, storage */
+  /** Variant description, color, size etc. */
   description?: string;
-  /** SKU for internal reference */
+  /** SKU / ASIN-equivalent for internal reference */
   sku?: string;
   quantity: number;
   /** Unit price EXCLUDING tax */
   unitPrice: number;
-  /** Pre-computed tax amount for this line */
-  taxAmount: number;
-  /** Tax rate as a percentage e.g. 18 */
+  /** Discount amount at line level (0 if none) */
+  discount: number;
+  /** unitPrice × qty − discount */
+  netAmount: number;
+  /** Tax rate as a percentage, e.g. 18 */
   taxRate: number;
-  /** unitPrice × quantity + taxAmount */
+  /**
+   * Tax type label: 'CGST' | 'SGST' | 'IGST'
+   * Derived from whether supply is intra-state or inter-state.
+   */
+  taxType: 'CGST+SGST' | 'IGST' | 'EXEMPT';
+  /** Tax amount for this line */
+  taxAmount: number;
+  /** netAmount + taxAmount */
   totalAmount: number;
 }
 
 export interface InvoiceTotals {
-  subTotal: number; // sum of (unitPrice × qty) for all items
-  totalCgst: number; // for intra-state
-  totalSgst: number; // for intra-state
-  totalIgst: number; // for inter-state
+  subTotal: number; // Σ (unitPrice × qty) before discount
+  totalDiscount: number; // Σ discounts across all lines
+  netAmount: number; // subTotal − totalDiscount
+  totalCgst: number;
+  totalSgst: number;
+  totalIgst: number;
   totalTax: number; // totalCgst + totalSgst OR totalIgst
-  grandTotal: number; // subTotal + totalTax
-  currency: string; // ISO 4217 e.g. "INR"
-  grandTotalInWords?: string; // optional, pre-formatted
+  grandTotal: number; // netAmount + totalTax
+  currency: string; // ISO 4217, e.g. "INR"
+  grandTotalInWords?: string;
+  reverseCharge: boolean; // "Whether tax is payable under reverse charge"
+}
+
+/** Full structured address — used for both seller and buyer blocks */
+export interface InvoiceAddress {
+  recipientName: string;
+  companyName?: string;
+  addressLine1: string;
+  addressLine2?: string;
+  street?: string;
+  city: string;
+  state: string;
+  postalCode: string;
+  country: string;
+  stateCode?: string; // e.g. "24" for Gujarat (shown as "State/UT Code: 24")
 }
 
 export interface InvoiceCustomer {
   name: string;
   phone?: string;
   email?: string;
-  shippingAddress: string; // single formatted string
-  billingAddress: string; // falls back to shippingAddress
-  placeOfSupply?: string; // e.g. "09-UTTARPRADESH"
+  billingAddress: InvoiceAddress;
+  shippingAddress: InvoiceAddress;
+  placeOfSupply?: string; // e.g. "GUJARAT"
+  placeOfDelivery?: string; // usually same as placeOfSupply
 }
 
+export interface InvoiceSeller {
+  legalName: string;
+  tradeName?: string;
+  /** Full registered address of the seller (warehouse / company) */
+  address: InvoiceAddress;
+  /** Ordered list of tax/compliance IDs: GSTIN, PAN, CIN, FSSAI … */
+  taxIds: Array<{ key: string; value: string }>;
+  supportEmail?: string;
+  supportPhone?: string;
+  websiteUrl?: string;
+}
+
+export interface InvoiceBranding {
+  logoUrl?: string;
+  /** Pre-fetched logo bytes — avoids an extra HTTP call inside the template */
+  logoBuffer?: Buffer;
+  primaryColor: string;
+  secondaryColor?: string;
+  accentColor?: string;
+  watermarkUrl?: string | null;
+  fontFamily?: string;
+}
+
+export interface InvoiceMeta {
+  invoiceNumber: string;
+  invoiceDate: Date;
+  orderNumber: string; // the source order ID / order number
+  orderDate: Date;
+  dueDate?: Date;
+  templateId: string;
+}
+
+export interface InvoicePaymentInfo {
+  transactionId?: string;
+  paymentMethod?: string;
+  invoiceValue?: number;
+  paidAt?: Date;
+}
+
+export interface InvoiceFooter {
+  termsAndConditions?: string;
+  notes?: string | null;
+  signatoryName?: string;
+  signatoryDesignation?: string;
+  /** Pre-fetched signature as base64 data URI: "data:image/png;base64,..." */
+  signatorySignatureDataUri?: string;
+  footerDisclaimer?: string; // e.g. "This is a system-generated document."
+}
 export interface InvoiceLegal {
   legalName: string;
   tradeName?: string;
@@ -206,57 +303,28 @@ export interface InvoiceLegal {
   registeredAddress?: string;
 }
 
-export interface InvoiceBranding {
-  /** Publicly accessible URL for the company logo */
-  logoUrl?: string;
-  /** Pre-fetched logo bytes (preferred — avoids network call inside template) */
-  logoBuffer?: Buffer;
-  primaryColor: string; // hex e.g. "#1A73E8"
-  secondaryColor?: string;
-  accentColor?: string;
-  watermarkUrl?: string | null;
-}
-
-export interface InvoiceMeta {
-  invoiceNumber: string;
-  invoiceDate: Date;
-  dueDate?: Date;
-  /** e.g. "standard-gst" | "minimal" | "branded" */
-  templateId: string;
-}
-
-export interface InvoiceFooter {
-  termsAndConditions?: string;
-  notes?: string | null;
-  signatoryName?: string;
-  signatoryDesignation?: string;
-  /** Pre-fetched signature image bytes */
-  signatorySignatureBuffer?: Buffer;
-}
-
 /**
- * The ONE object every IInvoiceTemplate.render() receives.
- * All templates must accept this and only this.
+ * The single DTO every IInvoiceTemplate.render() receives.
+ * No template ever queries the database directly.
  */
 export interface StandardizedInvoicePayload {
   meta: InvoiceMeta;
   branding: InvoiceBranding;
-  legal: InvoiceLegal;
+  seller: InvoiceSeller;
+
   customer: InvoiceCustomer;
   items: InvoiceLineItem[];
   totals: InvoiceTotals;
+  payment?: InvoicePaymentInfo;
   footer: InvoiceFooter;
 }
 
 // ================================================================
-// TEMPLATE CONTRACT — every template implements this
+// TEMPLATE CONTRACT
 // ================================================================
 
 export interface IInvoiceTemplate {
-  /** Must be unique across the entire registry e.g. 'standard-gst' */
   readonly templateId: string;
-  /** Human-readable label shown in admin UI */
   readonly templateLabel: string;
-  /** Accepts the standardized payload, returns a PDF buffer */
   render(payload: StandardizedInvoicePayload): Promise<Buffer>;
 }
