@@ -311,7 +311,7 @@ export interface StandardizedInvoicePayload {
   meta: InvoiceMeta;
   branding: InvoiceBranding;
   seller: InvoiceSeller;
-
+  legal: InvoiceLegal;
   customer: InvoiceCustomer;
   items: InvoiceLineItem[];
   totals: InvoiceTotals;

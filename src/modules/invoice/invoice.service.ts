@@ -71,7 +71,7 @@ export class InvoiceService {
 
     // ── 7. Resolve template ID ────────────────────────────────────
     const templateId =
-      context.config?.default_invoice_template?.template_name ?? 'standard-gst';
+      context.config?.default_invoice_template?.template_name ?? 'minimal';
 
     // ── 8. Generate one invoice per warehouse group, in parallel ──
     const results = await Promise.allSettled(

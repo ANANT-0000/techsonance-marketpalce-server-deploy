@@ -14,7 +14,9 @@ import * as fs from 'fs';
 import * as path from 'path';
 
 @Injectable()
-export class PuppeteerMinimalTemplate implements IInvoiceTemplate, OnModuleInit {
+export class PuppeteerMinimalTemplate
+  implements IInvoiceTemplate, OnModuleInit
+{
   readonly templateId = 'minimal';
   readonly templateLabel = 'Minimal Clean Invoice (Puppeteer)';
   private compiledTemplate: handlebars.TemplateDelegate;
@@ -28,7 +30,10 @@ export class PuppeteerMinimalTemplate implements IInvoiceTemplate, OnModuleInit 
       const htmlString = fs.readFileSync(templatePath, 'utf8');
       this.compiledTemplate = handlebars.compile(htmlString);
     } catch (error) {
-      console.error(`[PuppeteerMinimalTemplate] Failed to load HTML template:`, error);
+      console.error(
+        `[PuppeteerMinimalTemplate] Failed to load HTML template:`,
+        error,
+      );
       throw new InternalServerErrorException(
         'Failed to compile minimal invoice template',
       );
@@ -98,7 +103,11 @@ export class PuppeteerMinimalTemplate implements IInvoiceTemplate, OnModuleInit 
     };
 
     const sym =
-      p.totals.currency === 'INR' ? '₹' : p.totals.currency === 'USD' ? '$' : `${p.totals.currency} `;
+      p.totals.currency === 'INR'
+        ? '₹'
+        : p.totals.currency === 'USD'
+          ? '$'
+          : `${p.totals.currency} `;
     const fc = (amount: number) => `${sym}${Number(amount).toFixed(2)}`;
 
     return {

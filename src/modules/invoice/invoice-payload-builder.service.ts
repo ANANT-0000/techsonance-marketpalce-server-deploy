@@ -26,6 +26,7 @@ import {
   InvoiceBranding,
   InvoiceCustomer,
   InvoiceFooter,
+  InvoiceLegal,
   InvoiceLineItem,
   InvoiceMeta,
   InvoicePaymentInfo,
@@ -426,12 +427,15 @@ export class InvoicePayloadBuilderService {
     const { config, branding, legal } = context;
 
     // ── 1. Compliance IDs (GSTIN, PAN, CIN, FSSAI …) ─────────────
-    const complianceRows = await this.db
-      .select()
-      .from(company_compliance)
-      .where(eq(company_compliance.company_id, group.items[0].company_id))
-      .catch(() => []);
-
+    let complianceRows: (typeof company_compliance.$inferSelect)[] = [];
+    try {
+      complianceRows = await this.db
+        .select()
+        .from(company_compliance)
+        .where(eq(company_compliance.company_id, group.items[0].company_id));
+    } catch {
+      complianceRows = [];
+    }
     // Build taxIds from compliance table first; fall back to GST registration row
     let taxIds: Array<{ key: string; value: string }> = complianceRows
       .filter((r) => r.is_active)
@@ -498,7 +502,7 @@ export class InvoicePayloadBuilderService {
       return {
         name: item.variant?.product?.name ?? 'Unknown Product',
         sku: item.variant?.sku ?? undefined,
-        description: item.variant?.product?.description ?? undefined,
+        // description: item.variant?.product?.description ?? undefined,
         quantity: qty,
         unitPrice,
         discount,
@@ -665,13 +669,20 @@ export class InvoicePayloadBuilderService {
       orderDate: orderInfo.orderDate,
       templateId,
     };
-
+const legalPayload: InvoiceLegal = {
+  legalName: legal?.legal_name ?? vendorInfo.companyName,
+  tradeName: legal?.trade_name ?? undefined,
+  supportEmail: legal?.support_email ?? undefined,
+  supportPhone: legal?.support_phone ?? undefined,
+  websiteUrl: legal?.website_url ?? undefined,
+  taxIds,
+};
     return {
       meta,
       branding: brandingPayload,
       seller,
       customer,
-      legal,
+      legal: legalPayload,
       items,
       totals,
       payment: paymentInfo,

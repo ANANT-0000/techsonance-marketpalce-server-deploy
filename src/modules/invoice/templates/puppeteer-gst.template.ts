@@ -103,7 +103,7 @@ export class PuppeteerGstTemplate implements IInvoiceTemplate, OnModuleInit {
 
     try {
       const page = await browser.newPage();
-      await page.setContent(html, { waitUntil: 'networkidle0' });
+      await page.setContent(html, { waitUntil: 'load' });
 
       const pdfBytes = await page.pdf({
         format: 'A4',
@@ -199,7 +199,7 @@ export class PuppeteerGstTemplate implements IInvoiceTemplate, OnModuleInit {
           name: item.name,
           hsnCode: item.hsnCode ?? null,
           sku: item.sku ?? null,
-          description: item.description ?? null,
+          // description: item.description ?? null,
           quantity: item.quantity,
           unitPrice: fc(item.unitPrice),
           discount: item.discount > 0 ? fc(item.discount) : fc(0),
