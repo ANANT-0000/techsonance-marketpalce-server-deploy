@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <style>
+    body { font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; margin: 0; padding: 0; color: #111; font-size: 11px; line-height: 1.4; }
+    .container { padding: 40px; position: relative; }
+    
+    {{#if branding.watermarkUrl}}
+    .watermark { position: absolute; top: 30%; left: 50%; transform: translate(-50%, -50%); opacity: 0.06; width: 400px; z-index: -1; }
+    {{/if}}
+
+    .header { display: flex; justify-content: space-between; border-bottom: 2px solid {{branding.primaryColor}}; padding-bottom: 20px; margin-bottom: 20px; }
+    .company-details h1 { color: {{branding.primaryColor}}; font-size: 24px; margin: 0 0 5px 0; text-transform: uppercase; }
+    .company-details h2 { font-size: 16px; margin: 0 0 10px 0; }
+    .meta-details { text-align: right; }
+    .meta-details table { width: 100%; text-align: left; }
+    .meta-details th { color: #666; font-weight: normal; padding-right: 15px; }
+    .meta-details td { font-weight: bold; }
+
+    .addresses { display: flex; justify-content: space-between; margin-bottom: 30px; }
+    .addresses > div { width: 48%; }
+    .section-title { font-size: 10px; color: #666; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 5px; border-bottom: 1px solid #eee; padding-bottom: 3px; }
+
+    table.items { width: 100%; border-collapse: collapse; margin-bottom: 20px; }
+    table.items th { background-color: {{branding.primaryColor}}; color: #fff; padding: 10px; text-align: right; font-size: 10px; }
+    table.items th:nth-child(1), table.items th:nth-child(2) { text-align: left; }
+    table.items td { padding: 10px; border-bottom: 1px solid #e0e0e0; vertical-align: top; text-align: right; }
+    table.items td:nth-child(1), table.items td:nth-child(2) { text-align: left; }
+    table.items tbody tr:nth-child(even) { background-color: #f7f7f7; }
+    
+    .item-name { font-weight: bold; font-size: 12px; margin-bottom: 3px; }
+    .hsn-code, .item-desc { font-size: 9px; color: #666; }
+
+    .totals-wrapper { display: flex; justify-content: flex-end; }
+    .totals { width: 300px; border: 1px solid #e0e0e0; border-radius: 4px; padding: 15px; background: #fafafa; }
+    .totals-row { display: flex; justify-content: space-between; margin-bottom: 8px; }
+    .totals-row.grand { font-size: 14px; font-weight: bold; border-top: 1px solid #ccc; padding-top: 8px; margin-top: 8px; color: {{branding.primaryColor}}; }
+
+    .footer-section { margin-top: 40px; display: flex; justify-content: space-between; page-break-inside: avoid; }
+    .terms { width: 60%; font-size: 9px; color: #555; }
+    .signatory { width: 30%; text-align: center; }
+    .signature-img { height: 60px; object-fit: contain; margin-bottom: 5px; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    {{#if branding.watermarkUrl}}<img src="{{branding.watermarkUrl}}" class="watermark" />{{/if}}
+
+    <div class="header">
+      <div class="company-details">
+        {{#if branding.logoUrl}}<img src="{{branding.logoUrl}}" style="max-height: 50px; margin-bottom: 10px;" />{{/if}}
+        <h1>TAX INVOICE</h1>
+        <h2>{{legal.tradeName}}</h2>
+        {{#each legal.taxIds}}<div style="font-size: 10px; color: #555;"><b>{{key}}:</b> {{value}}</div>{{/each}}
+      </div>
+      <div class="meta-details">
+        <table>
+          <tr><th>Invoice No:</th><td>{{meta.invoiceNumber}}</td></tr>
+          <tr><th>Date:</th><td>{{meta.invoiceDate}}</td></tr>
+        </table>
+      </div>
+    </div>
+
+    <div class="addresses">
+      <div>
+        <div class="section-title">Billed To</div>
+        <strong>{{customer.name}}</strong><br/>
+        {{customer.billingAddress}}<br/>
+        {{#if customer.phone}}Ph: {{customer.phone}}{{/if}}
+      </div>
+      <div>
+        <div class="section-title">Shipped To</div>
+        <strong>{{customer.name}}</strong><br/>
+        {{customer.shippingAddress}}
+      </div>
+    </div>
+
+    <table class="items">
+      <thead>
+        <tr>
+          <th style="width: 5%;">#</th><th style="width: 45%;">Item Description</th><th>Rate</th><th>Qty</th><th>Tax</th><th>Amount</th>
+        </tr>
+      </thead>
+      <tbody>
+        {{#each items}}
+        <tr>
+          <td>{{@index}}</td>
+          <td>
+            <div class="item-name">{{name}}</div>
+            {{#if hsnCode}}<div class="hsn-code">HSN: {{hsnCode}}</div>{{/if}}
+            {{#if description}}<div class="item-desc">{{description}}</div>{{/if}}
+          </td>
+          <td>{{../totals.currency}} {{unitPrice}}</td>
+          <td style="text-align: center;">{{quantity}}</td>
+          <td>{{../totals.currency}} {{taxAmount}}</td>
+          <td><b>{{../totals.currency}} {{totalAmount}}</b></td>
+        </tr>
+        {{/each}}
+      </tbody>
+    </table>
+
+    <div class="totals-wrapper">
+      <div class="totals">
+        <div class="totals-row"><span>Sub Total:</span> <span>{{totals.currency}} {{totals.subTotal}}</span></div>
+        <div class="totals-row"><span>Total Tax:</span> <span>{{totals.currency}} {{totals.totalTax}}</span></div>
+        <div class="totals-row grand"><span>Grand Total:</span> <span>{{totals.currency}} {{totals.grandTotal}}</span></div>
+      </div>
+    </div>
+
+    <div class="footer-section">
+      <div class="terms">
+        <div class="section-title">Terms & Conditions</div>
+        <p>{{footer.termsAndConditions}}</p>
+      </div>
+      <div class="signatory">
+        {{#if footer.signatorySignatureUrl}}<img src="{{footer.signatorySignatureUrl}}" class="signature-img" />{{/if}}
+        <div style="border-top: 1px solid #111; padding-top: 5px;">
+          <b>For {{legal.tradeName}}</b><br/>
+          <span style="font-size: 9px; color: #666;">{{footer.signatoryName}}</span>
+        </div>
+      </div>
+    </div>
+  </div>
+</body>
+</html>

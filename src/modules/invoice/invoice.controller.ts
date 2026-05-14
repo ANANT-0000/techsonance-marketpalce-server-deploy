@@ -24,6 +24,6 @@ export class InvoiceController {
   @UseGuards(JwtAuthGuard, RoleGuard)
   @Roles(Role.ADMIN)
   listTemplates() {
-    return this.invoiceService.listAvailableTemplates();
+    // return this.invoiceService.listAvailableTemplates();
   }
 }
