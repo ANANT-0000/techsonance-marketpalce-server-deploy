@@ -1,4 +1,9 @@
 import { Buffer } from 'buffer';
+
+// ================================================================
+// RAW DB RELATION TYPES  (unchanged from your existing code)
+// ================================================================
+
 export interface WarehouseAddress {
   address_line_1: string;
   city: string;
@@ -122,6 +127,7 @@ export interface companyLegal {
   created_at: string | Date;
   updated_at: string | Date;
 }
+
 export interface companyBranding {
   id: string;
   company_id: string;
@@ -136,64 +142,121 @@ export interface companyBranding {
   created_at: string | Date;
   updated_at: string | Date;
 }
+
 export interface CompanyContext {
   config: companyConfig | null;
   branding: companyBranding | null;
   legal: companyLegal | null;
 }
-export interface StandardizedInvoicePayload {
-  meta: {
-    invoiceNumber: string;
-    invoiceDate: Date;
-    dueDate?: Date;
-  };
-  branding: {
-    logoUrl?: string;
-    logoBuffer?: Buffer;
-    primaryColor: string;
-    watermarkUrl?: string | null;
-  };
-  legal: {
-    legalName: string;
-    tradeName?: string;
-    supportEmail?: string;
-    supportPhone?: string;
-    taxIds: Array<{ key: string; value: string }>; // e.g., GST, VAT
-  };
-  customer: {
-    name: string;
-    phone?: string;
-    email?: string;
-    shippingAddress: string;
-    billingAddress: string;
-  };
-  items: Array<{
-    name: string;
-    description?: string;
-    quantity: number;
-    unitPrice: number;
-    taxAmount: number;
-    taxRate: number;
-    totalAmount: number;
-  }>;
-  totals: {
-    subTotal: number;
-    totalTax: number;
-    grandTotal: number;
-    currency: string;
-  };
-  footer: {
-    termsAndConditions?: string;
-    notes?: string | null;
-    signatoryName?: string;
-  };
+
+// ================================================================
+// STANDARDIZED INVOICE PAYLOAD
+// Single DTO passed into every template — templates never touch the DB
+// ================================================================
+
+export interface InvoiceLineItem {
+  /** Product name (variant name if multi-variant) */
+  name: string;
+  /** Optional: HSN/SAC code for GST compliance */
+  hsnCode?: string;
+  /** Optional: variant description, color, size, storage */
+  description?: string;
+  /** SKU for internal reference */
+  sku?: string;
+  quantity: number;
+  /** Unit price EXCLUDING tax */
+  unitPrice: number;
+  /** Pre-computed tax amount for this line */
+  taxAmount: number;
+  /** Tax rate as a percentage e.g. 18 */
+  taxRate: number;
+  /** unitPrice × quantity + taxAmount */
+  totalAmount: number;
 }
 
-// Every template MUST implement this interface
-export interface IInvoiceTemplate {
-  // Unique identifier for the registry (e.g., 'standard-gst', 'minimal')
-  readonly templateId: string;
+export interface InvoiceTotals {
+  subTotal: number; // sum of (unitPrice × qty) for all items
+  totalCgst: number; // for intra-state
+  totalSgst: number; // for intra-state
+  totalIgst: number; // for inter-state
+  totalTax: number; // totalCgst + totalSgst OR totalIgst
+  grandTotal: number; // subTotal + totalTax
+  currency: string; // ISO 4217 e.g. "INR"
+  grandTotalInWords?: string; // optional, pre-formatted
+}
 
-  // The universal render function
+export interface InvoiceCustomer {
+  name: string;
+  phone?: string;
+  email?: string;
+  shippingAddress: string; // single formatted string
+  billingAddress: string; // falls back to shippingAddress
+  placeOfSupply?: string; // e.g. "09-UTTARPRADESH"
+}
+
+export interface InvoiceLegal {
+  legalName: string;
+  tradeName?: string;
+  supportEmail?: string;
+  supportPhone?: string;
+  websiteUrl?: string;
+  /** All active compliance fields: GSTIN, PAN, CIN etc. */
+  taxIds: Array<{ key: string; value: string }>;
+  /** Full formatted registered address string */
+  registeredAddress?: string;
+}
+
+export interface InvoiceBranding {
+  /** Publicly accessible URL for the company logo */
+  logoUrl?: string;
+  /** Pre-fetched logo bytes (preferred — avoids network call inside template) */
+  logoBuffer?: Buffer;
+  primaryColor: string; // hex e.g. "#1A73E8"
+  secondaryColor?: string;
+  accentColor?: string;
+  watermarkUrl?: string | null;
+}
+
+export interface InvoiceMeta {
+  invoiceNumber: string;
+  invoiceDate: Date;
+  dueDate?: Date;
+  /** e.g. "standard-gst" | "minimal" | "branded" */
+  templateId: string;
+}
+
+export interface InvoiceFooter {
+  termsAndConditions?: string;
+  notes?: string | null;
+  signatoryName?: string;
+  signatoryDesignation?: string;
+  /** Pre-fetched signature image bytes */
+  signatorySignatureBuffer?: Buffer;
+}
+
+/**
+ * The ONE object every IInvoiceTemplate.render() receives.
+ * All templates must accept this and only this.
+ */
+export interface StandardizedInvoicePayload {
+  meta: InvoiceMeta;
+  branding: InvoiceBranding;
+  legal: InvoiceLegal;
+  customer: InvoiceCustomer;
+  items: InvoiceLineItem[];
+  totals: InvoiceTotals;
+  footer: InvoiceFooter;
+}
+
+// ================================================================
+// TEMPLATE CONTRACT — every template implements this
+// ================================================================
+
+export interface IInvoiceTemplate {
+  /** Must be unique across the entire registry e.g. 'standard-gst' */
+  readonly templateId: string;
+  /** Human-readable label shown in admin UI */
+  readonly templateLabel: string;
+  /** Accepts the standardized payload, returns a PDF buffer */
   render(payload: StandardizedInvoicePayload): Promise<Buffer>;
 }

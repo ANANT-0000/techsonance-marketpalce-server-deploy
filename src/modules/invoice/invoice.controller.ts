@@ -1,4 +1,4 @@
-import { Body, Controller, Headers, Post, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, Headers, Post, UseGuards } from '@nestjs/common';
 import { InvoiceService } from './invoice.service';
 import { Roles } from '../../common/decorators/roles.decorator';
 import { RoleGuard } from 'src/guards/role.guard';
@@ -19,5 +19,11 @@ export class InvoiceController {
       payload,
     );
     return this.invoiceService.getBulkInvoiceUrls(domain, payload.orderIds);
+  }
+  @Get('templates')
+  @UseGuards(JwtAuthGuard, RoleGuard)
+  @Roles(Role.ADMIN)
+  listTemplates() {
+    return this.invoiceService.listAvailableTemplates();
   }
 }

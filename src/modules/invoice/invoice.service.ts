@@ -3,130 +3,92 @@ import {
   Inject,
   InternalServerErrorException,
   NotFoundException,
+  Logger,
 } from '@nestjs/common';
-import { DRIZZLE, type DrizzleService } from '../../drizzle/drizzle.module';
 import { and, eq, inArray } from 'drizzle-orm';
 
+import { DRIZZLE, type DrizzleService } from '../../drizzle/drizzle.module';
+import { invoices } from '../../drizzle/schema';
 import { UploadToCloudService } from '../../utils/upload-to-cloud/upload-to-cloud.service';
-import { randomUUID } from 'crypto';
 import { domainExtractor } from '../../common/filters/domainExtractor.filter';
 import { CompanyService } from '../company/company.service';
 
-// --- New Modular Imports ---
 import { InvoiceTemplateRegistry } from './template.registry';
+import { InvoicePayloadBuilderService } from './invoice-payload-builder.service';
 import {
-  CompanyContext,
-  GroupingResult,
   MappedOrderInfo,
   MappedVendorInfo,
-  OrderItem,
-  OrderWithRelations,
-  StandardizedInvoicePayload,
   WarehouseGroup,
+  CompanyContext,
 } from './interfaces/invoice.interface';
-import {
-  gst_registrations,
-  invoices,
-  orders,
-  company_branding,
-  company_document_config,
-  company_legal_profile,
-} from '../../drizzle/schema';
 
+/**
+ * InvoiceService — orchestrator only.
+ *
+ * Responsibilities:
+ *  1. Orchestrate DB fetching via InvoicePayloadBuilderService
+ *  2. Select the right template via InvoiceTemplateRegistry
+ *  3. Call template.render() with the standardised payload
+ *  4. Upload the resulting PDF buffer to Cloudinary
+ *  5. Persist the invoice record to the DB
+ */
 @Injectable()
 export class InvoiceService {
+  private readonly logger = new Logger(InvoiceService.name);
+
   constructor(
     @Inject(DRIZZLE) private readonly db: DrizzleService,
-    private readonly uploadToCloudService: UploadToCloudService,
+    private readonly uploadService: UploadToCloudService,
     private readonly companyService: CompanyService,
     private readonly templateRegistry: InvoiceTemplateRegistry,
+    private readonly payloadBuilder: InvoicePayloadBuilderService,
   ) {}
 
-  async createInvoice(orderId: string): Promise<void> {
-    // ── Step 1: Fetch order + all deep relations ───────────────────────────────
-    const orderData = (await this.db.query.orders
-      .findFirst({
-        where: eq(orders.id, orderId),
-        with: {
-          customer: true,
-          address: true,
-          items: {
-            with: {
-              variant: {
-                with: {
-                  product: {
-                    with: {
-                      vendor: {
-                        with: { user: true },
-                      },
-                    },
-                  },
-                  inventory: {
-                    with: {
-                      warehouse: { with: { address: true } },
-                    },
-                  },
-                },
-              },
-            },
-          },
-        },
-      })
-      .catch((err) => {
-        console.error(
-          `[InvoiceService] Failed to fetch order ${orderId}:`,
-          err,
-        );
-        throw new InternalServerErrorException(
-          `Failed to fetch order ${orderId}.`,
-          { cause: err },
-        );
-      })) as OrderWithRelations | undefined;
-
-    if (!orderData) throw new NotFoundException(`Order ${orderId} not found`);
-    if (!orderData.items.length)
-      throw new NotFoundException(`Order ${orderId} has no items`);
-
+  // ══════════════════════════════════════════════════════════════════
+  // PUBLIC: createInvoice — called after a successful payment
+  // ══════════════════════════════════════════════════════════════════
+  async createInvoice(
+    orderId: string,
+    gstData: {
+      totalCgst: number;
+      totalSgst: number;
+      totalIgst: number;
+      totalTax: number;
+      subTotal: number;
+      grandTotal: number;
+      vendorGstId?: string;
+    } | null = null,
+  ): Promise<void> {
+    // ── Step 1: Fetch order + deep relations ──────────────────────────
+    const orderData =
+      await this.payloadBuilder.fetchOrderWithRelations(orderId);
     const companyId = orderData.company_id;
 
-    // ── Step 2: Fetch Identity, Legal & Config Data ONCE per order ─────────────
-    const [gstDetails, config, branding, legal] = await Promise.all([
-      this.db.query.gst_registrations.findFirst({
-        where: eq(gst_registrations.company_id, companyId),
-      }),
+    // ── Step 2: Fetch company identity data in parallel ───────────────
+    const context: CompanyContext =
+      await this.payloadBuilder.fetchCompanyContext(companyId);
 
-      this.db.query.company_document_config.findFirst({
-        where: eq(company_document_config.company_id, companyId),
-        with: { default_invoice_template: true },
-      }),
+    // ── Step 3: Determine template ────────────────────────────────────
+    const templateId =
+      context.config?.default_invoice_template?.template_name ?? 'standard-gst';
 
-      this.db.query.company_branding.findFirst({
-        where: eq(company_branding.company_id, companyId),
-      }),
-
-      this.db.query.company_legal_profile.findFirst({
-        where: eq(company_legal_profile.company_id, companyId),
-      }),
-    ]);
-
-    // ── Step 3: Group items by warehouse ───────────────────────────────────────
-    const { assigned, unresolved } = this.groupItemsByWarehouse(
+    // ── Step 4: Group items by warehouse ──────────────────────────────
+    const { assigned, unresolved } = this.payloadBuilder.groupItemsByWarehouse(
       orderData.items,
     );
 
     if (unresolved.length > 0) {
-      console.warn(
-        `[InvoiceService] Order ${orderId}: ${unresolved.length} item(s) skipped (no warehouse).`,
+      this.logger.warn(
+        `Order ${orderId}: ${unresolved.length} item(s) skipped — no warehouse assigned.`,
       );
     }
-
     if (assigned.size === 0) {
       throw new InternalServerErrorException(
-        `No valid warehouses found for order ${orderId}`,
+        `No valid warehouses found for order ${orderId}.`,
       );
     }
 
-    // ── Step 4: Build shared info objects ──────────────────────────────────────
+    // ── Step 5: Build shared info maps ────────────────────────────────
     const mappedOrderInfo: MappedOrderInfo = {
       id: orderData.id,
       customerName:
@@ -143,63 +105,59 @@ export class InvoiceService {
     };
 
     const mappedVendorInfo: MappedVendorInfo = {
-      companyName: this.resolveVendorName(assigned),
-      // @ts-ignore - GST details might be null, handle gracefully
-      gstNumber: (gstDetails && gstDetails[0]?.gst_number) || 'N/A',
+      companyName: this.payloadBuilder.resolveVendorName(assigned),
+      gstNumber:
+        context.config?.default_invoice_template?.template_name ?? 'N/A',
       mobileNumber:
-        orderData.items[0].variant?.product?.vendor?.user?.phone_number ??
+        orderData.items[0]?.variant?.product?.vendor?.user?.phone_number ??
         'N/A',
       email: orderData.customer.email,
     };
 
-    // ── Step 5: Generate all warehouse invoices IN PARALLEL ────────────────────
+    // ── Step 6: Generate one invoice per warehouse group in parallel ───
+    const prefix = context.config?.invoice_number_prefix ?? 'INV';
+
     const results = await Promise.allSettled(
       Array.from(assigned.values()).map((group) =>
         this.generateInvoiceForGroup(
-          orderData.id,
+          orderId,
           group,
           mappedOrderInfo,
           mappedVendorInfo,
-          {
-            config: config || null,
-            branding: branding || null,
-            legal: legal || null,
-          },
+          context,
+          templateId,
+          prefix,
+          gstData,
         ),
       ),
     );
 
-    // ── Step 6: Collect successes, surface failures ────────────────────────────
-    const invoiceInsertions: (typeof invoices.$inferInsert)[] = [];
-
+    // ── Step 7: Collect successes, log failures ───────────────────────
+    const insertions: (typeof invoices.$inferInsert)[] = [];
     for (const result of results) {
       if (result.status === 'fulfilled') {
-        if (Array.isArray(result.value)) {
-          invoiceInsertions.push(...result.value);
-        } else {
-          invoiceInsertions.push(result.value);
-        }
+        insertions.push(...result.value);
       } else {
-        console.error(
-          `[InvoiceService] Warehouse invoice generation failed for order ${orderId}:`,
+        this.logger.error(
+          `Warehouse invoice generation failed for order ${orderId}:`,
           result.reason,
         );
       }
     }
 
-    if (invoiceInsertions.length === 0) {
+    if (insertions.length === 0) {
       throw new InternalServerErrorException(
         `All invoice generations failed for order ${orderId}.`,
       );
     }
 
-    // ── Step 7: Single bulk insert ─────────────────────────────────────────────
+    // ── Step 8: Bulk DB insert ────────────────────────────────────────
     await this.db
       .insert(invoices)
-      .values(invoiceInsertions)
+      .values(insertions)
       .catch((err) => {
-        console.error(
-          `[InvoiceService] Failed to insert invoice records for order ${orderId}:`,
+        this.logger.error(
+          `Failed to persist invoice records for order ${orderId}`,
           err,
         );
         throw new InternalServerErrorException(
@@ -208,16 +166,20 @@ export class InvoiceService {
         );
       });
 
-    console.log(
-      `[InvoiceService] Successfully generated ${invoiceInsertions.length} invoice(s) for order ${orderId}.`,
+    this.logger.log(
+      `Successfully generated ${insertions.length} invoice(s) for order ${orderId}.`,
     );
   }
+
+  // ══════════════════════════════════════════════════════════════════
+  // PUBLIC: getBulkInvoiceUrls — admin/vendor bulk download
+  // ══════════════════════════════════════════════════════════════════
 
   async getBulkInvoiceUrls(domain: string, orderIds: string[]) {
     const filteredDomain = domainExtractor(domain);
     const companyId = await this.companyService.find(filteredDomain);
 
-    return await this.db
+    return this.db
       .select({
         invoice_url: invoices.invoice_url,
         invoice_number: invoices.invoice_number,
@@ -232,106 +194,67 @@ export class InvoiceService {
       );
   }
 
-  private groupItemsByWarehouse(items: OrderItem[]): GroupingResult {
-    const assigned = new Map<string, WarehouseGroup>();
-    const unresolved: OrderItem[] = [];
+  // ══════════════════════════════════════════════════════════════════
+  // PUBLIC: listTemplates — admin UI endpoint helper
+  // ══════════════════════════════════════════════════════════════════
 
-    for (const item of items) {
-      const warehouse = item.variant?.inventory?.warehouse ?? null;
-      if (!warehouse) {
-        unresolved.push(item);
-        continue;
-      }
-      const existing = assigned.get(warehouse.id);
-      if (existing) existing.items.push(item);
-      else assigned.set(warehouse.id, { warehouse, items: [item] });
-    }
-    return { assigned, unresolved };
+  listAvailableTemplates() {
+    return this.templateRegistry.listTemplates();
   }
 
-  // ─── Refactored: Generate one invoice for a warehouse group ────────────────
+  // ══════════════════════════════════════════════════════════════════
+  // PRIVATE: generate PDF + upload for one warehouse group
+  // ══════════════════════════════════════════════════════════════════
+
   private async generateInvoiceForGroup(
     orderId: string,
     group: WarehouseGroup,
     orderInfo: MappedOrderInfo,
     vendorInfo: MappedVendorInfo,
-    companyContext: CompanyContext,
+    context: CompanyContext,
+    templateId: string,
+    prefix: string,
+    gstData: {
+      totalCgst: number;
+      totalSgst: number;
+      totalIgst: number;
+      totalTax: number;
+      subTotal: number;
+      grandTotal: number;
+      vendorGstId?: string;
+    } | null,
   ): Promise<(typeof invoices.$inferInsert)[]> {
-    const { config, branding, legal } = companyContext;
-    const invoiceNumber = this.buildInvoiceNumber(group.warehouse.id);
+    // 1. Build invoice number
+    const invoiceNumber = this.payloadBuilder.buildInvoiceNumber(
+      group.warehouse.id,
+      prefix,
+    );
 
-    // 1. Determine Template Name from Config (Fallback to 'standard-gst')
-    const templateName =
-      config?.default_invoice_template?.template_name || 'standard-gst';
+    // 2. Build the standardized payload (all DB calls done here)
+    const payload = await this.payloadBuilder.buildPayload(
+      orderId,
+      group,
+      orderInfo,
+      vendorInfo,
+      context,
+      invoiceNumber,
+      templateId,
+      gstData,
+    );
 
-    // 2. Map Items & Calculate Totals
-    let subTotal = 0;
-    const itemsPayload = group.items.map((item) => {
-      const price = Number(item.price);
-      const totalAmount = price * item.quantity;
-      subTotal += totalAmount;
+    // 3. Retrieve the correct template from the registry
+    const template = this.templateRegistry.getTemplate(templateId);
 
-      return {
-        name: item.variant?.product?.name ?? 'Unknown Product',
-        quantity: item.quantity,
-        unitPrice: price,
-        taxAmount: 0,
-        taxRate: 0,
-        totalAmount: totalAmount,
-      };
-    });
-
-    // 3. Construct the Standardized Payload exactly matching the Template Interface
-    const payload: StandardizedInvoicePayload = {
-      meta: {
-        invoiceNumber,
-        invoiceDate: new Date(),
-      },
-      branding: {
-        logoUrl: branding?.logo_url,
-        primaryColor: branding?.primary_color || '#000000',
-        watermarkUrl: branding?.watermark_url || null,
-      },
-      legal: {
-        legalName: legal?.legal_name || vendorInfo.companyName,
-        tradeName: legal?.trade_name || vendorInfo.companyName,
-        supportEmail: legal?.support_email || vendorInfo.email,
-        supportPhone: legal?.support_phone || vendorInfo.mobileNumber,
-        taxIds: [{ key: 'GSTIN', value: vendorInfo.gstNumber }], // Simplified - wire up actual compliance array later
-      },
-      customer: {
-        name: orderInfo.customerName,
-        phone: orderInfo.customerPhone,
-        shippingAddress: `${orderInfo.shippingAddress.addressLine1}, ${orderInfo.shippingAddress.city}, ${orderInfo.shippingAddress.state} - ${orderInfo.shippingAddress.pincode}`,
-        billingAddress: `${orderInfo.shippingAddress.addressLine1}, ${orderInfo.shippingAddress.city}, ${orderInfo.shippingAddress.state} - ${orderInfo.shippingAddress.pincode}`,
-      },
-      items: itemsPayload,
-      totals: {
-        subTotal,
-        totalTax: 0,
-        grandTotal: subTotal,
-        currency: config?.default_currency || 'INR',
-      },
-      footer: {
-        termsAndConditions:
-          config?.invoice_terms_and_conditions ||
-          'Thank you for your business!',
-        notes: config?.invoice_footer_text || null,
-        signatoryName: config?.signatory_name || 'Authorized Signatory',
-      },
-    };
-
-    // 4. Retrieve Template from Registry & Render PDF
-    const template = this.templateRegistry.getTemplate(templateName);
+    // 4. Render PDF — template handles ALL visual concerns
     const pdfBuffer = await template.render(payload);
 
     // 5. Upload to Cloudinary
-    const invoiceUrl: string = await this.uploadToCloudService.uploadInvoice(
+    const invoiceUrl = await this.uploadService.uploadInvoice(
       pdfBuffer,
       `invoice_${orderId}_${group.warehouse.id}`,
     );
 
-    // 6. Return DB Insert Object
+    // 6. Return DB insert shape
     return [
       {
         invoice_number: invoiceNumber,
@@ -341,23 +264,5 @@ export class InvoiceService {
         company_id: group.items[0].company_id,
       },
     ];
-  }
-
-  // ─── Helpers ──────────────────────────────────────────────────────────────────
-  private buildInvoiceNumber(warehouseId: string): string {
-    const date = new Date().toISOString().slice(0, 10).replace(/-/g, '');
-    const unique = randomUUID().replace(/-/g, '').slice(0, 6).toUpperCase();
-    const whSuffix = warehouseId.replace(/-/g, '').slice(0, 4).toUpperCase();
-    return `INV-${date}-${unique}-${whSuffix}`;
-  }
-
-  private resolveVendorName(assigned: Map<string, WarehouseGroup>): string {
-    for (const group of assigned.values()) {
-      for (const item of group.items) {
-        const name = item.variant?.product?.vendor?.store_name;
-        if (name) return name;
-      }
-    }
-    return 'Vendor Store';
   }
 }
