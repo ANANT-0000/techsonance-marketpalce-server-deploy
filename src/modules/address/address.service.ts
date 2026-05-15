@@ -10,7 +10,7 @@ import { DRIZZLE, type DrizzleService } from '../../drizzle/drizzle.module';
 import { address, user, vendor } from '../../drizzle/schema';
 import { CreateAddressDto } from './dto/createAddress.dto';
 import { UpdateAddressDto } from './dto/updateAddress.dto';
-import { domainExtractor } from 'src/common/filters/domainExtractor.filter';
+import { domainExtractor } from '../../common/filters/domainExtractor.filter';
 import { CompanyService } from '../company/company.service';
 @Injectable()
 export class AddressService {

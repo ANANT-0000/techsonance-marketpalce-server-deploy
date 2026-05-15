@@ -153,10 +153,12 @@ export const audit_logs = pg.pgTable(
     pg.index('idx_audit_logs_created_at').on(table.created_at),
   ],
 );
-export const invoiceTemplate = pg.pgTable('invoiceTemplate', {
+export const templates = pg.pgTable('templates', {
   id: pg.uuid('id').primaryKey().defaultRandom(),
   template_name: pg.text('template_name').notNull(),
+  template_label: pg.text('template_label').notNull(),
   template_url: pg.text('template_url'),
+  description: pg.text('description'),
   created_at: pg.timestamp('created_at').notNull().defaultNow(),
   updated_at: pg
     .timestamp('updated_at')
@@ -165,8 +167,7 @@ export const invoiceTemplate = pg.pgTable('invoiceTemplate', {
     .$onUpdate(() => new Date()),
   company_id: pg
     .uuid('company_id')
-    .references(() => company.id, { onDelete: 'cascade' })
-    .notNull(),
+    .references(() => company.id, { onDelete: 'cascade' }),
   vendor_id: pg
     .uuid('vendor_id')
     .references(() => vendor.id, { onDelete: 'cascade' }),

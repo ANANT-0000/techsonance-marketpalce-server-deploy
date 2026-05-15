@@ -5,7 +5,7 @@ import { UploadToCloudModule } from '../../utils/upload-to-cloud/upload-to-cloud
 import { CompanyModule } from '../company/company.module';
 import { InvoiceTemplateRegistry } from './template.registry';
 import { PuppeteerGstTemplate } from './templates/puppeteer-gst.template';
-import { DrizzleModule } from 'src/drizzle/drizzle.module';
+import { DrizzleModule } from '../../drizzle/drizzle.module';
 import { InvoicePayloadBuilderService } from './invoice-payload-builder.service';
 import { PuppeteerMinimalTemplate } from './templates/puppeteer-minimal.template';
 

@@ -1,7 +1,7 @@
 import * as pg from 'drizzle-orm/pg-core';
 import { company } from './main.schema';
 import { address } from './users.schema';
-import { invoiceTemplate, vendor_document } from './utils.schema';
+import {  templates, vendor_document } from './utils.schema';
 
 // ================================================================
 // COMPANY IDENTITY SCHEMA
@@ -200,12 +200,10 @@ export const company_document_config = pg.pgTable('company_document_config', {
   invoice_sequence_reset: pg.text('invoice_sequence_reset').default('APRIL'),
 
   // ── Default Invoice Template ──
-  // Points to your existing invoiceTemplate table.
-  // This is the company-level fallback template.
-  // Vendors override this via their own invoiceTemplate row.
+
   default_invoice_template_id: pg
     .uuid('default_invoice_template_id')
-    .references(() => invoiceTemplate.id),
+    .references(() => templates.id),
 
   // ── Signatory Block ──
   // Printed at the bottom-right of invoices as "Authorized Signatory"
@@ -238,7 +236,3 @@ export const company_document_config = pg.pgTable('company_document_config', {
     .defaultNow()
     .$onUpdate(() => new Date()),
 });
-
-// ================================================================
-// RELATIONS
-// ================================================================

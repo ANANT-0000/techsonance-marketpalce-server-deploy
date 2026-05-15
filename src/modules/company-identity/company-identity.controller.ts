@@ -12,7 +12,7 @@ import {
 } from '@nestjs/common';
 
 import { UploadToCloud } from '../../common/decorators/upload.decorator';
-import { ParseJsonPipe } from 'src/common/pipes/parseJsonPipe';
+import { ParseJsonPipe } from '../../common/pipes/parseJsonPipe';
 import { CompanyIdentityService } from './company-identity.service';
 import {
   UpsertBrandingDto,

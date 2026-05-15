@@ -1,4 +1,4 @@
-// src/modules/invoice/invoice-payload-builder.service.ts
+// ../../modules/invoice/invoice-payload-builder.service.ts
 import {
   Injectable,
   Inject,
@@ -40,7 +40,7 @@ import {
   WarehouseGroup,
 } from './interfaces/invoice.interface';
 import { randomUUID } from 'crypto';
-import { fetchImageAsBuffer } from 'src/utils/image-fetcher.util';
+import { fetchImageAsBuffer } from '../../utils/image-fetcher.util';
 
 // ─── helpers ────────────────────────────────────────────────────
 

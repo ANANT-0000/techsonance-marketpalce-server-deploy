@@ -41,12 +41,11 @@ import { CreateVendorDto } from './dto/CreateVendorDto';
 import { LoginDto } from '../users/dto/userAuth.dto.ts';
 import { UploadToCloudService } from '../../utils/upload-to-cloud/upload-to-cloud.service';
 import { formatCompanyDomain } from '../../common/filters/formatDomain.filter';
-import { company_compliance } from 'src/drizzle/schema/company_identity.schema';
+import { company_compliance } from '../../drizzle/schema/company_identity.schema';
 import { CreateAddressDto } from '../address/dto/createAddress.dto';
-import { AddressType } from 'src/common/Types/index.type';
-import { find } from 'pdfkit';
+import { AddressType } from '../../common/Types/index.type';
 import { CompanyService } from '../company/company.service';
-import { domainExtractor } from 'src/common/filters/domainExtractor.filter';
+import { domainExtractor } from '../../common/filters/domainExtractor.filter';
 
 const SALT_ROUNDS = 10;
 type UserType = typeof userTable.$inferSelect;

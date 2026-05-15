@@ -24,7 +24,11 @@ export class PuppeteerMinimalTemplate
   constructor(private readonly registry: InvoiceTemplateRegistry) {
     const templatePath = path.join(
       process.cwd(),
-      'src/modules/invoice/html-templates/minimal.hbs',
+      'src', // Note: If running from 'dist' in production, you might need to handle 'src' vs 'dist' dynamically, or keep templates in a root-level folder.
+      'modules',
+      'invoice',
+      'html-templates',
+      'minimal.hbs',
     );
     try {
       const htmlString = fs.readFileSync(templatePath, 'utf8');
@@ -111,6 +115,7 @@ export class PuppeteerMinimalTemplate
     const fc = (amount: number) => `${sym}${Number(amount).toFixed(2)}`;
 
     return {
+      branding: p.branding,
       meta: {
         invoiceNumber: p.meta.invoiceNumber,
         invoiceDate: fmtDate(p.meta.invoiceDate),

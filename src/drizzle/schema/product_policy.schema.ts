@@ -4,6 +4,7 @@ import * as pg from 'drizzle-orm/pg-core';
 import { company } from './main.schema';
 import { vendor } from './users.schema';
 import { categories, order_items, products } from './shop.schema';
+import { templates } from './utils.schema';
 
 // Policy type enum — covers all real-world cases
 export const policyTypeEnum = pg.pgEnum('policy_type_enum', [
@@ -24,6 +25,8 @@ export const policy_duration_unit_enum = pg.pgEnum(
 // A company/vendor defines their reusable policies once.
 // e.g. "1 Year Manufacturer Warranty", "30-Day Exchange", "No Return - Innerwear"
 // Then assigns them to categories or specific products.
+
+//===============================================================
 export const product_policies = pg.pgTable(
   'product_policies',
   {
@@ -53,8 +56,10 @@ export const product_policies = pg.pgTable(
       .default(false),
     // WARRANTY → true (prints warranty card)
     // NO_RETURN → false (just a label on invoice)
-    // Document template URL (if generates_document = true)
-    document_template_url: pg.text('document_template_url'),
+    //=============================================================
+    document_id: pg
+      .uuid('document_id')
+      .references(() => templates.id, { onDelete: 'cascade' }),
     is_active: pg.boolean('is_active').notNull().default(true),
     // Owner — policy belongs to either a company or a vendor
     // Both nullable — application logic enforces at least one is set
@@ -102,7 +107,7 @@ export const category_policy = pg.pgTable(
   },
   (table) => [
     // One policy type per category (can't have two WARRANTY policies on same category)
-    pg.uniqueIndex('uq_category_policy').on(table.category_id, table.policy_id),
+    // pg.uniqueIndex('uq_category_policy').on(table.category_id, table.policy_id),
     pg.index('idx_category_policy_category').on(table.category_id),
   ],
 );
@@ -133,7 +138,7 @@ export const product_policy_override = pg.pgTable(
     created_at: pg.timestamp('created_at').notNull().defaultNow(),
   },
   (table) => [
-    pg.uniqueIndex('uq_product_policy').on(table.product_id, table.policy_id),
+    // pg.uniqueIndex('uq_product_policy').on(table.product_id, table.policy_id),
     pg.index('idx_product_policy_override_product').on(table.product_id),
   ],
 );

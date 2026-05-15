@@ -104,10 +104,6 @@ export interface MappedVendorInfo {
 // ── Company context fetched from DB ──────────────────────────────
 
 export interface companyConfig {
-  id: string;
-  created_at: string | Date;
-  updated_at: string | Date;
-  company_id: string;
   invoice_number_prefix: string | null;
   invoice_number_format: string | null;
   invoice_sequence_counter: number | null;
@@ -127,7 +123,7 @@ export interface companyConfig {
     template_url: string | null;
     created_at: string | Date;
     updated_at: string | Date;
-    company_id: string;
+    company_id: string | null;
     vendor_id: string | null;
   } | null;
 }

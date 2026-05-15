@@ -1,4 +1,4 @@
-// src/modules/invoice/invoice.service.ts
+// ../../modules/invoice/invoice.service.ts
 import {
   Injectable,
   InternalServerErrorException,

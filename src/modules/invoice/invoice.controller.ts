@@ -1,9 +1,9 @@
 import { Body, Controller, Get, Headers, Post, UseGuards } from '@nestjs/common';
 import { InvoiceService } from './invoice.service';
 import { Roles } from '../../common/decorators/roles.decorator';
-import { RoleGuard } from 'src/guards/role.guard';
+import { RoleGuard } from '../../guards/role.guard';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
-import { Role } from 'src/enums/role.enum';
+import { Role } from '../../enums/role.enum';
 @Controller({ version: '1', path: 'invoice' })
 export class InvoiceController {
   constructor(private readonly invoiceService: InvoiceService) {}

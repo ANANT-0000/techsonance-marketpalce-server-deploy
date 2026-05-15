@@ -41,6 +41,7 @@ import { InvoiceModule } from './modules/invoice/invoice.module';
 // import { PdfModule } from './utils/pdf/pdf.module';
 import { ProductPoliciesModule } from './modules/product-policies/product-policies.module';
 import { CompanyIdentityModule } from './modules/company-identity/company-identity.module';
+import { TemplateModule } from './modules/template/template.module';
 @Module({
   imports: [
     DrizzleModule,
@@ -79,6 +80,7 @@ import { CompanyIdentityModule } from './modules/company-identity/company-identi
     // PdfModule,
     ProductPoliciesModule,
     CompanyIdentityModule,
+    TemplateModule,
     // ThrottlerModule.forRoot([
     //   {
     //     name: "short",

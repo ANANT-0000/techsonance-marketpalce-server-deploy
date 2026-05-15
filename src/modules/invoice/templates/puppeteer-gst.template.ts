@@ -1,4 +1,4 @@
-// src/modules/invoice/templates/puppeteer-gst.template.ts
+// ../../modules/invoice/templates/puppeteer-gst.template.ts
 import {
   Injectable,
   OnModuleInit,
@@ -63,7 +63,11 @@ export class PuppeteerGstTemplate implements IInvoiceTemplate, OnModuleInit {
 
     const templatePath = path.join(
       process.cwd(),
-      'src/modules/invoice/html-templates/standard-gst.hbs',
+      'src', // Note: If running from 'dist' in production, you might need to handle 'src' vs 'dist' dynamically, or keep templates in a root-level folder.
+      'modules',
+      'invoice',
+      'html-templates',
+      'standard-gst.hbs',
     );
     try {
       const htmlString = fs.readFileSync(templatePath, 'utf8');

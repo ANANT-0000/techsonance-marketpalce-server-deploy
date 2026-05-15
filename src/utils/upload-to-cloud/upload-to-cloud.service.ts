@@ -78,4 +78,20 @@ export class UploadToCloudService {
       streamifier.createReadStream(buffer).pipe(uploadStream);
     });
   }
+  async uploadTemplate(buffer: Buffer, template_name: string): Promise<string> {
+    return new Promise((resolve, reject) => {
+      const uploadStream = cloudinary.uploader.upload_stream(
+        {
+          folder: 'techsonance_templates',
+          resource_type: 'auto',
+          public_id: `template_${template_name}`,
+        },
+        (error, result) => {
+          if (result) resolve(result.secure_url);
+          else reject(error);
+        },
+      );
+      streamifier.createReadStream(buffer).pipe(uploadStream);
+    });
+  }
 }

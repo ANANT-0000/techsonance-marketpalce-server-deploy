@@ -39,7 +39,7 @@ import {
 import {
   audit_logs,
   inventory,
-  invoiceTemplate,
+  templates,
   vendor_document,
   warehouse,
 } from './utils.schema';
@@ -502,9 +502,24 @@ export const companyDocumentConfigRelations = relations(
       fields: [company_document_config.company_id],
       references: [company.id],
     }),
-    default_invoice_template: one(invoiceTemplate, {
+    default_invoice_template: one(templates, {
       fields: [company_document_config.default_invoice_template_id],
-      references: [invoiceTemplate.id],
+      references: [templates.id],
     }),
   }),
 );
+
+export const templateRelations = relations(templates, ({ one }) => ({
+  companyDocumentConfig: one(company_document_config, {
+    fields: [templates.id],
+    references: [company_document_config.default_invoice_template_id],
+  }),
+  company: one(company, {
+    fields: [templates.id],
+    references: [company.id],
+  }),
+  vendor: one(vendor, {
+    fields: [templates.id],
+    references: [vendor.id],
+  }),
+}));

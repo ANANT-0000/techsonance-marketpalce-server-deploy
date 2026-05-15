@@ -23,7 +23,7 @@ import {
 } from '../../drizzle/schema';
 import { CompanyService } from '../company/company.service';
 import { domainExtractor } from '../../common/filters/domainExtractor.filter';
-import { getStateByCode } from 'src/common/state_code';
+import { getStateByCode } from '../../common/state_code';
 
 @Injectable()
 export class FinancesService {
