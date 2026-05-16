@@ -187,6 +187,7 @@ export const categoriesRelations = relations(categories, ({ one, many }) => ({
   children: many(categories, {
     relationName: 'sub_categories',
   }),
+  // company:one()
 }));
 
 export const productVariantsRelations = relations(

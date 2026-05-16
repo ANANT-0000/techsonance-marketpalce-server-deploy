@@ -25,14 +25,17 @@ export class CartService {
     @Inject(DRIZZLE) private readonly db: DrizzleService,
     private readonly companyService: CompanyService,
   ) {}
+  private async resolveCompanyId(domain: string): Promise<string> {
+    const filterDomain = domainExtractor(domain);
+    return this.companyService.find(filterDomain);
+  }
   async create(
     createCartDto: CreateCartDto,
     customerId: string,
     domain: string,
   ) {
     try {
-      const filteredDomain = domainExtractor(domain);
-      const companyId = await this.companyService.find(filteredDomain);
+      const companyId = await this.resolveCompanyId(domain);
       if (!companyId) {
         throw new HttpException('Company not found', HttpStatus.NOT_FOUND);
       }
@@ -139,8 +142,7 @@ export class CartService {
   async findAll(customerId: string, domain: string) {
     try {
       console.log('customerId', customerId);
-      const filteredDomain = domainExtractor(domain);
-      const companyId = await this.companyService.find(filteredDomain);
+      const companyId = await this.resolveCompanyId(domain);
       const [isUserCartExits] = await this.db
         .select({ id: carts.id })
         .from(carts)
@@ -219,9 +221,7 @@ export class CartService {
 
   async findOne(productVariantId: string, customerId: string, domain: string) {
     try {
-      const filteredDomain = domainExtractor(domain);
-
-      const companyId = await this.companyService.find(filteredDomain);
+      const companyId = await this.resolveCompanyId(domain);
       const [isUserCartExits] = await this.db
         .select({ id: carts.id })
         .from(carts)
@@ -321,8 +321,7 @@ export class CartService {
     domain: string,
   ) {
     try {
-      const filteredDomain = domainExtractor(domain);
-      const companyId = await this.companyService.find(filteredDomain);
+      const companyId = await this.resolveCompanyId(domain);
       const [isUserCartExits] = await this.db
         .select({ id: carts.id })
         .from(carts)

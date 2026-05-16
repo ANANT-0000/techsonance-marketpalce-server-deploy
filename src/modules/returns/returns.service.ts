@@ -76,6 +76,11 @@ export class ReturnsService {
     private readonly mailService: MailService,
   ) {}
 
+  private async resolveCompanyId(domain: string): Promise<string> {
+    const filteredDomain = domainExtractor(domain);
+    return this.companyService.find(filteredDomain);
+  }
+
   // ── Create return request ─────────────────────────────────────────────────
   async createReturnRequest(
     userId: string,
@@ -85,8 +90,7 @@ export class ReturnsService {
   ) {
     // console.log(" inservce dto",dto, "files",files)
     try {
-      const filteredDomain = domainExtractor(domain);
-      const companyId = await this.companyService.find(filteredDomain);
+      const companyId = await this.resolveCompanyId(domain);
       console.log('serching orderitem');
       const [userDetails] = await this.db
         .select({
@@ -207,8 +211,7 @@ export class ReturnsService {
   // ── Get customer returns ──────────────────────────────────────────────────
   async getCustomerReturns(userId: string, domain: string) {
     try {
-      const filteredDomain = domainExtractor(domain);
-      const companyId = await this.companyService.find(filteredDomain);
+      const companyId = await this.resolveCompanyId(domain);
 
       return await this.db.query.return_requests
         .findMany({
@@ -235,8 +238,7 @@ export class ReturnsService {
   // ── Get vendor returns list ───────────────────────────────────────────────
   async getVendorReturns(domain: string) {
     try {
-      const filteredDomain = domainExtractor(domain);
-      const companyId = await this.companyService.find(filteredDomain);
+      const companyId = await this.resolveCompanyId(domain);
 
       return await this.db.query.return_requests
         .findMany({
@@ -300,8 +302,7 @@ export class ReturnsService {
   // ── Get single vendor return by ID ────────────────────────────────────────
   async getVendorReturnById(returnId: string, domain: string) {
     try {
-      const filteredDomain = domainExtractor(domain);
-      const companyId = await this.companyService.find(filteredDomain);
+      const companyId = await this.resolveCompanyId(domain);
 
       const requestDetails = await this.db.query.return_requests
         .findFirst({
@@ -380,8 +381,7 @@ export class ReturnsService {
     dto: UpdateReturnDto,
   ) {
     try {
-      const filteredDomain = domainExtractor(domain);
-      const companyId = await this.companyService.find(filteredDomain);
+      const companyId = await this.resolveCompanyId(domain);
 
       // ── Fetch the full return request ──────────────────────────────────
       const [returnRequest] = await this.db

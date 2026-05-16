@@ -37,6 +37,12 @@ export class UsersService {
     private readonly companyService: CompanyService,
     private readonly mailService: MailService,
   ) {}
+
+  private async resolveCompanyId(domain: string): Promise<string> {
+    const filteredDomain = domainExtractor(domain);
+    return this.companyService.find(filteredDomain);
+  }
+
   // Find user by ID
   async findById(id: string) {
     try {
@@ -190,8 +196,7 @@ export class UsersService {
   async register(userData: CreateUserDto, domain: string) {
     try {
       // ── 1. Resolve company ──────────────────────────────────────────
-      const filteredDomain = domainExtractor(domain);
-      const companyId = await this.companyService.find(filteredDomain);
+      const companyId = await this.resolveCompanyId(domain);
 
       if (!companyId) {
         throw new HttpException('Company not found', HttpStatus.NOT_FOUND);
@@ -319,8 +324,7 @@ export class UsersService {
   async login(login: LoginDto, domain: string) {
     try {
       console.log(domain);
-      const filteredDomain = domainExtractor(domain);
-      const companyId = await this.companyService.find(filteredDomain);
+      const companyId = await this.resolveCompanyId(domain);
       if (!companyId) {
         throw new HttpException('Company not found', HttpStatus.UNAUTHORIZED);
       }
@@ -420,8 +424,7 @@ export class UsersService {
 
   async listCustomersByDomain(domain: string) {
     try {
-      const filteredDomain = domainExtractor(domain);
-      const companyId = await this.companyService.find(filteredDomain);
+      const companyId = await this.resolveCompanyId(domain);
       if (!companyId) {
         throw new HttpException('Company not found', HttpStatus.UNAUTHORIZED);
       }
@@ -576,8 +579,7 @@ export class UsersService {
         throw new HttpException('User not found', HttpStatus.NOT_FOUND);
       }
       const otp = randomInt(100000, 999999).toString();
-      const filteredDomain = domainExtractor(domain);
-      const companyId = await this.companyService.find(filteredDomain);
+      const companyId = await this.resolveCompanyId(domain);
       const [companyDetails] = await this.db
         .select()
         .from(company)
@@ -685,8 +687,7 @@ export class UsersService {
           'OTP has expired. Please request a new one.',
         );
       }
-      const filteredDomain = domainExtractor(domain);
-      const companyId = await this.companyService.find(filteredDomain);
+      const companyId = await this.resolveCompanyId(domain);
       if (!companyId) {
         throw new HttpException(
           'You cannot perform this action. Please try again.',

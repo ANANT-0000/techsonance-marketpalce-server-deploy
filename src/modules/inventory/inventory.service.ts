@@ -28,10 +28,14 @@ export class InventoryService {
     @Inject(DRIZZLE) private readonly db: DrizzleService,
     private readonly companyService: CompanyService,
   ) {}
+
+  private async resolveCompanyId(domain: string): Promise<string> {
+    const filteredDomain = domainExtractor(domain);
+    return this.companyService.find(filteredDomain);
+  }
   async create(dto: CreateInventoryDto, domain: string) {
     try {
-      const filteredDomain = domainExtractor(domain);
-      const companyId = await this.companyService.find(filteredDomain);
+      const companyId = await this.resolveCompanyId(domain);
       const [existingInventory] = await this.db
         .select({ id: inventory.id })
         .from(inventory)
@@ -75,8 +79,7 @@ export class InventoryService {
 
   async findAll(domain: string) {
     try {
-      const filteredDomain = domainExtractor(domain);
-      const companyId = await this.companyService.find(filteredDomain);
+      const companyId = await this.resolveCompanyId(domain);
       console.log(companyId);
 
       const rows = await this.db.query.inventory
@@ -302,8 +305,7 @@ export class InventoryService {
     domain: string,
   ) {
     try {
-      const filteredDomain = domainExtractor(domain);
-      const companyId = await this.companyService.find(filteredDomain);
+      const companyId = await this.resolveCompanyId(domain);
       console.log(
         'start updating stock',
         newQuantity,
@@ -514,8 +516,7 @@ export class InventoryService {
   }
   async remove(id: string, domain: string) {
     try {
-      const filteredDomain = domainExtractor(domain);
-      const companyId = await this.companyService.find(filteredDomain);
+      const companyId = await this.resolveCompanyId(domain);
       const [existing] = await this.db
         .select({ id: inventory.id })
         .from(inventory)

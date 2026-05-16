@@ -29,9 +29,6 @@ export const categories = pg.pgTable('categories', {
     .defaultNow()
     .$onUpdate(() => new Date()),
   company_id: pg.uuid('company_id').references(() => company.id),
-  vendor_id: pg
-    .uuid('vendor_id')
-    .references(() => vendor.id, { onDelete: 'cascade' }),
 });
 export const coupons = pg.pgTable('coupons', {
   id: pg.uuid('id').primaryKey().defaultRandom(),

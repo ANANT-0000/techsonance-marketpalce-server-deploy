@@ -18,6 +18,10 @@ export class AddressService {
     @Inject(DRIZZLE) private readonly db: DrizzleService,
     private readonly companyService: CompanyService,
   ) {}
+  private async resolveCompanyId(domain: string): Promise<string> {
+    const filterDomain = domainExtractor(domain);
+    return this.companyService.find(filterDomain);
+  }
   async findAddressesByUserId(userId: string) {
     if (!userId) {
       console.log('**************************** user ', userId);
@@ -96,8 +100,7 @@ export class AddressService {
       return new HttpException('Domain is required', HttpStatus.BAD_REQUEST);
     }
 
-    const filteredDomain = domainExtractor(domain);
-    const companyId = await this.companyService.find(filteredDomain);
+    const companyId = await this.resolveCompanyId(domain);
     try {
       const vendorUserId = await this.db.query.vendor.findFirst({
         where: eq(vendor.company_id, companyId),
@@ -138,8 +141,7 @@ export class AddressService {
   async createCompanyAddress(domain: string, addressData: CreateAddressDto) {
     try {
       console.log('recived', addressData);
-      const filteredDomain = domainExtractor(domain);
-      const companyId = await this.companyService.find(filteredDomain);
+      const companyId = await this.resolveCompanyId(domain);
       const vendorRecord = await this.db.query.vendor.findFirst({
         where: eq(vendor.company_id, companyId),
 

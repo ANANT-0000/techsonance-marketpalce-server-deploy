@@ -35,6 +35,11 @@ export class OrdersService {
     private readonly financesService: FinancesService,
   ) {}
 
+  private async resolveCompanyId(domain: string): Promise<string> {
+    const filteredDomain = domainExtractor(domain);
+    return this.companyService.find(filteredDomain);
+  }
+
   async createOrder({
     userId,
     companyId,
@@ -192,8 +197,7 @@ export class OrdersService {
           HttpStatus.BAD_REQUEST,
         );
       }
-      const filteredDomain = domainExtractor(domain);
-      const companyId = await this.companyService.find(filteredDomain);
+      const companyId = await this.resolveCompanyId(domain);
 
       const [orderResult] = await this.db.query.orders.findMany({
         where: and(eq(orders.id, orderId), eq(orders.company_id, companyId)),
@@ -431,8 +435,7 @@ export class OrdersService {
       if (!userId) {
         throw new HttpException('User ID is required', HttpStatus.BAD_REQUEST);
       }
-      const filteredDomain = domainExtractor(domain);
-      const companyId = await this.companyService.find(filteredDomain);
+      const companyId = await this.resolveCompanyId(domain);
 
       const ordersList = await this.db.query.orders
         .findMany({
@@ -538,8 +541,7 @@ export class OrdersService {
           HttpStatus.BAD_REQUEST,
         );
       }
-      const filteredDomain = domainExtractor(domain);
-      const companyId = await this.companyService.find(filteredDomain);
+      const companyId = await this.resolveCompanyId(domain);
 
       const orderDetails = await this.db.query.orders.findFirst({
         where: and(eq(orders.id, orderId), eq(orders.company_id, companyId)),
@@ -628,8 +630,7 @@ export class OrdersService {
     status?: OrderStatus | undefined,
   ) {
     try {
-      const filteredDomain = domainExtractor(domain);
-      const companyId = await this.companyService.find(filteredDomain);
+      const companyId = await this.resolveCompanyId(domain);
       console.log(
         'order status \n',
         status,
@@ -734,8 +735,7 @@ export class OrdersService {
           HttpStatus.BAD_REQUEST,
         );
       }
-      const filteredDomain = domainExtractor(domain);
-      const companyId = await this.companyService.find(filteredDomain);
+      const companyId = await this.resolveCompanyId(domain);
       const row = await this.db.query.orders.findFirst({
         where: and(eq(orders.id, orderId), eq(orders.company_id, companyId)),
         columns: {
@@ -1017,8 +1017,7 @@ export class OrdersService {
   }
   async getPendingOrders(domain: string) {
     try {
-      const filteredDomain = domainExtractor(domain);
-      const companyId = await this.companyService.find(filteredDomain);
+      const companyId = await this.resolveCompanyId(domain);
       const result = await this.db.query.orders.findMany({
         where: eq(orders.company_id, companyId),
         with: {

@@ -38,10 +38,14 @@ export class OrderItemsService {
     private readonly mailService: MailService,
   ) {}
 
+  private async resolveCompanyId(domain: string): Promise<string> {
+    const filteredDomain = domainExtractor(domain);
+    return this.companyService.find(filteredDomain);
+  }
+
   async getOrderItemDetails(orderItemId: string, domain: string) {
     try {
-      const filteredDomain = domainExtractor(domain);
-      const companyId = await this.companyService.find(filteredDomain);
+      const companyId = await this.resolveCompanyId(domain);
       const itemExists = await this.db
         .select({ id: order_items.id })
         .from(order_items)
@@ -104,11 +108,10 @@ export class OrderItemsService {
     newStatus: OrderStatus,
     domain: string,
   ) {
-    const filteredDomain = domainExtractor(domain);
-    const companyId = await this.companyService.find(filteredDomain);
+    const companyId = await this.resolveCompanyId(domain);
     if (!companyId) {
       throw new HttpException(
-        `Company not found ${filteredDomain}`,
+        `Company not found ${domain}`,
         HttpStatus.NOT_FOUND,
       );
     }
@@ -193,8 +196,7 @@ export class OrderItemsService {
       console.log(
         `Cancelling order item ${orderItemId} for user ${userId} with reason: ${cancelReason} in company ${domain}`,
       );
-      const filteredDomain = domainExtractor(domain);
-      const companyId = await this.companyService.find(filteredDomain);
+      const companyId = await this.resolveCompanyId(domain);
       console.log('finding user...');
       const [userRecord] = await this.db
         .select({ role_id: user_and_company.role_id, id: user.id })

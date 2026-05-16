@@ -12,6 +12,12 @@ export class WishlistService {
     @Inject(DRIZZLE) private readonly db: DrizzleService,
     private readonly companyService: CompanyService,
   ) {}
+
+  private async resolveCompanyId(domain: string): Promise<string> {
+    const filteredDomain = domainExtractor(domain);
+    return this.companyService.find(filteredDomain);
+  }
+
   async create(productVariantId: string, customerId: string, domain: string) {
     if (!domain) {
       throw new HttpException(
@@ -21,8 +27,7 @@ export class WishlistService {
     }
     console.log('productVariantId', productVariantId);
     console.log('customerId', customerId);
-    const filteredDomain = domainExtractor(domain);
-    const companyId = await this.companyService.find(filteredDomain);
+    const companyId = await this.resolveCompanyId(domain);
     const [variantExists] = await this.db
       .select({ id: product_variants.id })
       .from(product_variants)
@@ -155,8 +160,7 @@ export class WishlistService {
       );
     }
     try {
-      const filteredDomain = domainExtractor(domain);
-      const companyId = await this.companyService.find(filteredDomain);
+      const companyId = await this.resolveCompanyId(domain);
       const wishlistData = await this.db.query.wishlist.findMany({
         where: and(
           eq(wishlist.user_id, customerId),
@@ -204,8 +208,7 @@ export class WishlistService {
       );
     }
 
-    const filteredDomain = domainExtractor(domain);
-    const companyId = await this.companyService.find(filteredDomain);
+    const companyId = await this.resolveCompanyId(domain);
     try {
       const [wishlistRecord] = await this.db
         .select({ id: wishlist.id })

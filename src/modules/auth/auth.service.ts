@@ -37,6 +37,11 @@ export class AuthService {
     private readonly companyService: CompanyService,
   ) { }
 
+  private async resolveCompanyId(domain: string): Promise<string> {
+    const filteredDomain = domainExtractor(domain);
+    return this.companyService.find(filteredDomain);
+  }
+
   async validateUser(userId: string, email: string) {
     const user = await this.usersService.findByPayload({
       sub: userId,
@@ -112,8 +117,7 @@ export class AuthService {
         throw new HttpException('User not found', HttpStatus.NOT_FOUND);
       }
       const otp = randomInt(100000, 999999).toString();
-      const filteredDomain = domainExtractor(domain);
-      const companyId = await this.companyService.find(filteredDomain);
+      const companyId = await this.resolveCompanyId(domain);
       const [companyDetails] = await this.db
         .select()
         .from(company)

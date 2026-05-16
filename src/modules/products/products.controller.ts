@@ -67,6 +67,11 @@ export class ProductsController {
     console.log('get all products');
     return await this.productsService.getAllProducts(domain);
   }
+  @Get('options')
+  async getAllProductOptions(@Headers('company-domain') domain: string) {
+    console.log('get all product options');
+    return await this.productsService.getAllProductOptions(domain);
+  }
   @Get('active')
   @UseGuards(JwtAuthGuard, RoleGuard)
   @Roles(Role.ADMIN, Role.VENDOR)

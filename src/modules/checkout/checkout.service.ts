@@ -25,6 +25,11 @@ export class CheckoutService {
     private readonly companyService: CompanyService,
     private readonly mailService: MailService,
   ) {}
+
+  private async resolveCompanyId(domain: string): Promise<string> {
+    const filteredDomain = domainExtractor(domain);
+    return this.companyService.find(filteredDomain);
+  }
   async initiateCheckout(
     userId: string,
     initiateCheckoutDto: InitiateCheckoutDto,
@@ -46,8 +51,7 @@ export class CheckoutService {
         HttpStatus.BAD_REQUEST,
       );
     }
-    const filteredDomain = domainExtractor(domain);
-    const companyId = await this.companyService.find(filteredDomain);
+    const companyId = await this.resolveCompanyId(domain);
 
     const addressRecord = await this.db
       .select()
@@ -90,9 +94,7 @@ export class CheckoutService {
     console.log(orderId, '==orderId');
     console.log('verifyCheckoutDto check', dto);
 
-    const filteredDomain = domainExtractor(domain);
-    
-    const companyId = await this.companyService.find(filteredDomain);
+    const companyId = await this.resolveCompanyId(domain);
     if (!companyId) {
       throw new HttpException('Company not found', HttpStatus.NOT_FOUND);
     }

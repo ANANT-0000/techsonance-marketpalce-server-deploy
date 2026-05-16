@@ -3,6 +3,7 @@ import {
   Controller,
   Delete,
   Get,
+  Headers,
   HttpCode,
   HttpStatus,
   Param,
@@ -22,54 +23,45 @@ import { Roles } from '../../common/decorators/roles.decorator';
   path: 'categories',
 })
 export class CategoryController {
-  constructor(private readonly categoryService: CategoryService) { }
-  @Get(':vendorId')
-  findByVendorId(@Param('vendorId') vendorId: string) {
-    return this.categoryService.findByVendorId(vendorId);
-  }
-  @Post(':vendorId')
-  @HttpCode(HttpStatus.CREATED)
-  @UseGuards(JwtAuthGuard, RoleGuard)
-  @Roles(Role.ADMIN, Role.VENDOR)
-  create(
-    @Param('vendorId') vendorId: string,
-    @Body('companyId') companyId: string,
-    @Body('category') createCategoryDto: CreateCategoryDto,
-  ) {
-    console.log(
-      'Received request to create category for vendor:',
-      vendorId,
-      companyId,
-    );
-    console.log('Category data:', createCategoryDto);
-    return this.categoryService.create(createCategoryDto, vendorId, companyId);
-  }
+  constructor(private readonly categoryService: CategoryService) {}
+
   @Post('create-many-categories')
   createMany(
-    @Body('vendorId') vendorId: string,
-    @Body('companyId') companyId: string,
+    @Headers('company-domain') domain: string,
     @Body('categories') createCategoryDtos: CreateCategoryDto[],
   ) {
-    return this.categoryService.createMany(
-      createCategoryDtos,
-      vendorId,
-      companyId,
-    );
+    return this.categoryService.createMany(createCategoryDtos, domain);
   }
-  @Get(':vendorId/:id')
-  findOne(@Param('vendorId') vendorId: string, @Param('id') id: string) {
-    return this.categoryService.findOne(id, vendorId);
+  @Get()
+  findAll(@Headers('company-domain') domain: string) {
+    return this.categoryService.findAll(domain);
   }
-  @Patch(':vendorId/:id')
+  @Post()
+  @HttpCode(HttpStatus.CREATED)
+  // @UseGuards(JwtAuthGuard, RoleGuard)
+  // @Roles(Role.ADMIN, Role.VENDOR)
+  create(
+    @Headers('company-domain') domain: string,
+    @Body('category') createCategoryDto:any,
+  ) {
+    console.log('Received request to create category for domain:', domain);
+    console.log('Category data:', createCategoryDto);
+    return this.categoryService.create(createCategoryDto, domain);
+  }
+  @Get(':id')
+  findOne(@Headers('company-domain') domain: string, @Param('id') id: string) {
+    return this.categoryService.findOne(id, domain);
+  }
+  @Patch(':id')
   update(
-    @Param('vendorId') vendorId: string,
+    @Headers('company-domain') domain: string,
     @Param('id') id: string,
     @Body('category') updateCategoryDto: CreateCategoryDto,
   ) {
-    return this.categoryService.update(id, vendorId, updateCategoryDto);
+    return this.categoryService.update(id, domain, updateCategoryDto);
   }
-  @Delete(':vendorId/:id')
-  delete(@Param('vendorId') vendorId: string, @Param('id') id: string) {
-    return this.categoryService.delete(id, vendorId);
+  @Delete(':id')
+  delete(@Headers('company-domain') domain: string, @Param('id') id: string) {
+    return this.categoryService.delete(id, domain);
   }
 }

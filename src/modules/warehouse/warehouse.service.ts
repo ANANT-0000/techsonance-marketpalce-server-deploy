@@ -21,10 +21,15 @@ export class WarehouseService {
     @Inject(DRIZZLE) private readonly db: DrizzleService,
     private readonly companyService: CompanyService,
   ) {}
+
+  private async resolveCompanyId(domain: string): Promise<string> {
+    const filteredDomain = domainExtractor(domain);
+    return this.companyService.find(filteredDomain);
+  }
+
   async create(warehouseAddressDto: warehouseAddressDto, domain: string) {
     try {
-      const filteredDomain = domainExtractor(domain);
-      const companyId = await this.companyService.find(filteredDomain);
+      const companyId = await this.resolveCompanyId(domain);
       console.log('creating warehouse', warehouseAddressDto);
       return await this.db.transaction(async (tx) => {
         const [existingWarehouse] = await tx
@@ -100,8 +105,7 @@ export class WarehouseService {
 
   async findAll(domain: string) {
     try {
-      const filteredDomain = domainExtractor(domain);
-      const companyId = await this.companyService.find(filteredDomain);
+      const companyId = await this.resolveCompanyId(domain);
       return await this.db.query.warehouse
         .findMany({
           where: eq(warehouse.company_id, companyId),
@@ -132,8 +136,7 @@ export class WarehouseService {
   }
   async findOptions(domain: string) {
     try {
-      const filteredDomain = domainExtractor(domain);
-      const companyId = await this.companyService.find(filteredDomain);
+      const companyId = await this.resolveCompanyId(domain);
       return await this.db.query.warehouse
         .findMany({
           where: eq(warehouse.company_id, companyId),
@@ -161,8 +164,7 @@ export class WarehouseService {
   }
   async findOne(id: string, domain: string) {
     try {
-      const filteredDomain = domainExtractor(domain);
-      const companyId = await this.companyService.find(filteredDomain);
+      const companyId = await this.resolveCompanyId(domain);
       const warehouseRecord = await this.db.query.warehouse
         .findFirst({
           where: and(eq(warehouse.id, id), eq(warehouse.company_id, companyId)),
@@ -295,8 +297,7 @@ export class WarehouseService {
 
   async remove(id: string, domain: string) {
     try {
-      const filteredDomain = domainExtractor(domain);
-      const companyId = await this.companyService.find(filteredDomain);
+      const companyId = await this.resolveCompanyId(domain);
       console.log('deleting warehouse');
       const deleted = await this.db
         .delete(warehouse)

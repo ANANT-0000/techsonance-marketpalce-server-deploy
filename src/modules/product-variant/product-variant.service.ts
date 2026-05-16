@@ -30,6 +30,12 @@ export class ProductVariantService {
     private inventoryService: InventoryService,
     private readonly companyService: CompanyService,
   ) {}
+
+  private async resolveCompanyId(domain: string): Promise<string> {
+    const filteredDomain = domainExtractor(domain);
+    return this.companyService.find(filteredDomain);
+  }
+
   async create(
     createProductVariantDto: CreateProductVariantDto,
     domain: string,
@@ -48,8 +54,7 @@ export class ProductVariantService {
         cause: new Error('Product ID is required'),
       });
     }
-    const filteredDomain = domainExtractor(domain);
-    const companyId = await this.companyService.find(filteredDomain);
+    const companyId = await this.resolveCompanyId(domain);
     console.log('creating product variant..');
     const [productId] = await this.db
       .select({ id: products.id })
@@ -308,8 +313,7 @@ export class ProductVariantService {
           HttpStatus.BAD_REQUEST,
         );
       }
-      const filteredDomain = domainExtractor(domain);
-      const companyId = await this.companyService.find(filteredDomain);
+      const companyId = await this.resolveCompanyId(domain);
       const result = await this.db.transaction(async (tx) => {
         const [existingVariant] = await tx
           .select({

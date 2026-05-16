@@ -32,10 +32,14 @@ export class FinancesService {
     private readonly companyService: CompanyService,
   ) {}
 
+  private async resolveCompanyId(domain: string): Promise<string> {
+    const filteredDomain = domainExtractor(domain);
+    return this.companyService.find(filteredDomain);
+  }
+
   async getVendorEarnings(domain: string) {
     try {
-      const filteredDomain = domainExtractor(domain);
-      const companyId = await this.companyService.find(filteredDomain);
+      const companyId = await this.resolveCompanyId(domain);
 
       // Using Drizzle's Relational Query API
       // This automatically checks your schema relations and connects the IDs
@@ -203,8 +207,7 @@ export class FinancesService {
   }
   // 1. GST Registrations
   async getGstRegistrations(domain: string) {
-    const filteredDomain = domainExtractor(domain);
-    const companyId = await this.companyService.find(filteredDomain);
+    const companyId = await this.resolveCompanyId(domain);
 
     const records = await this.db.query.gst_registrations.findMany({
       where: eq(gst_registrations.company_id, companyId),
@@ -214,8 +217,7 @@ export class FinancesService {
   }
 
   async addGstRegistration(domain: string, data: any) {
-    const filteredDomain = domainExtractor(domain);
-    const companyId = await this.companyService.find(filteredDomain);
+    const companyId = await this.resolveCompanyId(domain);
     console.log(
       'Adding GST Registration for Company ID:',
       companyId,
@@ -251,8 +253,7 @@ export class FinancesService {
     };
   }
   async createTaxProfile(domain: string, data: any) {
-    const filteredDomain = domainExtractor(domain);
-    const companyId = await this.companyService.find(filteredDomain);
+    const companyId = await this.resolveCompanyId(domain);
 
     const newProfile = await this.db
       .insert(tax_profiles)
@@ -269,8 +270,7 @@ export class FinancesService {
 
   // 2. Create Tax Rate (Combines Tax Type + Tax Rate insertion)
   async createTaxRate(domain: string, data: any) {
-    const filteredDomain = domainExtractor(domain);
-    const companyId = await this.companyService.find(filteredDomain);
+    const companyId = await this.resolveCompanyId(domain);
 
     // Step A: Insert into tax_types
     const newTaxType = await this.db
@@ -311,8 +311,7 @@ export class FinancesService {
   }
   // 2. Tax Profiles
   async getTaxProfiles(domain: string) {
-    const filteredDomain = domainExtractor(domain);
-    const companyId = await this.companyService.find(filteredDomain);
+    const companyId = await this.resolveCompanyId(domain);
 
     const records = await this.db.query.tax_profiles.findMany({
       where: eq(tax_profiles.company_id, companyId),
@@ -323,8 +322,7 @@ export class FinancesService {
 
   // 3. Tax Rates
   async getTaxRates(domain: string) {
-    const filteredDomain = domainExtractor(domain);
-    const companyId = await this.companyService.find(filteredDomain);
+    const companyId = await this.resolveCompanyId(domain);
 
     const records = await this.db.query.tax_rates.findMany({
       where: eq(tax_rates.company_id, companyId),
@@ -333,8 +331,7 @@ export class FinancesService {
     return records;
   }
   async getTaxRateOptions(domain: string) {
-    const filteredDomain = domainExtractor(domain);
-    const companyId = await this.companyService.find(filteredDomain);
+    const companyId = await this.resolveCompanyId(domain);
 
     const records = await this.db.query.tax_rates.findMany({
       where: eq(tax_rates.company_id, companyId),
@@ -346,8 +343,7 @@ export class FinancesService {
 
   // 4. Product Tax Mapping (The Bridge)
   async getProductTaxMapping(domain: string) {
-    const filteredDomain = domainExtractor(domain);
-    const companyId = await this.companyService.find(filteredDomain);
+    const companyId = await this.resolveCompanyId(domain);
 
     // Because a product can have multiple variants (and thus multiple SKUs),
     // we use an aggregation to grab either the first SKU or an array of SKUs.
@@ -391,8 +387,7 @@ export class FinancesService {
 
   // 5. GST Invoices
   async getGstInvoices(domain: string) {
-    const filteredDomain = domainExtractor(domain);
-    const companyId = await this.companyService.find(filteredDomain);
+    const companyId = await this.resolveCompanyId(domain);
 
     const records = await this.db.query.gst_invoices.findMany({
       where: eq(gst_invoices.company_id, companyId),
@@ -401,8 +396,7 @@ export class FinancesService {
     return { success: true, data: records };
   }
   async getSingleGstRegistration(id: string, domain: string) {
-    const filteredDomain = domainExtractor(domain);
-    const companyId = await this.companyService.find(filteredDomain);
+    const companyId = await this.resolveCompanyId(domain);
 
     const record = await this.db.query.gst_registrations.findFirst({
       where: and(
@@ -415,8 +409,7 @@ export class FinancesService {
 
   // Handle the PATCH update
   async updateGstRegistration(id: string, domain: string, data: any) {
-    const filteredDomain = domainExtractor(domain);
-    const companyId = await this.companyService.find(filteredDomain);
+    const companyId = await this.resolveCompanyId(domain);
 
     const updatedRecord = await this.db
       .update(gst_registrations)
@@ -452,8 +445,7 @@ export class FinancesService {
 
   // --- REPEAT PATTERN FOR PROFILES & RATES ---
   async updateTaxProfile(id: string, domain: string, data: any) {
-    const filteredDomain = domainExtractor(domain);
-    const companyId = await this.companyService.find(filteredDomain);
+    const companyId = await this.resolveCompanyId(domain);
 
     const updated = await this.db
       .update(tax_profiles)
@@ -474,8 +466,7 @@ export class FinancesService {
     domain: string,
     data: { product_id: string; tax_rate_id: string },
   ) {
-    const filteredDomain = domainExtractor(domain);
-    const companyId = await this.companyService.find(filteredDomain); // Used for security validation if needed
+    const companyId = await this.resolveCompanyId(domain); // Used for security validation if needed
 
     // Check if the product already has a tax mapped
     const existingMapping = await this.db.query.product_tax.findFirst({
@@ -514,8 +505,7 @@ export class FinancesService {
     domain: string,
     data: { product_ids: string[]; tax_rate_id: string },
   ) {
-    const filteredDomain = domainExtractor(domain);
-    const companyId = await this.companyService.find(filteredDomain);
+    const companyId = await this.resolveCompanyId(domain);
 
     // Prepare the batch data
     const valuesToUpsert = data.product_ids.map((id) => ({

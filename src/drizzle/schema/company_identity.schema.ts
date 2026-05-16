@@ -1,7 +1,7 @@
 import * as pg from 'drizzle-orm/pg-core';
 import { company } from './main.schema';
 import { address } from './users.schema';
-import {  templates, vendor_document } from './utils.schema';
+import { templates, vendor_document } from './utils.schema';
 
 // ================================================================
 // COMPANY IDENTITY SCHEMA

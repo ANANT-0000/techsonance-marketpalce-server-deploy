@@ -34,12 +34,22 @@ export class ProductsService {
     private inventoryService: InventoryService,
     private readonly companyService: CompanyService,
   ) {}
-
+  private async resolveCompanyId(domain: string): Promise<string> {
+    console.log(
+      `[ProductPoliciesService.resolveCompanyId] Resolving company for domain: ${domain}`,
+    );
+    const filterDomain = domainExtractor(domain);
+    console.log(
+      `[ProductPoliciesService.resolveCompanyId] Extracted filter domain: ${filterDomain}`,
+    );
+    console.log(
+      `[ProductPoliciesService.resolveCompanyId] Querying CompanyService.find(...)`,
+    );
+    return this.companyService.find(filterDomain);
+  }
   async getAllProducts(domain: string) {
     try {
-      console.log('companyId', domain);
-      const filteredDomain = domainExtractor(domain);
-      const companyId = await this.companyService.find(filteredDomain);
+      const companyId = await this.resolveCompanyId(domain);
       const testSelect = await this.db
         .select({ id: products.id, name: products.name })
         .from(products)
@@ -86,6 +96,25 @@ export class ProductsService {
       });
     }
   }
+  async getAllProductOptions(domain: string) {
+    try {
+      const companyId = await this.resolveCompanyId(domain);
+      const productOptions = await this.db
+        .select({ id: products.id, name: products.name })
+        .from(products)
+        .where(eq(products.company_id, companyId))
+        .catch((e) => {
+          console.log('error in fetching products', e);
+          return [];
+        });
+      console.log('response product ', productOptions);
+      return productOptions;
+    } catch (error) {
+      throw new InternalServerErrorException('Failed to fetch products', {
+        cause: error,
+      });
+    }
+  }
   async getProductMainDetails(productId: string, domain: string) {
     try {
       console.log(productId);
@@ -124,8 +153,7 @@ export class ProductsService {
 
   async getProductById(productId: string, domain: string) {
     try {
-      const filteredDomain = domainExtractor(domain);
-      const companyId = await this.companyService.find(filteredDomain);
+      const companyId = await this.resolveCompanyId(domain);
       const productRecord = await this.db.query.products
         .findFirst({
           where: and(
@@ -242,8 +270,7 @@ export class ProductsService {
   }
   async getActiveProducts(domain: string) {
     try {
-      const filteredDomain = domainExtractor(domain);
-      const companyId = await this.companyService.find(filteredDomain);
+      const companyId = await this.resolveCompanyId(domain);
       const result = await this.db.query.products.findMany({
         where: and(eq(products.company_id, companyId)),
         columns: {
@@ -306,8 +333,7 @@ export class ProductsService {
     }
     console.log('domain', domain);
     try {
-      const filteredDomain = domainExtractor(domain);
-      const companyId = await this.companyService.find(filteredDomain);
+      const companyId = await this.resolveCompanyId(domain);
       return await this.db.transaction(async (tx) => {
         console.log('productDto.category_id', productDto.category_id);
         console.log('productDto.name', productDto.name);

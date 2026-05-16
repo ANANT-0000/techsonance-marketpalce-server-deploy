@@ -31,6 +31,11 @@ export class RefundsService {
     private readonly companyService: CompanyService,
   ) {}
 
+  private async resolveCompanyId(domain: string): Promise<string> {
+    const filteredDomain = domainExtractor(domain);
+    return this.companyService.find(filteredDomain);
+  }
+
   async initiateRefund({
     orderId,
     orderItemId,
@@ -44,8 +49,7 @@ export class RefundsService {
   }) {
     try {
       // domain can be a domain string OR a company UUID (called internally from returns.service)
-      const filteredDomain = domainExtractor(domain);
-      const companyId = await this.companyService.find(filteredDomain);
+      const companyId = await this.resolveCompanyId(domain);
 
       // ── 1. Validate order belongs to company ─────────────────────────
       const [order] = await this.db
@@ -250,8 +254,7 @@ export class RefundsService {
   // ── Get refund status for a specific order ───────────────────────────────
   async getRefundStatus(orderId: string, domain: string) {
     try {
-      const filteredDomain = domainExtractor(domain);
-      const companyId = await this.companyService.find(filteredDomain);
+      const companyId = await this.resolveCompanyId(domain);
 
       const refundRecords = await this.db.query.refunds.findMany({
         where: and(
@@ -322,8 +325,7 @@ export class RefundsService {
   // ── Mark a refund as processed (vendor confirms money sent) ─────────────
   async processRefund(refundId: string, domain: string) {
     try {
-      const filteredDomain = domainExtractor(domain);
-      const companyId = await this.companyService.find(filteredDomain);
+      const companyId = await this.resolveCompanyId(domain);
       console.log('refundId', refundId);
       const [existingRefund] = await this.db
         .select()
@@ -432,8 +434,7 @@ export class RefundsService {
 
   async getCompanyRefunds(domain: string) {
     try {
-      const filteredDomain = domainExtractor(domain);
-      const companyId = await this.companyService.find(filteredDomain);
+      const companyId = await this.resolveCompanyId(domain);
 
       // 1. Fetch raw data
       const refundRecords = await this.db.query.refunds.findMany({

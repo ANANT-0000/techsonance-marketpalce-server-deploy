@@ -19,13 +19,17 @@ export class ProductReviewService {
     private readonly companyService: CompanyService,
   ) {}
 
+  private async resolveCompanyId(domain: string): Promise<string> {
+    const filteredDomain = domainExtractor(domain);
+    return this.companyService.find(filteredDomain);
+  }
+
   async create(
     createProductReviewDto: CreateProductReviewDto,
     userId: string,
     domain: string,
   ) {
-    const filteredDomain = domainExtractor(domain);
-    const companyId = await this.companyService.find(filteredDomain);
+    const companyId = await this.resolveCompanyId(domain);
     const [newReview] = await this.db
       .insert(product_reviews)
       .values({
