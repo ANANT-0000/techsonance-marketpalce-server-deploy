@@ -12,7 +12,10 @@ import {
   InternalServerErrorException,
   NotFoundException,
 } from '@nestjs/common';
-import { CreateProductPolicyDto } from './dto/create-product-policy.dto';
+import {
+  CreateProductPolicyDto,
+  PolicyType,
+} from './dto/create-product-policy.dto';
 import { UpdateProductPolicyDto } from './dto/update-product-policy.dto';
 import { DRIZZLE, type DrizzleService } from '../../drizzle/drizzle.module';
 import { and, eq } from 'drizzle-orm';
@@ -540,7 +543,17 @@ export class ProductPoliciesService {
       return await this.db
         .select()
         .from(product_policy_override)
-        .where(eq(product_policy_override.product_id, productId));
+        .where(eq(product_policy_override.product_id, productId))
+        .catch((error) => {
+          console.error(
+            '[ProductPoliciesService.getProductPolicyOverrides] Failed while fetching product policy overrides',
+            error,
+          );
+          throw new InternalServerErrorException(
+            'Failed to fetch product policy overrides',
+            { cause: error },
+          );
+        });
     } catch (error) {
       console.error(
         '[ProductPoliciesService.getProductPolicyOverrides] Failed while fetching product policy overrides',
@@ -674,11 +687,7 @@ export class ProductPoliciesService {
         snapshot,
       );
 
-      return {
-        message: 'Order item policy snapshot created successfully',
-        status: HttpStatus.CREATED,
-        data: snapshot,
-      };
+      return snapshot;
     } catch (error) {
       console.error(
         '[ProductPoliciesService.createOrderItemPolicySnapshot] Failed while creating order item policy snapshot',
@@ -726,6 +735,115 @@ export class ProductPoliciesService {
       if (error instanceof NotFoundException) throw error;
       throw new InternalServerErrorException(
         'Failed to fetch order item policy',
+        { cause: error },
+      );
+    }
+  }
+
+  async getCoverageOverview(domain: string, policyId?: string | null) {
+    if (!domain) throw new BadRequestException('A domain is required.');
+    const companyId = await this.resolveCompanyId(domain);
+    const whereCause = [eq(product_policies.company_id, companyId)];
+    if (policyId) {
+      whereCause.push(eq(product_policies.id, policyId));
+    }
+    try {
+      const policiesRecords = await this.db.query.product_policies
+        .findMany({
+          where: and(...whereCause),
+          with: {
+            categoryAssignments: {
+              columns: {
+                id: true,
+                policy_id: true,
+                priority: true,
+              },
+              with: {
+                category: {
+                  with: {
+                    products: {
+                      columns: {
+                        id: true,
+                        name: true,
+                      },
+                    },
+                  },
+                },
+              },
+            },
+            productOverrides: {
+              columns: {
+                id: true,
+                policy_id: true,
+                overrides_category: true,
+              },
+              with: {
+                product: {
+                  columns: {
+                    id: true,
+                    name: true,
+                  },
+                },
+              },
+            },
+          },
+        })
+        .catch((error) => {
+          console.error(
+            '[ProductPoliciesService.getCoverageOverview] Failed while fetching coverage overview',
+            error,
+          );
+          throw new InternalServerErrorException(
+            'Failed to fetch coverage overview',
+            { cause: error },
+          );
+        });
+
+      if (!policiesRecords.length) return { data: [] };
+      // 2. Map the relational data directly into your frontend structure
+      const coverageData = policiesRecords.map((policyRecord) => {
+        // Destructure to separate the base policy fields from the joined arrays
+        const { categoryAssignments, productOverrides, ...policy } =
+          policyRecord;
+        const inheritedProducts = categoryAssignments.flatMap((ca) => {
+          if (!ca.category || !ca.category.products) return [];
+
+          return ca.category.products.map((p) => ({
+            id: p.id,
+            name: p.name,
+            category_name: ca.category.name,
+          }));
+        });
+        return {
+          policy,
+          categories: categoryAssignments
+            .filter((ca) => ca.category)
+            .map((ca) => ({
+              id: ca.category.id,
+              assignment_id: ca.id,
+              name: ca.category.name,
+              priority: ca.priority,
+            })),
+          products: productOverrides
+            .filter((po) => po.product)
+            .map((po) => ({
+              id: po.product.id,
+              override_id: po.id,
+              name: po.product.name,
+              overrides_category: po.overrides_category,
+            })),
+          inherited_products: inheritedProducts,
+        };
+      });
+      console.log(
+        '[ProductPoliciesService.getCoverageOverview] Coverage data fetched:',
+        coverageData,
+      );
+      return coverageData;
+    } catch (error) {
+      console.error('Error fetching coverage overview:', error);
+      throw new InternalServerErrorException(
+        'Failed to fetch coverage overview',
         { cause: error },
       );
     }

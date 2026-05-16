@@ -7,6 +7,8 @@ import { InventoryModule } from '../inventory/inventory.module';
 import { MailModule } from '../../common/services/mail/mail.module';
 import { InvoiceModule } from '../invoice/invoice.module';
 import { FinancesModule } from '../finances/finances.module';
+import { ProductPoliciesModule } from '../product-policies/product-policies.module';
+import { PolicyDocumentService } from '../product-policies/policy-document.service';
 
 @Module({
   imports: [
@@ -16,9 +18,10 @@ import { FinancesModule } from '../finances/finances.module';
     MailModule,
     InvoiceModule,
     FinancesModule,
+    ProductPoliciesModule,
   ],
   controllers: [OrdersController],
-  providers: [OrdersService],
+  providers: [OrdersService, PolicyDocumentService],
   exports: [OrdersService],
 })
 export class OrdersModule {}

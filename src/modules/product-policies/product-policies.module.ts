@@ -1,14 +1,33 @@
-import { Module } from '@nestjs/common';
+import { Module, OnModuleInit } from '@nestjs/common';
 import { ProductPoliciesService } from './product-policies.service';
 import { ProductPoliciesController } from './product-policies.controller';
 import { DrizzleModule } from '../../drizzle/drizzle.module';
 
 import { CompanyModule } from '../company/company.module';
+import { PuppeteerWarrantyTemplate } from './templates/puppeteer-warranty.template';
+import { PolicyTemplateRegistry } from './policy-template.registry';
+import { PolicyDocumentService } from './policy-document.service';
+import { PolicyPayloadBuilderService } from './policy-payload-builder.service';
+import { UploadToCloudModule } from 'src/utils/upload-to-cloud/upload-to-cloud.module';
 
-@Module({
-  imports: [DrizzleModule, CompanyModule],
-  controllers: [ProductPoliciesController],
-  providers: [ProductPoliciesService],
-  exports: [ProductPoliciesService],
-})
-export class ProductPoliciesModule {}
+Module({
+  imports: [CompanyModule, UploadToCloudModule],
+  providers: [
+    ProductPoliciesService,
+    PolicyDocumentService,
+    PolicyPayloadBuilderService,
+    PolicyTemplateRegistry,
+    PuppeteerWarrantyTemplate,
+  ],
+  exports: [ProductPoliciesService, PolicyDocumentService],
+});
+export class ProductPoliciesModule implements OnModuleInit {
+  constructor(
+    private readonly templateRegistry: PolicyTemplateRegistry, // <-- Inject here
+    private readonly warrantyTemplate: PuppeteerWarrantyTemplate,
+  ) {}
+
+  onModuleInit() {
+    this.templateRegistry.register(this.warrantyTemplate);
+  }
+}

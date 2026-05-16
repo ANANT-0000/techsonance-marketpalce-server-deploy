@@ -3,6 +3,7 @@ export * from './main.schema';
 export * from './utils.schema';
 export * from './finance.schema';
 export * from './shop.schema';
+export * from './product_policy.schema';
 export * from './company_identity.schema';
 import { address, user, vendor } from './users.schema';
 import {
@@ -187,7 +188,7 @@ export const categoriesRelations = relations(categories, ({ one, many }) => ({
   children: many(categories, {
     relationName: 'sub_categories',
   }),
-  // company:one()
+  products: many(products),
 }));
 
 export const productVariantsRelations = relations(

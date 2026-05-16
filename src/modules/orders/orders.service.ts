@@ -9,6 +9,7 @@ import { and, desc, eq, gt, inArray, or } from 'drizzle-orm';
 import { DRIZZLE, type DrizzleService } from '../../drizzle/drizzle.module';
 import {
   gst_invoices,
+  order_item_policy,
   order_items,
   orders,
   orders_tax,
@@ -23,6 +24,7 @@ import { response } from 'express';
 import { domainExtractor } from '../../common/filters/domainExtractor.filter';
 import { InvoiceService } from '../invoice/invoice.service';
 import { FinancesService } from '../finances/finances.service';
+import { PolicyDocumentService } from '../product-policies/policy-document.service';
 
 @Injectable()
 export class OrdersService {
@@ -33,6 +35,7 @@ export class OrdersService {
     private readonly mailService: MailService,
     private readonly invoiceService: InvoiceService,
     private readonly financesService: FinancesService,
+    private readonly policyDocumentService: PolicyDocumentService,
   ) {}
 
   private async resolveCompanyId(domain: string): Promise<string> {
@@ -353,7 +356,38 @@ export class OrdersService {
               );
               // TODO: push to a retry queue (Bull/BullMQ) in production
             });
+          const itemIds = orderItemsRecord.map((item) => item.id);
 
+          if (itemIds.length > 0) {
+            // 2. Fetch policies for ALL items in the cart using inArray
+            const orderItemsWithPolicies = await tx // Note: better to use tx here instead of this.db
+              .select()
+              .from(order_item_policy)
+              .where(inArray(order_item_policy.order_item_id, itemIds));
+
+            // 3. Generate PDFs asynchronously in the background
+            for (const itemPolicy of orderItemsWithPolicies) {
+              // Ensure we safely cast/access the JSONB snapshot
+              const snapshot = itemPolicy.policy_snapshot as any;
+
+              if (snapshot?.generates_document) {
+                // Fire and forget
+                this.policyDocumentService
+                  .generatePolicyDocument(itemPolicy.order_item_id)
+                  .then(() =>
+                    console.log(
+                      `[OrdersService] Warranty PDF generated for item ${itemPolicy.order_item_id}`,
+                    ),
+                  )
+                  .catch((err) =>
+                    console.error(
+                      `[OrdersService] Failed to generate warranty for item ${itemPolicy.order_item_id}`,
+                      err,
+                    ),
+                  );
+              }
+            }
+          }
           return {
             success: true,
             orderId,

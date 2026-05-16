@@ -2,9 +2,9 @@
 
 import * as pg from 'drizzle-orm/pg-core';
 import { company } from './main.schema';
-import { vendor } from './users.schema';
 import { categories, order_items, products } from './shop.schema';
 import { templates } from './utils.schema';
+import { relations } from 'drizzle-orm';
 
 // Policy type enum — covers all real-world cases
 export const policyTypeEnum = pg.pgEnum('policy_type_enum', [
@@ -66,9 +66,6 @@ export const product_policies = pg.pgTable(
     company_id: pg
       .uuid('company_id')
       .references(() => company.id, { onDelete: 'cascade' }),
-    vendor_id: pg
-      .uuid('vendor_id')
-      .references(() => vendor.id, { onDelete: 'cascade' }),
     created_at: pg.timestamp('created_at').notNull().defaultNow(),
     updated_at: pg
       .timestamp('updated_at')
@@ -78,7 +75,6 @@ export const product_policies = pg.pgTable(
   },
   (table) => [
     pg.index('idx_policy_company_id').on(table.company_id),
-    pg.index('idx_policy_vendor_id').on(table.vendor_id),
     pg.index('idx_policy_type').on(table.policy_type),
   ],
 );
@@ -188,3 +184,58 @@ export const order_item_policy = pg.pgTable(
     pg.index('idx_oip_policy_end_date').on(table.policy_end_date), // for expiry queries
   ],
 );
+export const productPoliciesRelations = relations(
+  product_policies,
+  ({ one, many }) => ({
+    company: one(company, {
+      fields: [product_policies.company_id],
+      references: [company.id],
+    }),
+    document: one(templates, {
+      fields: [product_policies.document_id],
+      references: [templates.id],
+    }),
+    categoryAssignments: many(category_policy),
+    productOverrides: many(product_policy_override),
+    orderItemPolicies: many(order_item_policy),
+  }),
+);
+
+export const categoryPolicyRelations = relations(
+  category_policy,
+  ({ one }) => ({
+    category: one(categories, {
+      fields: [category_policy.category_id],
+      references: [categories.id],
+    }),
+    policy: one(product_policies, {
+      fields: [category_policy.policy_id],
+      references: [product_policies.id],
+    }),
+  }),
+);
+
+export const productPolicyOverride = relations(
+  product_policy_override,
+  ({ one }) => ({
+    product: one(products, {
+      fields: [product_policy_override.product_id],
+      references: [products.id],
+    }),
+    policy: one(product_policies, {
+      fields: [product_policy_override.policy_id],
+      references: [product_policies.id],
+    }),
+  }),
+);
+
+export const orderItemPolicy = relations(order_item_policy, ({ one }) => ({
+  orderItem: one(order_items, {
+    fields: [order_item_policy.order_item_id],
+    references: [order_items.id],
+  }),
+  policy: one(product_policies, {
+    fields: [order_item_policy.policy_id],
+    references: [product_policies.id],
+  }),
+}));

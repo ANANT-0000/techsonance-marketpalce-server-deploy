@@ -59,6 +59,7 @@ export class ProductPoliciesController {
 
   @Delete(':id')
   remove(@Param('id') id: string, @Headers('company-domain') domain: string) {
+    //@ts-ignore
     return this.productPoliciesService.delete(id, domain);
   }
 
@@ -113,5 +114,18 @@ export class ProductPoliciesController {
   @Get('order-item/:orderItemId')
   getOrderItemPolicy(@Param('orderItemId') orderItemId: string) {
     return this.productPoliciesService.getOrderItemPolicy(orderItemId);
+  }
+
+  @Get('coverage/overview')
+  getCoverageOverview(@Headers('company-domain') domain: string) {
+    return this.productPoliciesService.getCoverageOverview(domain);
+  }
+
+  @Get('coverage/:policyId')
+  getPolicyCoverageDetails(
+    @Param('policyId') policyId: string,
+    @Headers('company-domain') domain: string,
+  ) {
+    return this.productPoliciesService.getCoverageOverview(domain, policyId);
   }
 }
