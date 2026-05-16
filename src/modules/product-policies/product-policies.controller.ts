@@ -22,6 +22,10 @@ export class ProductPoliciesController {
     private readonly productPoliciesService: ProductPoliciesService,
   ) {}
 
+  // ==========================================
+  // BASE POLICY CRUD
+  // ==========================================
+
   @Post()
   create(
     @Body() createProductPolicyDto: CreateProductPolicyDto,
@@ -33,49 +37,6 @@ export class ProductPoliciesController {
   @Get()
   findAll(@Headers('company-domain') domain: string) {
     return this.productPoliciesService.findAll(domain);
-  }
-
-  @Post('category-assign')
-  assignCategoryPolicy(
-    @Body() dto: AssignCategoryPolicyDto,
-    @Headers('company-domain') domain: string,
-  ) {
-    return this.productPoliciesService.assignCategoryPolicy(dto, domain);
-  }
-
-  @Get('category/:categoryId')
-  getCategoryPolicies(@Param('categoryId') categoryId: string) {
-    return this.productPoliciesService.getCategoryPolicies(categoryId);
-  }
-
-  @Delete('category-assign/:id')
-  removeCategoryPolicy(@Param('id') id: string) {
-    return this.productPoliciesService.removeCategoryPolicy(id);
-  }
-
-  // ─── PRODUCT OVERRIDE ROUTES ───
-  @Post('product-override')
-  assignProductPolicyOverride(
-    @Body() dto: AssignProductPolicyOverrideDto,
-    @Headers('company-domain') domain: string,
-  ) {
-    return this.productPoliciesService.assignProductPolicyOverride(dto, domain);
-  }
-
-  @Get('product/:productId')
-  getProductPolicyOverrides(@Param('productId') productId: string) {
-    return this.productPoliciesService.getProductPolicyOverrides(productId);
-  }
-
-  @Delete('product-override/:id')
-  removeProductPolicyOverride(@Param('id') id: string) {
-    return this.productPoliciesService.removeProductPolicyOverride(id);
-  }
-
-  // ─── ORDER ITEM POLICY ROUTES ───
-  @Get('order-item/:orderItemId')
-  getOrderItemPolicy(@Param('orderItemId') orderItemId: string) {
-    return this.productPoliciesService.getOrderItemPolicy(orderItemId);
   }
 
   @Get(':id')
@@ -98,7 +59,59 @@ export class ProductPoliciesController {
 
   @Delete(':id')
   remove(@Param('id') id: string, @Headers('company-domain') domain: string) {
-    //@ts-ignore
     return this.productPoliciesService.delete(id, domain);
+  }
+
+  // ==========================================
+  // CATEGORY POLICY ASSIGNMENTS
+  // ==========================================
+
+  @Post('category-assign')
+  assignCategoryPolicy(
+    @Body() dto: AssignCategoryPolicyDto,
+    @Headers('company-domain') domain: string,
+  ) {
+    return this.productPoliciesService.assignCategoryPolicy(dto, domain);
+  }
+
+  @Get('category/:categoryId')
+  getCategoryPolicies(@Param('categoryId') categoryId: string) {
+    return this.productPoliciesService.getCategoryPolicies(categoryId);
+  }
+
+  @Delete('category-assign/:id')
+  removeCategoryPolicy(@Param('id') id: string) {
+    return this.productPoliciesService.removeCategoryPolicy(id);
+  }
+
+  // ==========================================
+  // PRODUCT POLICY OVERRIDES
+  // ==========================================
+
+  @Post('product-override')
+  assignProductPolicyOverride(
+    @Body() dto: AssignProductPolicyOverrideDto,
+    @Headers('company-domain') domain: string,
+  ) {
+    return this.productPoliciesService.assignProductPolicyOverride(dto, domain);
+  }
+
+  @Get('product-override/:productId')
+  getProductPolicyOverrides(@Param('productId') productId: string) {
+    return this.productPoliciesService.getProductPolicyOverrides(productId);
+  }
+
+  @Delete('product-override/:id')
+  removeProductPolicyOverride(@Param('id') id: string) {
+    return this.productPoliciesService.removeProductPolicyOverride(id);
+  }
+
+  // ==========================================
+  // ORDER ITEM POLICY SNAPSHOTS
+  // ==========================================
+
+  @Get('order-item/:orderItemId')
+  getOrderItemPolicy(@Param('orderItemId') orderItemId: string) {
+    return this.productPoliciesService.getOrderItemPolicy(orderItemId);
   }
 }
