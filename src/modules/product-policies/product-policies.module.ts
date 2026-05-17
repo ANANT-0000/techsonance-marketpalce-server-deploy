@@ -9,9 +9,8 @@ import { PolicyTemplateRegistry } from './policy-template.registry';
 import { PolicyDocumentService } from './policy-document.service';
 import { PolicyPayloadBuilderService } from './policy-payload-builder.service';
 import { UploadToCloudModule } from 'src/utils/upload-to-cloud/upload-to-cloud.module';
-
-Module({
-  imports: [CompanyModule, UploadToCloudModule],
+@Module({
+  imports: [DrizzleModule, CompanyModule, UploadToCloudModule],
   providers: [
     ProductPoliciesService,
     PolicyDocumentService,
@@ -19,11 +18,15 @@ Module({
     PolicyTemplateRegistry,
     PuppeteerWarrantyTemplate,
   ],
-  exports: [ProductPoliciesService, PolicyDocumentService],
-});
+  exports: [
+    ProductPoliciesService,
+    PolicyDocumentService,
+    PolicyTemplateRegistry,
+  ],
+})
 export class ProductPoliciesModule implements OnModuleInit {
   constructor(
-    private readonly templateRegistry: PolicyTemplateRegistry, // <-- Inject here
+    private readonly templateRegistry: PolicyTemplateRegistry,
     private readonly warrantyTemplate: PuppeteerWarrantyTemplate,
   ) {}
 

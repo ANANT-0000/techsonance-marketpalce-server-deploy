@@ -5,9 +5,16 @@ import { MailModule } from '../../common/services/mail/mail.module';
 import { CompanyModule } from '../company/company.module';
 import { InventoryModule } from '../inventory/inventory.module';
 import { DrizzleModule } from '../../drizzle/drizzle.module';
+import { ProductPoliciesModule } from '../product-policies/product-policies.module';
 
 @Module({
-  imports: [MailModule, CompanyModule, InventoryModule, DrizzleModule],
+  imports: [
+    MailModule,
+    CompanyModule,
+    InventoryModule,
+    DrizzleModule,
+    ProductPoliciesModule,
+  ],
   controllers: [OrderItemsController],
   providers: [OrderItemsService],
 })

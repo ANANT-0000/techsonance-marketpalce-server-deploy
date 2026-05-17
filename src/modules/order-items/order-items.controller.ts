@@ -3,16 +3,21 @@ import {
   Controller,
   Get,
   Headers,
+  NotFoundException,
   Param,
   Patch,
   Post,
 } from '@nestjs/common';
 import { OrderItemsService } from './order-items.service';
 import { CancelledByEnum } from '../../drizzle/types/types';
+import { ProductPoliciesService } from '../product-policies/product-policies.service';
 
 @Controller({ version: '1', path: 'order-items' })
 export class OrderItemsController {
-  constructor(private readonly orderItemsService: OrderItemsService) {}
+  constructor(
+    private readonly orderItemsService: OrderItemsService,
+    private readonly productPoliciesService: ProductPoliciesService,
+  ) {}
   @Get('test')
   test() {
     return 'Order items controller is working';
@@ -29,6 +34,23 @@ export class OrderItemsController {
   //   // Implement logic to update order item status
   //   return { message: 'Order item status updated successfully' };
   // }
+
+  @Get(':orderItemId/download-warranty')
+  async downloadWarrantyDocument(@Param('orderItemId') orderItemId: string) {
+    const policySnapshot =
+      await this.productPoliciesService.getOrderItemPolicy(orderItemId);
+
+    if (!policySnapshot.document_generated || !policySnapshot.document_url) {
+      throw new NotFoundException(
+        'Warranty document has not been generated yet or is not applicable.',
+      );
+    }
+
+    // Redirect the user directly to the Cloudinary/AWS PDF URL
+
+    return policySnapshot.document_url;
+  }
+
   @Patch(':orderItemId/cancel')
   async cancelOrderItem(
     @Param('orderItemId') orderItemId: string,
@@ -46,5 +68,4 @@ export class OrderItemsController {
       domain,
     );
   }
-
 }

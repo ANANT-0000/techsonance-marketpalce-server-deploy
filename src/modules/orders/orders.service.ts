@@ -8,6 +8,7 @@ import {
 import { and, desc, eq, gt, inArray, or } from 'drizzle-orm';
 import { DRIZZLE, type DrizzleService } from '../../drizzle/drizzle.module';
 import {
+  category_policy,
   gst_invoices,
   order_item_policy,
   order_items,
@@ -15,6 +16,9 @@ import {
   orders_tax,
   payments,
   product_images,
+  product_policy_override,
+  product_variants,
+  products,
 } from '../../drizzle/schema';
 import { OrderStatus, PaymentStatus } from '../../drizzle/types/types';
 import { CompanyService } from '../company/company.service';
@@ -25,6 +29,8 @@ import { domainExtractor } from '../../common/filters/domainExtractor.filter';
 import { InvoiceService } from '../invoice/invoice.service';
 import { FinancesService } from '../finances/finances.service';
 import { PolicyDocumentService } from '../product-policies/policy-document.service';
+import { ProductPoliciesService } from '../product-policies/product-policies.service';
+import { PolicySnapshot } from '../product-policies/interfaces/policy-document.interface';
 
 @Injectable()
 export class OrdersService {
@@ -36,6 +42,7 @@ export class OrdersService {
     private readonly invoiceService: InvoiceService,
     private readonly financesService: FinancesService,
     private readonly policyDocumentService: PolicyDocumentService,
+    private readonly productPoliciesService: ProductPoliciesService,
   ) {}
 
   private async resolveCompanyId(domain: string): Promise<string> {
@@ -148,7 +155,63 @@ export class OrdersService {
               { cause: error },
             );
           });
+        const insertedItems = await tx
+          .select({
+            id: order_items.id,
+            product_variant_id: order_items.product_variant_id,
+          })
+          .from(order_items)
+          .where(eq(order_items.order_id, newOrder.id));
 
+        for (const item of insertedItems) {
+          // Get product_id from variant
+          const [variant] = await tx
+            .select({ product_id: product_variants.product_id })
+            .from(product_variants)
+            .where(eq(product_variants.id, item.product_variant_id ?? ''));
+
+          // Check product override first, then category policy
+          const override = await tx
+            .select({ policy_id: product_policy_override.policy_id })
+            .from(product_policy_override)
+            .where(
+              eq(product_policy_override.product_id, variant.product_id ?? ''),
+            )
+            .limit(1);
+
+          let resolvedPolicyId = override[0]?.policy_id;
+
+          if (!resolvedPolicyId) {
+            // Fall back to category policy
+            const product = await tx
+              .select({ category_id: products.category_id })
+              .from(products)
+              .where(eq(products.id, variant.product_id ?? ''))
+              .limit(1);
+
+            const catPolicy = await tx
+              .select({ policy_id: category_policy.policy_id })
+              .from(category_policy)
+              .where(
+                eq(category_policy.category_id, product[0].category_id ?? ''),
+              )
+              .orderBy(category_policy.priority)
+              .limit(1);
+
+            resolvedPolicyId = catPolicy[0]?.policy_id;
+          }
+
+          if (resolvedPolicyId) {
+            await this.productPoliciesService.createOrderItemPolicySnapshot(
+              {
+                order_item_id: item.id,
+                policy_id: resolvedPolicyId,
+                policy_start_date: new Date().toISOString().split('T')[0],
+              },
+              companyId,
+            );
+          }
+        }
         // 7. Create payment record (PENDING — confirmed later via verifyCheckout)
         await tx
           .insert(payments)
@@ -354,29 +417,37 @@ export class OrdersService {
                 `[OrdersService] Background PDF generation failed for order ${orderId}:`,
                 err,
               );
-              // TODO: push to a retry queue (Bull/BullMQ) in production
             });
           const itemIds = orderItemsRecord.map((item) => item.id);
+          console.log(' [OrdersService] before if itemsIds: ', itemIds);
 
           if (itemIds.length > 0) {
             // 2. Fetch policies for ALL items in the cart using inArray
-            const orderItemsWithPolicies = await tx // Note: better to use tx here instead of this.db
+            console.log(' [OrdersService] itemsIds: ', itemIds);
+            const orderItemsWithPolicies = await tx
               .select()
               .from(order_item_policy)
-              .where(inArray(order_item_policy.order_item_id, itemIds));
+              .where(inArray(order_item_policy.order_item_id, itemIds))
+              .catch((error) => {
+                console.error('Error fetching order item policies:', error);
+                throw new InternalServerErrorException(
+                  'Failed to fetch order item policies',
+                  { cause: error },
+                );
+              });
 
             // 3. Generate PDFs asynchronously in the background
             for (const itemPolicy of orderItemsWithPolicies) {
               // Ensure we safely cast/access the JSONB snapshot
-              const snapshot = itemPolicy.policy_snapshot as any;
-
+              const snapshot = itemPolicy.policy_snapshot as PolicySnapshot;
+              console.log('Policy Snapshot:', snapshot);
               if (snapshot?.generates_document) {
                 // Fire and forget
                 this.policyDocumentService
                   .generatePolicyDocument(itemPolicy.order_item_id)
                   .then(() =>
                     console.log(
-                      `[OrdersService] Warranty PDF generated for item ${itemPolicy.order_item_id}`,
+                      `[   Warranty PDF generated for item ${itemPolicy.order_item_id}`,
                     ),
                   )
                   .catch((err) =>

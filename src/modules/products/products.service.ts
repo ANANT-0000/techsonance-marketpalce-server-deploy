@@ -465,6 +465,7 @@ export class ProductsService {
     }
   }
   async updateProduct(
+    domain: string,
     productVariantId: string,
     product: UpdateProductDto,
     imagesToDelete?: string[],
@@ -479,7 +480,7 @@ export class ProductsService {
         HttpStatus.BAD_REQUEST,
       );
     }
-    const companyId = await this.companyService.find(productVariantId);
+    const companyId = await this.resolveCompanyId(domain);
     const [productId] = await this.db
       .select({
         product_id: product_variants.product_id,
@@ -521,137 +522,153 @@ export class ProductsService {
           HttpStatus.BAD_REQUEST,
         );
       }
-      await this.db.transaction(async (tx) => {
-        const updatedProductResult = await tx
-          .update(products)
-          .set(productUpdatedData)
-          .where(eq(products.id, productVariantId));
-        console.log('updatedProductResult', updatedProductResult);
-        const finalResults: { url: string; type: productImageType }[] = [];
-
-        if (files?.product?.[0]) {
-          const mainRes = await this.uploadToCloudService.uploadFile(
-            files.product[0],
-          );
-          finalResults.push({
-            url: mainRes.secure_url,
-            type: productImageType.MAIN,
-          });
-        }
-
-        if (files?.product_spec && files.product_spec.length > 0) {
-          const galleryRes = await this.uploadToCloudService.uploadFiles(
-            files.product_spec,
-          );
-          finalResults.push(
-            ...galleryRes.map((res) => ({
-              url: res.secure_url,
-              type: productImageType.GALLERY,
-            })),
-          );
-        }
-        console.log('finalResults *******', product.variant_id);
-        if (finalResults.length > 0 && product.variant_id) {
-          const imageInserts = finalResults.map((image, index) => {
-            console.log('images inserts');
-            console.table(image);
-            return {
-              variant_id: product.variant_id,
-              product_id: productId,
-              image_url: image.url,
-              alt_text: `${image.type} Image ${index + 1}`,
-              is_primary: image.type === productImageType.MAIN,
-              imgType: image.type,
-            };
-          });
-          console.table(imageInserts);
-          const createdImages = await tx
-            .insert(product_images)
-            .values(imageInserts)
+      await this.db
+        .transaction(async (tx) => {
+          const updatedProductResult = await tx
+            .update(products)
+            .set(productUpdatedData)
+            .where(eq(products.id, productVariantId))
             .catch((error) => {
-              console.error('Error inserting product images:', error);
+              console.error('Error updating product:', error);
               throw new InternalServerErrorException(
-                'Failed to insert product images',
+                'Failed to update product',
                 {
                   cause: error,
                 },
               );
             });
-          console.log('createdImages', createdImages);
-          console.log('imagesToDelete', imagesToDelete);
-          if (imagesToDelete) {
-            console.log('starting deleting images');
-            const deletePromises = imagesToDelete.map(
-              async (id) =>
-                await tx
-                  .delete(product_images)
-                  .where(
-                    or(
-                      eq(product_images.id, id),
-                      eq(product_images.product_id, id),
-                    ),
-                  )
-                  .then(() => {
-                    console.log(`Deleted product image with ID: ${id}`);
-                    return id;
-                  })
-                  .catch((error) => {
-                    console.error('Error deleting product image:', error);
-                    throw new InternalServerErrorException(
-                      'Failed to delete product image',
-                      {
-                        cause: error,
-                      },
-                    );
-                  }),
+          console.log('updatedProductResult', updatedProductResult);
+          const finalResults: { url: string; type: productImageType }[] = [];
+
+          if (files?.product?.[0]) {
+            const mainRes = await this.uploadToCloudService.uploadFile(
+              files.product[0],
             );
-            const deletedImages = await Promise.all(deletePromises);
-            console.log('deletedImages', deletedImages);
-          }
-          console.log();
-          const updateProductVariantData = {
-            variant_name: product.variant_name,
-            sku: product.sku,
-            price: product.base_price,
-            attributes: product.attributes,
-            status: product.status,
-            seo_meta: null,
-          };
-          console.log('updateProductVariantDat', updateProductVariantData);
-          const updatedVariantResult = await tx
-            .update(product_variants)
-            .set(updateProductVariantData)
-            .where(
-              and(
-                eq(product_variants.product_id, productId),
-                eq(product_variants.id, productVariantId),
-              ),
-            )
-            .catch((error) => {
-              console.error('Error updating product variant:', error);
-              throw new InternalServerErrorException(
-                'Failed to update product variant',
-                {
-                  cause: error,
-                },
-              );
+            finalResults.push({
+              url: mainRes.secure_url,
+              type: productImageType.MAIN,
             });
-          console.log('updatedVariantResult', updatedVariantResult);
-        }
-        if (product.warehouse_id && productVariantId) {
-          await this.inventoryService.setStock(
-            productVariantId,
-            product.warehouse_id,
-            product.stock_quantity ?? 0,
-            companyId,
-            tx as DrizzleService,
-          );
-        }
-        return {
-          message: 'Product updated successfully',
-          status: HttpStatus.OK,
-        };
-      });
+          }
+
+          if (files?.product_spec && files.product_spec.length > 0) {
+            const galleryRes = await this.uploadToCloudService.uploadFiles(
+              files.product_spec,
+            );
+            finalResults.push(
+              ...galleryRes.map((res) => ({
+                url: res.secure_url,
+                type: productImageType.GALLERY,
+              })),
+            );
+          }
+          console.log('finalResults *******', product.variant_id);
+          if (finalResults.length > 0 && product.variant_id) {
+            const imageInserts = finalResults.map((image, index) => {
+              console.log('images inserts');
+              console.table(image);
+              return {
+                variant_id: product.variant_id,
+                product_id: productId,
+                image_url: image.url,
+                alt_text: `${image.type} Image ${index + 1}`,
+                is_primary: image.type === productImageType.MAIN,
+                imgType: image.type,
+              };
+            });
+            console.table(imageInserts);
+            const createdImages = await tx
+              .insert(product_images)
+              .values(imageInserts)
+              .catch((error) => {
+                console.error('Error inserting product images:', error);
+                throw new InternalServerErrorException(
+                  'Failed to insert product images',
+                  {
+                    cause: error,
+                  },
+                );
+              });
+            console.log('createdImages', createdImages);
+            console.log('imagesToDelete', imagesToDelete);
+            if (imagesToDelete) {
+              console.log('starting deleting images');
+              const deletePromises = imagesToDelete.map(
+                async (id) =>
+                  await tx
+                    .delete(product_images)
+                    .where(
+                      or(
+                        eq(product_images.id, id),
+                        eq(product_images.product_id, id),
+                      ),
+                    )
+                    .then(() => {
+                      console.log(`Deleted product image with ID: ${id}`);
+                      return id;
+                    })
+                    .catch((error) => {
+                      console.error('Error deleting product image:', error);
+                      throw new InternalServerErrorException(
+                        'Failed to delete product image',
+                        {
+                          cause: error,
+                        },
+                      );
+                    }),
+              );
+              const deletedImages = await Promise.all(deletePromises);
+              console.log('deletedImages', deletedImages);
+            }
+            console.log();
+            const updateProductVariantData = {
+              variant_name: product.variant_name,
+              sku: product.sku,
+              price: product.base_price,
+              attributes: product.attributes,
+              status: product.status,
+              seo_meta: null,
+            };
+            console.log('updateProductVariantDat', updateProductVariantData);
+            const updatedVariantResult = await tx
+              .update(product_variants)
+              .set(updateProductVariantData)
+              .where(
+                and(
+                  eq(product_variants.product_id, productId),
+                  eq(product_variants.id, productVariantId),
+                ),
+              )
+              .catch((error) => {
+                console.error('Error updating product variant:', error);
+                throw new InternalServerErrorException(
+                  'Failed to update product variant',
+                  {
+                    cause: error,
+                  },
+                );
+              });
+            console.log('updatedVariantResult', updatedVariantResult);
+          }
+          if (product.warehouse_id && productVariantId) {
+            await this.inventoryService.setStock(
+              productVariantId,
+              product.warehouse_id,
+              product.stock_quantity ?? 0,
+              companyId,
+              tx as DrizzleService,
+            );
+          }
+          return {
+            message: 'Product updated successfully',
+            status: HttpStatus.OK,
+          };
+        })
+        .catch((error) => {
+          console.error('Error in transaction:', error);
+          throw new InternalServerErrorException('Failed to update product', {
+            cause: error,
+          });
+        });
     } catch (error) {
       throw new InternalServerErrorException('Failed to register vendor', {
         cause: error,

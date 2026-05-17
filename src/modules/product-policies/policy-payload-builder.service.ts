@@ -11,7 +11,10 @@ import {
   company_branding,
   company,
 } from '../../drizzle/schema';
-import { PolicyDocumentPayload } from './interfaces/policy-document.interface';
+import {
+  PolicyDocumentPayload,
+  PolicySnapshot,
+} from './interfaces/policy-document.interface';
 
 @Injectable()
 export class PolicyPayloadBuilderService {
@@ -40,6 +43,7 @@ export class PolicyPayloadBuilderService {
     }
 
     const { orderItem, policy_snapshot } = itemPolicy;
+    const snapshot = policy_snapshot as PolicySnapshot;
     const orderData = orderItem.order;
     if (!orderData?.customer) {
       throw new NotFoundException(
@@ -105,16 +109,16 @@ export class PolicyPayloadBuilderService {
         price: orderItem.price.toString(),
       },
       policy: {
-        policyName: policy_snapshot['policy_name'],
-        policyType: policy_snapshot['policy_type'],
+        policyName: snapshot.policy_name,
+        policyType: snapshot.policy_type,
         startDate: itemPolicy.policy_start_date,
         endDate: itemPolicy.policy_end_date,
-        coverageDescription: policy_snapshot['coverage_description'],
-        exclusions: policy_snapshot['exclusions'],
-        serviceProvider: policy_snapshot['service_provider'],
-        claimEmail: policy_snapshot['claim_contact_email'],
-        claimPhone: policy_snapshot['claim_contact_phone'],
-        processDescription: policy_snapshot['claim_process_description'],
+        coverageDescription: snapshot.coverage_description,
+        exclusions: snapshot.exclusions,
+        serviceProvider: snapshot.service_provider,
+        claimEmail: snapshot.claim_contact_email,
+        claimPhone: snapshot.claim_contact_phone,
+        processDescription: snapshot.claim_process_description,
       },
       branding: {
         companyName: companyInfo?.company_name || 'Company',

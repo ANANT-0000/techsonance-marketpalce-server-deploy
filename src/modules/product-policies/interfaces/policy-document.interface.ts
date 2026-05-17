@@ -34,3 +34,17 @@ export interface PolicyDocumentPayload {
     logoUrl?: string;
   };
 }
+
+export interface PolicySnapshot {
+  policy_name: string;
+  policy_type: string;
+  coverage_description?: string;
+  exclusions?: string;
+  service_provider?: string;
+  claim_contact_email?: string;
+  claim_contact_phone?: string;
+  claim_process_description?: string;
+  generates_document?: boolean;
+  duration_value?: number;
+  duration_unit?: string;
+}

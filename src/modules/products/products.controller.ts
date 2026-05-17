@@ -93,11 +93,13 @@ export class ProductsController {
   async updateProduct(
     @Param('id') id: string,
     @Body('product_data', ParseJsonPipe) product: any,
+    @Headers('company-domain') domain: string,
     @Body('imagesToDelete', ParseJsonPipe) imagesToDelete?: string[],
     @UploadedFiles() files?: ProductFiles,
   ) {
     // console.log(imagesToDelete);
     return await this.productsService.updateProduct(
+      domain,
       id,
       product,
       imagesToDelete,

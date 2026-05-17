@@ -13,6 +13,7 @@ import * as puppeteer from 'puppeteer';
 import * as handlebars from 'handlebars';
 import * as fs from 'fs';
 import * as path from 'path';
+import { resolveTemplatePath } from 'src/utils/resolve-template-path.util';
 
 // ── Register helpers once at module level, never in constructor ───
 let _helpersRegistered = false;
@@ -61,13 +62,11 @@ export class PuppeteerGstTemplate implements IInvoiceTemplate, OnModuleInit {
   constructor(private readonly registry: InvoiceTemplateRegistry) {
     registerHandlebarsHelpers();
 
-    const templatePath = path.join(
-      process.cwd(),
-      'src', // Note: If running from 'dist' in production, you might need to handle 'src' vs 'dist' dynamically, or keep templates in a root-level folder.
+    const templatePath = resolveTemplatePath(
       'modules',
       'invoice',
       'html-templates',
-      'standard-gst.hbs',
+      'minimal.hbs',
     );
     try {
       const htmlString = fs.readFileSync(templatePath, 'utf8');

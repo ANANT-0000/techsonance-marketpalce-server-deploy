@@ -5,7 +5,7 @@ import {
   Injectable,
   InternalServerErrorException,
 } from '@nestjs/common';
-import {  eq } from 'drizzle-orm';
+import { and, eq } from 'drizzle-orm';
 import { DRIZZLE, type DrizzleService } from '../../drizzle/drizzle.module';
 import {
   company_branding,
@@ -352,26 +352,14 @@ export class CompanyIdentityService {
       }
       console.log('uploaded signatory_signature');
 
-      const payload: any = {
-        company_id: companyId,
-        invoice_number_prefix: dto.invoice_number_prefix ?? 'INV',
-        invoice_number_format:
-          dto.invoice_number_format ?? '{PREFIX}-{YYYY}-{SEQ8}',
-        invoice_sequence_reset: dto.invoice_sequence_reset ?? 'APRIL',
-        default_currency: dto.default_currency ?? 'INR',
-        default_timezone: dto.default_timezone ?? 'Asia/Kolkata',
-        date_format: dto.date_format ?? 'DD/MM/YYYY',
-        signatory_name: dto.signatory_name ?? null,
-        signatory_designation: dto.signatory_designation ?? null,
-        signatory_signature_url: uploadedUrls.signatory_signature_url ?? null,
-        invoice_footer_text: dto.invoice_footer_text ?? null,
-        invoice_terms_and_conditions: dto.invoice_terms_and_conditions ?? null,
-        default_invoice_template_id: dto.default_invoice_template_id ?? null,
-      };
       console.log('searching existing document config');
 
       const [existing] = await this.db
-        .select({ id: company_document_config.id })
+        .select({
+          id: company_document_config.id,
+          signatory_signature_url:
+            company_document_config.signatory_signature_url,
+        })
         .from(company_document_config)
         .where(eq(company_document_config.company_id, companyId))
         .limit(1)
@@ -385,13 +373,36 @@ export class CompanyIdentityService {
             { cause: error },
           );
         });
-
+      const payload: any = {
+        company_id: companyId,
+        invoice_number_prefix: dto.invoice_number_prefix ?? 'INV',
+        invoice_number_format:
+          dto.invoice_number_format ?? '{PREFIX}-{YYYY}-{SEQ8}',
+        invoice_sequence_reset: dto.invoice_sequence_reset ?? 'APRIL',
+        default_currency: dto.default_currency ?? 'INR',
+        default_timezone: dto.default_timezone ?? 'Asia/Kolkata',
+        date_format: dto.date_format ?? 'DD/MM/YYYY',
+        signatory_name: dto.signatory_name ?? null,
+        signatory_designation: dto.signatory_designation ?? null,
+        signatory_signature_url:
+          uploadedUrls.signatory_signature_url ??
+          existing?.signatory_signature_url ??
+          null,
+        invoice_footer_text: dto.invoice_footer_text ?? null,
+        invoice_terms_and_conditions: dto.invoice_terms_and_conditions ?? null,
+        default_invoice_template_id: dto.default_invoice_template_id ?? null,
+      };
       if (existing) {
         console.log('updating existing document config');
         const [updated] = await this.db
           .update(company_document_config)
           .set(payload)
-          .where(eq(company_document_config.company_id, companyId))
+          .where(
+            and(
+              eq(company_document_config.company_id, companyId),
+              eq(company_document_config.id, existing.id),
+            ),
+          )
           .returning()
           .catch((error) => {
             console.error(
@@ -409,6 +420,7 @@ export class CompanyIdentityService {
         return updated;
       }
       console.log('creating new document config');
+
       const [created] = await this.db
         .insert(company_document_config)
         .values(payload)

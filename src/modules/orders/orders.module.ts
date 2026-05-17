@@ -21,7 +21,7 @@ import { PolicyDocumentService } from '../product-policies/policy-document.servi
     ProductPoliciesModule,
   ],
   controllers: [OrdersController],
-  providers: [OrdersService, PolicyDocumentService],
+  providers: [OrdersService],
   exports: [OrdersService],
 })
 export class OrdersModule {}

@@ -666,6 +666,7 @@ export class ProductPoliciesService {
     try {
       console.log(
         '[ProductPoliciesService.createOrderItemPolicySnapshot] Inserting order item policy snapshot',
+        dto,
       );
       const [snapshot] = await this.db
         .insert(order_item_policy)
@@ -680,7 +681,17 @@ export class ProductPoliciesService {
           document_generated: policy.generates_document ?? false,
           document_url: dto.order_item_policy_document_url,
         })
-        .returning();
+        .returning()
+        .catch((error) => {
+          console.error(
+            '[ProductPoliciesService.createOrderItemPolicySnapshot] Failed while inserting order item policy snapshot',
+            error,
+          );
+          throw new InternalServerErrorException(
+            'Failed to create order item policy snapshot',
+            { cause: error },
+          );
+        });
 
       console.log(
         '[ProductPoliciesService.createOrderItemPolicySnapshot] Snapshot created successfully',

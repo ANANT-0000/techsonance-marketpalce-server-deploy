@@ -6,18 +6,20 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { PolicyDocumentPayload } from '../interfaces/policy-document.interface';
 import { IPolicyTemplate } from '../policy-template.registry';
+import { resolveTemplatePath } from 'src/utils/resolve-template-path.util';
 
 @Injectable()
 export class PuppeteerWarrantyTemplate implements IPolicyTemplate {
   public readonly templateId = 'standard-warranty';
+  readonly templateLabel = 'Standard Warranty Policy (Puppeteer)';
   private compiledTemplate: HandlebarsTemplateDelegate;
 
   constructor() {
-    const templatePath = path.join(
-      __dirname,
-      '..',
+    const templatePath = resolveTemplatePath(
+      'modules',
+      'invoice',
       'html-templates',
-      'warranty.hbs',
+      'minimal.hbs',
     );
     const templateHtml = fs.readFileSync(templatePath, 'utf8');
     this.compiledTemplate = handlebars.compile(templateHtml);
