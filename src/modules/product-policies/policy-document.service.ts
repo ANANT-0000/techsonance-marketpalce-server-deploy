@@ -42,7 +42,7 @@ export class PolicyDocumentService {
       const documentUrl = await this.uploadToCloudService.uploadInvoice(
         pdfBuffer,
         fileName,
-      ); // Reusing upload logic
+      );
 
       // 4. Update Database
       await this.db
@@ -51,7 +51,14 @@ export class PolicyDocumentService {
           document_url: documentUrl,
           document_generated: true,
         })
-        .where(eq(order_item_policy.order_item_id, orderItemId));
+        .where(eq(order_item_policy.order_item_id, orderItemId))
+        .catch((err) => {
+          this.logger.error(
+            `Failed to update policy record with document URL for item ${orderItemId}`,
+            err.stack,
+          );
+          throw err;
+        });
 
       this.logger.log(
         `Successfully generated and linked policy document: ${documentUrl}`,

@@ -209,6 +209,7 @@ export class OrdersService {
                 policy_start_date: new Date().toISOString().split('T')[0],
               },
               companyId,
+              tx as DrizzleService,
             );
           }
         }

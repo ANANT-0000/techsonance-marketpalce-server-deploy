@@ -603,7 +603,9 @@ export class ProductPoliciesService {
   async createOrderItemPolicySnapshot(
     dto: CreateOrderItemPolicySnapshotDto,
     domain: string,
+    tx?: DrizzleService, 
   ) {
+     const db = tx ?? this.db; 
     console.log(
       '[ProductPoliciesService.createOrderItemPolicySnapshot] Request received',
     );
@@ -668,7 +670,7 @@ export class ProductPoliciesService {
         '[ProductPoliciesService.createOrderItemPolicySnapshot] Inserting order item policy snapshot',
         dto,
       );
-      const [snapshot] = await this.db
+      const [snapshot] = await db
         .insert(order_item_policy)
         .values({
           policy_id: dto.policy_id,
