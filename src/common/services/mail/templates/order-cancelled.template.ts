@@ -1,7 +1,11 @@
 import { emailLayout } from './layout.template';
 
-export function orderCancelledTemplate(customerName: string, orderId: string, refundInitiated: boolean): string {
-    const content = `
+export function orderCancelledTemplate(
+  customerName: string,
+  orderId: string,
+  refundInitiated: boolean,
+): string {
+  const content = `
             <table align="center" role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%" style="margin: 0 auto;">
                 <tr>
                     <td style="padding: 0 40px 10px 40px;" class="mobile-padding">
@@ -15,14 +19,18 @@ export function orderCancelledTemplate(customerName: string, orderId: string, re
                             Your order <strong>#${orderId}</strong> has been successfully cancelled as requested.
                         </p>
                         
-                        ${refundInitiated ? `
+                        ${
+                          refundInitiated
+                            ? `
                         <div style="background-color: #f8fafc; border-left: 4px solid #64748b; padding: 20px; border-radius: 4px; margin: 25px 0;">
                             <p style="margin: 0 0 5px 0; color: #334155; font-weight: bold; font-size: 14px; font-family: Helvetica, Arial, sans-serif;">REFUND STATUS</p>
                             <p style="margin: 0; color: #475569; font-size: 15px; line-height: 1.5; font-family: Helvetica, Arial, sans-serif;">
                                 A full refund has been initiated to your original payment method. Please allow 3-5 business days for the funds to appear in your account.
                             </p>
                         </div>
-                        ` : ''}
+                        `
+                            : ''
+                        }
  
                         <p style="color: #888; font-size: 12px;">
                             If you did not request this cancellation, please contact our support team immediately.
@@ -34,5 +42,5 @@ export function orderCancelledTemplate(customerName: string, orderId: string, re
                 </tr>
             </table>
     `;
-    return emailLayout(content, `Order Cancelled: #${orderId}`);
+  return emailLayout(content, `Order Cancelled: #${orderId}`);
 }

@@ -35,7 +35,7 @@ export class AuthService {
     private vendorService: VendorsService,
     private mail: MailService,
     private readonly companyService: CompanyService,
-  ) { }
+  ) {}
 
   private async resolveCompanyId(domain: string): Promise<string> {
     const filteredDomain = domainExtractor(domain);
@@ -200,13 +200,21 @@ export class AuthService {
     | { message: string; status: number; email: string }
   > {
     try {
-      console.log('[AuthService.validateOAuthLogin] Validating OAuth login for:', oauthUser.email);
+      console.log(
+        '[AuthService.validateOAuthLogin] Validating OAuth login for:',
+        oauthUser.email,
+      );
       const filteredDomain = domainExtractor(domain);
-      console.log('[AuthService.validateOAuthLogin] Resolving company for domain:', filteredDomain);
+      console.log(
+        '[AuthService.validateOAuthLogin] Resolving company for domain:',
+        filteredDomain,
+      );
       // Find company by domain
       const companyId = await this.companyService.find(filteredDomain);
       if (!companyId) {
-        console.log('[AuthService.validateOAuthLogin] Stopping: Company not found');
+        console.log(
+          '[AuthService.validateOAuthLogin] Stopping: Company not found',
+        );
         throw new HttpException('Domain not found', HttpStatus.NOT_FOUND);
       }
 
@@ -221,7 +229,10 @@ export class AuthService {
           ),
         )
         .catch((error) => {
-          console.error('[AuthService.validateOAuthLogin] Error validating OAuth login:', error);
+          console.error(
+            '[AuthService.validateOAuthLogin] Error validating OAuth login:',
+            error,
+          );
           throw new InternalServerErrorException(
             'Failed to validate OAuth login',
             {
@@ -230,7 +241,10 @@ export class AuthService {
           );
         });
 
-      console.log('[AuthService.validateOAuthLogin] existing user:', existingUser);
+      console.log(
+        '[AuthService.validateOAuthLogin] existing user:',
+        existingUser,
+      );
       // If user exists, log them in
       if (existingUser) {
         console.log(
@@ -308,7 +322,10 @@ export class AuthService {
         return { access_token: accessToken, refresh_token: refreshToken };
       }
 
-      console.log('[AuthService.validateOAuthLogin] New user, registering:', oauthUser.email);
+      console.log(
+        '[AuthService.validateOAuthLogin] New user, registering:',
+        oauthUser.email,
+      );
 
       const [roleRecord] = await this.db
         .select({ id: user_roles.id, role_name: user_roles.role_name })
@@ -339,7 +356,10 @@ export class AuthService {
         })
         .returning()
         .catch((err) => {
-          console.error('[AuthService.validateOAuthLogin] Failed to create user with Google OAuth:', err);
+          console.error(
+            '[AuthService.validateOAuthLogin] Failed to create user with Google OAuth:',
+            err,
+          );
           throw new HttpException(
             'Failed to create user account',
             HttpStatus.INTERNAL_SERVER_ERROR,
@@ -351,7 +371,10 @@ export class AuthService {
         access_status: AccessStatus.ACTIVE,
         role_id: roleRecord.id,
       });
-      console.log('[AuthService.validateOAuthLogin] New user created successfully:', newUser.email);
+      console.log(
+        '[AuthService.validateOAuthLogin] New user created successfully:',
+        newUser.email,
+      );
 
       // Send welcome email
       try {
@@ -360,7 +383,10 @@ export class AuthService {
           `${newUser.first_name} ${newUser.last_name}`,
         );
       } catch (emailError) {
-        console.error('[AuthService.validateOAuthLogin] Failed to send welcome email:', emailError);
+        console.error(
+          '[AuthService.validateOAuthLogin] Failed to send welcome email:',
+          emailError,
+        );
         // Don't fail the registration if email fails
       }
 
@@ -384,7 +410,10 @@ export class AuthService {
 
       return { access_token: accessToken, refresh_token: refreshToken };
     } catch (error) {
-      console.error('[AuthService.validateOAuthLogin] OAuth validation error:', error);
+      console.error(
+        '[AuthService.validateOAuthLogin] OAuth validation error:',
+        error,
+      );
 
       if (error instanceof HttpException) {
         throw error;

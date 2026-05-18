@@ -3,40 +3,36 @@ import {
   Controller,
   Delete,
   Get,
-  Header,
   Headers,
   Patch,
   Post,
+  Query,
   UploadedFiles,
   UseGuards,
+  Param,
 } from '@nestjs/common';
 import { UploadToCloud } from '../../common/decorators/upload.decorator';
 import { ProductsService } from './products.service';
 import { CreateProductDto } from './dto/createProduct.dto';
-import { Param } from '@nestjs/common';
 import { ProductStatus, UserRole } from '../../drizzle/types/types';
 import { ParseJsonPipe } from '../../common/pipes/parseJsonPipe';
 import { plainToInstance } from 'class-transformer';
 import { validate } from 'class-validator';
 import { type ProductFiles } from '../../common/Types/index.type';
-import { AuthGuard } from '@nestjs/passport';
-import { RoleGuard } from '../../guards/role.guard';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
+import { RoleGuard } from '../../guards/role.guard';
 import { Roles } from '../../common/decorators/roles.decorator';
 import { Role } from '../../enums/role.enum';
-// import { ParseJsonPipe } from '../../common/pipes/parseJsonPipe';
-// import { validate } from 'class-validator';
-// import { plainToInstance } from 'class-transformer';
+import { GetProductsQueryDto } from './dto/get-products-query.dto';
+
 @Controller({
   version: '1',
   path: 'products',
 })
 export class ProductsController {
-  constructor(private productsService: ProductsService) { }
+  constructor(private productsService: ProductsService) {}
 
   @Post(':vendor_id')
-  // @UseGuards(RoleGuard, JwtAuthGuard)
-  // @Roles(Role.ADMIN, Role.VENDOR)
   @UploadToCloud([
     { name: 'product', maxCount: 1 },
     { name: 'product_spec', maxCount: 20 },
@@ -47,14 +43,9 @@ export class ProductsController {
     @Headers('company-domain') domain: string,
     @UploadedFiles() files?: ProductFiles,
   ) {
-    console.log(' Received product data:', productDto);
-    console.log('vendorId', vendorId);
-    console.log('companyId', domain);
-    console.log('Received files:', files);
     const dto = plainToInstance(CreateProductDto, productDto);
     const errors = await validate(dto);
     console.log('VALIDATION ERRORS:', JSON.stringify(errors, null, 2));
-
     return await this.productsService.createProduct(
       productDto,
       vendorId,
@@ -62,22 +53,39 @@ export class ProductsController {
       files,
     );
   }
+
   @Get('all')
-  async getAllProducts(@Headers('company-domain') domain: string) {
-    console.log('get all products');
-    return await this.productsService.getAllProducts(domain);
+  async getAllProducts(
+    @Headers('company-domain') domain: string,
+    @Query() query: GetProductsQueryDto,
+  ) {
+    return await this.productsService.getAllProducts(domain, query);
   }
+
+  /**
+   * GET /v1/products/suggestions?search=...
+   * Returns lightweight name+id list for autocomplete (P2)
+   */
+  @Get('suggestions')
+  async getProductSuggestions(
+    @Headers('company-domain') domain: string,
+    @Query('search') search: string,
+  ) {
+    return await this.productsService.getProductSuggestions(domain, search);
+  }
+
   @Get('options')
   async getAllProductOptions(@Headers('company-domain') domain: string) {
-    console.log('get all product options');
     return await this.productsService.getAllProductOptions(domain);
   }
+
   @Get('active')
   @UseGuards(JwtAuthGuard, RoleGuard)
   @Roles(Role.ADMIN, Role.VENDOR)
   async getActiveProducts(@Headers('company-domain') domain: string) {
-    return await this.productsService.getActiveProducts(domain)
+    return await this.productsService.getActiveProducts(domain);
   }
+
   @Get('main-details/:id')
   async getProductMainDetails(
     @Param('id') id: string,
@@ -85,6 +93,7 @@ export class ProductsController {
   ) {
     return await this.productsService.getProductMainDetails(id, domain);
   }
+
   @Patch(':id')
   @UploadToCloud([
     { name: 'product', maxCount: 1 },
@@ -97,7 +106,6 @@ export class ProductsController {
     @Body('imagesToDelete', ParseJsonPipe) imagesToDelete?: string[],
     @UploadedFiles() files?: ProductFiles,
   ) {
-    // console.log(imagesToDelete);
     return await this.productsService.updateProduct(
       domain,
       id,
@@ -106,6 +114,7 @@ export class ProductsController {
       files,
     );
   }
+
   @Patch('update-product-category/:id')
   async updateProductCategory(
     @Param('id') id: string,
@@ -121,6 +130,7 @@ export class ProductsController {
   ) {
     return await this.productsService.getProductDetailsById(id, domain);
   }
+
   @Get(':id')
   async getProductById(
     @Param('id') id: string,
@@ -129,21 +139,21 @@ export class ProductsController {
     return await this.productsService.getProductById(id, domain);
   }
 
-
   @Delete('delete-selected')
   async deleteSelectedProduct(@Body('ids') ids: string[]) {
     return await this.productsService.deleteSelectedProducts(ids);
   }
 
-
   @Delete('delete-selected-variants')
   async deleteSelectedProductVariants(@Body('ids') ids: string[]) {
     return await this.productsService.deleteSelectedProductVariants(ids);
   }
+
   @Delete(':id')
   async deleteProduct(@Param('id') id: string) {
     return await this.productsService.deleteProduct(id);
   }
+
   @Delete('delete-variant/:id')
   async deleteProductVariant(@Param('id') id: string) {
     return await this.productsService.deleteProductVariant(id);

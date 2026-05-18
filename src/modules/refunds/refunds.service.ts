@@ -151,7 +151,7 @@ export class RefundsService {
 
         if (orderLevelExists) {
           throw new HttpException(
-            `A full-order refund already exists with status: ${existingOrderRefund!.refund_status}`,
+            `A full-order refund already exists with status: ${existingOrderRefund.refund_status}`,
             HttpStatus.BAD_REQUEST,
           );
         }

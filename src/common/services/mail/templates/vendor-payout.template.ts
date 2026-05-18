@@ -1,10 +1,17 @@
 import { emailLayout } from './layout.template';
 
-export function vendorPayoutTemplate(storeName: string, amount: number, currency: string = 'USD'): string {
-    const formattedAmount = new Intl.NumberFormat('en-US', { style: 'currency', currency }).format(amount);
-    const financeDashboardUrl = `${'http://localhost:3000'}/vendor/finances`;
+export function vendorPayoutTemplate(
+  storeName: string,
+  amount: number,
+  currency: string = 'USD',
+): string {
+  const formattedAmount = new Intl.NumberFormat('en-US', {
+    style: 'currency',
+    currency,
+  }).format(amount);
+  const financeDashboardUrl = `${'http://localhost:3000'}/vendor/finances`;
 
-    const content = `
+  const content = `
             <!-- Content Section -->
             <table align="center" role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%" style="margin: 0 auto;">
                 <tr>
@@ -57,5 +64,5 @@ export function vendorPayoutTemplate(storeName: string, amount: number, currency
                 </tr>
             </table>
   `;
-    return emailLayout(content, 'Payout Processed');
+  return emailLayout(content, 'Payout Processed');
 }

@@ -24,7 +24,7 @@ import { ProductStatus } from '../../drizzle/types/types';
   path: 'product-variant',
 })
 export class ProductVariantController {
-  constructor(private readonly productVariantService: ProductVariantService) { }
+  constructor(private readonly productVariantService: ProductVariantService) {}
 
   @Post()
   @UploadToCloud([
@@ -100,7 +100,10 @@ export class ProductVariantController {
     console.log('id', id);
     console.log('status', status);
     console.log('dmoain', domain);
-    return await this.productVariantService.UpdateProductVarintStatus(status, id);
+    return await this.productVariantService.UpdateProductVarintStatus(
+      status,
+      id,
+    );
   }
   @Delete(':id')
   async delete(@Param('id') id: string) {

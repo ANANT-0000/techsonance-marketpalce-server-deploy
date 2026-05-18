@@ -14,7 +14,7 @@ import {
   user_roles,
 } from '../../drizzle/schema';
 import { AccessStatus, UserRole, UserStatus } from '../../drizzle/types/types';
-import { and, eq, InferSelectModel, or } from 'drizzle-orm';
+import { and, eq, InferSelectModel,} from 'drizzle-orm';
 import { DRIZZLE, type DrizzleService } from '../../drizzle/drizzle.module';
 
 import bcrypt from 'bcryptjs';
@@ -25,7 +25,7 @@ import { UpdateUserDtoTs } from './dto/update-user.dto.ts.js';
 import { MailService } from '../../common/services/mail/mail.service';
 import { CompanyService } from '../company/company.service.js';
 import { randomInt } from 'crypto';
-import { from } from 'rxjs';
+ 
 import { domainExtractor } from '../../common/filters/domainExtractor.filter.js';
 type UserRecord = InferSelectModel<typeof user>;
 type UserRoleRecord = InferSelectModel<typeof user_roles>;
@@ -203,13 +203,18 @@ export class UsersService {
       }
 
       // ── 2. Check if user already exists ────────────────────────────
-      console.log('[UsersService.register] Checking if user already exists', { email: userData.email });
+      console.log('[UsersService.register] Checking if user already exists', {
+        email: userData.email,
+      });
       const [existingUser] = await this.db
         .select()
         .from(user)
         .where(eq(user.email, userData.email))
         .catch((error) => {
-          console.error('[UsersService.register] Error checking existing user:', error);
+          console.error(
+            '[UsersService.register] Error checking existing user:',
+            error,
+          );
           throw new InternalServerErrorException(
             'Failed to check existing user',
             {
@@ -221,7 +226,10 @@ export class UsersService {
       // ── 3. FIXED: Only query user_and_company if user exists ────────
       //    Previously crashed with existingUser.id when existingUser = undefined
       if (existingUser) {
-        console.log('[UsersService.register] User exists, checking company link', { existingUserId: existingUser.id, companyId });
+        console.log(
+          '[UsersService.register] User exists, checking company link',
+          { existingUserId: existingUser.id, companyId },
+        );
         const [existingCompanyUser] = await this.db
           .select()
           .from(user_and_company)
@@ -232,7 +240,10 @@ export class UsersService {
             ),
           )
           .catch((error) => {
-            console.error('[UsersService.register] Error checking existing company user:', error);
+            console.error(
+              '[UsersService.register] Error checking existing company user:',
+              error,
+            );
             throw new InternalServerErrorException(
               'Failed to check existing company user',
               { cause: error },
@@ -366,10 +377,15 @@ export class UsersService {
         throw new ConflictException('User is not registered to this company');
       }
       if (!userRecord || !userRecord?.password_hash) {
-        console.log('[UsersService.login] Stopping: User record incomplete or missing password hash');
+        console.log(
+          '[UsersService.login] Stopping: User record incomplete or missing password hash',
+        );
         throw new HttpException('Invalid credentials', HttpStatus.UNAUTHORIZED);
       }
-      console.log('[UsersService.login] Verifying password for user:', userRecord.email);
+      console.log(
+        '[UsersService.login] Verifying password for user:',
+        userRecord.email,
+      );
       const isPasswordValid = await bcrypt.compare(
         login.password,
         userRecord.password_hash,
@@ -405,7 +421,10 @@ export class UsersService {
         ...userRecord,
         password_hash: undefined, // Exclude password hash from the response
       };
-      console.log('[UsersService.login] Login successful for user:', filteredUser.email);
+      console.log(
+        '[UsersService.login] Login successful for user:',
+        filteredUser.email,
+      );
 
       return {
         user: filteredUser,
@@ -427,20 +446,30 @@ export class UsersService {
   }
 
   async listCustomersByDomain(domain: string) {
-    console.log('[UsersService.listCustomersByDomain] Request received for domain:', domain);
+    console.log(
+      '[UsersService.listCustomersByDomain] Request received for domain:',
+      domain,
+    );
     try {
       const companyId = await this.resolveCompanyId(domain);
       if (!companyId) {
-        console.log('[UsersService.listCustomersByDomain] Stopping: Company not found');
+        console.log(
+          '[UsersService.listCustomersByDomain] Stopping: Company not found',
+        );
         throw new HttpException('Company not found', HttpStatus.UNAUTHORIZED);
       }
-      console.log('[UsersService.listCustomersByDomain] Querying role record for CUSTOMER');
+      console.log(
+        '[UsersService.listCustomersByDomain] Querying role record for CUSTOMER',
+      );
       const [roleRecord] = await this.db
         .select()
         .from(user_roles)
         .where(eq(user_roles.role_name, UserRole.CUSTOMER))
         .catch((error) => {
-          console.error('[UsersService.listCustomersByDomain] Error fetching role record:', error);
+          console.error(
+            '[UsersService.listCustomersByDomain] Error fetching role record:',
+            error,
+          );
           throw new InternalServerErrorException(
             'Failed to fetch role record',
             {
@@ -448,9 +477,11 @@ export class UsersService {
             },
           );
         });
-      
+
       if (!roleRecord) {
-        console.log('[UsersService.listCustomersByDomain] Stopping: Role not found');
+        console.log(
+          '[UsersService.listCustomersByDomain] Stopping: Role not found',
+        );
         throw new HttpException(
           'Role not found',
           HttpStatus.INTERNAL_SERVER_ERROR,
@@ -468,7 +499,10 @@ export class UsersService {
           },
         })
         .then((data) => {
-          console.log('[UsersService.listCustomersByDomain] Customer data retrieved', { count: data.length });
+          console.log(
+            '[UsersService.listCustomersByDomain] Customer data retrieved',
+            { count: data.length },
+          );
           return data.map((item) => {
             return {
               id: item.user.id,
@@ -481,7 +515,10 @@ export class UsersService {
           });
         })
         .catch((error) => {
-          console.error('[UsersService.listCustomersByDomain] Error listing customers:', error);
+          console.error(
+            '[UsersService.listCustomersByDomain] Error listing customers:',
+            error,
+          );
           throw new InternalServerErrorException('Failed to list customers', {
             cause: error,
           });
@@ -554,10 +591,17 @@ export class UsersService {
     customer_id?: string,
     email?: string,
   ) {
-    console.log('[UsersService.initializeAccountActionOtp] Request received', { domain, actionType, customer_id, email });
+    console.log('[UsersService.initializeAccountActionOtp] Request received', {
+      domain,
+      actionType,
+      customer_id,
+      email,
+    });
     try {
       if (!email && !customer_id) {
-        console.log('[UsersService.initializeAccountActionOtp] Stopping: Either email or customer_id must be provided');
+        console.log(
+          '[UsersService.initializeAccountActionOtp] Stopping: Either email or customer_id must be provided',
+        );
         throw new HttpException(
           'Either email or customer_id not provided',
           HttpStatus.BAD_REQUEST,
@@ -623,7 +667,9 @@ export class UsersService {
           formattedExpireTime,
           companyDetails.company_name,
         );
-      console.log('[UsersService.initializeAccountActionOtp] Sent OTP mail successfully');
+      console.log(
+        '[UsersService.initializeAccountActionOtp] Sent OTP mail successfully',
+      );
       return {
         message:
           actionType === UserStatus.INACTIVE
@@ -646,10 +692,17 @@ export class UsersService {
     customer_id?: string,
     email?: string,
   ) {
-    console.log('[UsersService.confirmAccountAction] Request received', { domain, actionType, customer_id, email });
+    console.log('[UsersService.confirmAccountAction] Request received', {
+      domain,
+      actionType,
+      customer_id,
+      email,
+    });
     try {
       if (!email && !customer_id) {
-        console.log('[UsersService.confirmAccountAction] Stopping: Either email or customer_id must be provided');
+        console.log(
+          '[UsersService.confirmAccountAction] Stopping: Either email or customer_id must be provided',
+        );
         throw new HttpException(
           'Either email or customer_id not provided',
           HttpStatus.BAD_REQUEST,
@@ -680,11 +733,16 @@ export class UsersService {
       if (!userRecord.otp || userRecord.otp !== otp) {
         throw new UnauthorizedException('Invalid OTP.');
       }
-      console.log('[UsersService.confirmAccountAction] OTP matches successfully');
+      console.log(
+        '[UsersService.confirmAccountAction] OTP matches successfully',
+      );
       if (!userRecord.otpExpires) {
         throw new UnauthorizedException('Invalid OTP');
       }
-      console.log('[UsersService.confirmAccountAction] Validating OTP expiration', { expires: userRecord.otpExpires, current: new Date() });
+      console.log(
+        '[UsersService.confirmAccountAction] Validating OTP expiration',
+        { expires: userRecord.otpExpires, current: new Date() },
+      );
       if (new Date() > new Date(userRecord.otpExpires)) {
         await this.db
           .update(user)
@@ -696,13 +754,17 @@ export class UsersService {
       }
       const companyId = await this.resolveCompanyId(domain);
       if (!companyId) {
-        console.log('[UsersService.confirmAccountAction] Stopping: Action not allowed for this company/domain');
+        console.log(
+          '[UsersService.confirmAccountAction] Stopping: Action not allowed for this company/domain',
+        );
         throw new HttpException(
           'You cannot perform this action. Please try again.',
           HttpStatus.UNAUTHORIZED,
         );
       }
-      console.log('[UsersService.confirmAccountAction] Starting database updates');
+      console.log(
+        '[UsersService.confirmAccountAction] Starting database updates',
+      );
       const [userAndCompany] = await this.db
         .select()
         .from(user_and_company)
@@ -734,7 +796,9 @@ export class UsersService {
         .update(user)
         .set({ otp: null, otpExpires: null })
         .where(eq(user.id, userRecord.id));
-      console.log('[UsersService.confirmAccountAction] Action confirmed and records updated successfully');
+      console.log(
+        '[UsersService.confirmAccountAction] Action confirmed and records updated successfully',
+      );
       return {
         message:
           actionType === UserStatus.INACTIVE

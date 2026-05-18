@@ -437,7 +437,7 @@ export class InvoicePayloadBuilderService {
       complianceRows = [];
     }
     // Build taxIds from compliance table first; fall back to GST registration row
-    let taxIds: Array<{ key: string; value: string }> = complianceRows
+    const taxIds: Array<{ key: string; value: string }> = complianceRows
       .filter((r) => r.is_active)
       .map((r) => ({ key: r.field_key.toUpperCase(), value: r.field_value }));
 
@@ -669,14 +669,14 @@ export class InvoicePayloadBuilderService {
       orderDate: orderInfo.orderDate,
       templateId,
     };
-const legalPayload: InvoiceLegal = {
-  legalName: legal?.legal_name ?? vendorInfo.companyName,
-  tradeName: legal?.trade_name ?? undefined,
-  supportEmail: legal?.support_email ?? undefined,
-  supportPhone: legal?.support_phone ?? undefined,
-  websiteUrl: legal?.website_url ?? undefined,
-  taxIds,
-};
+    const legalPayload: InvoiceLegal = {
+      legalName: legal?.legal_name ?? vendorInfo.companyName,
+      tradeName: legal?.trade_name ?? undefined,
+      supportEmail: legal?.support_email ?? undefined,
+      supportPhone: legal?.support_phone ?? undefined,
+      websiteUrl: legal?.website_url ?? undefined,
+      taxIds,
+    };
     return {
       meta,
       branding: brandingPayload,

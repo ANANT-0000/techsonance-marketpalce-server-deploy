@@ -8,8 +8,14 @@ import { CompanyModule } from '../company/company.module';
 import { MailModule } from '../../common/services/mail/mail.module';
 
 @Module({
-  imports: [CouponModule, DrizzleModule, MailModule, OrdersModule, CompanyModule],
+  imports: [
+    CouponModule,
+    DrizzleModule,
+    MailModule,
+    OrdersModule,
+    CompanyModule,
+  ],
   controllers: [CheckoutController],
   providers: [CheckoutService],
 })
-export class CheckoutModule { }
+export class CheckoutModule {}

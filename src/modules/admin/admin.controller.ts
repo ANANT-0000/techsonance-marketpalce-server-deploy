@@ -35,13 +35,11 @@ export class AdminController {
     private readonly userService: UsersService,
     private readonly orderService: OrdersService,
     private readonly companyService: CompanyService,
-
-  ) { }
+  ) {}
   @Get('test')
   test() {
     return 'Admin controller is working';
   }
-
 
   @Post('create-vendor')
   @HttpCode(HttpStatus.OK)
@@ -64,10 +62,13 @@ export class AdminController {
     return this.vendorService.getVendorById(vendorId);
   }
   @Get('vendors')
-
   @HttpCode(HttpStatus.OK)
-  async getAllVendors(@Query('offset') offset: string, @Query('limit') limit: string, @Query('status') status: string,
-    @Query('sort') sort: string) {
+  async getAllVendors(
+    @Query('offset') offset: string,
+    @Query('limit') limit: string,
+    @Query('status') status: string,
+    @Query('sort') sort: string,
+  ) {
     return this.vendorService.getAllVendors(offset, limit, status, sort);
   }
 
@@ -83,20 +84,17 @@ export class AdminController {
     return this.orderService.getAllOrders();
   }
   @Get('vendors/:vendorId')
-
   @HttpCode(HttpStatus.OK)
   async getVendorDetails(@Param('vendorId') vendorId: string) {
     return this.vendorService.getVendorDetails(vendorId);
   }
   @Patch('activate-vendor/:id')
   @HttpCode(HttpStatus.OK)
-
   async activateVendor(@Param('id') id: string) {
     return await this.companyService.activateCompany(id);
   }
   @Patch('deactivate-vendor/:id')
   @HttpCode(HttpStatus.OK)
-
   async deactivateVendor(@Param('id') id: string) {
     return await this.companyService.deactivateCompany(id);
   }
@@ -113,7 +111,6 @@ export class AdminController {
     return await this.vendorService.updateVendorStatus(id, UserStatus.ACTIVE);
   }
   @Patch('reject-vendor/:id')
-
   @HttpCode(HttpStatus.OK)
   async rejectVendor(@Param('id') id: string) {
     return await this.vendorService.updateVendorStatus(id, UserStatus.REJECTED);

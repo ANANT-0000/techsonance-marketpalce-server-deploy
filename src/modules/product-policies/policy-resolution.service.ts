@@ -50,8 +50,7 @@ export class PolicyResolutionService {
       .limit(1);
 
     if (!variant?.product_id) {
-      const reason =
-        `Variant ${productVariantId} has no linked product — cannot resolve policy.`;
+      const reason = `Variant ${productVariantId} has no linked product — cannot resolve policy.`;
       this.logger.warn(`[resolveForVariant] ${reason}`);
       return { policy_id: null, source: 'none', reason };
     }
@@ -71,20 +70,26 @@ export class PolicyResolutionService {
     if (override?.policy_id) {
       // Verify the policy is still active before using it
       const [policy] = await db
-        .select({ id: product_policies.id, is_active: product_policies.is_active })
+        .select({
+          id: product_policies.id,
+          is_active: product_policies.is_active,
+        })
         .from(product_policies)
         .where(eq(product_policies.id, override.policy_id))
         .limit(1);
 
       if (policy?.is_active) {
-        const reason =
-          `Product override found for product ${productId} → policy ${override.policy_id}`;
+        const reason = `Product override found for product ${productId} → policy ${override.policy_id}`;
         this.logger.log(`[resolveForVariant] ${reason}`);
-        return { policy_id: override.policy_id, source: 'product_override', reason };
+        return {
+          policy_id: override.policy_id,
+          source: 'product_override',
+          reason,
+        };
       } else {
         this.logger.warn(
           `[resolveForVariant] Product ${productId} has override → policy ${override.policy_id} ` +
-          `but that policy is INACTIVE. Falling through to category policy.`,
+            `but that policy is INACTIVE. Falling through to category policy.`,
         );
       }
     }
@@ -97,8 +102,7 @@ export class PolicyResolutionService {
       .limit(1);
 
     if (!product?.category_id) {
-      const reason =
-        `Product ${productId} has no category_id — cannot fall back to category policy.`;
+      const reason = `Product ${productId} has no category_id — cannot fall back to category policy.`;
       this.logger.warn(`[resolveForVariant] ${reason}`);
       return { policy_id: null, source: 'none', reason };
     }
@@ -116,10 +120,13 @@ export class PolicyResolutionService {
       .limit(1);
 
     if (catPolicy?.policy_id) {
-      const reason =
-        `Category policy found for category ${product.category_id} → policy ${catPolicy.policy_id}`;
+      const reason = `Category policy found for category ${product.category_id} → policy ${catPolicy.policy_id}`;
       this.logger.log(`[resolveForVariant] ${reason}`);
-      return { policy_id: catPolicy.policy_id, source: 'category_policy', reason };
+      return {
+        policy_id: catPolicy.policy_id,
+        source: 'category_policy',
+        reason,
+      };
     }
 
     // ── Step 4: nothing found ────────────────────────────────────────
@@ -149,7 +156,10 @@ export class PolicyResolutionService {
         item.productVariantId,
         tx,
       );
-      results.set(item.orderItemId, { ...resolution, orderItemId: item.orderItemId });
+      results.set(item.orderItemId, {
+        ...resolution,
+        orderItemId: item.orderItemId,
+      });
     }
 
     return results;

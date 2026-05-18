@@ -19,10 +19,10 @@ import { CompanyModule } from '../company/company.module';
     VendorsModule,
     CompanyModule,
     UsersModule,
-    OrdersModule
+    OrdersModule,
   ],
   controllers: [AdminController],
   providers: [AdminService],
   exports: [AdminService],
 })
-export class AdminModule { }
+export class AdminModule {}

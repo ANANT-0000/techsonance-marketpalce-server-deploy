@@ -15,7 +15,18 @@ import {
   products,
 } from '../../drizzle/schema/shop.schema';
 import { productImageType, ProductStatus } from '../../drizzle/types/types';
-import { and, desc, eq, or } from 'drizzle-orm';
+import {
+  and,
+  asc,
+  count,
+  desc,
+  eq,
+  gte,
+  ilike,
+  lte,
+  or,
+  sql,
+} from 'drizzle-orm';
 
 import { UploadToCloudService } from '../../utils/upload-to-cloud/upload-to-cloud.service';
 import { UpdateProductDto } from './dto/updatedProduct.dto';
@@ -24,6 +35,7 @@ import { CompanyService } from '../company/company.service';
 import { InventoryService } from '../inventory/inventory.service';
 import { product_tax, warehouse } from '../../drizzle/schema';
 import { domainExtractor } from '../../common/filters/domainExtractor.filter';
+import { GetProductsQueryDto, SortBy } from './dto/get-products-query.dto';
 
 @Injectable()
 export class ProductsService {
@@ -47,60 +59,171 @@ export class ProductsService {
     );
     return this.companyService.find(filterDomain);
   }
-  async getAllProducts(domain: string) {
-    console.log('[ProductsService.getAllProducts] Request received');
+  async getAllProducts(domain: string, query: GetProductsQueryDto = {}) {
+    console.log('[ProductsService.getAllProducts] Request received', query);
     try {
-      console.log(`[ProductsService.getAllProducts] Resolving company id for domain: ${domain}`);
       const companyId = await this.resolveCompanyId(domain);
-      console.log(`[ProductsService.getAllProducts] Querying products for company_id: ${companyId}`);
-      const product = await this.db.query.products
-        .findMany({
-          where: (products) => eq(products.company_id, companyId),
-          with: {
-            category: true,
-            variants: {
-              // orderBy: (variants, { desc }) => desc(variants.created_at),
-              // where: eq(product_variants.status, ProductStatus.ACTIVE),
-              columns: {
-                id: true,
-                variant_name: true,
-                price: true,
-                sku: true,
-                status: true,
+      const {
+        offset = 0,
+        limit = 12,
+        search,
+        category_id,
+        min_price,
+        max_price,
+        sort_by = SortBy.NEWEST,
+      } = query;
+
+      // ── Build WHERE conditions ──────────────────────────────────────────────
+      const conditions = [eq(products.company_id, companyId)];
+
+      if (search && search.trim()) {
+        const term = `%${search.trim()}%`;
+        conditions.push(
+          or(
+            ilike(products.name, term),
+            ilike(products.description, term),
+          ) as any,
+        );
+      }
+
+      if (category_id) {
+        conditions.push(eq(products.category_id, category_id));
+      }
+
+      if (min_price !== undefined) {
+        conditions.push(gte(products.base_price, String(min_price)));
+      }
+
+      if (max_price !== undefined) {
+        conditions.push(lte(products.base_price, String(max_price)));
+      }
+
+      const where = and(...conditions);
+
+      // ── Sorting ─────────────────────────────────────────────────────────────
+      const orderBy = (() => {
+        switch (sort_by) {
+          case SortBy.PRICE_ASC:
+            return asc(sql`CAST(${products.base_price} AS NUMERIC)`);
+          case SortBy.PRICE_DESC:
+            return desc(sql`CAST(${products.base_price} AS NUMERIC)`);
+          case SortBy.NAME_ASC:
+            return asc(products.name);
+          case SortBy.DISCOUNT:
+            return desc(sql`CAST(${products.discount_percent} AS NUMERIC)`);
+          case SortBy.NEWEST:
+          default:
+            return desc(products.created_at);
+        }
+      })();
+
+      // ── Total count (for pagination) ─────────────────────────────────────────
+      const [{ total }] = await this.db
+        .select({ total: count() })
+        .from(products)
+        .where(where);
+
+      // ── Paginated IDs ────────────────────────────────────────────────────────
+      // Fetch IDs first (fast), then hydrate with relations
+      const productIds = await this.db
+        .select({ id: products.id })
+        .from(products)
+        .where(where)
+        .orderBy(orderBy)
+        .limit(limit)
+        .offset(offset);
+
+      if (productIds.length === 0) {
+        return {
+          data: [],
+          total: Number(total),
+          offset,
+          limit,
+        };
+      }
+
+      const ids = productIds.map((p) => p.id);
+
+      // ── Hydrate with relations ───────────────────────────────────────────────
+      const productList = await this.db.query.products.findMany({
+        where: (p) => or(...ids.map((id) => eq(p.id, id))) as any,
+        with: {
+          category: true,
+          variants: {
+            columns: {
+              id: true,
+              variant_name: true,
+              price: true,
+              sku: true,
+              status: true,
+            },
+            with: {
+              images: {
+                limit: 1,
+                where: (images) => eq(images.is_primary, true),
               },
-              with: {
-                images: {
-                  limit: 1,
-                  where: (images) => eq(images.is_primary, true),
-                },
-                inventory: {
-                  columns: {
-                    stock_quantity: true,
-                    warehouse_id: true,
-                  },
-                },
+              inventory: {
+                columns: { stock_quantity: true, warehouse_id: true },
               },
             },
           },
-        })
-        .catch((e) => {
-          console.log('error in fetching products', e);
-          return [];
-        });
-      console.log('response product ', product);
-      return product;
+        },
+      });
+
+      // Re-sort to match the ordered IDs from the paginated query
+      const idOrder = new Map(ids.map((id, i) => [id, i]));
+      productList.sort(
+        (a, b) => (idOrder.get(a.id) ?? 0) - (idOrder.get(b.id) ?? 0),
+      );
+
+      return {
+        data: productList,
+        total: Number(total),
+        offset,
+        limit,
+        totalPages: Math.ceil(Number(total) / limit),
+      };
     } catch (error) {
       throw new InternalServerErrorException('Failed to fetch products', {
         cause: error,
       });
     }
   }
+  async getProductSuggestions(domain: string, search: string) {
+    if (!search || search.trim().length < 2) return { data: [] };
+    try {
+      const companyId = await this.resolveCompanyId(domain);
+      const term = `%${search.trim()}%`;
+      const suggestions = await this.db
+        .select({ id: products.id, name: products.name })
+        .from(products)
+        .where(
+          and(
+            eq(products.company_id, companyId),
+            or(
+              ilike(products.name, term),
+              ilike(products.description, term),
+            ) as any,
+          ),
+        )
+        .limit(8)
+        .orderBy(asc(products.name));
+      return { data: suggestions };
+    } catch (error) {
+      throw new InternalServerErrorException('Failed to fetch suggestions');
+    }
+  }
+
   async getAllProductOptions(domain: string) {
     console.log('[ProductsService.getAllProductOptions] Request received');
     try {
-      console.log(`[ProductsService.getAllProductOptions] Resolving company id for domain: ${domain}`);
+      console.log(
+        `[ProductsService.getAllProductOptions] Resolving company id for domain: ${domain}`,
+      );
       const companyId = await this.resolveCompanyId(domain);
-      console.log(`[ProductsService.getAllProductOptions] Querying product options for company_id: ${companyId}`);
+      console.log(
+        `[ProductsService.getAllProductOptions] Querying product options for company_id: ${companyId}`,
+      );
       const productOptions = await this.db
         .select({ id: products.id, name: products.name })
         .from(products)
@@ -118,9 +241,13 @@ export class ProductsService {
     }
   }
   async getProductMainDetails(productId: string, domain: string) {
-    console.log(`[ProductsService.getProductMainDetails] Request received for productId: ${productId}`);
+    console.log(
+      `[ProductsService.getProductMainDetails] Request received for productId: ${productId}`,
+    );
     try {
-      console.log(`[ProductsService.getProductMainDetails] Querying product main details for id: ${productId}`);
+      console.log(
+        `[ProductsService.getProductMainDetails] Querying product main details for id: ${productId}`,
+      );
       const productRecord = await this.db.query.products
         .findFirst({
           where: (products) => eq(products.id, productId),
@@ -155,11 +282,17 @@ export class ProductsService {
   }
 
   async getProductById(productId: string, domain: string) {
-    console.log(`[ProductsService.getProductById] Request received for productId: ${productId}`);
+    console.log(
+      `[ProductsService.getProductById] Request received for productId: ${productId}`,
+    );
     try {
-      console.log(`[ProductsService.getProductById] Resolving company id for domain: ${domain}`);
+      console.log(
+        `[ProductsService.getProductById] Resolving company id for domain: ${domain}`,
+      );
       const companyId = await this.resolveCompanyId(domain);
-      console.log(`[ProductsService.getProductById] Querying product by id: ${productId} and company_id: ${companyId}`);
+      console.log(
+        `[ProductsService.getProductById] Querying product by id: ${productId} and company_id: ${companyId}`,
+      );
       const productRecord = await this.db.query.products
         .findFirst({
           where: and(
@@ -198,9 +331,13 @@ export class ProductsService {
     }
   }
   async getProductDetailsById(productVariantId: string, domain: string) {
-    console.log(`[ProductsService.getProductDetailsById] Request received for productVariantId: ${productVariantId}`);
+    console.log(
+      `[ProductsService.getProductDetailsById] Request received for productVariantId: ${productVariantId}`,
+    );
     try {
-      console.log(`[ProductsService.getProductDetailsById] Checking product variant existence for id: ${productVariantId}`);
+      console.log(
+        `[ProductsService.getProductDetailsById] Checking product variant existence for id: ${productVariantId}`,
+      );
       const isProductVariantExist = await this.db
         .select({ id: product_variants.id })
         .from(product_variants)
@@ -211,9 +348,14 @@ export class ProductsService {
             'Failed to check product variant existence',
           );
         });
-      console.log(`[ProductsService.getProductDetailsById] isProductVariantExist:`, isProductVariantExist);
-      
-      console.log(`[ProductsService.getProductDetailsById] Querying product variant details for id: ${productVariantId}`);
+      console.log(
+        `[ProductsService.getProductDetailsById] isProductVariantExist:`,
+        isProductVariantExist,
+      );
+
+      console.log(
+        `[ProductsService.getProductDetailsById] Querying product variant details for id: ${productVariantId}`,
+      );
       const productVariant = await this.db.query.product_variants
         .findFirst({
           where: eq(product_variants.id, productVariantId),
@@ -278,9 +420,13 @@ export class ProductsService {
   async getActiveProducts(domain: string) {
     console.log(`[ProductsService.getActiveProducts] Request received`);
     try {
-      console.log(`[ProductsService.getActiveProducts] Resolving company id for domain: ${domain}`);
+      console.log(
+        `[ProductsService.getActiveProducts] Resolving company id for domain: ${domain}`,
+      );
       const companyId = await this.resolveCompanyId(domain);
-      console.log(`[ProductsService.getActiveProducts] Querying active products for company_id: ${companyId}`);
+      console.log(
+        `[ProductsService.getActiveProducts] Querying active products for company_id: ${companyId}`,
+      );
       const result = await this.db.query.products.findMany({
         where: and(eq(products.company_id, companyId)),
         columns: {
@@ -316,7 +462,10 @@ export class ProductsService {
     files?: ProductFiles,
   ) {
     console.log('[ProductsService.createProduct] Request received');
-    console.log('[ProductsService.createProduct] Incoming payload:', productDto);
+    console.log(
+      '[ProductsService.createProduct] Incoming payload:',
+      productDto,
+    );
     const finalResults: { url: string; type: productImageType }[] = [];
 
     if (files?.product?.[0]) {
@@ -344,15 +493,22 @@ export class ProductsService {
     }
     console.log(`[ProductsService.createProduct] domain: ${domain}`);
     try {
-      console.log(`[ProductsService.createProduct] Resolving company id for domain: ${domain}`);
+      console.log(
+        `[ProductsService.createProduct] Resolving company id for domain: ${domain}`,
+      );
       const companyId = await this.resolveCompanyId(domain);
       return await this.db.transaction(async (tx) => {
-        console.log(`[ProductsService.createProduct] Querying category for id: ${productDto.category_id}`);
+        console.log(
+          `[ProductsService.createProduct] Querying category for id: ${productDto.category_id}`,
+        );
         const categoryRecord = await tx
           .select({ id: categories.id })
           .from(categories)
           .where(eq(categories.id, productDto.category_id));
-        console.log(`[ProductsService.createProduct] categoryRecord:`, categoryRecord);
+        console.log(
+          `[ProductsService.createProduct] categoryRecord:`,
+          categoryRecord,
+        );
         if (!categoryRecord) {
           throw new Error('Category not found');
         }
@@ -368,14 +524,22 @@ export class ProductsService {
           vendor_id: vendorId,
           company_id: companyId,
         };
-        console.log('[ProductsService.createProduct] Inserting product into database', productInsert);
+        console.log(
+          '[ProductsService.createProduct] Inserting product into database',
+          productInsert,
+        );
         const [createdProduct] = await tx
           .insert(products)
           .values(productInsert)
           .returning({ id: products.id });
 
-        console.log('[ProductsService.createProduct] createdProduct:', createdProduct);
-        console.log('[ProductsService.createProduct] Inserting product variant into database');
+        console.log(
+          '[ProductsService.createProduct] createdProduct:',
+          createdProduct,
+        );
+        console.log(
+          '[ProductsService.createProduct] Inserting product variant into database',
+        );
         const [variantRecords] = await tx
           .insert(product_variants)
           .values({
@@ -483,18 +647,27 @@ export class ProductsService {
     imagesToDelete?: string[],
     files?: ProductFiles,
   ) {
-    console.log(`[ProductsService.updateProduct] Request received for productVariantId: ${productVariantId}`);
+    console.log(
+      `[ProductsService.updateProduct] Request received for productVariantId: ${productVariantId}`,
+    );
     console.log('[ProductsService.updateProduct] Incoming payload:', product);
-    console.log('[ProductsService.updateProduct] imagesToDelete:', imagesToDelete);
+    console.log(
+      '[ProductsService.updateProduct] imagesToDelete:',
+      imagesToDelete,
+    );
     if (!productVariantId) {
       return new HttpException(
         'Product Variant ID is required',
         HttpStatus.BAD_REQUEST,
       );
     }
-    console.log(`[ProductsService.updateProduct] Resolving company id for domain: ${domain}`);
+    console.log(
+      `[ProductsService.updateProduct] Resolving company id for domain: ${domain}`,
+    );
     const companyId = await this.resolveCompanyId(domain);
-    console.log(`[ProductsService.updateProduct] Querying product_id for variant id: ${productVariantId}`);
+    console.log(
+      `[ProductsService.updateProduct] Querying product_id for variant id: ${productVariantId}`,
+    );
     const [productId] = await this.db
       .select({
         product_id: product_variants.product_id,
@@ -538,7 +711,9 @@ export class ProductsService {
       }
       await this.db
         .transaction(async (tx) => {
-          console.log(`[ProductsService.updateProduct] Updating product id: ${productVariantId}`);
+          console.log(
+            `[ProductsService.updateProduct] Updating product id: ${productVariantId}`,
+          );
           const updatedProductResult = await tx
             .update(products)
             .set(productUpdatedData)
@@ -692,16 +867,22 @@ export class ProductsService {
   }
 
   async deleteProduct(productId: string) {
-    console.log(`[ProductsService.deleteProduct] Request received for productId: ${productId}`);
+    console.log(
+      `[ProductsService.deleteProduct] Request received for productId: ${productId}`,
+    );
     if (!productId) {
-      console.log('[ProductsService.deleteProduct] Stopping: productId is missing');
+      console.log(
+        '[ProductsService.deleteProduct] Stopping: productId is missing',
+      );
       return new HttpException(
         'Product ID is required',
         HttpStatus.BAD_REQUEST,
       );
     }
     try {
-      console.log(`[ProductsService.deleteProduct] Deleting product id: ${productId}`);
+      console.log(
+        `[ProductsService.deleteProduct] Deleting product id: ${productId}`,
+      );
       await this.db
         .delete(products)
         .where(eq(products.id, productId))
@@ -722,16 +903,22 @@ export class ProductsService {
     }
   }
   async UpdateProductCategory(categoryId: string, productId: string) {
-    console.log(`[ProductsService.UpdateProductCategory] Request received for categoryId: ${categoryId}, productId: ${productId}`);
+    console.log(
+      `[ProductsService.UpdateProductCategory] Request received for categoryId: ${categoryId}, productId: ${productId}`,
+    );
     if (!categoryId && !productId) {
-      console.log('[ProductsService.UpdateProductCategory] Stopping: categoryId or productId is missing');
+      console.log(
+        '[ProductsService.UpdateProductCategory] Stopping: categoryId or productId is missing',
+      );
       return new HttpException(
         'Category ID is required',
         HttpStatus.BAD_REQUEST,
       );
     }
     try {
-      console.log(`[ProductsService.UpdateProductCategory] Updating product category for productId: ${productId}`);
+      console.log(
+        `[ProductsService.UpdateProductCategory] Updating product category for productId: ${productId}`,
+      );
       await this.db
         .update(products)
         .set({ category_id: categoryId })
@@ -751,16 +938,23 @@ export class ProductsService {
   }
 
   async deleteSelectedProducts(productIds: string[]) {
-    console.log(`[ProductsService.deleteSelectedProducts] Request received for productIds:`, productIds);
+    console.log(
+      `[ProductsService.deleteSelectedProducts] Request received for productIds:`,
+      productIds,
+    );
     if (!productIds || productIds.length === 0) {
-      console.log('[ProductsService.deleteSelectedProducts] Stopping: productIds array is empty');
+      console.log(
+        '[ProductsService.deleteSelectedProducts] Stopping: productIds array is empty',
+      );
       return new HttpException(
         'Product IDs are required',
         HttpStatus.BAD_REQUEST,
       );
     }
     try {
-      console.log(`[ProductsService.deleteSelectedProducts] Deleting selected products`);
+      console.log(
+        `[ProductsService.deleteSelectedProducts] Deleting selected products`,
+      );
       const deletePromises = productIds.map((id) =>
         this.db.delete(products).where(eq(products.id, id)),
       );
@@ -780,16 +974,22 @@ export class ProductsService {
   }
 
   async deleteProductVariant(variantId: string) {
-    console.log(`[ProductsService.deleteProductVariant] Request received for variantId: ${variantId}`);
+    console.log(
+      `[ProductsService.deleteProductVariant] Request received for variantId: ${variantId}`,
+    );
     if (!variantId) {
-      console.log('[ProductsService.deleteProductVariant] Stopping: variantId is missing');
+      console.log(
+        '[ProductsService.deleteProductVariant] Stopping: variantId is missing',
+      );
       return new HttpException(
         'Variant ID is required',
         HttpStatus.BAD_REQUEST,
       );
     }
     try {
-      console.log(`[ProductsService.deleteProductVariant] Deleting product variant id: ${variantId}`);
+      console.log(
+        `[ProductsService.deleteProductVariant] Deleting product variant id: ${variantId}`,
+      );
       await this.db
         .delete(product_variants)
         .where(eq(product_variants.id, variantId));
@@ -807,16 +1007,23 @@ export class ProductsService {
     }
   }
   async deleteSelectedProductVariants(variantIds: string[]) {
-    console.log(`[ProductsService.deleteSelectedProductVariants] Request received for variantIds:`, variantIds);
+    console.log(
+      `[ProductsService.deleteSelectedProductVariants] Request received for variantIds:`,
+      variantIds,
+    );
     if (!variantIds || variantIds.length === 0) {
-      console.log('[ProductsService.deleteSelectedProductVariants] Stopping: variantIds array is empty');
+      console.log(
+        '[ProductsService.deleteSelectedProductVariants] Stopping: variantIds array is empty',
+      );
       return new HttpException(
         'Variant IDs are required',
         HttpStatus.BAD_REQUEST,
       );
     }
     try {
-      console.log(`[ProductsService.deleteSelectedProductVariants] Deleting selected product variants`);
+      console.log(
+        `[ProductsService.deleteSelectedProductVariants] Deleting selected product variants`,
+      );
       const deletePromises = variantIds.map((id) =>
         this.db.delete(product_variants).where(eq(product_variants.id, id)),
       );
@@ -835,13 +1042,19 @@ export class ProductsService {
     }
   }
   async deleteProductImage(imageId: string) {
-    console.log(`[ProductsService.deleteProductImage] Request received for imageId: ${imageId}`);
+    console.log(
+      `[ProductsService.deleteProductImage] Request received for imageId: ${imageId}`,
+    );
     if (!imageId) {
-      console.log('[ProductsService.deleteProductImage] Stopping: imageId is missing');
+      console.log(
+        '[ProductsService.deleteProductImage] Stopping: imageId is missing',
+      );
       return new HttpException('Image ID is required', HttpStatus.BAD_REQUEST);
     }
     try {
-      console.log(`[ProductsService.deleteProductImage] Deleting product image id: ${imageId}`);
+      console.log(
+        `[ProductsService.deleteProductImage] Deleting product image id: ${imageId}`,
+      );
       await this.db
         .delete(product_images)
         .where(eq(product_images.id, imageId));

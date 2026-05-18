@@ -1,17 +1,17 @@
 import { emailLayout } from './layout.template';
 
 export function orderShippedTemplate(
-    customerName: string, 
-    orderId: string, 
-    trackingUrl: string, 
-    itemName?: string
+  customerName: string,
+  orderId: string,
+  trackingUrl: string,
+  itemName?: string,
 ): string {
-    // If itemName is provided, it's a partial shipment. Otherwise, it implies the full order.
-    const shipmentContext = itemName 
-        ? `Your item <strong>${itemName}</strong> from order` 
-        : `Your order`;
+  // If itemName is provided, it's a partial shipment. Otherwise, it implies the full order.
+  const shipmentContext = itemName
+    ? `Your item <strong>${itemName}</strong> from order`
+    : `Your order`;
 
-    const content = `
+  const content = `
             <table align="center" role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%" style="margin: 0 auto;">
                 <tr>
                     <td style="padding: 0 40px 10px 40px;" class="mobile-padding">
@@ -55,5 +55,5 @@ export function orderShippedTemplate(
                 </tr>
             </table>
     `;
-    return emailLayout(content, `Your Order #${orderId} has Shipped`);
+  return emailLayout(content, `Your Order #${orderId} has Shipped`);
 }

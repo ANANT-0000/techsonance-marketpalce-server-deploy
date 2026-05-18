@@ -723,7 +723,7 @@ export class VendorsService {
       });
     }
   }
-  
+
   async vendorApplicationCount() {
     try {
       const count = await this.db

@@ -27,19 +27,27 @@ export class InventoryService {
   constructor(
     @Inject(DRIZZLE) private readonly db: DrizzleService,
     private readonly companyService: CompanyService,
-  ) { }
+  ) {}
 
   private async resolveCompanyId(domain: string): Promise<string> {
     const filteredDomain = domainExtractor(domain);
-    console.log(`[InventoryService.resolveCompanyId] Resolving company for domain: ${domain}`);
+    console.log(
+      `[InventoryService.resolveCompanyId] Resolving company for domain: ${domain}`,
+    );
     return this.companyService.find(filteredDomain);
   }
   async create(dto: CreateInventoryDto, domain: string) {
-    console.log('[InventoryService.create] Request received for inventory creation', dto, domain);
+    console.log(
+      '[InventoryService.create] Request received for inventory creation',
+      dto,
+      domain,
+    );
     try {
       console.log('[InventoryService.create] Resolving company id');
       const companyId = await this.resolveCompanyId(domain);
-      console.log('[InventoryService.create] Querying existing inventory record');
+      console.log(
+        '[InventoryService.create] Querying existing inventory record',
+      );
       const [existingInventory] = await this.db
         .select({ id: inventory.id })
         .from(inventory)
@@ -51,7 +59,10 @@ export class InventoryService {
         )
         .limit(1);
       if (existingInventory) {
-        console.log('[InventoryService.create] Updating existing inventory quantity', existingInventory.id);
+        console.log(
+          '[InventoryService.create] Updating existing inventory quantity',
+          existingInventory.id,
+        );
         // upsert — just increase quantity
         const [updated] = await this.db
           .update(inventory)
@@ -88,7 +99,10 @@ export class InventoryService {
     try {
       console.log('[InventoryService.findAll] Resolving company id');
       const companyId = await this.resolveCompanyId(domain);
-      console.log('[InventoryService.findAll] Querying all inventory records', companyId);
+      console.log(
+        '[InventoryService.findAll] Querying all inventory records',
+        companyId,
+      );
 
       const rows = await this.db.query.inventory
         .findMany({
@@ -255,7 +269,13 @@ export class InventoryService {
     tx?: DrizzleService,
   ) {
     const db = tx ?? this.db;
-    console.log('[InventoryService.setStock] Starting stock update', productVariantId, warehouseId, newQuantity, companyId);
+    console.log(
+      '[InventoryService.setStock] Starting stock update',
+      productVariantId,
+      warehouseId,
+      newQuantity,
+      companyId,
+    );
     console.log('[InventoryService.setStock] Querying existing stock');
     const [existing] = await db
       .select({ id: inventory.id, stock_quantity: inventory.stock_quantity })
@@ -275,7 +295,10 @@ export class InventoryService {
       });
 
     if (existing) {
-      console.log('[InventoryService.setStock] Existing stock found, updating', existing);
+      console.log(
+        '[InventoryService.setStock] Existing stock found, updating',
+        existing,
+      );
       const updateResult = await db
         .update(inventory)
         .set({ stock_quantity: newQuantity })
@@ -286,10 +309,15 @@ export class InventoryService {
             cause: error,
           });
         });
-      console.log('[InventoryService.setStock] Stock updated successfully', updateResult);
+      console.log(
+        '[InventoryService.setStock] Stock updated successfully',
+        updateResult,
+      );
       return updateResult;
     } else {
-      console.log('[InventoryService.setStock] No existing stock found, inserting new record');
+      console.log(
+        '[InventoryService.setStock] No existing stock found, inserting new record',
+      );
       const insertResult = await db
         .insert(inventory)
         .values({
@@ -313,11 +341,20 @@ export class InventoryService {
     newQuantity: number,
     domain: string,
   ) {
-    console.log('[InventoryService.updateStock] Request received', productVariantId, newQuantity, domain);
+    console.log(
+      '[InventoryService.updateStock] Request received',
+      productVariantId,
+      newQuantity,
+      domain,
+    );
     try {
       console.log('[InventoryService.updateStock] Resolving company id');
       const companyId = await this.resolveCompanyId(domain);
-      console.log('[InventoryService.updateStock] Querying inventory record for variant', productVariantId, companyId);
+      console.log(
+        '[InventoryService.updateStock] Querying inventory record for variant',
+        productVariantId,
+        companyId,
+      );
       const [inv] = await this.db
         .select({
           id: inventory.id,
@@ -379,10 +416,17 @@ export class InventoryService {
     companyId: string,
     tx: DrizzleService, // transaction context
   ) {
-    console.log('[InventoryService.deductStockForOrder] Request received', orderLines, companyId);
+    console.log(
+      '[InventoryService.deductStockForOrder] Request received',
+      orderLines,
+      companyId,
+    );
     try {
       for (const line of orderLines) {
-        console.log('[InventoryService.deductStockForOrder] Querying stock for variant', line.variantId);
+        console.log(
+          '[InventoryService.deductStockForOrder] Querying stock for variant',
+          line.variantId,
+        );
         const [idv] = await tx
           .select({
             id: inventory.id,
@@ -420,7 +464,11 @@ export class InventoryService {
               eq(inventory.product_variant_id, line.variantId),
             ),
           );
-        console.log('[InventoryService.deductStockForOrder] Stock deducted successfully', line.variantId, line.quantity);
+        console.log(
+          '[InventoryService.deductStockForOrder] Stock deducted successfully',
+          line.variantId,
+          line.quantity,
+        );
       }
       console.log('[InventoryService.deductStockForOrder] Process completed');
     } catch (error) {
@@ -527,7 +575,11 @@ export class InventoryService {
     try {
       console.log('[InventoryService.remove] Resolving company id');
       const companyId = await this.resolveCompanyId(domain);
-      console.log('[InventoryService.remove] Querying existing inventory record', id, companyId);
+      console.log(
+        '[InventoryService.remove] Querying existing inventory record',
+        id,
+        companyId,
+      );
       const [existing] = await this.db
         .select({ id: inventory.id })
         .from(inventory)

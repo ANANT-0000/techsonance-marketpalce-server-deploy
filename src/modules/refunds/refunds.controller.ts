@@ -13,7 +13,7 @@ import { RefundsService } from './refunds.service';
 
 @Controller({ version: '1', path: 'refunds' })
 export class RefundsController {
-  constructor(private readonly refundsService: RefundsService) { }
+  constructor(private readonly refundsService: RefundsService) {}
 
   // Vendor manually initiates a refund for a full order
   @Post(':orderId/initiate')
@@ -24,7 +24,12 @@ export class RefundsController {
     @Headers('company-domain') domain: string,
     @Body('orderItemId') orderItemId?: string,
   ) {
-    return this.refundsService.initiateRefund({ orderId, orderItemId, reason, domain });
+    return this.refundsService.initiateRefund({
+      orderId,
+      orderItemId,
+      reason,
+      domain,
+    });
   }
 
   // Get all refund records for a specific order

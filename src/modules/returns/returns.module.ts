@@ -9,8 +9,15 @@ import { InventoryModule } from '../inventory/inventory.module';
 import { MailModule } from '../../common/services/mail/mail.module';
 
 @Module({
-  imports: [CompanyModule, DrizzleModule, UploadToCloudModule, RefundsModule, InventoryModule, MailModule],
+  imports: [
+    CompanyModule,
+    DrizzleModule,
+    UploadToCloudModule,
+    RefundsModule,
+    InventoryModule,
+    MailModule,
+  ],
   controllers: [ReturnsController],
   providers: [ReturnsService],
 })
-export class ReturnsModule { }
+export class ReturnsModule {}

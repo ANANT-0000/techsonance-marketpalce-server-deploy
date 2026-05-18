@@ -122,7 +122,7 @@ export class CompanyIdentityController {
       signatory_signature_file?: Express.Multer.File[];
     },
   ) {
-    console.log('dro',dto);
+    console.log('dro', dto);
     return await this.service.upsertDocumentConfig(domain, dto, files ?? {});
   }
 }

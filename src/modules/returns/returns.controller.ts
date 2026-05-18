@@ -1,4 +1,17 @@
-import { Controller, Post, Body, Get, Patch, Param, UseGuards, Req, Headers, HttpStatus, HttpCode, UploadedFiles } from '@nestjs/common';
+import {
+  Controller,
+  Post,
+  Body,
+  Get,
+  Patch,
+  Param,
+  UseGuards,
+  Req,
+  Headers,
+  HttpStatus,
+  HttpCode,
+  UploadedFiles,
+} from '@nestjs/common';
 import { ReturnsService } from './returns.service';
 import { CreateReturnDto } from './dto/create-return.dto';
 import { UpdateReturnDto } from './dto/update-return.dto';
@@ -6,27 +19,30 @@ import { ParseJsonPipe } from '../../common/pipes/parseJsonPipe';
 import { UploadToCloud } from '../../common/decorators/upload.decorator';
 
 @Controller({ path: 'returns', version: '1' })
-
 export class ReturnsController {
-  constructor(private readonly returnsService: ReturnsService) { }
+  constructor(private readonly returnsService: ReturnsService) {}
 
   @Post('user/:userId')
-  @UploadToCloud([
-    { name: 'evidence_images', maxCount: 3 },
-  ])
+  @UploadToCloud([{ name: 'evidence_images', maxCount: 3 }])
   @HttpCode(HttpStatus.CREATED)
-  createReturn(@Param('userId') userId: string, @Body(ParseJsonPipe) dto: CreateReturnDto, @UploadedFiles() files: { evidence_images?: Express.Multer.File[] }, @Headers('company-domain') domain: string) {
-    console.log("dto",dto, "files",files)
+  createReturn(
+    @Param('userId') userId: string,
+    @Body(ParseJsonPipe) dto: CreateReturnDto,
+    @UploadedFiles() files: { evidence_images?: Express.Multer.File[] },
+    @Headers('company-domain') domain: string,
+  ) {
+    console.log('dto', dto, 'files', files);
     return this.returnsService.createReturnRequest(userId, dto, files, domain);
   }
 
   @Get('user/:userId')
-
   @HttpCode(HttpStatus.OK)
-  getCustomerReturns(@Param('userId') userId: string, @Headers('company-domain') domain: string) {
+  getCustomerReturns(
+    @Param('userId') userId: string,
+    @Headers('company-domain') domain: string,
+  ) {
     return this.returnsService.getCustomerReturns(userId, domain);
   }
-
 
   @Get('vendor')
   @HttpCode(HttpStatus.OK)
@@ -45,10 +61,9 @@ export class ReturnsController {
   updateStatus(
     @Param('returnId') returnId: string,
     @Body() dto: any,
-    @Headers('company-domain') domain: string
+    @Headers('company-domain') domain: string,
   ) {
-    console.log("return status dto", dto)
+    console.log('return status dto', dto);
     return this.returnsService.updateReturnStatus(returnId, domain, dto);
   }
-
 }

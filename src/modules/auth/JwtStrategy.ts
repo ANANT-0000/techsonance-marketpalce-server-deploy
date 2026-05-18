@@ -6,12 +6,11 @@ import { JWT_GUARD } from './jwt-auth.guard';
 @Injectable()
 export class JwtStrategy extends PassportStrategy(Strategy, JWT_GUARD) {
   constructor() {
-
     super({
       jwtFromRequest: ExtractJwt.fromAuthHeaderAsBearerToken(),
       ignoreExpiration: false,
 
-      secretOrKey: process.env.JWT_SECRET || 'your_fallback_secret', 
+      secretOrKey: process.env.JWT_SECRET || 'your_fallback_secret',
     });
   }
 

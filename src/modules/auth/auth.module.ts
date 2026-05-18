@@ -13,7 +13,7 @@ import { MailModule } from '../../common/services/mail/mail.module';
 import { CompanyModule } from '../company/company.module';
 import { GoogleStrategy } from './google.strategy';
 import { AdminModule } from '../admin/admin.module';
- 
+
 @Module({
   imports: [
     UsersModule,
@@ -35,7 +35,8 @@ import { AdminModule } from '../admin/admin.module';
   controllers: [AuthController],
   providers: [
     AuthService,
-    JwtStrategy, GoogleStrategy
+    JwtStrategy,
+    GoogleStrategy,
     // {
     //   provide: APP_GUARD,
     //   useClass: RoleGuard,
@@ -43,4 +44,4 @@ import { AdminModule } from '../admin/admin.module';
   ],
   exports: [AuthService, JwtModule],
 })
-export class AuthModule { }
+export class AuthModule {}

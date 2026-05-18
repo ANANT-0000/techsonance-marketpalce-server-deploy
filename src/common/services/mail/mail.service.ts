@@ -37,7 +37,6 @@ export class MailService {
     private readonly jwtService: JwtService,
     private readonly configService: ConfigService,
   ) {
-    // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-call
     this.nodeMailerTransporter = nodemailer.createTransport({
       host: configService.get<string>('MAIL_HOST'),
       port: configService.get<number>('MAIL_PORT'),
@@ -139,7 +138,7 @@ export class MailService {
     // const transporter = await this.createTransporter();
 
     // const resend = new Resend(this.configService.get<string>('RESEND_KEY'));
-    // eslint-disable-next-line @typescript-eslint/no-unsafe-return
+
     // return await transporter.sendMail(mailOptions).catch((error) => {
     //   console.error('Error sending email:', error);
     //   throw new Error('Failed to send email. Please try again later.');

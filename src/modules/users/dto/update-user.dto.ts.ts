@@ -1,4 +1,4 @@
-import { Transform } from "class-transformer";
+import { Transform } from 'class-transformer';
 import {
   IsEmail,
   IsNotEmpty,
@@ -6,7 +6,7 @@ import {
   IsString,
   Length,
   MaxLength,
-} from "class-validator";
+} from 'class-validator';
 
 export class UpdateUserDtoTs {
   @IsNotEmpty()

@@ -118,7 +118,7 @@ export class AddressService {
         );
       }
 
-      const addressRecord= await this.db
+      const addressRecord = await this.db
         .select()
         .from(address)
         .where(

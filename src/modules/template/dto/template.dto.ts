@@ -29,5 +29,4 @@ export class UpdateTemplateDto {
   @IsString()
   @Transform(({ value }: { value: string }) => value.trim())
   description?: string;
-
 }

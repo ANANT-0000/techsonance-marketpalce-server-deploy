@@ -8,11 +8,7 @@ import {
 import { JwtService } from '@nestjs/jwt';
 import { and, eq } from 'drizzle-orm';
 import { DRIZZLE } from '../../drizzle/drizzle.module';
-import {
-  company,
-  user,
-  user_roles,
-} from '../../drizzle/schema';
+import { company, user, user_roles } from '../../drizzle/schema';
 import { type DrizzleDB } from '../../drizzle/types/drizzle';
 import { UserRole } from '../../drizzle/types/types';
 import { ConfigService } from '@nestjs/config';

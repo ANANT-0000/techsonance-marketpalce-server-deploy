@@ -1,13 +1,13 @@
 import {
   IsString,
   IsNumber,
-  IsBoolean,
+ 
   IsArray,
   IsOptional,
   ValidateNested,
   IsEnum,
   IsNumberString,
-  IsObject,
+ 
 } from 'class-validator';
 import { Transform, Type } from 'class-transformer';
 import { ProductStatus } from '../../../drizzle/types/types';

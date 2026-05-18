@@ -15,7 +15,6 @@ import { RoleGuard } from '../../guards/role.guard';
 import { Role } from '../../enums/role.enum';
 import { Roles } from '../../common/decorators/roles.decorator';
 import { ProductPoliciesService } from '../product-policies/product-policies.service';
- 
 
 @Controller({
   version: '1',

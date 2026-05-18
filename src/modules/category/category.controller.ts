@@ -42,7 +42,7 @@ export class CategoryController {
   // @Roles(Role.ADMIN, Role.VENDOR)
   create(
     @Headers('company-domain') domain: string,
-    @Body('category') createCategoryDto:any,
+    @Body('category') createCategoryDto: any,
   ) {
     console.log('Received request to create category for domain:', domain);
     console.log('Category data:', createCategoryDto);

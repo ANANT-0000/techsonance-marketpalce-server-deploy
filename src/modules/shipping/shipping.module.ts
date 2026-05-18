@@ -10,4 +10,4 @@ import { MailModule } from '../../common/services/mail/mail.module';
   controllers: [ShippingController],
   providers: [ShippingService],
 })
-export class ShippingModule { }
+export class ShippingModule {}

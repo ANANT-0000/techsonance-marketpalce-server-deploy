@@ -50,11 +50,19 @@ export class OrdersService {
   ) {}
   private async resolveCompanyId(domain: string): Promise<string> {
     const filteredDomain = domainExtractor(domain);
-    console.log(`[OrdersService.resolveCompanyId] Resolving company for domain: ${domain}`);
-    console.log(`[OrdersService.resolveCompanyId] Extracted filter domain: ${filteredDomain}`);
-    console.log(`[OrdersService.resolveCompanyId] Querying CompanyService.find(...)`);
+    console.log(
+      `[OrdersService.resolveCompanyId] Resolving company for domain: ${domain}`,
+    );
+    console.log(
+      `[OrdersService.resolveCompanyId] Extracted filter domain: ${filteredDomain}`,
+    );
+    console.log(
+      `[OrdersService.resolveCompanyId] Querying CompanyService.find(...)`,
+    );
     const companyId = await this.companyService.find(filteredDomain);
-    console.log(`[OrdersService.resolveCompanyId] Company resolved: ${companyId}`);
+    console.log(
+      `[OrdersService.resolveCompanyId] Company resolved: ${companyId}`,
+    );
     return companyId;
   }
 
@@ -72,13 +80,16 @@ export class OrdersService {
     paymentMethod: string;
   }) {
     try {
-      console.log('[OrdersService.createOrder] Starting order creation request', {
-        userId,
-        companyId,
-        addressId,
-        itemCount: orderLines.length,
-        paymentMethod,
-      });
+      console.log(
+        '[OrdersService.createOrder] Starting order creation request',
+        {
+          userId,
+          companyId,
+          addressId,
+          itemCount: orderLines.length,
+          paymentMethod,
+        },
+      );
       const totalAmount = orderLines.reduce(
         (acc, line) => acc + line.price * line.quantity,
         0,
@@ -89,7 +100,9 @@ export class OrdersService {
 
       const orderResult = await this.db.transaction(async (tx) => {
         console.log('[OrdersService.createOrder] Transaction started');
-        console.log('[OrdersService.createOrder] Deducting stock for order lines');
+        console.log(
+          '[OrdersService.createOrder] Deducting stock for order lines',
+        );
         await this.inventoryService.deductStockForOrder(
           orderLines.map((l) => ({
             variantId: l.variantId,
@@ -133,9 +146,12 @@ export class OrdersService {
 
         // 4. Insert orders_tax rows
         if (taxData.appliedTaxTypeIds.length > 0) {
-          console.log('[OrdersService.createOrder] Writing order tax mappings', {
-            taxCount: taxData.appliedTaxTypeIds.length,
-          });
+          console.log(
+            '[OrdersService.createOrder] Writing order tax mappings',
+            {
+              taxCount: taxData.appliedTaxTypeIds.length,
+            },
+          );
           const orderTaxInserts = taxData.appliedTaxTypeIds.map(
             (taxTypeId) => ({
               order_id: newOrder.id,
@@ -146,7 +162,7 @@ export class OrdersService {
         }
 
         // 5. Create GST Invoice record
-        console.log('[OrdersService.createOrder] Creating GST invoice record');   
+        console.log('[OrdersService.createOrder] Creating GST invoice record');
         await tx.insert(gst_invoices).values({
           company_id: companyId,
           order_id: newOrder.id,
@@ -270,10 +286,13 @@ export class OrdersService {
             );
           });
 
-        console.log('[OrdersService.createOrder] Order creation transaction completed', {
-          orderId: newOrder.id,
-          totalAmount: String(taxData.grandTotal),
-        });
+        console.log(
+          '[OrdersService.createOrder] Order creation transaction completed',
+          {
+            orderId: newOrder.id,
+            totalAmount: String(taxData.grandTotal),
+          },
+        );
 
         return {
           orderId: newOrder.id,
@@ -299,10 +318,15 @@ export class OrdersService {
   // ── All other methods unchanged below this line ──────────────────
 
   async getOrderById(orderId: string, domain?: string) {
-    console.log('[OrdersService.getOrderById] Request received', { orderId, domain });
+    console.log('[OrdersService.getOrderById] Request received', {
+      orderId,
+      domain,
+    });
     try {
       if (!orderId || !domain) {
-        console.log('[OrdersService.getOrderById] Stopping: orderId or domain is missing');
+        console.log(
+          '[OrdersService.getOrderById] Stopping: orderId or domain is missing',
+        );
         throw new HttpException(
           'Order ID and Domain are required',
           HttpStatus.BAD_REQUEST,
@@ -311,7 +335,10 @@ export class OrdersService {
       console.log('[OrdersService.getOrderById] Resolving company id');
       const companyId = await this.resolveCompanyId(domain);
 
-      console.log('[OrdersService.getOrderById] Querying order by id', { orderId, companyId });
+      console.log('[OrdersService.getOrderById] Querying order by id', {
+        orderId,
+        companyId,
+      });
       const [orderResult] = await this.db.query.orders.findMany({
         where: and(eq(orders.id, orderId), eq(orders.company_id, companyId)),
         with: { items: true },
@@ -342,7 +369,9 @@ export class OrdersService {
       const allOrders = await this.db.query.orders.findMany({
         columns: { id: true, created_at: true },
       });
-      console.log('[OrdersService.getAllOrders] Orders fetched successfully', { count: allOrders.length });
+      console.log('[OrdersService.getAllOrders] Orders fetched successfully', {
+        count: allOrders.length,
+      });
       return allOrders;
     } catch (error) {
       console.error('Error fetching orders:', error);
@@ -375,7 +404,8 @@ export class OrdersService {
     }
 
     try {
-      console.log(`[OrdersService.completeOrderVerification] Starting payment verification for order ${orderId} (company ${companyId}, success=${isSuccess})`,
+      console.log(
+        `[OrdersService.completeOrderVerification] Starting payment verification for order ${orderId} (company ${companyId}, success=${isSuccess})`,
       );
       if (!existingOrder || !existingOrder.user_id) {
         throw new HttpException('Order not found', HttpStatus.NOT_FOUND);
@@ -390,10 +420,12 @@ export class OrdersService {
         .where(eq(order_items.order_id, orderId));
 
       return this.db.transaction(async (tx) => {
-        console.log('[OrdersService.completeOrderVerification] Verification transaction started',
+        console.log(
+          '[OrdersService.completeOrderVerification] Verification transaction started',
         );
         if (isSuccess) {
-          console.log(`[OrdersService.completeOrderVerification] Payment succeeded, updating order items for order ${orderId}`,
+          console.log(
+            `[OrdersService.completeOrderVerification] Payment succeeded, updating order items for order ${orderId}`,
           );
           const orderItemsRecord = await tx
             .select()
@@ -422,14 +454,16 @@ export class OrdersService {
             );
           }
 
-          console.log(`[OrdersService.completeOrderVerification] Order items marked processing (${orderItemsRecord.length} items) for order ${orderId}`,
+          console.log(
+            `[OrdersService.completeOrderVerification] Order items marked processing (${orderItemsRecord.length} items) for order ${orderId}`,
           );
 
           if (!orderItemsRecord[0]?.order_id) {
             throw new HttpException('Order not found', HttpStatus.NOT_FOUND);
           }
 
-          console.log(`[OrdersService.completeOrderVerification] Marking payment completed for order ${orderItemsRecord[0].order_id}`,
+          console.log(
+            `[OrdersService.completeOrderVerification] Marking payment completed for order ${orderItemsRecord[0].order_id}`,
           );
           await tx
             .update(payments)
@@ -444,7 +478,8 @@ export class OrdersService {
             });
 
           if (customerDetails.email) {
-            console.log(`[OrdersService.completeOrderVerification] Sending order placed email to ${customerDetails.email} for order ${orderId}`,
+            console.log(
+              `[OrdersService.completeOrderVerification] Sending order placed email to ${customerDetails.email} for order ${orderId}`,
             );
             await this.mailService
               .sendOrderPlacedEmail(
@@ -474,7 +509,8 @@ export class OrdersService {
             );
 
           const itemIds = orderItemsRecord.map((item) => item.id);
-          console.log(`[OrdersService.completeOrderVerification] Checking policy snapshots for order items: ${itemIds.join(', ')}`,
+          console.log(
+            `[OrdersService.completeOrderVerification] Checking policy snapshots for order items: ${itemIds.join(', ')}`,
           );
 
           if (itemIds.length > 0) {
@@ -490,7 +526,8 @@ export class OrdersService {
                 );
               });
 
-            console.log(`[OrdersService.completeOrderVerification] Policy snapshot records loaded: ${orderItemsWithPolicies.length}`,
+            console.log(
+              `[OrdersService.completeOrderVerification] Policy snapshot records loaded: ${orderItemsWithPolicies.length}`,
             );
 
             // Fire-and-forget warranty PDF generation per item
@@ -516,7 +553,8 @@ export class OrdersService {
             }
           }
 
-          console.log(`[OrdersService.completeOrderVerification] Verification completed successfully for order ${orderId}`,
+          console.log(
+            `[OrdersService.completeOrderVerification] Verification completed successfully for order ${orderId}`,
           );
           return {
             success: true,
@@ -524,7 +562,8 @@ export class OrdersService {
             message: 'Order placed successfully',
           };
         } else {
-          console.log(`[OrdersService.completeOrderVerification] Payment failed, rolling back stock for order ${orderId}`,
+          console.log(
+            `[OrdersService.completeOrderVerification] Payment failed, rolling back stock for order ${orderId}`,
           );
           await this.inventoryService.rollbackStockForOrder(
             orderLines.map((l) => ({
@@ -541,7 +580,8 @@ export class OrdersService {
             .where(eq(order_items.order_id, orderId));
 
           if (orderItemsRecord.length > 0) {
-            console.log(`[OrdersService.completeOrderVerification] Marking ${orderItemsRecord.length} order items cancelled after failed payment`,
+            console.log(
+              `[OrdersService.completeOrderVerification] Marking ${orderItemsRecord.length} order items cancelled after failed payment`,
             );
             await Promise.all(
               orderItemsRecord.map((item) =>
@@ -564,7 +604,8 @@ export class OrdersService {
             );
           }
 
-          console.log(`[OrdersService.completeOrderVerification] Marking payment as failed for order ${existingOrder.id}`,
+          console.log(
+            `[OrdersService.completeOrderVerification] Marking payment as failed for order ${existingOrder.id}`,
           );
           await tx
             .update(payments)
@@ -577,7 +618,8 @@ export class OrdersService {
               );
             });
 
-          console.log(`[OrdersService.completeOrderVerification] Verification completed with failure branch for order ${existingOrder.id}`,
+          console.log(
+            `[OrdersService.completeOrderVerification] Verification completed with failure branch for order ${existingOrder.id}`,
           );
           return {
             success: false,
@@ -601,16 +643,24 @@ export class OrdersService {
   }
 
   async getUserOrders(userId: string, domain: string) {
-    console.log('[OrdersService.getUserOrders] Request received', { userId, domain });
+    console.log('[OrdersService.getUserOrders] Request received', {
+      userId,
+      domain,
+    });
     try {
       if (!userId) {
-        console.log('[OrdersService.getUserOrders] Stopping: User ID is missing');
+        console.log(
+          '[OrdersService.getUserOrders] Stopping: User ID is missing',
+        );
         throw new HttpException('User ID is required', HttpStatus.BAD_REQUEST);
       }
       console.log('[OrdersService.getUserOrders] Resolving company id');
       const companyId = await this.resolveCompanyId(domain);
 
-      console.log('[OrdersService.getUserOrders] Querying orders for user', { userId, companyId });
+      console.log('[OrdersService.getUserOrders] Querying orders for user', {
+        userId,
+        companyId,
+      });
       return await this.db.query.orders
         .findMany({
           orderBy: desc(orders.created_at),
@@ -689,19 +739,30 @@ export class OrdersService {
     limit: number = 10,
     status?: OrderStatus,
   ) {
-    console.log('[OrdersService.getUserOrderDetails] Request received', { orderId, domain, offset, limit, status });
+    console.log('[OrdersService.getUserOrderDetails] Request received', {
+      orderId,
+      domain,
+      offset,
+      limit,
+      status,
+    });
     try {
       if (!orderId || !domain) {
-        console.log('[OrdersService.getUserOrderDetails] Stopping: orderId or domain is missing');
+        console.log(
+          '[OrdersService.getUserOrderDetails] Stopping: orderId or domain is missing',
+        );
         throw new HttpException(
           'Order ID and domain are required',
           HttpStatus.BAD_REQUEST,
         );
-      } 
+      }
       console.log('[OrdersService.getUserOrderDetails] Resolving company id');
       const companyId = await this.resolveCompanyId(domain);
 
-      console.log('[OrdersService.getUserOrderDetails] Querying order details', { orderId, companyId });
+      console.log(
+        '[OrdersService.getUserOrderDetails] Querying order details',
+        { orderId, companyId },
+      );
       const orderDetails = await this.db.query.orders.findFirst({
         where: and(eq(orders.id, orderId), eq(orders.company_id, companyId)),
         columns: {
@@ -759,10 +820,14 @@ export class OrdersService {
       });
 
       if (!orderDetails) {
-        console.log('[OrdersService.getUserOrderDetails] Stopping: Order not found');
+        console.log(
+          '[OrdersService.getUserOrderDetails] Stopping: Order not found',
+        );
         throw new HttpException('Order not found', HttpStatus.NOT_FOUND);
       }
-      console.log('[OrdersService.getUserOrderDetails] Order details found successfully');
+      console.log(
+        '[OrdersService.getUserOrderDetails] Order details found successfully',
+      );
       return orderDetails;
     } catch (error) {
       console.error('Error fetching order details:', error);
@@ -777,13 +842,16 @@ export class OrdersService {
     domain: string,
     offset: number = 0,
     limit: number = 50,
-    status?: OrderStatus | undefined,
+    status?: OrderStatus,
   ) {
     try {
-      console.log(`[OrdersService.getOrdersList] Request received for domain: ${domain}, offset: ${offset}, limit: ${limit}, status: ${status}`,
+      console.log(
+        `[OrdersService.getOrdersList] Request received for domain: ${domain}, offset: ${offset}, limit: ${limit}, status: ${status}`,
       );
       const companyId = await this.resolveCompanyId(domain);
-      console.log(`[OrdersService.getOrdersList] Company resolved: ${companyId}`);
+      console.log(
+        `[OrdersService.getOrdersList] Company resolved: ${companyId}`,
+      );
 
       const validOrderIds = (
         await this.db
@@ -856,10 +924,15 @@ export class OrdersService {
   }
 
   async getOrderDetails(orderId: string, domain: string) {
-    console.log('[OrdersService.getOrderDetails] Request received', { orderId, domain });
+    console.log('[OrdersService.getOrderDetails] Request received', {
+      orderId,
+      domain,
+    });
     try {
       if (!orderId || !domain) {
-        console.log('[OrdersService.getOrderDetails] Stopping: Order ID or domain missing');
+        console.log(
+          '[OrdersService.getOrderDetails] Stopping: Order ID or domain missing',
+        );
         throw new HttpException(
           'Order ID and domain are required',
           HttpStatus.BAD_REQUEST,
@@ -867,7 +940,10 @@ export class OrdersService {
       }
       console.log('[OrdersService.getOrderDetails] Resolving company id');
       const companyId = await this.resolveCompanyId(domain);
-      console.log('[OrdersService.getOrderDetails] Querying order details from DB', { orderId, companyId });
+      console.log(
+        '[OrdersService.getOrderDetails] Querying order details from DB',
+        { orderId, companyId },
+      );
       const row = await this.db.query.orders.findFirst({
         where: and(eq(orders.id, orderId), eq(orders.company_id, companyId)),
         columns: { id: true, total_amount: true, created_at: true },
@@ -942,7 +1018,9 @@ export class OrdersService {
       });
 
       if (!row) {
-        console.log('[OrdersService.getOrderDetails] Stopping: Order not found');
+        console.log(
+          '[OrdersService.getOrderDetails] Stopping: Order not found',
+        );
         throw new HttpException('Order not found', HttpStatus.NOT_FOUND);
       }
 
@@ -951,7 +1029,9 @@ export class OrdersService {
       );
       const isSingleWarehouse = warehouseIds.size <= 1;
 
-      console.log('[OrdersService.getOrderDetails] Order details found successfully');
+      console.log(
+        '[OrdersService.getOrderDetails] Order details found successfully',
+      );
       return {
         id: row.id,
         total_amount: row.total_amount,
@@ -1037,9 +1117,16 @@ export class OrdersService {
     newStatus: OrderStatus,
     domain: string,
   ) {
-    console.log('[OrdersService.setOrderStatus] Request received', { orderId, newStatus, domain });
+    console.log('[OrdersService.setOrderStatus] Request received', {
+      orderId,
+      newStatus,
+      domain,
+    });
     const filteredDomain = domainExtractor(domain);
-    console.log('[OrdersService.setOrderStatus] Resolving company for domain:', filteredDomain);
+    console.log(
+      '[OrdersService.setOrderStatus] Resolving company for domain:',
+      filteredDomain,
+    );
     const companyId = await this.companyService.find(filteredDomain);
     if (!companyId) {
       console.log('[OrdersService.setOrderStatus] Stopping: Company not found');
@@ -1050,7 +1137,10 @@ export class OrdersService {
     }
 
     try {
-      console.log('[OrdersService.setOrderStatus] Querying existing order from DB', { orderId, companyId });
+      console.log(
+        '[OrdersService.setOrderStatus] Querying existing order from DB',
+        { orderId, companyId },
+      );
       const [existingOrder] = await this.db
         .select({ id: orders.id })
         .from(orders)
@@ -1067,14 +1157,19 @@ export class OrdersService {
           newStatus.toLowerCase() as OrderStatus,
         )
       ) {
-        console.log('[OrdersService.setOrderStatus] Stopping: Invalid status', newStatus);
+        console.log(
+          '[OrdersService.setOrderStatus] Stopping: Invalid status',
+          newStatus,
+        );
         throw new HttpException(
           'Invalid order status value',
           HttpStatus.BAD_REQUEST,
         );
       }
 
-      console.log('[OrdersService.setOrderStatus] Querying order items to update');
+      console.log(
+        '[OrdersService.setOrderStatus] Querying order items to update',
+      );
       const orderItemsRecord = await this.db
         .select({ id: order_items.id })
         .from(order_items)
@@ -1103,7 +1198,10 @@ export class OrdersService {
         );
       }
 
-      console.log('[OrdersService.setOrderStatus] Order status updated successfully', { orderId });
+      console.log(
+        '[OrdersService.setOrderStatus] Order status updated successfully',
+        { orderId },
+      );
       return orderId;
     } catch (error) {
       console.error('Error updating order status:', error);
@@ -1115,11 +1213,16 @@ export class OrdersService {
   }
 
   async getPendingOrders(domain: string) {
-    console.log('[OrdersService.getPendingOrders] Request received', { domain });
+    console.log('[OrdersService.getPendingOrders] Request received', {
+      domain,
+    });
     try {
       console.log('[OrdersService.getPendingOrders] Resolving company id');
       const companyId = await this.resolveCompanyId(domain);
-      console.log('[OrdersService.getPendingOrders] Querying pending orders from DB', { companyId });
+      console.log(
+        '[OrdersService.getPendingOrders] Querying pending orders from DB',
+        { companyId },
+      );
       const result = await this.db.query.orders.findMany({
         where: eq(orders.company_id, companyId),
         with: {
@@ -1138,7 +1241,9 @@ export class OrdersService {
           },
         },
       });
-      console.log('[OrdersService.getPendingOrders] Pending orders retrieved successfully');
+      console.log(
+        '[OrdersService.getPendingOrders] Pending orders retrieved successfully',
+      );
       return result.map((order) => order.items).flat();
     } catch (error) {
       console.error('Error fetching pending orders:', error);

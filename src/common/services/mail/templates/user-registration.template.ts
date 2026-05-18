@@ -1,10 +1,15 @@
 import { emailLayout } from './layout.template';
 
-export function userRegistrationTemplate(userName: string, actionUrl?: string): string {
-    // Fallback URL if no specific action URL (like email verification) is provided
-    const targetUrl = actionUrl || `${process.env.FRONTEND_URL || 'https://techsonance.com'}/shopping`;
+export function userRegistrationTemplate(
+  userName: string,
+  actionUrl?: string,
+): string {
+  // Fallback URL if no specific action URL (like email verification) is provided
+  const targetUrl =
+    actionUrl ||
+    `${process.env.FRONTEND_URL || 'https://techsonance.com'}/shopping`;
 
-    const content = `
+  const content = `
             <!-- Content Section -->
             <table align="center" role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%" style="margin: 0 auto;">
                 <tr>
@@ -55,5 +60,5 @@ export function userRegistrationTemplate(userName: string, actionUrl?: string): 
                 </tr>
             </table>
     `;
-    return emailLayout(content, 'Welcome to Techsonance Marketplace!');
+  return emailLayout(content, 'Welcome to Techsonance Marketplace!');
 }

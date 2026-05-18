@@ -1,12 +1,12 @@
 import { emailLayout } from './layout.template';
 
 export function deactivateAccountOtpTemplate(
-    userName: string,
-    otpCode: string,
-    expireAt: string,
-    companyName: string = 'Techsonance Marketplace'
+  userName: string,
+  otpCode: string,
+  expireAt: string,
+  companyName: string = 'Techsonance Marketplace',
 ): string {
-    const content = `
+  const content = `
             <!-- Content Section -->
             <table align="center" role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%" style="margin: 0 auto;">
                 <tr>
@@ -49,5 +49,5 @@ export function deactivateAccountOtpTemplate(
             </table>
     `;
 
-    return emailLayout(content, `Confirm Account Deactivation - ${companyName}`);
+  return emailLayout(content, `Confirm Account Deactivation - ${companyName}`);
 }

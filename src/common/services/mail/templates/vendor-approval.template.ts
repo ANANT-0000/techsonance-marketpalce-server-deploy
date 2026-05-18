@@ -1,7 +1,6 @@
 import { emailLayout } from './layout.template';
 
 export function vendorApprovalTemplate(storeName: string): string {
-  
   const dashboardUrl = `${process.env.FRONTEND_URL || 'https://techsonance.com'}/vendor/dashboard`;
 
   const content = `

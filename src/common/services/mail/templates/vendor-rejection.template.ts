@@ -1,9 +1,12 @@
 import { emailLayout } from './layout.template';
 
-export function vendorRejectionTemplate(storeName: string, reason?: string): string {
-    const contactUrl = `${process.env.FRONTEND_URL || 'https://techsonance.com'}/contact`;
+export function vendorRejectionTemplate(
+  storeName: string,
+  reason?: string,
+): string {
+  const contactUrl = `${process.env.FRONTEND_URL || 'https://techsonance.com'}/contact`;
 
-    const content = `
+  const content = `
             <!-- Content Section -->
             <table align="center" role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%" style="margin: 0 auto;">
                 <tr>
@@ -21,7 +24,9 @@ export function vendorRejectionTemplate(storeName: string, reason?: string): str
                             Thank you for your interest in joining Techsonance Marketplace. After carefully reviewing your application, we regret to inform you that we cannot approve your store at this time.
                         </p>
 
-                        ${reason ? `
+                        ${
+                          reason
+                            ? `
                         <!-- Reason Box -->
                         <div style="background-color: #fff1f2; border-left: 4px solid #f43f5e; padding: 20px; border-radius: 4px; margin: 25px 0;">
                             <p style="margin: 0 0 5px 0; color: #9f1239; font-weight: bold; font-size: 14px; font-family: Helvetica, Arial, sans-serif;">REASON FOR REJECTION</p>
@@ -29,7 +34,9 @@ export function vendorRejectionTemplate(storeName: string, reason?: string): str
                                 ${reason}
                             </p>
                         </div>
-                        ` : ''}
+                        `
+                            : ''
+                        }
 
                         <p style="margin: 0 0 20px 0; color: #475569; font-size: 16px; line-height: 1.6; font-family: Helvetica, Arial, sans-serif;">
                             If you have resolved the issues mentioned above or feel this was a mistake, please reach out to our support team for a secondary review.
@@ -42,5 +49,5 @@ export function vendorRejectionTemplate(storeName: string, reason?: string): str
                 </tr>
             </table>
     `;
-    return emailLayout(content, 'Update on your Vendor Application');
+  return emailLayout(content, 'Update on your Vendor Application');
 }

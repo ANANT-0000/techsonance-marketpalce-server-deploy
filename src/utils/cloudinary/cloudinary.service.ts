@@ -2,7 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { v2 as cloudinary } from 'cloudinary';
 import { CloudinaryResponse } from './cloudinary-response';
 import toStream from 'buffer-to-stream';
-import { Readable } from 'stream';
+ 
 import 'multer';
 @Injectable()
 export class CloudinaryService {
@@ -31,7 +31,7 @@ export class CloudinaryService {
         reject(new Error('No file provided'));
         return;
       }
-      const stream = toStream(file.buffer) as Readable;
+      const stream = toStream(file.buffer);
       stream.pipe(uploadStream);
     });
   }

@@ -19,7 +19,11 @@ import {
 } from '../../drizzle/schema';
 import { orders, user } from '../../drizzle/schema';
 import { UpdateReturnDto } from './dto/update-return.dto';
-import { OrderStatus, ReturnStatus, ReturnType } from '../../drizzle/types/types';
+import {
+  OrderStatus,
+  ReturnStatus,
+  ReturnType,
+} from '../../drizzle/types/types';
 import { UploadToCloudService } from '../../utils/upload-to-cloud/upload-to-cloud.service';
 import { RefundsService } from '../refunds/refunds.service';
 import { InventoryService } from '../inventory/inventory.service';
@@ -405,7 +409,7 @@ export class ReturnsService {
       }
 
       const currentStatus = returnRequest.status as ReturnStatus;
-      const newStatus = dto.status as ReturnStatus;
+      const newStatus = dto.status;
       const returnType = returnRequest.type as ReturnType;
 
       // ── Guard: already in a terminal state ────────────────────────────

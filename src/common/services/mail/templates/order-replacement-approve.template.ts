@@ -1,9 +1,12 @@
 import { emailLayout } from './layout.template';
 
-export function orderReplacementTemplate(customerName: string, orderId: string): string {
-    const orderUrl = `${process.env.FRONTEND_URL || 'https://techsonance.com'}/customerProfile/orders/${orderId}`;
+export function orderReplacementTemplate(
+  customerName: string,
+  orderId: string,
+): string {
+  const orderUrl = `${process.env.FRONTEND_URL || 'https://techsonance.com'}/customerProfile/orders/${orderId}`;
 
-    const content = `
+  const content = `
             <table align="center" role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%" style="margin: 0 auto;">
                 <tr>
                     <td style="padding: 0 40px 10px 40px;" class="mobile-padding">
@@ -47,5 +50,5 @@ export function orderReplacementTemplate(customerName: string, orderId: string):
                 </tr>
             </table>
     `;
-    return emailLayout(content, `Replacement Approved: #${orderId}`);
+  return emailLayout(content, `Replacement Approved: #${orderId}`);
 }

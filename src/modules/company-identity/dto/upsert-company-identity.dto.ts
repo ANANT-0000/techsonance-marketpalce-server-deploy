@@ -141,7 +141,6 @@ export class UpsertDocumentConfigDto {
   @MaxLength(255)
   signatory_designation?: string;
 
- 
   @IsString()
   @IsOptional()
   @Trim()

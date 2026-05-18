@@ -1,7 +1,7 @@
 import { emailLayout } from './layout.template';
 
 export function vendorRegistrationTemplate(storeName: string): string {
-    const content = `
+  const content = `
             <!-- Content Section -->
             <table align="center" role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%" style="margin: 0 auto;">
                 <tr>
@@ -39,5 +39,5 @@ export function vendorRegistrationTemplate(storeName: string): string {
                 </tr>
             </table>
   `;
-    return emailLayout(content, 'Vendor Registration Received - Techsonance');
+  return emailLayout(content, 'Vendor Registration Received - Techsonance');
 }

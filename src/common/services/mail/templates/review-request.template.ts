@@ -1,9 +1,13 @@
 import { emailLayout } from './layout.template';
 
-export function reviewRequestTemplate(customerName: string, productName: string, productId: string): string {
-    const reviewUrl = `${process.env.FRONTEND_URL || 'https://techsonance.com'}/shopping/${productId}#reviews`;
+export function reviewRequestTemplate(
+  customerName: string,
+  productName: string,
+  productId: string,
+): string {
+  const reviewUrl = `${process.env.FRONTEND_URL || 'https://techsonance.com'}/shopping/${productId}#reviews`;
 
-    const content = `
+  const content = `
             <table align="center" role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%" style="margin: 0 auto;">
                 <tr>
                     <td style="padding: 0 40px 10px 40px;" class="mobile-padding">
@@ -46,5 +50,5 @@ export function reviewRequestTemplate(customerName: string, productName: string,
                 </tr>
             </table>
     `;
-    return emailLayout(content, `What do you think of your ${productName}?`);
+  return emailLayout(content, `What do you think of your ${productName}?`);
 }

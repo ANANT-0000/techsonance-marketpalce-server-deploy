@@ -25,7 +25,6 @@ export const user = pg.pgTable(
       .$onUpdate(() => new Date()),
   },
   (table) => [
- 
     pg.index('idx_user_email').on(table.email),
     pg.index('idx_user_first_name').on(table.first_name),
     pg.index('idx_user_last_name').on(table.last_name),

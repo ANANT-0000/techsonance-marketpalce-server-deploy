@@ -47,7 +47,6 @@ export class warehouseAddressDto {
 }
 
 export class updateWarehouseAddressDto {
-
   @IsOptional()
   @IsString()
   @Transform(({ value }: { value: string }) => value.trim())

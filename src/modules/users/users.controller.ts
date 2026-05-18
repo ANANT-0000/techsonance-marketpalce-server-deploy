@@ -19,7 +19,7 @@ import { UserStatus } from '../../drizzle/types/types';
 
 @Controller({ version: '1', path: 'users' })
 export class UsersController {
-  constructor(private readonly userService: UsersService) { }
+  constructor(private readonly userService: UsersService) {}
   @Get('/:id')
   @HttpCode(HttpStatus.OK)
   async getProfile(@Param('id') userId: string) {
@@ -30,23 +30,57 @@ export class UsersController {
     return user;
   }
   @Post(':customer_id/deactivate')
-  async deactivateCustomer(@Param('customer_id') customer_id: string, @Headers('company-domain') domain: string) {
+  async deactivateCustomer(
+    @Param('customer_id') customer_id: string,
+    @Headers('company-domain') domain: string,
+  ) {
     console.log('deactivate customer', customer_id, domain);
-    return this.userService.initializeAccountActionOtp(domain, UserStatus.INACTIVE, customer_id, undefined);
+    return this.userService.initializeAccountActionOtp(
+      domain,
+      UserStatus.INACTIVE,
+      customer_id,
+      undefined,
+    );
   }
   @Post('reactivate')
-  async reactivateCustomer(@Body('email') email: string, @Headers('company-domain') domain: string) {
+  async reactivateCustomer(
+    @Body('email') email: string,
+    @Headers('company-domain') domain: string,
+  ) {
     console.log('reactivate customer', email, domain);
-    return this.userService.initializeAccountActionOtp(domain, UserStatus.ACTIVE, undefined, email);
+    return this.userService.initializeAccountActionOtp(
+      domain,
+      UserStatus.ACTIVE,
+      undefined,
+      email,
+    );
   }
   @Patch(':customer_id/deactivate/confirm')
-  async confirmAccountDeactivation(@Param('customer_id') customer_id: string, @Body('otp') otp: string, @Headers('company-domain') domain: string) {
-    return this.userService.confirmAccountAction(domain, UserStatus.INACTIVE, otp, customer_id, undefined);
+  async confirmAccountDeactivation(
+    @Param('customer_id') customer_id: string,
+    @Body('otp') otp: string,
+    @Headers('company-domain') domain: string,
+  ) {
+    return this.userService.confirmAccountAction(
+      domain,
+      UserStatus.INACTIVE,
+      otp,
+      customer_id,
+      undefined,
+    );
   }
   @Patch('reactivate/confirm')
-  async confirmAccountReactivation(@Body() body: { otp: string, email: string }, @Headers('company-domain') domain: string) {
+  async confirmAccountReactivation(
+    @Body() body: { otp: string; email: string },
+    @Headers('company-domain') domain: string,
+  ) {
     console.log('confirm account reactivation', body, domain);
-    return this.userService.confirmAccountAction(domain, UserStatus.ACTIVE, body.otp, undefined, body.email);
+    return this.userService.confirmAccountAction(
+      domain,
+      UserStatus.ACTIVE,
+      body.otp,
+      undefined,
+      body.email,
+    );
   }
-
 }

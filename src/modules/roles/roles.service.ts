@@ -8,7 +8,11 @@ import {
 } from '@nestjs/common';
 import { and, eq, InferSelectModel } from 'drizzle-orm';
 import { DRIZZLE } from '../../drizzle/drizzle.module';
-import { permissions, role_permissions, user_roles } from '../../drizzle/schema';
+import {
+  permissions,
+  role_permissions,
+  user_roles,
+} from '../../drizzle/schema';
 import { type DrizzleDB } from '../../drizzle/types/drizzle';
 type Role = InferSelectModel<typeof user_roles>['role_name'];
 @Injectable()
@@ -137,9 +141,12 @@ export class RolesService {
       console.log(rolePermissions);
       return rolePermissions;
     } catch (error) {
-      throw new InternalServerErrorException('Failed to retrieve role permissions', {
-        cause: error,
-      });
+      throw new InternalServerErrorException(
+        'Failed to retrieve role permissions',
+        {
+          cause: error,
+        },
+      );
     }
   }
   async addPermissionToRole(roleId: string, permissionId: string) {
@@ -170,9 +177,12 @@ export class RolesService {
       });
       return insertResult;
     } catch (error) {
-      throw new InternalServerErrorException('Failed to add permission to role', {
-        cause: error,
-      });
+      throw new InternalServerErrorException(
+        'Failed to add permission to role',
+        {
+          cause: error,
+        },
+      );
     }
   }
   async removePermissionFromRole(roleId: string, permissionId: string) {
@@ -197,9 +207,12 @@ export class RolesService {
         message: 'Permission removed from role successfully',
       };
     } catch (error) {
-      throw new InternalServerErrorException('Failed to remove permission from role', {
-        cause: error,
-      });
+      throw new InternalServerErrorException(
+        'Failed to remove permission from role',
+        {
+          cause: error,
+        },
+      );
     }
   }
 }

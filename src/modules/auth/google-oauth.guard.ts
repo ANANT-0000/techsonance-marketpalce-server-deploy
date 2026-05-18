@@ -8,7 +8,8 @@ export class GoogleOAuthGuard extends AuthGuard('google') {
     const req = context.switchToHttp().getRequest();
     // Grab the domain from the query and inject it into the OAuth state!
     return {
-      state: req.query.domain || process.env.FRONTEND_URL || 'http://localhost:3000',
+      state:
+        req.query.domain || process.env.FRONTEND_URL || 'http://localhost:3000',
     };
   }
 }

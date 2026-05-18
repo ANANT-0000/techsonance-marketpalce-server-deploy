@@ -40,25 +40,35 @@ export class OrderItemsService {
 
   private async resolveCompanyId(domain: string): Promise<string> {
     const filteredDomain = domainExtractor(domain);
-    console.log(`[OrderItemsService.resolveCompanyId] Resolving company for domain: ${domain}`);
-    console.log(`[OrderItemsService.resolveCompanyId] Extracted filter domain: ${filteredDomain}`,
+    console.log(
+      `[OrderItemsService.resolveCompanyId] Resolving company for domain: ${domain}`,
     );
-    console.log('[OrderItemsService.resolveCompanyId] Querying CompanyService.find(...)');
+    console.log(
+      `[OrderItemsService.resolveCompanyId] Extracted filter domain: ${filteredDomain}`,
+    );
+    console.log(
+      '[OrderItemsService.resolveCompanyId] Querying CompanyService.find(...)',
+    );
     const companyId = await this.companyService.find(filteredDomain);
-    console.log(`[OrderItemsService.resolveCompanyId] Company resolved: ${companyId}`);
+    console.log(
+      `[OrderItemsService.resolveCompanyId] Company resolved: ${companyId}`,
+    );
     return companyId;
   }
 
-  
-
   async getOrderItemDetails(orderItemId: string, domain: string) {
     try {
-      console.log('[OrderItemsService.getOrderItemDetails] Starting order item lookup', {
-        orderItemId,
-        domain,
-      });
+      console.log(
+        '[OrderItemsService.getOrderItemDetails] Starting order item lookup',
+        {
+          orderItemId,
+          domain,
+        },
+      );
       const companyId = await this.resolveCompanyId(domain);
-      console.log('[OrderItemsService.getOrderItemDetails] Company resolved', { companyId });
+      console.log('[OrderItemsService.getOrderItemDetails] Company resolved', {
+        companyId,
+      });
       const itemExists = await this.db
         .select({ id: order_items.id })
         .from(order_items)
@@ -99,9 +109,12 @@ export class OrderItemsService {
       if (!orderItem) {
         throw new HttpException('Order item not found', HttpStatus.NOT_FOUND);
       }
-      console.log('[OrderItemsService.getOrderItemDetails] Order item details loaded', {
-        orderItemId,
-      });
+      console.log(
+        '[OrderItemsService.getOrderItemDetails] Order item details loaded',
+        {
+          orderItemId,
+        },
+      );
       return orderItem;
     } catch (error) {
       console.error('Error fetching order item details:', error);
@@ -124,11 +137,14 @@ export class OrderItemsService {
     newStatus: OrderStatus,
     domain: string,
   ) {
-    console.log('[OrderItemsService.setOrderItemStatus] Starting status update', {
-      itemId,
-      newStatus,
-      domain,
-    });
+    console.log(
+      '[OrderItemsService.setOrderItemStatus] Starting status update',
+      {
+        itemId,
+        newStatus,
+        domain,
+      },
+    );
     const companyId = await this.resolveCompanyId(domain);
     if (!companyId) {
       throw new HttpException(
@@ -166,10 +182,13 @@ export class OrderItemsService {
           HttpStatus.NOT_FOUND,
         );
       }
-      console.log('[OrderItemsService.setOrderItemStatus] Order verified for item', {
-        orderId: isOrderExist.id,
-        companyId,
-      });
+      console.log(
+        '[OrderItemsService.setOrderItemStatus] Order verified for item',
+        {
+          orderId: isOrderExist.id,
+          companyId,
+        },
+      );
       if (
         Object.values(OrderStatus).includes(
           newStatus.toLowerCase() as OrderStatus,
@@ -201,12 +220,15 @@ export class OrderItemsService {
             },
           );
         });
-      console.log('[OrderItemsService.setOrderItemStatus] Order item status updated', {
-        itemId: existingItem.id,
-        orderId: isOrderExist.id,
-        newStatus: newStatus.toLowerCase(),
-        affectedRows: orderItemUpdated,
-      });
+      console.log(
+        '[OrderItemsService.setOrderItemStatus] Order item status updated',
+        {
+          itemId: existingItem.id,
+          orderId: isOrderExist.id,
+          newStatus: newStatus.toLowerCase(),
+          affectedRows: orderItemUpdated,
+        },
+      );
       return { message: 'Order item status updated successfully' };
     } catch (error) {
       console.error('Error updating order status:', error);
@@ -227,14 +249,19 @@ export class OrderItemsService {
     domain: string,
   ) {
     try {
-      console.log('[OrderItemsService.cancelOrder] Cancellation request received', {
-        orderItemId,
-        userId,
-        domain,
-        cancelReason,
-      });
+      console.log(
+        '[OrderItemsService.cancelOrder] Cancellation request received',
+        {
+          orderItemId,
+          userId,
+          domain,
+          cancelReason,
+        },
+      );
       const companyId = await this.resolveCompanyId(domain);
-      console.log('[OrderItemsService.cancelOrder] Company resolved', { companyId });
+      console.log('[OrderItemsService.cancelOrder] Company resolved', {
+        companyId,
+      });
       console.log('[OrderItemsService.cancelOrder] Loading user record');
       const [userRecord] = await this.db
         .select({ role_id: user_and_company.role_id, id: user.id })
@@ -285,7 +312,9 @@ export class OrderItemsService {
 
       return await this.db.transaction(async (tx) => {
         console.log('[OrderItemsService.cancelOrder] Transaction started');
-        console.log('[OrderItemsService.cancelOrder] Fetching order item inside transaction');
+        console.log(
+          '[OrderItemsService.cancelOrder] Fetching order item inside transaction',
+        );
         const [existingOrderItem] = await tx
           .select({
             id: order_items.id,
@@ -329,9 +358,12 @@ export class OrderItemsService {
           );
         }
         if (existingOrderItem.order_status === OrderStatus.CANCELLED) {
-          console.log('[OrderItemsService.cancelOrder] Order item already cancelled', {
-            orderItemId: existingOrderItem.id,
-          });
+          console.log(
+            '[OrderItemsService.cancelOrder] Order item already cancelled',
+            {
+              orderItemId: existingOrderItem.id,
+            },
+          );
           throw new HttpException(
             'Order item is already cancelled',
             HttpStatus.BAD_REQUEST,
@@ -342,10 +374,13 @@ export class OrderItemsService {
           existingOrderItem.order_status === OrderStatus.SHIPPED ||
           existingOrderItem.order_status === OrderStatus.DELIVERED
         ) {
-          console.log('[OrderItemsService.cancelOrder] Order item cannot be cancelled', {
-            orderItemId: existingOrderItem.id,
-            status: existingOrderItem.order_status,
-          });
+          console.log(
+            '[OrderItemsService.cancelOrder] Order item cannot be cancelled',
+            {
+              orderItemId: existingOrderItem.id,
+              status: existingOrderItem.order_status,
+            },
+          );
           throw new HttpException(
             `Order item is already ${existingOrderItem.order_status} and cannot be cancelled`,
             HttpStatus.BAD_REQUEST,
@@ -383,7 +418,8 @@ export class OrderItemsService {
           orderId: order.id,
           totalAmount: order.total_amount,
         });
-        console.log('[OrderItemsService.cancelOrder] Loading all order items for cancellation checks',
+        console.log(
+          '[OrderItemsService.cancelOrder] Loading all order items for cancellation checks',
         );
         const allOrderItems = await tx
           .select({
@@ -408,9 +444,12 @@ export class OrderItemsService {
               },
             );
           });
-        console.log('[OrderItemsService.cancelOrder] Order items loaded for validation', {
-          itemCount: allOrderItems.length,
-        });
+        console.log(
+          '[OrderItemsService.cancelOrder] Order items loaded for validation',
+          {
+            itemCount: allOrderItems.length,
+          },
+        );
 
         const hasShippedOrDelivered = allOrderItems.some((item) =>
           [OrderStatus.SHIPPED, OrderStatus.DELIVERED].includes(
@@ -419,7 +458,8 @@ export class OrderItemsService {
         );
 
         if (hasShippedOrDelivered) {
-          console.log('[OrderItemsService.cancelOrder] Cancellation blocked because another item is already shipped or delivered',
+          console.log(
+            '[OrderItemsService.cancelOrder] Cancellation blocked because another item is already shipped or delivered',
             { orderId: order.id },
           );
           throw new HttpException(
@@ -455,9 +495,12 @@ export class OrderItemsService {
         const refundAmount =
           Number(existingOrderItem.price) * existingOrderItem.quantity;
         const isPrepaid = paymentRecord.payment_method !== 'COD';
-        console.log('[OrderItemsService.cancelOrder] Marking order item as cancelled', {
-          orderItemId: existingOrderItem.id,
-        });
+        console.log(
+          '[OrderItemsService.cancelOrder] Marking order item as cancelled',
+          {
+            orderItemId: existingOrderItem.id,
+          },
+        );
         await tx
           .update(order_items)
           .set({ order_status: OrderStatus.CANCELLED })
@@ -474,7 +517,9 @@ export class OrderItemsService {
               },
             );
           });
-        console.log('[OrderItemsService.cancelOrder] Writing cancellation audit record');
+        console.log(
+          '[OrderItemsService.cancelOrder] Writing cancellation audit record',
+        );
         await tx
           .insert(order_item_cancelled)
           .values({
@@ -491,7 +536,8 @@ export class OrderItemsService {
               { cause: error },
             );
           });
-        console.log('[OrderItemsService.cancelOrder] Rolling back inventory for cancelled item',
+        console.log(
+          '[OrderItemsService.cancelOrder] Rolling back inventory for cancelled item',
           {
             variantId: existingOrderItem.product_variant_id,
             quantity: existingOrderItem.quantity,
@@ -506,7 +552,8 @@ export class OrderItemsService {
           tx as DrizzleService,
         );
         if (isPrepaid) {
-          console.log('[OrderItemsService.cancelOrder] Creating refund record for prepaid order',
+          console.log(
+            '[OrderItemsService.cancelOrder] Creating refund record for prepaid order',
             {
               refundAmount: String(refundAmount),
             },
@@ -536,9 +583,12 @@ export class OrderItemsService {
             item.order_status !== OrderStatus.CANCELLED,
         );
 
-        console.log('[OrderItemsService.cancelOrder] Recalculating order total', {
-          remainingActiveItems: remainingActiveItems.length,
-        });
+        console.log(
+          '[OrderItemsService.cancelOrder] Recalculating order total',
+          {
+            remainingActiveItems: remainingActiveItems.length,
+          },
+        );
         const newOrderTotal = remainingActiveItems.reduce(
           (sum, item) => sum + Number(item.price) * item.quantity,
           0,
@@ -566,7 +616,8 @@ export class OrderItemsService {
           const finalPaymentStatus = isPrepaid
             ? PaymentStatus.REFUNDED
             : PaymentStatus.CANCELLED;
-          console.log('[OrderItemsService.cancelOrder] All items cancelled, updating payment status',
+          console.log(
+            '[OrderItemsService.cancelOrder] All items cancelled, updating payment status',
             {
               paymentId: paymentRecord.id,
               finalPaymentStatus,
@@ -585,7 +636,8 @@ export class OrderItemsService {
               );
             });
         }
-        console.log('[OrderItemsService.cancelOrder] Checking whether cancellation email should be sent',
+        console.log(
+          '[OrderItemsService.cancelOrder] Checking whether cancellation email should be sent',
         );
         const [customerRecord] = await tx
           .select({
@@ -598,10 +650,13 @@ export class OrderItemsService {
           .limit(1);
 
         if (customerRecord?.email) {
-          console.log('[OrderItemsService.cancelOrder] Sending cancellation email', {
-            email: customerRecord.email,
-            orderId: order.id,
-          });
+          console.log(
+            '[OrderItemsService.cancelOrder] Sending cancellation email',
+            {
+              email: customerRecord.email,
+              orderId: order.id,
+            },
+          );
           await this.mailService.sendOrderCancelledEmail(
             customerRecord.email,
             `${customerRecord.first_name} ${customerRecord.last_name} `,
@@ -609,11 +664,14 @@ export class OrderItemsService {
             true,
           );
         }
-        console.log('[OrderItemsService.cancelOrder] Cancellation transaction completed', {
-          orderItemId,
-          refundAmount: String(refundAmount),
-          orderFullyCancelled: allItemsNowCancelled,
-        });
+        console.log(
+          '[OrderItemsService.cancelOrder] Cancellation transaction completed',
+          {
+            orderItemId,
+            refundAmount: String(refundAmount),
+            orderFullyCancelled: allItemsNowCancelled,
+          },
+        );
         return {
           message: 'Order item cancelled successfully',
           orderItemId,
