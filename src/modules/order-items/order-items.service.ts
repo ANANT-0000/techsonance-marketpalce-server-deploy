@@ -40,12 +40,25 @@ export class OrderItemsService {
 
   private async resolveCompanyId(domain: string): Promise<string> {
     const filteredDomain = domainExtractor(domain);
-    return this.companyService.find(filteredDomain);
+    console.log(`[OrderItemsService.resolveCompanyId] Resolving company for domain: ${domain}`);
+    console.log(`[OrderItemsService.resolveCompanyId] Extracted filter domain: ${filteredDomain}`,
+    );
+    console.log('[OrderItemsService.resolveCompanyId] Querying CompanyService.find(...)');
+    const companyId = await this.companyService.find(filteredDomain);
+    console.log(`[OrderItemsService.resolveCompanyId] Company resolved: ${companyId}`);
+    return companyId;
   }
+
+  
 
   async getOrderItemDetails(orderItemId: string, domain: string) {
     try {
+      console.log('[OrderItemsService.getOrderItemDetails] Starting order item lookup', {
+        orderItemId,
+        domain,
+      });
       const companyId = await this.resolveCompanyId(domain);
+      console.log('[OrderItemsService.getOrderItemDetails] Company resolved', { companyId });
       const itemExists = await this.db
         .select({ id: order_items.id })
         .from(order_items)
@@ -86,6 +99,9 @@ export class OrderItemsService {
       if (!orderItem) {
         throw new HttpException('Order item not found', HttpStatus.NOT_FOUND);
       }
+      console.log('[OrderItemsService.getOrderItemDetails] Order item details loaded', {
+        orderItemId,
+      });
       return orderItem;
     } catch (error) {
       console.error('Error fetching order item details:', error);
@@ -108,6 +124,11 @@ export class OrderItemsService {
     newStatus: OrderStatus,
     domain: string,
   ) {
+    console.log('[OrderItemsService.setOrderItemStatus] Starting status update', {
+      itemId,
+      newStatus,
+      domain,
+    });
     const companyId = await this.resolveCompanyId(domain);
     if (!companyId) {
       throw new HttpException(
@@ -125,6 +146,10 @@ export class OrderItemsService {
       if (!existingItem || !existingItem.order_id) {
         throw new HttpException('Order item not found', HttpStatus.NOT_FOUND);
       }
+      console.log('[OrderItemsService.setOrderItemStatus] Order item located', {
+        itemId: existingItem.id,
+        orderId: existingItem.order_id,
+      });
       const [isOrderExist] = await this.db
         .select({ id: orders.id })
         .from(orders)
@@ -141,6 +166,10 @@ export class OrderItemsService {
           HttpStatus.NOT_FOUND,
         );
       }
+      console.log('[OrderItemsService.setOrderItemStatus] Order verified for item', {
+        orderId: isOrderExist.id,
+        companyId,
+      });
       if (
         Object.values(OrderStatus).includes(
           newStatus.toLowerCase() as OrderStatus,
@@ -172,7 +201,12 @@ export class OrderItemsService {
             },
           );
         });
-      console.log('order items updated to processing', orderItemUpdated);
+      console.log('[OrderItemsService.setOrderItemStatus] Order item status updated', {
+        itemId: existingItem.id,
+        orderId: isOrderExist.id,
+        newStatus: newStatus.toLowerCase(),
+        affectedRows: orderItemUpdated,
+      });
       return { message: 'Order item status updated successfully' };
     } catch (error) {
       console.error('Error updating order status:', error);
@@ -193,11 +227,15 @@ export class OrderItemsService {
     domain: string,
   ) {
     try {
-      console.log(
-        `Cancelling order item ${orderItemId} for user ${userId} with reason: ${cancelReason} in company ${domain}`,
-      );
+      console.log('[OrderItemsService.cancelOrder] Cancellation request received', {
+        orderItemId,
+        userId,
+        domain,
+        cancelReason,
+      });
       const companyId = await this.resolveCompanyId(domain);
-      console.log('finding user...');
+      console.log('[OrderItemsService.cancelOrder] Company resolved', { companyId });
+      console.log('[OrderItemsService.cancelOrder] Loading user record');
       const [userRecord] = await this.db
         .select({ role_id: user_and_company.role_id, id: user.id })
         .from(user)
@@ -217,8 +255,11 @@ export class OrderItemsService {
         console.log('User not found', userRecord);
         throw new HttpException('User not found', HttpStatus.NOT_FOUND);
       }
-      console.log('User found', userRecord);
-      console.log('finding Role...');
+      console.log('[OrderItemsService.cancelOrder] User record loaded', {
+        userId: userRecord.id,
+        roleId: userRecord.role_id,
+      });
+      console.log('[OrderItemsService.cancelOrder] Loading role record');
       const [RoleRecord] = await this.db
         .select({ role_id: user_roles.id, role_name: user_roles.role_name })
         .from(user_roles)
@@ -237,10 +278,14 @@ export class OrderItemsService {
         console.log('User role not found', RoleRecord);
         throw new HttpException('User role not found', HttpStatus.NOT_FOUND);
       }
-      console.log('Role found', RoleRecord);
+      console.log('[OrderItemsService.cancelOrder] Role record loaded', {
+        roleId: RoleRecord.role_id,
+        roleName: RoleRecord.role_name,
+      });
 
       return await this.db.transaction(async (tx) => {
-        console.log('Finding existing order item...');
+        console.log('[OrderItemsService.cancelOrder] Transaction started');
+        console.log('[OrderItemsService.cancelOrder] Fetching order item inside transaction');
         const [existingOrderItem] = await tx
           .select({
             id: order_items.id,
@@ -254,7 +299,6 @@ export class OrderItemsService {
           .where(eq(order_items.id, orderItemId))
           .limit(1)
           .then((result) => {
-            console.log('Role query result:', result);
             return result;
           })
           .catch((error) => {
@@ -269,7 +313,11 @@ export class OrderItemsService {
         if (!existingOrderItem) {
           throw new HttpException('Order item not found', HttpStatus.NOT_FOUND);
         }
-        console.log('Found existing order item...', existingOrderItem);
+        console.log('[OrderItemsService.cancelOrder] Order item loaded', {
+          orderItemId: existingOrderItem.id,
+          orderId: existingOrderItem.order_id,
+          status: existingOrderItem.order_status,
+        });
 
         if (
           !existingOrderItem.order_id ||
@@ -281,10 +329,9 @@ export class OrderItemsService {
           );
         }
         if (existingOrderItem.order_status === OrderStatus.CANCELLED) {
-          console.log(
-            'Order item is already cancelled',
-            existingOrderItem.order_status,
-          );
+          console.log('[OrderItemsService.cancelOrder] Order item already cancelled', {
+            orderItemId: existingOrderItem.id,
+          });
           throw new HttpException(
             'Order item is already cancelled',
             HttpStatus.BAD_REQUEST,
@@ -295,16 +342,16 @@ export class OrderItemsService {
           existingOrderItem.order_status === OrderStatus.SHIPPED ||
           existingOrderItem.order_status === OrderStatus.DELIVERED
         ) {
-          console.log(
-            `Order item is already ${existingOrderItem.order_status} and cannot be cancelled`,
-            existingOrderItem.order_status,
-          );
+          console.log('[OrderItemsService.cancelOrder] Order item cannot be cancelled', {
+            orderItemId: existingOrderItem.id,
+            status: existingOrderItem.order_status,
+          });
           throw new HttpException(
             `Order item is already ${existingOrderItem.order_status} and cannot be cancelled`,
             HttpStatus.BAD_REQUEST,
           );
         }
-        console.log('searching main order...');
+        console.log('[OrderItemsService.cancelOrder] Loading parent order');
         const [order] = await tx
           .select({
             id: orders.id,
@@ -332,7 +379,12 @@ export class OrderItemsService {
             HttpStatus.NOT_FOUND,
           );
         }
-        console.log('Found main order...', order);
+        console.log('[OrderItemsService.cancelOrder] Parent order loaded', {
+          orderId: order.id,
+          totalAmount: order.total_amount,
+        });
+        console.log('[OrderItemsService.cancelOrder] Loading all order items for cancellation checks',
+        );
         const allOrderItems = await tx
           .select({
             id: order_items.id,
@@ -356,6 +408,9 @@ export class OrderItemsService {
               },
             );
           });
+        console.log('[OrderItemsService.cancelOrder] Order items loaded for validation', {
+          itemCount: allOrderItems.length,
+        });
 
         const hasShippedOrDelivered = allOrderItems.some((item) =>
           [OrderStatus.SHIPPED, OrderStatus.DELIVERED].includes(
@@ -364,12 +419,15 @@ export class OrderItemsService {
         );
 
         if (hasShippedOrDelivered) {
+          console.log('[OrderItemsService.cancelOrder] Cancellation blocked because another item is already shipped or delivered',
+            { orderId: order.id },
+          );
           throw new HttpException(
             'Cannot cancel: one or more items in this order have already been shipped or delivered',
             HttpStatus.BAD_REQUEST,
           );
         }
-        console.log('serching paymtn record...');
+        console.log('[OrderItemsService.cancelOrder] Loading payment record');
         const [paymentRecord] = await tx
           .select({ id: payments.id, payment_method: payments.payment_method })
           .from(payments)
@@ -390,10 +448,16 @@ export class OrderItemsService {
             HttpStatus.NOT_FOUND,
           );
         }
-        console.log('found payemnt record', paymentRecord);
+        console.log('[OrderItemsService.cancelOrder] Payment record loaded', {
+          paymentId: paymentRecord.id,
+          paymentMethod: paymentRecord.payment_method,
+        });
         const refundAmount =
           Number(existingOrderItem.price) * existingOrderItem.quantity;
         const isPrepaid = paymentRecord.payment_method !== 'COD';
+        console.log('[OrderItemsService.cancelOrder] Marking order item as cancelled', {
+          orderItemId: existingOrderItem.id,
+        });
         await tx
           .update(order_items)
           .set({ order_status: OrderStatus.CANCELLED })
@@ -410,6 +474,7 @@ export class OrderItemsService {
               },
             );
           });
+        console.log('[OrderItemsService.cancelOrder] Writing cancellation audit record');
         await tx
           .insert(order_item_cancelled)
           .values({
@@ -426,6 +491,12 @@ export class OrderItemsService {
               { cause: error },
             );
           });
+        console.log('[OrderItemsService.cancelOrder] Rolling back inventory for cancelled item',
+          {
+            variantId: existingOrderItem.product_variant_id,
+            quantity: existingOrderItem.quantity,
+          },
+        );
         await this.inventoryService.rollbackStockForOrder(
           {
             variantId: existingOrderItem.product_variant_id,
@@ -435,6 +506,11 @@ export class OrderItemsService {
           tx as DrizzleService,
         );
         if (isPrepaid) {
+          console.log('[OrderItemsService.cancelOrder] Creating refund record for prepaid order',
+            {
+              refundAmount: String(refundAmount),
+            },
+          );
           await tx
             .insert(refunds)
             .values({
@@ -460,11 +536,18 @@ export class OrderItemsService {
             item.order_status !== OrderStatus.CANCELLED,
         );
 
+        console.log('[OrderItemsService.cancelOrder] Recalculating order total', {
+          remainingActiveItems: remainingActiveItems.length,
+        });
         const newOrderTotal = remainingActiveItems.reduce(
           (sum, item) => sum + Number(item.price) * item.quantity,
           0,
         );
 
+        console.log('[OrderItemsService.cancelOrder] Updating order total', {
+          orderId: existingOrderItem.order_id,
+          newOrderTotal: String(newOrderTotal),
+        });
         await tx
           .update(orders)
           .set({ total_amount: String(newOrderTotal) })
@@ -483,6 +566,12 @@ export class OrderItemsService {
           const finalPaymentStatus = isPrepaid
             ? PaymentStatus.REFUNDED
             : PaymentStatus.CANCELLED;
+          console.log('[OrderItemsService.cancelOrder] All items cancelled, updating payment status',
+            {
+              paymentId: paymentRecord.id,
+              finalPaymentStatus,
+            },
+          );
           await tx
             .update(payments)
             .set({ payment_status: finalPaymentStatus })
@@ -496,9 +585,8 @@ export class OrderItemsService {
               );
             });
         }
-        // ─────────────────────────────────────────────────────────────────
-        // Send Order Cancellation Email
-        // ─────────────────────────────────────────────────────────────────
+        console.log('[OrderItemsService.cancelOrder] Checking whether cancellation email should be sent',
+        );
         const [customerRecord] = await tx
           .select({
             email: user.email,
@@ -510,6 +598,10 @@ export class OrderItemsService {
           .limit(1);
 
         if (customerRecord?.email) {
+          console.log('[OrderItemsService.cancelOrder] Sending cancellation email', {
+            email: customerRecord.email,
+            orderId: order.id,
+          });
           await this.mailService.sendOrderCancelledEmail(
             customerRecord.email,
             `${customerRecord.first_name} ${customerRecord.last_name} `,
@@ -517,7 +609,11 @@ export class OrderItemsService {
             true,
           );
         }
-        // ─────────────────────────────────────────────────────────────────`
+        console.log('[OrderItemsService.cancelOrder] Cancellation transaction completed', {
+          orderItemId,
+          refundAmount: String(refundAmount),
+          orderFullyCancelled: allItemsNowCancelled,
+        });
         return {
           message: 'Order item cancelled successfully',
           orderItemId,

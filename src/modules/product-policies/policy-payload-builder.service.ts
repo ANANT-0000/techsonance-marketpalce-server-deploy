@@ -30,12 +30,15 @@ export class PolicyPayloadBuilderService {
             order: {
               with: { customer: true },
             },
-            variant: true,
+            variant: {
+              with: {
+                product: true,
+              },
+            },
           },
         },
       },
     });
-
     if (!itemPolicy) {
       throw new NotFoundException(
         `No policy found for order item ${orderItemId}`,

@@ -26,6 +26,7 @@ import {
   product_policy_override,
 } from '../../drizzle/schema/product_policy.schema';
 import { domainExtractor } from 'src/common/filters/domainExtractor.filter';
+import { orders } from 'src/drizzle/schema';
 
 @Injectable()
 export class ProductPoliciesService {
@@ -603,9 +604,9 @@ export class ProductPoliciesService {
   async createOrderItemPolicySnapshot(
     dto: CreateOrderItemPolicySnapshotDto,
     domain: string,
-    tx?: DrizzleService, 
+    tx?: DrizzleService,
   ) {
-     const db = tx ?? this.db; 
+    const db = tx ?? this.db;
     console.log(
       '[ProductPoliciesService.createOrderItemPolicySnapshot] Request received',
     );
@@ -859,6 +860,63 @@ export class ProductPoliciesService {
         'Failed to fetch coverage overview',
         { cause: error },
       );
+    }
+  }
+
+  async getWarrantyUrl(orderId: string) {
+    console.log(
+      `[ProductPoliciesService.getWarrantyUrl] Request received for order_id: ${orderId}`,
+    );
+
+    try {
+      const warrantyUrls = await this.db.query.orders
+        .findMany({
+          where: eq(orders.id, orderId),
+          columns: {
+            id: true,
+          },
+          with: {
+            items: {
+              with: {
+                policy: {
+                  columns: {
+                    document_url: true,
+                  },
+                },
+              },
+            },
+          },
+        })
+        .catch((error) => {
+          console.error(
+            '[ProductPoliciesService.getWarrantyUrl] Failed while fetching warranty URL',
+            error,
+          );
+          throw new InternalServerErrorException(
+            'Failed to fetch warranty URL',
+            {
+              cause: error,
+            },
+          );
+        });
+      if (!warrantyUrls || warrantyUrls.length === 0) {
+        console.log(
+          `[ProductPoliciesService.getWarrantyUrl] No order found for order_id: ${orderId}`,
+        );
+        throw new NotFoundException(`Order with ID ${orderId} not found.`);
+      }
+      const extractedUrls = warrantyUrls.flatMap(
+        (order) =>
+          order.items.map((item) => item.policy?.document_url).filter(Boolean), // Removes any undefined/null values if a policy is missing
+      );
+
+      console.log(extractedUrls);
+      return extractedUrls;
+    } catch (error) {
+      console.error('Error fetching warranty URL:', error);
+      throw new InternalServerErrorException('Failed to fetch warranty URL', {
+        cause: error,
+      });
     }
   }
 }

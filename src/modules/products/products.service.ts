@@ -36,29 +36,28 @@ export class ProductsService {
   ) {}
   private async resolveCompanyId(domain: string): Promise<string> {
     console.log(
-      `[ProductPoliciesService.resolveCompanyId] Resolving company for domain: ${domain}`,
+      `[ProductsService.resolveCompanyId] Resolving company for domain: ${domain}`,
     );
     const filterDomain = domainExtractor(domain);
     console.log(
-      `[ProductPoliciesService.resolveCompanyId] Extracted filter domain: ${filterDomain}`,
+      `[ProductsService.resolveCompanyId] Extracted filter domain: ${filterDomain}`,
     );
     console.log(
-      `[ProductPoliciesService.resolveCompanyId] Querying CompanyService.find(...)`,
+      `[ProductsService.resolveCompanyId] Querying CompanyService.find(...)`,
     );
     return this.companyService.find(filterDomain);
   }
   async getAllProducts(domain: string) {
+    console.log('[ProductsService.getAllProducts] Request received');
     try {
+      console.log(`[ProductsService.getAllProducts] Resolving company id for domain: ${domain}`);
       const companyId = await this.resolveCompanyId(domain);
-      const testSelect = await this.db
-        .select({ id: products.id, name: products.name })
-        .from(products)
-        .where(eq(products.company_id, companyId));
-      console.log('testSelect', testSelect);
+      console.log(`[ProductsService.getAllProducts] Querying products for company_id: ${companyId}`);
       const product = await this.db.query.products
         .findMany({
           where: (products) => eq(products.company_id, companyId),
           with: {
+            category: true,
             variants: {
               // orderBy: (variants, { desc }) => desc(variants.created_at),
               // where: eq(product_variants.status, ProductStatus.ACTIVE),
@@ -97,8 +96,11 @@ export class ProductsService {
     }
   }
   async getAllProductOptions(domain: string) {
+    console.log('[ProductsService.getAllProductOptions] Request received');
     try {
+      console.log(`[ProductsService.getAllProductOptions] Resolving company id for domain: ${domain}`);
       const companyId = await this.resolveCompanyId(domain);
+      console.log(`[ProductsService.getAllProductOptions] Querying product options for company_id: ${companyId}`);
       const productOptions = await this.db
         .select({ id: products.id, name: products.name })
         .from(products)
@@ -116,8 +118,9 @@ export class ProductsService {
     }
   }
   async getProductMainDetails(productId: string, domain: string) {
+    console.log(`[ProductsService.getProductMainDetails] Request received for productId: ${productId}`);
     try {
-      console.log(productId);
+      console.log(`[ProductsService.getProductMainDetails] Querying product main details for id: ${productId}`);
       const productRecord = await this.db.query.products
         .findFirst({
           where: (products) => eq(products.id, productId),
@@ -152,8 +155,11 @@ export class ProductsService {
   }
 
   async getProductById(productId: string, domain: string) {
+    console.log(`[ProductsService.getProductById] Request received for productId: ${productId}`);
     try {
+      console.log(`[ProductsService.getProductById] Resolving company id for domain: ${domain}`);
       const companyId = await this.resolveCompanyId(domain);
+      console.log(`[ProductsService.getProductById] Querying product by id: ${productId} and company_id: ${companyId}`);
       const productRecord = await this.db.query.products
         .findFirst({
           where: and(
@@ -192,8 +198,9 @@ export class ProductsService {
     }
   }
   async getProductDetailsById(productVariantId: string, domain: string) {
+    console.log(`[ProductsService.getProductDetailsById] Request received for productVariantId: ${productVariantId}`);
     try {
-      console.log('productVariantId', productVariantId);
+      console.log(`[ProductsService.getProductDetailsById] Checking product variant existence for id: ${productVariantId}`);
       const isProductVariantExist = await this.db
         .select({ id: product_variants.id })
         .from(product_variants)
@@ -204,9 +211,9 @@ export class ProductsService {
             'Failed to check product variant existence',
           );
         });
-      console.log('isProductVariantExist', isProductVariantExist);
-      // const filteredDomain = domainExtractor(domain);
-      // const companyId = await this.companyService.find(filteredDomain);
+      console.log(`[ProductsService.getProductDetailsById] isProductVariantExist:`, isProductVariantExist);
+      
+      console.log(`[ProductsService.getProductDetailsById] Querying product variant details for id: ${productVariantId}`);
       const productVariant = await this.db.query.product_variants
         .findFirst({
           where: eq(product_variants.id, productVariantId),
@@ -269,8 +276,11 @@ export class ProductsService {
     }
   }
   async getActiveProducts(domain: string) {
+    console.log(`[ProductsService.getActiveProducts] Request received`);
     try {
+      console.log(`[ProductsService.getActiveProducts] Resolving company id for domain: ${domain}`);
       const companyId = await this.resolveCompanyId(domain);
+      console.log(`[ProductsService.getActiveProducts] Querying active products for company_id: ${companyId}`);
       const result = await this.db.query.products.findMany({
         where: and(eq(products.company_id, companyId)),
         columns: {
@@ -305,7 +315,8 @@ export class ProductsService {
     domain: string,
     files?: ProductFiles,
   ) {
-    console.log('productDto', productDto);
+    console.log('[ProductsService.createProduct] Request received');
+    console.log('[ProductsService.createProduct] Incoming payload:', productDto);
     const finalResults: { url: string; type: productImageType }[] = [];
 
     if (files?.product?.[0]) {
@@ -331,17 +342,17 @@ export class ProductsService {
         })),
       );
     }
-    console.log('domain', domain);
+    console.log(`[ProductsService.createProduct] domain: ${domain}`);
     try {
+      console.log(`[ProductsService.createProduct] Resolving company id for domain: ${domain}`);
       const companyId = await this.resolveCompanyId(domain);
       return await this.db.transaction(async (tx) => {
-        console.log('productDto.category_id', productDto.category_id);
-        console.log('productDto.name', productDto.name);
+        console.log(`[ProductsService.createProduct] Querying category for id: ${productDto.category_id}`);
         const categoryRecord = await tx
           .select({ id: categories.id })
           .from(categories)
           .where(eq(categories.id, productDto.category_id));
-        console.log('categoryRecord', categoryRecord);
+        console.log(`[ProductsService.createProduct] categoryRecord:`, categoryRecord);
         if (!categoryRecord) {
           throw new Error('Category not found');
         }
@@ -357,13 +368,14 @@ export class ProductsService {
           vendor_id: vendorId,
           company_id: companyId,
         };
-        console.log('productInsert', productInsert);
+        console.log('[ProductsService.createProduct] Inserting product into database', productInsert);
         const [createdProduct] = await tx
           .insert(products)
           .values(productInsert)
           .returning({ id: products.id });
 
-        console.log('createdProduct', createdProduct);
+        console.log('[ProductsService.createProduct] createdProduct:', createdProduct);
+        console.log('[ProductsService.createProduct] Inserting product variant into database');
         const [variantRecords] = await tx
           .insert(product_variants)
           .values({
@@ -471,16 +483,18 @@ export class ProductsService {
     imagesToDelete?: string[],
     files?: ProductFiles,
   ) {
-    console.log('updateProduct productVariantId', productVariantId);
-    console.log('product', product);
-    console.log('imagesToDelete', imagesToDelete);
+    console.log(`[ProductsService.updateProduct] Request received for productVariantId: ${productVariantId}`);
+    console.log('[ProductsService.updateProduct] Incoming payload:', product);
+    console.log('[ProductsService.updateProduct] imagesToDelete:', imagesToDelete);
     if (!productVariantId) {
       return new HttpException(
         'Product Variant ID is required',
         HttpStatus.BAD_REQUEST,
       );
     }
+    console.log(`[ProductsService.updateProduct] Resolving company id for domain: ${domain}`);
     const companyId = await this.resolveCompanyId(domain);
+    console.log(`[ProductsService.updateProduct] Querying product_id for variant id: ${productVariantId}`);
     const [productId] = await this.db
       .select({
         product_id: product_variants.product_id,
@@ -488,7 +502,7 @@ export class ProductsService {
       .from(product_variants)
       .where(eq(product_variants.id, productVariantId))
       .then((res) => {
-        console.log('productId', res);
+        console.log('[ProductsService.updateProduct] productId:', res);
         return res.map((item) => item.product_id);
       })
       .catch((error) => {
@@ -524,6 +538,7 @@ export class ProductsService {
       }
       await this.db
         .transaction(async (tx) => {
+          console.log(`[ProductsService.updateProduct] Updating product id: ${productVariantId}`);
           const updatedProductResult = await tx
             .update(products)
             .set(productUpdatedData)
@@ -677,14 +692,16 @@ export class ProductsService {
   }
 
   async deleteProduct(productId: string) {
+    console.log(`[ProductsService.deleteProduct] Request received for productId: ${productId}`);
     if (!productId) {
+      console.log('[ProductsService.deleteProduct] Stopping: productId is missing');
       return new HttpException(
         'Product ID is required',
         HttpStatus.BAD_REQUEST,
       );
     }
     try {
-      console.log('deleting product', productId);
+      console.log(`[ProductsService.deleteProduct] Deleting product id: ${productId}`);
       await this.db
         .delete(products)
         .where(eq(products.id, productId))
@@ -705,13 +722,16 @@ export class ProductsService {
     }
   }
   async UpdateProductCategory(categoryId: string, productId: string) {
+    console.log(`[ProductsService.UpdateProductCategory] Request received for categoryId: ${categoryId}, productId: ${productId}`);
     if (!categoryId && !productId) {
+      console.log('[ProductsService.UpdateProductCategory] Stopping: categoryId or productId is missing');
       return new HttpException(
         'Category ID is required',
         HttpStatus.BAD_REQUEST,
       );
     }
     try {
+      console.log(`[ProductsService.UpdateProductCategory] Updating product category for productId: ${productId}`);
       await this.db
         .update(products)
         .set({ category_id: categoryId })
@@ -731,13 +751,16 @@ export class ProductsService {
   }
 
   async deleteSelectedProducts(productIds: string[]) {
+    console.log(`[ProductsService.deleteSelectedProducts] Request received for productIds:`, productIds);
     if (!productIds || productIds.length === 0) {
+      console.log('[ProductsService.deleteSelectedProducts] Stopping: productIds array is empty');
       return new HttpException(
         'Product IDs are required',
         HttpStatus.BAD_REQUEST,
       );
     }
     try {
+      console.log(`[ProductsService.deleteSelectedProducts] Deleting selected products`);
       const deletePromises = productIds.map((id) =>
         this.db.delete(products).where(eq(products.id, id)),
       );
@@ -757,13 +780,16 @@ export class ProductsService {
   }
 
   async deleteProductVariant(variantId: string) {
+    console.log(`[ProductsService.deleteProductVariant] Request received for variantId: ${variantId}`);
     if (!variantId) {
+      console.log('[ProductsService.deleteProductVariant] Stopping: variantId is missing');
       return new HttpException(
         'Variant ID is required',
         HttpStatus.BAD_REQUEST,
       );
     }
     try {
+      console.log(`[ProductsService.deleteProductVariant] Deleting product variant id: ${variantId}`);
       await this.db
         .delete(product_variants)
         .where(eq(product_variants.id, variantId));
@@ -781,13 +807,16 @@ export class ProductsService {
     }
   }
   async deleteSelectedProductVariants(variantIds: string[]) {
+    console.log(`[ProductsService.deleteSelectedProductVariants] Request received for variantIds:`, variantIds);
     if (!variantIds || variantIds.length === 0) {
+      console.log('[ProductsService.deleteSelectedProductVariants] Stopping: variantIds array is empty');
       return new HttpException(
         'Variant IDs are required',
         HttpStatus.BAD_REQUEST,
       );
     }
     try {
+      console.log(`[ProductsService.deleteSelectedProductVariants] Deleting selected product variants`);
       const deletePromises = variantIds.map((id) =>
         this.db.delete(product_variants).where(eq(product_variants.id, id)),
       );
@@ -806,10 +835,13 @@ export class ProductsService {
     }
   }
   async deleteProductImage(imageId: string) {
+    console.log(`[ProductsService.deleteProductImage] Request received for imageId: ${imageId}`);
     if (!imageId) {
+      console.log('[ProductsService.deleteProductImage] Stopping: imageId is missing');
       return new HttpException('Image ID is required', HttpStatus.BAD_REQUEST);
     }
     try {
+      console.log(`[ProductsService.deleteProductImage] Deleting product image id: ${imageId}`);
       await this.db
         .delete(product_images)
         .where(eq(product_images.id, imageId));

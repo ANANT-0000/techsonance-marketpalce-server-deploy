@@ -7,26 +7,29 @@ import {
   Patch,
   Param,
   Delete,
-  Req,
   Headers,
-  UseGuards,
+  UseInterceptors,
 } from '@nestjs/common';
 import { ProductReviewService } from './product-review.service';
 import { CreateProductReviewDto } from './dto/create-product-review.dto';
 import { UpdateProductReviewDto } from './dto/update-product-review.dto';
+import { ParseJsonPipe } from '../../common/pipes/parseJsonPipe';
+import { AnyFilesInterceptor } from '@nestjs/platform-express';
 // import { JwtAuthGuard } from '../../guards/jwt-auth.guard'; // Import your authentication guard here
 
-@Controller(['product-review', 'reviews']) // Allows both routes
+@Controller({ version: '1', path: 'product-review' })
 export class ProductReviewController {
   constructor(private readonly productReviewService: ProductReviewService) {}
 
   // @UseGuards(JwtAuthGuard) // Protect this endpoint so only logged in customers can review
-  @Post()
+  @Post(':userId')
+  @UseInterceptors(AnyFilesInterceptor())
   create(
-    @Body() createProductReviewDto: CreateProductReviewDto,
-    @Body() userId: string,
+    @Param('userId') userId: string,
+    @Body('reviewData', ParseJsonPipe) createProductReviewDto: any,
     @Headers('company-domain') domain: string,
   ) {
+    console.log('Create Product Review DTO:', createProductReviewDto);
     return this.productReviewService.create(
       createProductReviewDto,
       userId,
@@ -44,25 +47,31 @@ export class ProductReviewController {
     return this.productReviewService.findOneById(id);
   }
 
-  // Gets all reviews for a specific Product (Public)
   @Get('product/:id')
   findByProductId(@Param('id') id: string) {
     return this.productReviewService.findAllByProductId(id);
   }
+  @Get('existing/:variantId/:id')
+  findExistingReview(
+    @Param('id') id: string,
+    @Param('variantId') variantId: string,
+  ) {
+    return this.productReviewService.findExistingReview(id, variantId);
+  }
 
   // @UseGuards(JwtAuthGuard)
-  @Patch(':id')
+  @Patch(':userId/:id')
   update(
     @Param('id') id: string,
-    @Body() updateProductReviewDto: UpdateProductReviewDto,
-    @Body() userId: string,
+    @Body(ParseJsonPipe) updateProductReviewDto: UpdateProductReviewDto,
+    @Param('userId') userId: string,
   ) {
     return this.productReviewService.update(id, userId, updateProductReviewDto);
   }
 
   // @UseGuards(JwtAuthGuard)
-  @Delete(':id')
-  remove(@Param('id') id: string, @Body() userId: string) {
+  @Delete(':userId/:id')
+  remove(@Param('id') id: string, @Param('userId') userId: string) {
     return this.productReviewService.remove(id, userId);
   }
 }

@@ -94,4 +94,21 @@ export class UploadToCloudService {
       streamifier.createReadStream(buffer).pipe(uploadStream);
     });
   }
+
+  async uploadWarranty(buffer: Buffer, fileName: string): Promise<string> {
+    return new Promise((resolve, reject) => {
+      const uploadStream = cloudinary.uploader.upload_stream(
+        {
+          folder: 'techsonance_warranties',
+          resource_type: 'auto',
+          public_id: `warranty_${fileName}`,
+        },
+        (error, result) => {
+          if (result) resolve(result.secure_url);
+          else reject(error);
+        },
+      );
+      streamifier.createReadStream(buffer).pipe(uploadStream);
+    });
+  }
 }

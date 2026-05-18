@@ -9,7 +9,7 @@ export class JwtAuthGuard extends AuthGuard(JWT_GUARD) {
     const result = (await super.canActivate(context)) as boolean;
 
     const request = context.switchToHttp().getRequest();
-    console.log(`${result} user in JwtAuthGuard`, request.user);
+    console.log(`[JwtAuthGuard.canActivate] Access granted: ${result}, user:`, request.user);
     return result;
   }
 }

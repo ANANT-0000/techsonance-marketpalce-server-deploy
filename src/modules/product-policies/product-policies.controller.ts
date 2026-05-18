@@ -14,7 +14,7 @@ import { UpdateProductPolicyDto } from './dto/update-product-policy.dto';
 import {
   AssignCategoryPolicyDto,
   AssignProductPolicyOverrideDto,
-} from './dto/product-policy.dto';
+} from './dto/product-policy.dto'; 
 
 @Controller({ version: '1', path: 'product-policies' })
 export class ProductPoliciesController {
@@ -115,6 +115,8 @@ export class ProductPoliciesController {
   getOrderItemPolicy(@Param('orderItemId') orderItemId: string) {
     return this.productPoliciesService.getOrderItemPolicy(orderItemId);
   }
+
+
 
   @Get('coverage/overview')
   getCoverageOverview(@Headers('company-domain') domain: string) {

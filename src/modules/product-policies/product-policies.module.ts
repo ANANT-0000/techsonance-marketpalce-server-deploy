@@ -9,19 +9,23 @@ import { PolicyTemplateRegistry } from './policy-template.registry';
 import { PolicyDocumentService } from './policy-document.service';
 import { PolicyPayloadBuilderService } from './policy-payload-builder.service';
 import { UploadToCloudModule } from 'src/utils/upload-to-cloud/upload-to-cloud.module';
+import { PolicyResolutionService } from './policy-resolution.service';
 @Module({
   imports: [DrizzleModule, CompanyModule, UploadToCloudModule],
+  controllers: [ProductPoliciesController],
   providers: [
     ProductPoliciesService,
     PolicyDocumentService,
     PolicyPayloadBuilderService,
     PolicyTemplateRegistry,
     PuppeteerWarrantyTemplate,
+    PolicyResolutionService,
   ],
   exports: [
     ProductPoliciesService,
     PolicyDocumentService,
     PolicyTemplateRegistry,
+    PolicyResolutionService,
   ],
 })
 export class ProductPoliciesModule implements OnModuleInit {

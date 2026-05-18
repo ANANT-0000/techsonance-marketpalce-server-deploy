@@ -32,6 +32,7 @@ export class ProductVariantService {
   ) {}
 
   private async resolveCompanyId(domain: string): Promise<string> {
+    console.log(`[ProductVariantService.resolveCompanyId] Resolving company for domain: ${domain}`);
     const filteredDomain = domainExtractor(domain);
     return this.companyService.find(filteredDomain);
   }
@@ -41,21 +42,18 @@ export class ProductVariantService {
     domain: string,
     files: ProductFiles,
   ) {
-    console.log('createProductVariantDto', createProductVariantDto);
-    console.log('domain', domain);
+    console.log('[ProductVariantService.create] Request received', { domain, sku: createProductVariantDto.sku });
 
     if (!createProductVariantDto.product_id) {
       console.log(
-        'createProductVariantDto in conditional check',
-        createProductVariantDto,
-        domain,
+        '[ProductVariantService.create] Stopping: Product ID is missing'
       );
       throw new InternalServerErrorException('Product ID is required', {
         cause: new Error('Product ID is required'),
       });
     }
     const companyId = await this.resolveCompanyId(domain);
-    console.log('creating product variant..');
+    console.log('[ProductVariantService.create] Querying product validation', { productId: createProductVariantDto.product_id });
     const [productId] = await this.db
       .select({ id: products.id })
       .from(products)
@@ -66,7 +64,7 @@ export class ProductVariantService {
         ),
       )
       .catch((error) => {
-        console.error('Error fetching product:', error);
+        console.error('[ProductVariantService.create] Error fetching product:', error);
         throw new InternalServerErrorException('Failed to fetch product');
       });
     const variantData = {
@@ -88,14 +86,14 @@ export class ProductVariantService {
             id: product_variants.id,
           })
           .catch((error) => {
-            console.error('Error creating product variant:', error);
+            console.error('[ProductVariantService.create] Error creating product variant:', error);
             throw new InternalServerErrorException(
               'Failed to create product variant',
             );
           });
-        console.log('variantRecord', variantRecord);
+        console.log('[ProductVariantService.create] Variant record created', { variantId: variantRecord?.id });
         if (!variantRecord) {
-          console.log('failed to create variant ', variantRecord);
+          console.log('[ProductVariantService.create] Stopping: Failed to create variant');
           throw new Error('Failed to create product variant');
         }
         const finalResults: { url: string; type: productImageType }[] = [];
@@ -121,11 +119,10 @@ export class ProductVariantService {
             })),
           );
         }
-        console.log('finalResults images *******');
+        console.log('[ProductVariantService.create] Uploaded images to cloud:', finalResults.length);
 
-        console.table(finalResults);
         if (!variantRecord.id) {
-          console.log('failed variant record:', variantRecord);
+          console.log('[ProductVariantService.create] Stopping: Failed variant record id');
           throw new InternalServerErrorException('Failed variant record');
         }
         if (finalResults.length > 0) {
@@ -145,12 +142,12 @@ export class ProductVariantService {
             .values(imageInserts)
             .returning()
             .catch((error) => {
-              console.error('Error inserting product images:', error);
+              console.error('[ProductVariantService.create] Error inserting product images:', error);
               throw new InternalServerErrorException(
                 'Failed to insert product images',
               );
             });
-          console.log('variantImgsResult', variantImgsResult);
+          console.log('[ProductVariantService.create] Variant images inserted', { count: variantImgsResult.length });
         }
         if (createProductVariantDto.warehouse_id && variantRecord?.id) {
           await this.inventoryService.setStock(
@@ -163,9 +160,9 @@ export class ProductVariantService {
         }
         return variantRecord;
       });
-      console.log('productVariantRecord', productVariantRecord);
+      console.log('[ProductVariantService.create] Product variant transaction complete');
     } catch (error) {
-      console.error('Error creating product variant:', error);
+      console.error('[ProductVariantService.create] Error creating product variant:', error);
       if (
         error instanceof HttpException ||
         error instanceof InternalServerErrorException ||
@@ -181,8 +178,8 @@ export class ProductVariantService {
     }
   }
   async findAllVariantsByProductId(productId: string) {
+    console.log('[ProductVariantService.findAllVariantsByProductId] Request received for product:', productId);
     try {
-      console.log(productId);
       const productVariants = await this.db.query.product_variants.findMany({
         where: (product_variants) => eq(product_variants.product_id, productId),
         with: {
@@ -191,7 +188,7 @@ export class ProductVariantService {
       });
       return productVariants;
     } catch (error) {
-      console.error('Error fetching product variants by product ID:', error);
+      console.error('[ProductVariantService.findAllVariantsByProductId] Error fetching product variants by product ID:', error);
       throw new InternalServerErrorException(
         'Failed to fetch product variants by product ID',
       );
@@ -222,11 +219,11 @@ export class ProductVariantService {
           HttpStatus.BAD_REQUEST,
         );
       }
-      console.log('sending product varint details', productVariant);
+      console.log('[ProductVariantService.findVariantDetailsById] Sending product variant details', { id: productVariant.id });
       return productVariant;
     } catch (error) {
       if (error instanceof HttpException) throw error;
-      console.error('Error fetching product variant details:', error);
+      console.error('[ProductVariantService.findVariantDetailsById] Error fetching product variant details:', error);
       throw new InternalServerErrorException(
         'Failed to fetch product variant details',
       );
@@ -234,6 +231,7 @@ export class ProductVariantService {
   }
 
   async findAll(vendorId: string) {
+    console.log('[ProductVariantService.findAll] Request received for vendor:', vendorId);
     try {
       const product = await this.db
         .select({ id: products.id })
@@ -258,13 +256,14 @@ export class ProductVariantService {
       });
       return productVariants;
     } catch (error) {
-      console.error('Error fetching product variants:', error);
+      console.error('[ProductVariantService.findAll] Error fetching product variants:', error);
       throw new InternalServerErrorException(
         'Failed to fetch product variants',
       );
     }
   }
   async findOne(id: string) {
+    console.log('[ProductVariantService.findOne] Request received for id:', id);
     try {
       const productVariant = await this.db.query.product_variants.findFirst({
         where: (product_variants) => eq(product_variants.id, id),
@@ -282,10 +281,10 @@ export class ProductVariantService {
       if (!productVariant) {
         throw new Error(`Product variant with ID ${id} not found`);
       }
-      console.log('productVariant sending', productVariant);
+      console.log('[ProductVariantService.findOne] Product variant found');
       return productVariant;
     } catch (error) {
-      console.error('Error fetching product variant:', error);
+      console.error('[ProductVariantService.findOne] Error fetching product variant:', error);
       throw new InternalServerErrorException('Failed to fetch product variant');
     }
   }
@@ -297,6 +296,7 @@ export class ProductVariantService {
     files?: ProductFiles,
     domain?: string,
   ) {
+    console.log('[ProductVariantService.update] Request received', { id, domain });
     const updateData: Partial<UpdateProductVariantDto> = {
       variant_name: updateProductVariantDto.variant_name,
       sku: updateProductVariantDto.sku,
@@ -325,6 +325,7 @@ export class ProductVariantService {
           .limit(1);
 
         if (!existingVariant) {
+          console.log('[ProductVariantService.update] Stopping: Product variant not found');
           throw new HttpException(
             'Product variant not found',
             HttpStatus.NOT_FOUND,
@@ -374,7 +375,7 @@ export class ProductVariantService {
         if (finalResults.length > 0 && existingVariant.product_id !== null) {
           const imageInserts = finalResults.map((image, index) => {
             if (!existingVariant.product_id) {
-              console.log('existing variant id is null', existingVariant);
+              console.log('[ProductVariantService.update] Stopping: existing variant id is null', existingVariant);
               throw new InternalServerErrorException(
                 'Failed to update product variant',
               );
@@ -407,7 +408,7 @@ export class ProductVariantService {
     } catch (error) {
       if (error instanceof HttpException) throw error;
 
-      console.error('Update Error:', error);
+      console.error('[ProductVariantService.update] Update Error:', error);
       throw new InternalServerErrorException(
         'Failed to update product variant',
       );
@@ -415,13 +416,15 @@ export class ProductVariantService {
   }
 
   async UpdateProductVarintStatus(status: ProductStatus, productId: string) {
+    console.log('[ProductVariantService.UpdateProductVarintStatus] Request received', { productId, status });
     if (!status) {
+      console.log('[ProductVariantService.UpdateProductVarintStatus] Stopping: Product status is required');
       return new HttpException(
         'Product status is required',
         HttpStatus.BAD_REQUEST,
       );
     }
-    console.log('Product variant status updating');
+    console.log('[ProductVariantService.UpdateProductVarintStatus] Updating product variant status in DB');
 
     try {
       const result = await this.db
@@ -430,7 +433,7 @@ export class ProductVariantService {
         .where(eq(product_variants.id, productId))
         .returning()
         .catch((err) => {
-          console.error('Error updating product variant status:', err);
+          console.error('[ProductVariantService.UpdateProductVarintStatus] Error updating product variant status:', err);
           throw new InternalServerErrorException(
             'Failed to update product variant status',
             {
@@ -438,7 +441,7 @@ export class ProductVariantService {
             },
           );
         });
-      console.log('Product variant status updated', result);
+      console.log('[ProductVariantService.UpdateProductVarintStatus] Product variant status updated', { resultLength: result.length });
       return {
         message: 'Product variant status updated successfully',
         status: HttpStatus.OK,
@@ -454,18 +457,24 @@ export class ProductVariantService {
   }
 
   async delete(id: string) {
+    console.log('[ProductVariantService.delete] Request received for id:', id);
     try {
-      if (!id) throw new HttpException('id required', HttpStatus.BAD_REQUEST);
+      if (!id) {
+        console.log('[ProductVariantService.delete] Stopping: id required');
+        throw new HttpException('id required', HttpStatus.BAD_REQUEST);
+      }
+      console.log('[ProductVariantService.delete] Deleting product variant from DB');
       const result = await this.db
         .delete(product_variants)
         .where(eq(product_variants.id, id));
       if (!result) {
+        console.log('[ProductVariantService.delete] Stopping: Product variant not found');
         throw new Error(`Product variant with ID ${id} not found`);
       }
-      console.log('varint delete result', result);
+      console.log('[ProductVariantService.delete] Variant deleted successfully');
       return result;
     } catch (error) {
-      console.error('Error deleting product variant:', error);
+      console.error('[ProductVariantService.delete] Error deleting product variant:', error);
       throw new InternalServerErrorException(
         'Failed to delete product variant',
       );

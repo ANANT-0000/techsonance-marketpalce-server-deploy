@@ -25,7 +25,7 @@ export class GoogleStrategy extends PassportStrategy(Strategy, 'google') {
     done: VerifyCallback,
   ): Promise<any> {
     try {
-      console.log('Google Profile:', profile);
+      console.log('[GoogleStrategy.validate] Google Profile:', profile);
 
       // Generate a secure random password for OAuth users
       const randomPassword = bcrypt.hashSync(
@@ -51,7 +51,7 @@ export class GoogleStrategy extends PassportStrategy(Strategy, 'google') {
 
       done(null, user);
     } catch (error) {
-      console.error('Google OAuth validation error:', error);
+      console.error('[GoogleStrategy.validate] Google OAuth validation error:', error);
       done(error, false);
     }
   }

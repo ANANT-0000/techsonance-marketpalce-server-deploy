@@ -38,7 +38,9 @@ export class FinancesService {
   }
 
   async getVendorEarnings(domain: string) {
+    console.log('[FinancesService.getVendorEarnings] Request received for domain:', domain);
     try {
+      console.log('[FinancesService.getVendorEarnings] Resolving company id');
       const companyId = await this.resolveCompanyId(domain);
 
       // Using Drizzle's Relational Query API
@@ -106,7 +108,7 @@ export class FinancesService {
         earnings: earnings,
       };
     } catch (error) {
-      console.error('FinancesService Error: ', error);
+      console.error('[FinancesService.getVendorEarnings] FinancesService Error: ', error);
       throw new InternalServerErrorException(
         'Error occurred while fetching company earnings via relations',
         { cause: error },
@@ -114,7 +116,9 @@ export class FinancesService {
     }
   }
   async getVendorFinancial(vendorId: string) {
+    console.log('[FinancesService.getVendorFinancial] Request received for vendorId:', vendorId);
     try {
+      console.log('[FinancesService.getVendorFinancial] Querying vendor record');
       // 1. First, find the vendor to get their associated company_id
       const vendorRecord = await this.db.query.vendor.findFirst({
         where: eq(vendor.id, vendorId),
@@ -195,7 +199,7 @@ export class FinancesService {
         },
       };
     } catch (error) {
-      console.error('AdminFinancesService Error: ', error);
+      console.error('[FinancesService.getVendorFinancial] AdminFinancesService Error: ', error);
 
       if (error instanceof NotFoundException) throw error;
 
@@ -207,6 +211,7 @@ export class FinancesService {
   }
   // 1. GST Registrations
   async getGstRegistrations(domain: string) {
+    console.log('[FinancesService.getGstRegistrations] Request received for domain:', domain);
     const companyId = await this.resolveCompanyId(domain);
 
     const records = await this.db.query.gst_registrations.findMany({
@@ -217,13 +222,9 @@ export class FinancesService {
   }
 
   async addGstRegistration(domain: string, data: any) {
+    console.log('[FinancesService.addGstRegistration] Request received for domain:', domain);
     const companyId = await this.resolveCompanyId(domain);
-    console.log(
-      'Adding GST Registration for Company ID:',
-      companyId,
-      'with data:',
-      data,
-    );
+    console.log('[FinancesService.addGstRegistration] Adding GST Registration for Company ID:', companyId, 'with data:', data);
     const newRecord = await this.db
       .insert(gst_registrations)
       .values({
@@ -253,6 +254,7 @@ export class FinancesService {
     };
   }
   async createTaxProfile(domain: string, data: any) {
+    console.log('[FinancesService.createTaxProfile] Request received for domain:', domain);
     const companyId = await this.resolveCompanyId(domain);
 
     const newProfile = await this.db
@@ -343,6 +345,7 @@ export class FinancesService {
 
   // 4. Product Tax Mapping (The Bridge)
   async getProductTaxMapping(domain: string) {
+    console.log('[FinancesService.getProductTaxMapping] Request received for domain:', domain);
     const companyId = await this.resolveCompanyId(domain);
 
     // Because a product can have multiple variants (and thus multiple SKUs),
@@ -387,6 +390,7 @@ export class FinancesService {
 
   // 5. GST Invoices
   async getGstInvoices(domain: string) {
+    console.log('[FinancesService.getGstInvoices] Request received for domain:', domain);
     const companyId = await this.resolveCompanyId(domain);
 
     const records = await this.db.query.gst_invoices.findMany({
@@ -466,6 +470,7 @@ export class FinancesService {
     domain: string,
     data: { product_id: string; tax_rate_id: string },
   ) {
+    console.log('[FinancesService.assignTaxToProduct] Request received for domain:', domain);
     const companyId = await this.resolveCompanyId(domain); // Used for security validation if needed
 
     // Check if the product already has a tax mapped
@@ -543,6 +548,7 @@ export class FinancesService {
       price: number;
     }[],
   ) {
+    console.log('[FinancesService.calculateOrderTaxes] Request received for company:', companyId);
     // 1. Fetch Customer's State
     const [customerAddr] = await tx
       .select({ state: address.state })
@@ -568,7 +574,7 @@ export class FinancesService {
         ),
       )
       .catch((err) => {
-        console.error('Error fetching vendor GST registration:', err);
+        console.error('[FinancesService.calculateOrderTaxes] Error fetching vendor GST registration:', err);
         throw new HttpException(
           'Error fetching vendor GST registration',
           HttpStatus.INTERNAL_SERVER_ERROR,
@@ -610,7 +616,7 @@ export class FinancesService {
         .where(eq(product_variants.id, item.variantId))
         .catch((err) => {
           console.error(
-            'Error fetching product variant for tax calculation:',
+            '[FinancesService.calculateOrderTaxes] Error fetching product variant for tax calculation:',
             err,
           );
           throw new HttpException(

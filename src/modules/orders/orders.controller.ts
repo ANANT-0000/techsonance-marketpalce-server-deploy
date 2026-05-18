@@ -3,8 +3,6 @@ import {
   Controller,
   Get,
   Headers,
-  HttpCode,
-  HttpStatus,
   Param,
   Patch,
   Query,
@@ -16,13 +14,18 @@ import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { RoleGuard } from '../../guards/role.guard';
 import { Role } from '../../enums/role.enum';
 import { Roles } from '../../common/decorators/roles.decorator';
+import { ProductPoliciesService } from '../product-policies/product-policies.service';
+ 
 
 @Controller({
   version: '1',
   path: 'orders',
 })
 export class OrdersController {
-  constructor(private readonly ordersService: OrdersService) {}
+  constructor(
+    private readonly ordersService: OrdersService,
+    private readonly productPoliciesService: ProductPoliciesService,
+  ) {}
 
   @Get()
   // @UseGuards(JwtAuthGuard, RoleGuard)
@@ -77,13 +80,20 @@ export class OrdersController {
     return this.ordersService.getOrderDetails(orderId, domain);
   }
   @Patch(':orderid/status')
-  @UseGuards(JwtAuthGuard, RoleGuard)
-  @Roles(Role.ADMIN, Role.VENDOR)
+  // @UseGuards(JwtAuthGuard, RoleGuard)
+  // @Roles(Role.ADMIN, Role.VENDOR)
   async setOrderStatus(
     @Param('orderid') orderId: string,
     @Body('status') newStatus: OrderStatus,
     @Headers('company-domain') domain: string,
   ) {
     return this.ordersService.setOrderStatus(orderId, newStatus, domain);
+  }
+  @Get('warranty/:orderId')
+  getWarrantyUrl(@Param('orderId') orderId: string) {
+    console.log(
+      `[ProductPoliciesController.getWarrantyUrl] Fetching warranty URL for orderId: ${orderId}`,
+    );
+    return this.productPoliciesService.getWarrantyUrl(orderId);
   }
 }

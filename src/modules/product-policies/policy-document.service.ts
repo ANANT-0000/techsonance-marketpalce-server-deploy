@@ -38,10 +38,9 @@ export class PolicyDocumentService {
       const pdfBuffer = await template.render(payload);
 
       // 3. Upload to Cloud Storage
-      const fileName = `warranty_${payload.meta.orderNumber}_${orderItemId}`;
-      const documentUrl = await this.uploadToCloudService.uploadInvoice(
+      const documentUrl = await this.uploadToCloudService.uploadWarranty(
         pdfBuffer,
-        fileName,
+        `warranty_${payload.meta.orderNumber}_${orderItemId}`,
       );
 
       // 4. Update Database

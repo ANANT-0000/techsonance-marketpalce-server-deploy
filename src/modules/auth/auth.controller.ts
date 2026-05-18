@@ -127,7 +127,6 @@ export class AuthController {
     @Body('vendor', ParseJsonPipe) body: any,
     @UploadedFiles() files: Express.Multer.File[],
   ) {
-    console.log('body', body);
     const vendor = await this.vendorService.vendorRegister(body, files);
     return vendor;
   }

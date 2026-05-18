@@ -50,6 +50,7 @@ import {
   company_document_config,
   company_legal_profile,
 } from './company_identity.schema';
+import { order_item_policy } from './product_policy.schema';
 
 export const companyRelations = relations(company, ({ one, many }) => ({
   roles: many(user_roles),
@@ -298,6 +299,10 @@ export const orderItemsRelations = relations(order_items, ({ one }) => ({
   invoice: one(invoices, {
     fields: [order_items.id],
     references: [invoices.order_item_id],
+  }),
+  policy: one(order_item_policy, {
+    fields: [order_items.id],
+    references: [order_item_policy.order_item_id],
   }),
 }));
 

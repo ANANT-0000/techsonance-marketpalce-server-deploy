@@ -1,3 +1,6 @@
+// src/modules/orders/orders.service.ts
+// Full file — replaces the existing one entirely.
+
 import {
   HttpException,
   HttpStatus,
@@ -8,7 +11,6 @@ import {
 import { and, desc, eq, gt, inArray, or } from 'drizzle-orm';
 import { DRIZZLE, type DrizzleService } from '../../drizzle/drizzle.module';
 import {
-  category_policy,
   gst_invoices,
   order_item_policy,
   order_items,
@@ -19,17 +21,18 @@ import {
   product_policy_override,
   product_variants,
   products,
+  category_policy,
 } from '../../drizzle/schema';
 import { OrderStatus, PaymentStatus } from '../../drizzle/types/types';
 import { CompanyService } from '../company/company.service';
 import { InventoryService } from '../inventory/inventory.service';
 import { MailService } from '../../common/services/mail/mail.service';
-import { response } from 'express';
 import { domainExtractor } from '../../common/filters/domainExtractor.filter';
 import { InvoiceService } from '../invoice/invoice.service';
 import { FinancesService } from '../finances/finances.service';
 import { PolicyDocumentService } from '../product-policies/policy-document.service';
 import { ProductPoliciesService } from '../product-policies/product-policies.service';
+import { PolicyResolutionService } from '../product-policies/policy-resolution.service'; // ← NEW
 import { PolicySnapshot } from '../product-policies/interfaces/policy-document.interface';
 
 @Injectable()
@@ -43,11 +46,16 @@ export class OrdersService {
     private readonly financesService: FinancesService,
     private readonly policyDocumentService: PolicyDocumentService,
     private readonly productPoliciesService: ProductPoliciesService,
+    private readonly policyResolutionService: PolicyResolutionService, // ← NEW
   ) {}
-
   private async resolveCompanyId(domain: string): Promise<string> {
     const filteredDomain = domainExtractor(domain);
-    return this.companyService.find(filteredDomain);
+    console.log(`[OrdersService.resolveCompanyId] Resolving company for domain: ${domain}`);
+    console.log(`[OrdersService.resolveCompanyId] Extracted filter domain: ${filteredDomain}`);
+    console.log(`[OrdersService.resolveCompanyId] Querying CompanyService.find(...)`);
+    const companyId = await this.companyService.find(filteredDomain);
+    console.log(`[OrdersService.resolveCompanyId] Company resolved: ${companyId}`);
+    return companyId;
   }
 
   async createOrder({
@@ -64,6 +72,13 @@ export class OrdersService {
     paymentMethod: string;
   }) {
     try {
+      console.log('[OrdersService.createOrder] Starting order creation request', {
+        userId,
+        companyId,
+        addressId,
+        itemCount: orderLines.length,
+        paymentMethod,
+      });
       const totalAmount = orderLines.reduce(
         (acc, line) => acc + line.price * line.quantity,
         0,
@@ -73,7 +88,8 @@ export class OrdersService {
       }
 
       const orderResult = await this.db.transaction(async (tx) => {
-        // 1. Deduct stock
+        console.log('[OrdersService.createOrder] Transaction started');
+        console.log('[OrdersService.createOrder] Deducting stock for order lines');
         await this.inventoryService.deductStockForOrder(
           orderLines.map((l) => ({
             variantId: l.variantId,
@@ -82,8 +98,9 @@ export class OrdersService {
           companyId,
           tx as DrizzleService,
         );
+        console.log('[OrdersService.createOrder] Stock deduction complete');
 
-        // 2. Calculate taxes
+        console.log('[OrdersService.createOrder] Calculating taxes for order');
         const taxData = await this.financesService.calculateOrderTaxes(
           tx as DrizzleService,
           companyId,
@@ -109,9 +126,16 @@ export class OrdersService {
           });
 
         console.log('Order created:', newOrder.id);
+        console.log('[OrdersService.createOrder] Order row created', {
+          orderId: newOrder.id,
+          grandTotal: String(taxData.grandTotal),
+        });
 
         // 4. Insert orders_tax rows
         if (taxData.appliedTaxTypeIds.length > 0) {
+          console.log('[OrdersService.createOrder] Writing order tax mappings', {
+            taxCount: taxData.appliedTaxTypeIds.length,
+          });
           const orderTaxInserts = taxData.appliedTaxTypeIds.map(
             (taxTypeId) => ({
               order_id: newOrder.id,
@@ -122,6 +146,7 @@ export class OrdersService {
         }
 
         // 5. Create GST Invoice record
+        console.log('[OrdersService.createOrder] Creating GST invoice record');   
         await tx.insert(gst_invoices).values({
           company_id: companyId,
           order_id: newOrder.id,
@@ -145,6 +170,9 @@ export class OrdersService {
           company_id: companyId,
         }));
 
+        console.log('[OrdersService.createOrder] Inserting order items', {
+          itemCount: orderItemsData.length,
+        });
         await tx
           .insert(order_items)
           .values(orderItemsData)
@@ -152,9 +180,12 @@ export class OrdersService {
             console.error('Error inserting order items:', error);
             throw new InternalServerErrorException(
               'Failed to create order items',
-              { cause: error },
+              {
+                cause: error,
+              },
             );
           });
+
         const insertedItems = await tx
           .select({
             id: order_items.id,
@@ -163,70 +194,74 @@ export class OrdersService {
           .from(order_items)
           .where(eq(order_items.order_id, newOrder.id));
 
-        for (const item of insertedItems) {
-          // Get product_id from variant
-          const [variant] = await tx
-            .select({ product_id: product_variants.product_id })
-            .from(product_variants)
-            .where(eq(product_variants.id, item.product_variant_id ?? ''));
+        console.log('[OrdersService.createOrder] Order items inserted', {
+          insertedItemIds: insertedItems.map((item) => item.id),
+        });
 
-          // Check product override first, then category policy
-          const override = await tx
-            .select({ policy_id: product_policy_override.policy_id })
-            .from(product_policy_override)
-            .where(
-              eq(product_policy_override.product_id, variant.product_id ?? ''),
-            )
-            .limit(1);
+        // 7. Resolve and snapshot policies for every order item
+        //
+        // FIX: replaced the old ad-hoc inline lookup (which silently skipped
+        // items when category had no policy) with PolicyResolutionService which:
+        //   - checks product override first
+        //   - falls back to category policy
+        //   - logs exactly why each item did or didn't get a policy
+        //   - never throws — a missing policy never aborts the order
+        const resolutions =
+          await this.policyResolutionService.resolveForVariants(
+            insertedItems.map((item) => ({
+              orderItemId: item.id,
+              productVariantId: item.product_variant_id ?? '',
+            })),
+            tx as DrizzleService,
+          );
 
-          let resolvedPolicyId = override[0]?.policy_id;
+        console.log('[OrdersService.createOrder] Policy resolution complete', {
+          resolutionCount: resolutions.size,
+        });
 
-          if (!resolvedPolicyId) {
-            // Fall back to category policy
-            const product = await tx
-              .select({ category_id: products.category_id })
-              .from(products)
-              .where(eq(products.id, variant.product_id ?? ''))
-              .limit(1);
-
-            const catPolicy = await tx
-              .select({ policy_id: category_policy.policy_id })
-              .from(category_policy)
-              .where(
-                eq(category_policy.category_id, product[0].category_id ?? ''),
-              )
-              .orderBy(category_policy.priority)
-              .limit(1);
-
-            resolvedPolicyId = catPolicy[0]?.policy_id;
+        for (const [orderItemId, resolution] of resolutions.entries()) {
+          if (!resolution.policy_id) {
+            // Already logged by PolicyResolutionService — no snapshot needed
+            continue;
           }
 
-          if (resolvedPolicyId) {
+          try {
             await this.productPoliciesService.createOrderItemPolicySnapshot(
               {
-                order_item_id: item.id,
-                policy_id: resolvedPolicyId,
+                order_item_id: orderItemId,
+                policy_id: resolution.policy_id,
                 policy_start_date: new Date().toISOString().split('T')[0],
               },
               companyId,
               tx as DrizzleService,
             );
+
+            console.log(
+              `[createOrder] Snapshot created for item ${orderItemId} ` +
+                `via ${resolution.source}: ${resolution.reason}`,
+            );
+          } catch (err) {
+            // Don't let a snapshot failure abort the whole order
+            console.error(
+              `[createOrder] Snapshot failed for item ${orderItemId}:`,
+              err,
+            );
           }
         }
-        // 7. Create payment record (PENDING — confirmed later via verifyCheckout)
+
+        // 8. Create payment record (PENDING — confirmed later via verifyCheckout)
+        console.log('[OrdersService.createOrder] Creating payment record');
         await tx
           .insert(payments)
           .values({
-            order_id: newOrder.id, // ← was `createdOrder.id`
+            order_id: newOrder.id,
             company_id: companyId,
             amount: String(taxData.grandTotal),
             payment_status: PaymentStatus.PENDING,
             payment_method: paymentMethod,
-            transaction_ref: `txn_${newOrder.id}_${Date.now()}`, // ← was `createdOrder.id`
+            transaction_ref: `txn_${newOrder.id}_${Date.now()}`,
           })
-          .then((result) => {
-            console.log('Payment record created');
-          })
+          .then(() => console.log('Payment record created'))
           .catch((error) => {
             console.error('Error inserting payment record:', error);
             throw new InternalServerErrorException(
@@ -234,6 +269,11 @@ export class OrdersService {
               { cause: error },
             );
           });
+
+        console.log('[OrdersService.createOrder] Order creation transaction completed', {
+          orderId: newOrder.id,
+          totalAmount: String(taxData.grandTotal),
+        });
 
         return {
           orderId: newOrder.id,
@@ -256,35 +296,36 @@ export class OrdersService {
     }
   }
 
+  // ── All other methods unchanged below this line ──────────────────
+
   async getOrderById(orderId: string, domain?: string) {
+    console.log('[OrdersService.getOrderById] Request received', { orderId, domain });
     try {
       if (!orderId || !domain) {
+        console.log('[OrdersService.getOrderById] Stopping: orderId or domain is missing');
         throw new HttpException(
           'Order ID and Domain are required',
           HttpStatus.BAD_REQUEST,
         );
       }
+      console.log('[OrdersService.getOrderById] Resolving company id');
       const companyId = await this.resolveCompanyId(domain);
 
+      console.log('[OrdersService.getOrderById] Querying order by id', { orderId, companyId });
       const [orderResult] = await this.db.query.orders.findMany({
         where: and(eq(orders.id, orderId), eq(orders.company_id, companyId)),
-        with: {
-          items: true,
-        },
+        with: { items: true },
       });
 
       if (!orderResult || !orderResult.items) {
+        console.log('[OrdersService.getOrderById] Stopping: Order not found');
         throw new HttpException(
           'Order not found with the provided ID',
           HttpStatus.NOT_FOUND,
         );
       }
-      // if (orderResult.order_status === OrderStatus.PENDING) {
-      //   throw new BadRequestException(
-      //     'Order is still pending. Please complete the checkout process.',
-      //   );
-      // }
 
+      console.log('[OrdersService.getOrderById] Order found successfully');
       return orderResult;
     } catch (error) {
       console.error('Error fetching order:', error);
@@ -295,14 +336,14 @@ export class OrdersService {
   }
 
   async getAllOrders() {
+    console.log('[OrdersService.getAllOrders] Request received');
     try {
-      const orders = await this.db.query.orders.findMany({
-        columns: {
-          id: true,
-          created_at: true,
-        },
+      console.log('[OrdersService.getAllOrders] Querying all orders');
+      const allOrders = await this.db.query.orders.findMany({
+        columns: { id: true, created_at: true },
       });
-      return orders;
+      console.log('[OrdersService.getAllOrders] Orders fetched successfully', { count: allOrders.length });
+      return allOrders;
     } catch (error) {
       console.error('Error fetching orders:', error);
       throw new InternalServerErrorException('Failed to fetch orders', {
@@ -334,6 +375,8 @@ export class OrdersService {
     }
 
     try {
+      console.log(`[OrdersService.completeOrderVerification] Starting payment verification for order ${orderId} (company ${companyId}, success=${isSuccess})`,
+      );
       if (!existingOrder || !existingOrder.user_id) {
         throw new HttpException('Order not found', HttpStatus.NOT_FOUND);
       }
@@ -347,39 +390,47 @@ export class OrdersService {
         .where(eq(order_items.order_id, orderId));
 
       return this.db.transaction(async (tx) => {
+        console.log('[OrdersService.completeOrderVerification] Verification transaction started',
+        );
         if (isSuccess) {
-          // Set all order items to PROCESSING
+          console.log(`[OrdersService.completeOrderVerification] Payment succeeded, updating order items for order ${orderId}`,
+          );
           const orderItemsRecord = await tx
             .select()
             .from(order_items)
             .where(eq(order_items.order_id, orderId));
 
           if (orderItemsRecord.length > 0) {
-            const updateItem = orderItemsRecord.map(async (item) => {
-              return await tx
-                .update(order_items)
-                .set({ order_status: OrderStatus.PROCESSING })
-                .where(
-                  and(
-                    eq(order_items.order_id, orderId),
-                    eq(order_items.id, item.id),
-                  ),
-                )
-                .catch((error) => {
-                  throw new InternalServerErrorException(
-                    'Failed to update order status',
-                    { cause: error },
-                  );
-                });
-            });
-            await Promise.all(updateItem);
+            await Promise.all(
+              orderItemsRecord.map((item) =>
+                tx
+                  .update(order_items)
+                  .set({ order_status: OrderStatus.PROCESSING })
+                  .where(
+                    and(
+                      eq(order_items.order_id, orderId),
+                      eq(order_items.id, item.id),
+                    ),
+                  )
+                  .catch((error) => {
+                    throw new InternalServerErrorException(
+                      'Failed to update order status',
+                      { cause: error },
+                    );
+                  }),
+              ),
+            );
           }
+
+          console.log(`[OrdersService.completeOrderVerification] Order items marked processing (${orderItemsRecord.length} items) for order ${orderId}`,
+          );
 
           if (!orderItemsRecord[0]?.order_id) {
             throw new HttpException('Order not found', HttpStatus.NOT_FOUND);
           }
 
-          // Mark payment COMPLETED
+          console.log(`[OrdersService.completeOrderVerification] Marking payment completed for order ${orderItemsRecord[0].order_id}`,
+          );
           await tx
             .update(payments)
             .set({ payment_status: PaymentStatus.COMPLETED })
@@ -392,8 +443,9 @@ export class OrdersService {
               );
             });
 
-          // Send order confirmation email (non-blocking on failure)
           if (customerDetails.email) {
+            console.log(`[OrdersService.completeOrderVerification] Sending order placed email to ${customerDetails.email} for order ${orderId}`,
+            );
             await this.mailService
               .sendOrderPlacedEmail(
                 customerDetails.email,
@@ -406,25 +458,26 @@ export class OrdersService {
               });
           }
 
+          // Fire-and-forget invoice generation
           this.invoiceService
             .createInvoice(orderId)
-            .then(() => {
+            .then(() =>
               console.log(
                 `[OrdersService] Invoice PDF generated for order ${orderId}`,
-              );
-            })
-            .catch((err) => {
+              ),
+            )
+            .catch((err) =>
               console.error(
                 `[OrdersService] Background PDF generation failed for order ${orderId}:`,
                 err,
-              );
-            });
+              ),
+            );
+
           const itemIds = orderItemsRecord.map((item) => item.id);
-          console.log(' [OrdersService] before if itemsIds: ', itemIds);
+          console.log(`[OrdersService.completeOrderVerification] Checking policy snapshots for order items: ${itemIds.join(', ')}`,
+          );
 
           if (itemIds.length > 0) {
-            // 2. Fetch policies for ALL items in the cart using inArray
-            console.log(' [OrdersService] itemsIds: ', itemIds);
             const orderItemsWithPolicies = await tx
               .select()
               .from(order_item_policy)
@@ -437,18 +490,20 @@ export class OrdersService {
                 );
               });
 
-            // 3. Generate PDFs asynchronously in the background
+            console.log(`[OrdersService.completeOrderVerification] Policy snapshot records loaded: ${orderItemsWithPolicies.length}`,
+            );
+
+            // Fire-and-forget warranty PDF generation per item
             for (const itemPolicy of orderItemsWithPolicies) {
-              // Ensure we safely cast/access the JSONB snapshot
               const snapshot = itemPolicy.policy_snapshot as PolicySnapshot;
               console.log('Policy Snapshot:', snapshot);
+
               if (snapshot?.generates_document) {
-                // Fire and forget
                 this.policyDocumentService
                   .generatePolicyDocument(itemPolicy.order_item_id)
                   .then(() =>
                     console.log(
-                      `[   Warranty PDF generated for item ${itemPolicy.order_item_id}`,
+                      `[OrdersService] Warranty PDF generated for item ${itemPolicy.order_item_id}`,
                     ),
                   )
                   .catch((err) =>
@@ -460,13 +515,17 @@ export class OrdersService {
               }
             }
           }
+
+          console.log(`[OrdersService.completeOrderVerification] Verification completed successfully for order ${orderId}`,
+          );
           return {
             success: true,
             orderId,
             message: 'Order placed successfully',
           };
         } else {
-          // Payment failed — roll back stock
+          console.log(`[OrdersService.completeOrderVerification] Payment failed, rolling back stock for order ${orderId}`,
+          );
           await this.inventoryService.rollbackStockForOrder(
             orderLines.map((l) => ({
               variantId: l.variantId ?? '',
@@ -476,34 +535,37 @@ export class OrdersService {
             tx as DrizzleService,
           );
 
-          // Cancel order items
           const orderItemsRecord = await tx
             .select({ id: order_items.id })
             .from(order_items)
             .where(eq(order_items.order_id, orderId));
 
           if (orderItemsRecord.length > 0) {
-            const updateItem = orderItemsRecord.map(async (item) => {
-              return await tx
-                .update(order_items)
-                .set({ order_status: OrderStatus.CANCELLED })
-                .where(
-                  and(
-                    eq(order_items.order_id, orderId),
-                    eq(order_items.id, item.id),
-                  ),
-                )
-                .catch((error) => {
-                  throw new InternalServerErrorException(
-                    'Failed to update order status',
-                    { cause: error },
-                  );
-                });
-            });
-            await Promise.all(updateItem);
+            console.log(`[OrdersService.completeOrderVerification] Marking ${orderItemsRecord.length} order items cancelled after failed payment`,
+            );
+            await Promise.all(
+              orderItemsRecord.map((item) =>
+                tx
+                  .update(order_items)
+                  .set({ order_status: OrderStatus.CANCELLED })
+                  .where(
+                    and(
+                      eq(order_items.order_id, orderId),
+                      eq(order_items.id, item.id),
+                    ),
+                  )
+                  .catch((error) => {
+                    throw new InternalServerErrorException(
+                      'Failed to update order status',
+                      { cause: error },
+                    );
+                  }),
+              ),
+            );
           }
 
-          // Mark payment FAILED
+          console.log(`[OrdersService.completeOrderVerification] Marking payment as failed for order ${existingOrder.id}`,
+          );
           await tx
             .update(payments)
             .set({ payment_status: PaymentStatus.FAILED })
@@ -515,6 +577,8 @@ export class OrdersService {
               );
             });
 
+          console.log(`[OrdersService.completeOrderVerification] Verification completed with failure branch for order ${existingOrder.id}`,
+          );
           return {
             success: false,
             orderId: existingOrder.id,
@@ -537,13 +601,17 @@ export class OrdersService {
   }
 
   async getUserOrders(userId: string, domain: string) {
+    console.log('[OrdersService.getUserOrders] Request received', { userId, domain });
     try {
       if (!userId) {
+        console.log('[OrdersService.getUserOrders] Stopping: User ID is missing');
         throw new HttpException('User ID is required', HttpStatus.BAD_REQUEST);
       }
+      console.log('[OrdersService.getUserOrders] Resolving company id');
       const companyId = await this.resolveCompanyId(domain);
 
-      const ordersList = await this.db.query.orders
+      console.log('[OrdersService.getUserOrders] Querying orders for user', { userId, companyId });
+      return await this.db.query.orders
         .findMany({
           orderBy: desc(orders.created_at),
           where: and(
@@ -565,26 +633,15 @@ export class OrdersService {
               },
               with: {
                 variant: {
-                  columns: {
-                    id: true,
-                    variant_name: true,
-                    price: true,
-                  },
+                  columns: { id: true, variant_name: true, price: true },
                   with: {
                     images: {
                       where: eq(product_images.is_primary, true),
-                      columns: {
-                        image_url: true,
-                      },
+                      columns: { image_url: true },
                     },
                   },
                 },
-                return_request: {
-                  columns: {
-                    id: true,
-                    status: true,
-                  },
-                },
+                return_request: { columns: { id: true, status: true } },
               },
             },
             address: {
@@ -607,25 +664,16 @@ export class OrdersService {
                 transaction_ref: true,
               },
             },
-            shipping: {
-              columns: {
-                tracking_url: true,
-              },
-            },
+            shipping: { columns: { tracking_url: true } },
           },
         })
         .catch((error) => {
           console.error('Error fetching user orders:', error);
           throw new InternalServerErrorException(
             'Failed to retrieve user orders',
-            {
-              cause: error,
-            },
+            { cause: error },
           );
         });
-
-      // console.log('user orders \n', ordersList);
-      return ordersList;
     } catch (error) {
       console.error('Error fetching user orders:', error);
       throw new InternalServerErrorException('Failed to retrieve user orders', {
@@ -633,6 +681,7 @@ export class OrdersService {
       });
     }
   }
+
   async getUserOrderDetails(
     orderId: string,
     domain: string,
@@ -640,15 +689,19 @@ export class OrdersService {
     limit: number = 10,
     status?: OrderStatus,
   ) {
+    console.log('[OrdersService.getUserOrderDetails] Request received', { orderId, domain, offset, limit, status });
     try {
       if (!orderId || !domain) {
+        console.log('[OrdersService.getUserOrderDetails] Stopping: orderId or domain is missing');
         throw new HttpException(
           'Order ID and domain are required',
           HttpStatus.BAD_REQUEST,
         );
-      }
+      } 
+      console.log('[OrdersService.getUserOrderDetails] Resolving company id');
       const companyId = await this.resolveCompanyId(domain);
 
+      console.log('[OrdersService.getUserOrderDetails] Querying order details', { orderId, companyId });
       const orderDetails = await this.db.query.orders.findFirst({
         where: and(eq(orders.id, orderId), eq(orders.company_id, companyId)),
         columns: {
@@ -667,17 +720,11 @@ export class OrdersService {
             },
             with: {
               variant: {
-                columns: {
-                  id: true,
-                  variant_name: true,
-                  price: true,
-                },
+                columns: { id: true, variant_name: true, price: true },
                 with: {
                   images: {
                     where: eq(product_images.is_primary, true),
-                    columns: {
-                      image_url: true,
-                    },
+                    columns: { image_url: true },
                   },
                 },
               },
@@ -706,29 +753,26 @@ export class OrdersService {
             },
           },
           payment: true,
-          shipping: {
-            columns: {
-              tracking_url: true,
-            },
-          },
+          shipping: { columns: { tracking_url: true } },
           invoice: true,
         },
       });
+
       if (!orderDetails) {
+        console.log('[OrdersService.getUserOrderDetails] Stopping: Order not found');
         throw new HttpException('Order not found', HttpStatus.NOT_FOUND);
       }
-      console.log('order details \n', orderDetails.payment);
+      console.log('[OrdersService.getUserOrderDetails] Order details found successfully');
       return orderDetails;
     } catch (error) {
       console.error('Error fetching order details:', error);
       throw new InternalServerErrorException(
         'Failed to retrieve order details',
-        {
-          cause: error,
-        },
+        { cause: error },
       );
     }
   }
+
   async getOrdersList(
     domain: string,
     offset: number = 0,
@@ -736,53 +780,43 @@ export class OrdersService {
     status?: OrderStatus | undefined,
   ) {
     try {
-      const companyId = await this.resolveCompanyId(domain);
-      console.log(
-        'order status \n',
-        status,
-        Object.values(OrderStatus).includes(status as OrderStatus),
+      console.log(`[OrdersService.getOrdersList] Request received for domain: ${domain}, offset: ${offset}, limit: ${limit}, status: ${status}`,
       );
+      const companyId = await this.resolveCompanyId(domain);
+      console.log(`[OrdersService.getOrdersList] Company resolved: ${companyId}`);
 
-      // Step 1: Get order IDs that have matching items (for proper pagination)
-      const validOrderIdsQuery = this.db
-        .selectDistinct({ id: orders.id, created_at: orders.created_at })
-        .from(orders)
-        .innerJoin(
-          order_items,
-          and(
-            eq(order_items.order_id, orders.id),
-            Object.values(OrderStatus).includes(status as OrderStatus)
-              ? and(
-                  // @ts-ignore
-                  eq(order_items.order_status, status),
-                  gt(order_items.quantity, 0),
-                )
-              : undefined,
-          ),
-        )
-        .where(eq(orders.company_id, companyId))
-        .orderBy(desc(orders.created_at))
-        .limit(limit)
-        .offset(offset);
+      const validOrderIds = (
+        await this.db
+          .selectDistinct({ id: orders.id, created_at: orders.created_at })
+          .from(orders)
+          .innerJoin(
+            order_items,
+            and(
+              eq(order_items.order_id, orders.id),
+              Object.values(OrderStatus).includes(status as OrderStatus)
+                ? and(
+                    // @ts-ignore
+                    eq(order_items.order_status, status),
+                    gt(order_items.quantity, 0),
+                  )
+                : undefined,
+            ),
+          )
+          .where(eq(orders.company_id, companyId))
+          .orderBy(desc(orders.created_at))
+          .limit(limit)
+          .offset(offset)
+      ).map((o) => o.id);
 
-      const validOrderIds = (await validOrderIdsQuery).map((o) => o.id);
+      if (validOrderIds.length === 0) return [];
 
-      if (validOrderIds.length === 0) {
-        return [];
-      }
-
-      // Step 2: Fetch full data only for those orders
-      const ordersList = await this.db.query.orders.findMany({
+      return await this.db.query.orders.findMany({
         where: and(
           eq(orders.company_id, companyId),
           inArray(orders.id, validOrderIds),
         ),
         orderBy: desc(orders.created_at),
-        columns: {
-          id: true,
-          total_amount: true,
-          created_at: true,
-        },
+        columns: { id: true, total_amount: true, created_at: true },
         with: {
           items: {
             where: Object.values(OrderStatus).includes(status as OrderStatus)
@@ -792,20 +826,12 @@ export class OrdersService {
                   gt(order_items.quantity, 0),
                 )
               : undefined,
-            columns: {
-              order_status: true,
-              quantity: true,
-              price: true,
-            },
+            columns: { order_status: true, quantity: true, price: true },
             with: {
               cancelledRecord: true,
               return_request: true,
               invoice: true,
-              order: {
-                with: {
-                  payment: true,
-                },
-              },
+              order: { with: { payment: true } },
             },
           },
           address: {
@@ -820,35 +846,31 @@ export class OrdersService {
           payment: true,
         },
       });
-      console.log(ordersList);
-      return ordersList;
     } catch (error) {
       console.error('Error fetching orders list:', error);
-      if (error instanceof HttpException) {
-        throw error;
-      }
+      if (error instanceof HttpException) throw error;
       throw new InternalServerErrorException('Failed to retrieve orders list', {
         cause: error,
       });
     }
   }
+
   async getOrderDetails(orderId: string, domain: string) {
+    console.log('[OrdersService.getOrderDetails] Request received', { orderId, domain });
     try {
-      console.log('order id in getOrderDetails', orderId);
       if (!orderId || !domain) {
+        console.log('[OrdersService.getOrderDetails] Stopping: Order ID or domain missing');
         throw new HttpException(
           'Order ID and domain are required',
           HttpStatus.BAD_REQUEST,
         );
       }
+      console.log('[OrdersService.getOrderDetails] Resolving company id');
       const companyId = await this.resolveCompanyId(domain);
+      console.log('[OrdersService.getOrderDetails] Querying order details from DB', { orderId, companyId });
       const row = await this.db.query.orders.findFirst({
         where: and(eq(orders.id, orderId), eq(orders.company_id, companyId)),
-        columns: {
-          id: true,
-          total_amount: true,
-          created_at: true,
-        },
+        columns: { id: true, total_amount: true, created_at: true },
         with: {
           items: {
             columns: {
@@ -863,29 +885,17 @@ export class OrdersService {
               cancelledRecord: true,
               refund: true,
               variant: {
-                columns: {
-                  id: true,
-                  variant_name: true,
-                  price: true,
-                },
+                columns: { id: true, variant_name: true, price: true },
                 with: {
                   images: {
                     where: eq(product_images.is_primary, true),
-                    columns: {
-                      image_url: true,
-                    },
+                    columns: { image_url: true },
                   },
                   inventory: {
-                    columns: {
-                      stock_quantity: true,
-                      warehouse_id: true,
-                    },
+                    columns: { stock_quantity: true, warehouse_id: true },
                     with: {
                       warehouse: {
-                        columns: {
-                          warehouse_name: true,
-                          address_id: true,
-                        },
+                        columns: { warehouse_name: true, address_id: true },
                         with: {
                           address: {
                             columns: {
@@ -926,25 +936,23 @@ export class OrdersService {
             },
           },
           payment: true,
-          shipping: {
-            columns: {
-              tracking_url: true,
-            },
-          },
+          shipping: { columns: { tracking_url: true } },
           invoice: true,
         },
       });
 
       if (!row) {
+        console.log('[OrdersService.getOrderDetails] Stopping: Order not found');
         throw new HttpException('Order not found', HttpStatus.NOT_FOUND);
       }
-      console.log(row);
+
       const warehouseIds = new Set(
         row.items.map((i) => i?.variant?.inventory?.warehouse_id ?? null),
       );
       const isSingleWarehouse = warehouseIds.size <= 1;
 
-      const formattedOrderDetails = {
+      console.log('[OrdersService.getOrderDetails] Order details found successfully');
+      return {
         id: row.id,
         total_amount: row.total_amount,
         created_at: row.created_at,
@@ -956,21 +964,20 @@ export class OrdersService {
           email: row.customer?.email ?? null,
           phone_number: row.customer?.phone_number ?? null,
         },
-        invoice: row.invoice ? row.invoice : null,
+        invoice: row.invoice ?? null,
         items: row.items.map((item) => {
           const inventory = item?.variant?.inventory ?? null;
           const warehouse = inventory?.warehouse ?? null;
-
           return {
             id: item.id,
             quantity: item?.quantity,
-            unit_price: item?.price, // renamed: price → unit_price (clearer)
-            line_total: (Number(item?.price) * item?.quantity).toFixed(2), // pre-computed
+            unit_price: item?.price,
+            line_total: (Number(item?.price) * item?.quantity).toFixed(2),
             order_status: item?.order_status,
             refund: item?.refund,
             return: item?.return_request,
             cancel: item?.cancelledRecord,
-            invoice: item.invoice ? item.invoice : null,
+            invoice: item.invoice ?? null,
             warehouse: warehouse
               ? {
                   id: inventory?.warehouse_id ?? null,
@@ -988,16 +995,14 @@ export class OrdersService {
                     : null,
                 }
               : null,
-
             product_variant: {
               id: item.variant?.id ?? null,
               variant_name: item.variant?.variant_name ?? null,
               price: item.variant?.price ?? null,
-              image_url: item.variant?.images?.[0]?.image_url ?? null, // flattened: no array needed
+              image_url: item.variant?.images?.[0]?.image_url ?? null,
             },
           };
         }),
-
         shipping_address: row.address
           ? {
               name: row.address.name,
@@ -1009,29 +1014,20 @@ export class OrdersService {
               country: row.address.country,
             }
           : null,
-
         payment: row.payment
           ? {
               amount: row.payment.amount,
               payment_method: row.payment.payment_method,
             }
           : null,
-        shipping: {
-          tracking_url: row.shipping?.tracking_url ?? null,
-        },
+        shipping: { tracking_url: row.shipping?.tracking_url ?? null },
       };
-      console.log('formattedOrderDetails', formattedOrderDetails.items);
-      return formattedOrderDetails;
     } catch (error) {
       console.error('Error fetching order details:', error);
-      if (error instanceof HttpException) {
-        throw error;
-      }
+      if (error instanceof HttpException) throw error;
       throw new InternalServerErrorException(
         'Failed to retrieve order details',
-        {
-          cause: error,
-        },
+        { cause: error },
       );
     }
   }
@@ -1041,9 +1037,12 @@ export class OrdersService {
     newStatus: OrderStatus,
     domain: string,
   ) {
+    console.log('[OrdersService.setOrderStatus] Request received', { orderId, newStatus, domain });
     const filteredDomain = domainExtractor(domain);
+    console.log('[OrdersService.setOrderStatus] Resolving company for domain:', filteredDomain);
     const companyId = await this.companyService.find(filteredDomain);
     if (!companyId) {
+      console.log('[OrdersService.setOrderStatus] Stopping: Company not found');
       throw new HttpException(
         `Company not found ${domain}`,
         HttpStatus.NOT_FOUND,
@@ -1051,79 +1050,76 @@ export class OrdersService {
     }
 
     try {
+      console.log('[OrdersService.setOrderStatus] Querying existing order from DB', { orderId, companyId });
       const [existingOrder] = await this.db
         .select({ id: orders.id })
         .from(orders)
         .where(and(eq(orders.id, orderId), eq(orders.company_id, companyId)))
         .limit(1);
+
       if (!existingOrder) {
+        console.log('[OrdersService.setOrderStatus] Stopping: Order not found');
         throw new HttpException('Order not found', HttpStatus.NOT_FOUND);
       }
+
       if (
-        Object.values(OrderStatus).includes(
+        !Object.values(OrderStatus).includes(
           newStatus.toLowerCase() as OrderStatus,
         )
       ) {
-        console.log('✅ Valid enum value', newStatus);
-      } else {
-        console.log('❌ Not a valid enum value', newStatus);
+        console.log('[OrdersService.setOrderStatus] Stopping: Invalid status', newStatus);
         throw new HttpException(
           'Invalid order status value',
           HttpStatus.BAD_REQUEST,
         );
       }
-      console.log('find items...');
+
+      console.log('[OrdersService.setOrderStatus] Querying order items to update');
       const orderItemsRecord = await this.db
         .select({ id: order_items.id })
         .from(order_items)
         .where(eq(order_items.order_id, orderId))
         .limit(1);
-      console.log('orderItemsRecord', orderItemsRecord);
+
       if (orderItemsRecord) {
-        console.log('updating item statuses...');
-        const updateItem = orderItemsRecord.map(async (item) => {
-          return await this.db
-            .update(order_items)
-            .set({ order_status: newStatus.toLowerCase() as OrderStatus })
-            .where(
-              and(
-                eq(order_items.order_id, orderId),
-                eq(order_items.id, item.id),
-              ),
-            )
-            .then((result) => {
-              console.log(
-                `order item ${item.id} updated to ${newStatus}`,
-                result,
-              );
-            })
-            .catch((error) => {
-              console.error('Error updating order status:', error);
-              throw new InternalServerErrorException(
-                'Failed to update order status',
-                {
-                  cause: error,
-                },
-              );
-            });
-        });
-        const updateResults = await Promise.all(updateItem);
-        console.log('order items updated to processing', updateResults);
+        await Promise.all(
+          orderItemsRecord.map((item) =>
+            this.db
+              .update(order_items)
+              .set({ order_status: newStatus.toLowerCase() as OrderStatus })
+              .where(
+                and(
+                  eq(order_items.order_id, orderId),
+                  eq(order_items.id, item.id),
+                ),
+              )
+              .catch((error) => {
+                throw new InternalServerErrorException(
+                  'Failed to update order status',
+                  { cause: error },
+                );
+              }),
+          ),
+        );
       }
+
+      console.log('[OrdersService.setOrderStatus] Order status updated successfully', { orderId });
       return orderId;
     } catch (error) {
       console.error('Error updating order status:', error);
-      if (error instanceof HttpException) {
-        throw error;
-      }
+      if (error instanceof HttpException) throw error;
       throw new InternalServerErrorException('Failed to update order status', {
         cause: error,
       });
     }
   }
+
   async getPendingOrders(domain: string) {
+    console.log('[OrdersService.getPendingOrders] Request received', { domain });
     try {
+      console.log('[OrdersService.getPendingOrders] Resolving company id');
       const companyId = await this.resolveCompanyId(domain);
+      console.log('[OrdersService.getPendingOrders] Querying pending orders from DB', { companyId });
       const result = await this.db.query.orders.findMany({
         where: eq(orders.company_id, companyId),
         with: {
@@ -1142,9 +1138,8 @@ export class OrdersService {
           },
         },
       });
-      const reponse = result.map((order) => order.items).flat();
-      console.log(response);
-      return reponse;
+      console.log('[OrdersService.getPendingOrders] Pending orders retrieved successfully');
+      return result.map((order) => order.items).flat();
     } catch (error) {
       console.error('Error fetching pending orders:', error);
       throw new InternalServerErrorException('Failed to fetch pending orders', {

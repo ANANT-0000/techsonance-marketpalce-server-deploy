@@ -8,7 +8,6 @@ import { MailModule } from '../../common/services/mail/mail.module';
 import { InvoiceModule } from '../invoice/invoice.module';
 import { FinancesModule } from '../finances/finances.module';
 import { ProductPoliciesModule } from '../product-policies/product-policies.module';
-import { PolicyDocumentService } from '../product-policies/policy-document.service';
 
 @Module({
   imports: [

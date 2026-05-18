@@ -66,7 +66,7 @@ export class PuppeteerGstTemplate implements IInvoiceTemplate, OnModuleInit {
       'modules',
       'invoice',
       'html-templates',
-      'minimal.hbs',
+      'standard-gst.hbs',
     );
     try {
       const htmlString = fs.readFileSync(templatePath, 'utf8');
