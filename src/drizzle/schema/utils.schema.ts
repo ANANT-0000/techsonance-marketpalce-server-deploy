@@ -145,6 +145,7 @@ export const audit_logs = pg.pgTable(
     company_id: pg
       .uuid('company_id')
       .references(() => company.id, { onDelete: 'cascade' }),
+    admin_id: pg.uuid('admin_id').references(() => user.id),
   },
   (table) => [
     pg.index('idx_audit_logs_user_id').on(table.user_id),

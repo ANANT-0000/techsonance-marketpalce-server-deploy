@@ -600,4 +600,47 @@ export class InventoryService {
       });
     }
   }
+
+  async getLowStockAlerts(domain: string) {
+    console.log(
+      '[InventoryService.getLowStockAlerts] Request received',
+      domain,
+    );
+    try {
+      const companyId = await this.resolveCompanyId(domain);
+      // Using the threshold defined at the top of your service
+      const threshold = LOW_STOCK_THRESHOLD;
+
+      const alerts = await this.db
+        .select({
+          variant_id: product_variants.id,
+          variant_name: product_variants.variant_name,
+          sku: product_variants.sku,
+          total_stock: sql<number>`CAST(SUM(${inventory.stock_quantity}) AS INTEGER)`,
+        })
+        .from(inventory)
+        .innerJoin(
+          product_variants,
+          eq(inventory.product_variant_id, product_variants.id),
+        )
+        .where(eq(inventory.company_id, companyId))
+        .groupBy(
+          product_variants.id,
+          product_variants.variant_name,
+          product_variants.sku,
+        )
+        // Filter directly in SQL to only return items at or below the threshold
+        .having(sql`SUM(${inventory.stock_quantity}) <= ${threshold}`);
+
+      return alerts;
+    } catch (error) {
+      if (error instanceof HttpException) throw error;
+      throw new InternalServerErrorException(
+        'Failed to fetch low stock alerts',
+        {
+          cause: error,
+        },
+      );
+    }
+  }
 }

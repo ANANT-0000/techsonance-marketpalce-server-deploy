@@ -125,4 +125,9 @@ export class AdminController {
   async getVerifiedVendors() {
     return await this.vendorService.getVerifiedVendors();
   }
+  @Get('analytics/top-vendors')
+  @HttpCode(HttpStatus.OK)
+  getTopVendors() {
+    return this.adminService.getTopVendors(5);
+  }
 }

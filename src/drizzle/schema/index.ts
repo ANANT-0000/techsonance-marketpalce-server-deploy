@@ -411,6 +411,10 @@ export const auditLogsRelations = relations(audit_logs, ({ one }) => ({
     fields: [audit_logs.company_id],
     references: [company.id],
   }),
+  admin: one(user, {
+    fields: [audit_logs.admin_id],
+    references: [user.id],
+  }),
 }));
 export const cartRelations = relations(carts, ({ one, many }) => ({
   user: one(user, {

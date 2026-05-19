@@ -33,11 +33,11 @@ export class InventoryController {
   /**
    * Low-stock alert panel only items below threshold.
    */
-  // @Get('alerts/low-stock')
-  // @HttpCode(HttpStatus.OK)
-  // getLowStockAlerts(@Headers('company-domain') domain: string) {
-  //   return this.inventoryService.getLowStockAlerts(domain);
-  // }
+  @Get('alerts/low-stock')
+  @HttpCode(HttpStatus.OK)
+  getLowStockAlerts(@Headers('company-domain') domain: string) {
+    return this.inventoryService.getLowStockAlerts(domain);
+  }
 
   @Patch(':id')
   @HttpCode(HttpStatus.OK)

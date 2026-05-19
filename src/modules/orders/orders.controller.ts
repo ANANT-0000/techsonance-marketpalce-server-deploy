@@ -2,7 +2,10 @@ import {
   Body,
   Controller,
   Get,
+  Header,
   Headers,
+  HttpCode,
+  HttpStatus,
   Param,
   Patch,
   Query,
@@ -45,8 +48,8 @@ export class OrdersController {
   }
 
   @Get('pending')
-  @UseGuards(JwtAuthGuard, RoleGuard)
-  @Roles(Role.ADMIN, Role.VENDOR)
+  // @UseGuards(JwtAuthGuard, RoleGuard)
+  // @Roles(Role.ADMIN, Role.VENDOR)
   async getPendingOrders(@Headers('company-domain') domain: string) {
     return this.ordersService.getPendingOrders(domain);
   }
@@ -89,10 +92,40 @@ export class OrdersController {
     return this.ordersService.setOrderStatus(orderId, newStatus, domain);
   }
   @Get('warranty/:orderId')
-  getWarrantyUrl(@Param('orderId') orderId: string) {
+  async getWarrantyUrl(@Param('orderId') orderId: string) {
     console.log(
       `[ProductPoliciesController.getWarrantyUrl] Fetching warranty URL for orderId: ${orderId}`,
     );
     return this.productPoliciesService.getWarrantyUrl(orderId);
+  }
+  @Get('analytics/revenue')
+  async getSalesAnalytics(
+    @Headers('company-domain') domain: string,
+    @Query('days') days?: string,
+  ) {
+    return this.ordersService.getSalesAnalytics(
+      domain,
+      days ? Number(days) : 30,
+    );
+  }
+  @Get('analytics/top-products')
+  @HttpCode(HttpStatus.OK)
+  async getTopProducts(@Headers('company-domain') domain: string) {
+    return this.ordersService.getTopSellingProducts(domain, 5);
+  }
+  @Get('analytics/conversion')
+  @HttpCode(HttpStatus.OK)
+  getConversionRate(@Headers('company-domain') domain: string) {
+    return this.ordersService.getConversionMetrics(domain);
+  }
+
+  @Get('analytics/export')
+  @Header('Content-Type', 'text/csv')
+  @Header(
+    'Content-Disposition',
+    'attachment; filename="product_performance.csv"',
+  )
+  exportAnalytics(@Headers('company-domain') domain: string) {
+    return this.ordersService.exportVendorAnalytics(domain);
   }
 }

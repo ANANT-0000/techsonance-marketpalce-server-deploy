@@ -1,4 +1,4 @@
-import { Module, OnModuleInit } from '@nestjs/common';
+import { forwardRef, Module, OnModuleInit } from '@nestjs/common';
 import { ProductPoliciesService } from './product-policies.service';
 import { ProductPoliciesController } from './product-policies.controller';
 import { DrizzleModule } from '../../drizzle/drizzle.module';
@@ -11,7 +11,11 @@ import { PolicyPayloadBuilderService } from './policy-payload-builder.service';
 import { UploadToCloudModule } from 'src/utils/upload-to-cloud/upload-to-cloud.module';
 import { PolicyResolutionService } from './policy-resolution.service';
 @Module({
-  imports: [DrizzleModule, CompanyModule, UploadToCloudModule],
+  imports: [
+    DrizzleModule,
+    forwardRef(() => CompanyModule),
+    UploadToCloudModule,
+  ],
   controllers: [ProductPoliciesController],
   providers: [
     ProductPoliciesService,

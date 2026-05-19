@@ -1,4 +1,4 @@
-import { Module } from '@nestjs/common';
+import { forwardRef, Module } from '@nestjs/common';
 import { InvoiceService } from './invoice.service';
 import { InvoiceController } from './invoice.controller';
 import { UploadToCloudModule } from '../../utils/upload-to-cloud/upload-to-cloud.module';
@@ -10,7 +10,11 @@ import { InvoicePayloadBuilderService } from './invoice-payload-builder.service'
 import { PuppeteerMinimalTemplate } from './templates/puppeteer-minimal.template';
 
 @Module({
-  imports: [UploadToCloudModule, CompanyModule, DrizzleModule],
+  imports: [
+    UploadToCloudModule,
+    forwardRef(() => CompanyModule),
+    DrizzleModule,
+  ],
   controllers: [InvoiceController],
   providers: [
     InvoiceService,

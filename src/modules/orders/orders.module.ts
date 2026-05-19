@@ -1,4 +1,4 @@
-import { Module } from '@nestjs/common';
+import { Module, forwardRef } from '@nestjs/common';
 import { OrdersService } from './orders.service';
 import { OrdersController } from './orders.controller';
 import { DrizzleModule } from '../../drizzle/drizzle.module';
@@ -12,7 +12,7 @@ import { ProductPoliciesModule } from '../product-policies/product-policies.modu
 @Module({
   imports: [
     DrizzleModule,
-    CompanyModule,
+    forwardRef(() => CompanyModule),
     InventoryModule,
     MailModule,
     InvoiceModule,

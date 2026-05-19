@@ -8,7 +8,6 @@ import {
   Post,
   Query,
   UploadedFiles,
-  UseGuards,
   Param,
 } from '@nestjs/common';
 import { UploadToCloud } from '../../common/decorators/upload.decorator';
@@ -80,8 +79,8 @@ export class ProductsController {
   }
 
   @Get('active')
-  @UseGuards(JwtAuthGuard, RoleGuard)
-  @Roles(Role.ADMIN, Role.VENDOR)
+  // @UseGuards(JwtAuthGuard, RoleGuard)
+  // @Roles(Role.ADMIN, Role.VENDOR)
   async getActiveProducts(@Headers('company-domain') domain: string) {
     return await this.productsService.getActiveProducts(domain);
   }
