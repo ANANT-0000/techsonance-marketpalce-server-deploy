@@ -23,15 +23,35 @@ export class WarehouseService {
   ) {}
 
   private async resolveCompanyId(domain: string): Promise<string> {
+    console.log(
+      `[WarehouseService.resolveCompanyId] Resolving company for domain: ${domain}`,
+    );
     const filteredDomain = domainExtractor(domain);
+    console.log(
+      `[WarehouseService.resolveCompanyId] Extracted filter domain: ${filteredDomain}`,
+    );
+    console.log(
+      '[WarehouseService.resolveCompanyId] Querying CompanyService.find(...)',
+    );
     return this.companyService.find(filteredDomain);
   }
 
   async create(warehouseAddressDto: warehouseAddressDto, domain: string) {
     try {
+      console.log('[WarehouseService.create] Request received', {
+        domain,
+        warehouseName: warehouseAddressDto.name,
+        isDefault: warehouseAddressDto.is_default,
+      });
+      console.log('[WarehouseService.create] Resolving company id');
       const companyId = await this.resolveCompanyId(domain);
-      console.log('creating warehouse', warehouseAddressDto);
+      console.log(
+        '[WarehouseService.create] Starting warehouse creation transaction',
+      );
       return await this.db.transaction(async (tx) => {
+        console.log(
+          '[WarehouseService.create] Checking for existing warehouse',
+        );
         const [existingWarehouse] = await tx
           .select({ id: warehouse.id })
           .from(warehouse)
@@ -48,6 +68,9 @@ export class WarehouseService {
           );
         }
         if (warehouseAddressDto.is_default) {
+          console.log(
+            '[WarehouseService.create] Resetting previous default addresses',
+          );
           await tx
             .update(address)
             .set({ is_default: false })
@@ -61,7 +84,7 @@ export class WarehouseService {
               );
             });
         }
-        console.log('warehouse not exist');
+        console.log('[WarehouseService.create] Inserting warehouse address');
         const [addressResult] = await tx
           .insert(address)
           .values({
@@ -81,13 +104,18 @@ export class WarehouseService {
           })
           .returning({ id: address.id });
         const addressId = addressResult.id;
-        console.log('warehouse address created', addressResult);
+        console.log(
+          '[WarehouseService.create] Warehouse address created successfully',
+        );
+        console.log('[WarehouseService.create] Inserting warehouse record');
         await tx.insert(warehouse).values({
           warehouse_name: warehouseAddressDto.name,
           company_id: companyId,
           address_id: addressId,
         });
-        console.log('warehouse created');
+        console.log(
+          '[WarehouseService.create] Warehouse creation completed successfully',
+        );
         return {
           message: 'Warehouse created successfully',
         };
@@ -105,8 +133,13 @@ export class WarehouseService {
 
   async findAll(domain: string) {
     try {
+      console.log('[WarehouseService.findAll] Request received', { domain });
+      console.log('[WarehouseService.findAll] Resolving company id');
       const companyId = await this.resolveCompanyId(domain);
-      return await this.db.query.warehouse
+      console.log(
+        `[WarehouseService.findAll] Querying warehouses for company_id: ${companyId}`,
+      );
+      const warehouses = await this.db.query.warehouse
         .findMany({
           where: eq(warehouse.company_id, companyId),
           columns: {
@@ -118,7 +151,9 @@ export class WarehouseService {
           },
         })
         .then((warehouses) => {
-          console.log('warehouses', warehouses);
+          console.log(
+            `[WarehouseService.findAll] Retrieved ${warehouses.length} warehouse(s)`,
+          );
           return warehouses;
         })
         .catch((error) => {
@@ -127,6 +162,7 @@ export class WarehouseService {
             cause: error,
           });
         });
+      return warehouses;
     } catch (error) {
       console.error('Error finding all warehouses:', error);
       throw new InternalServerErrorException('Failed to find warehouses', {
@@ -136,8 +172,15 @@ export class WarehouseService {
   }
   async findOptions(domain: string) {
     try {
+      console.log('[WarehouseService.findOptions] Request received', {
+        domain,
+      });
+      console.log('[WarehouseService.findOptions] Resolving company id');
       const companyId = await this.resolveCompanyId(domain);
-      return await this.db.query.warehouse
+      console.log(
+        `[WarehouseService.findOptions] Querying warehouse options for company_id: ${companyId}`,
+      );
+      const warehouses = await this.db.query.warehouse
         .findMany({
           where: eq(warehouse.company_id, companyId),
           columns: {
@@ -146,7 +189,9 @@ export class WarehouseService {
           },
         })
         .then((warehouses) => {
-          console.log('warehouses', warehouses);
+          console.log(
+            `[WarehouseService.findOptions] Retrieved ${warehouses.length} warehouse option(s)`,
+          );
           return warehouses;
         })
         .catch((error) => {
@@ -155,6 +200,7 @@ export class WarehouseService {
             cause: error,
           });
         });
+      return warehouses;
     } catch (error) {
       console.error('Error finding all warehouses:', error);
       throw new InternalServerErrorException('Failed to find warehouses', {
@@ -164,7 +210,15 @@ export class WarehouseService {
   }
   async findOne(id: string, domain: string) {
     try {
+      console.log('[WarehouseService.findOne] Request received', {
+        id,
+        domain,
+      });
+      console.log('[WarehouseService.findOne] Resolving company id');
       const companyId = await this.resolveCompanyId(domain);
+      console.log(
+        `[WarehouseService.findOne] Querying warehouse: ${id} for company_id: ${companyId}`,
+      );
       const warehouseRecord = await this.db.query.warehouse
         .findFirst({
           where: and(eq(warehouse.id, id), eq(warehouse.company_id, companyId)),
@@ -182,6 +236,7 @@ export class WarehouseService {
             cause: error,
           });
         });
+      console.log('[WarehouseService.findOne] Warehouse lookup completed');
       return warehouseRecord;
     } catch (error) {
       console.error('Error finding warehouse:', error);
@@ -202,8 +257,16 @@ export class WarehouseService {
     domain: string,
   ) {
     const filteredDomain = domainExtractor(domain);
+    console.log('[WarehouseService.update] Request received', {
+      id,
+      domain,
+      warehouseName: updateWarehouseDto.name,
+    });
+    console.log('[WarehouseService.update] Resolving company id');
     const companyId = await this.companyService.find(filteredDomain);
-    console.log('updating warehouse', updateWarehouseAddressDto);
+    console.log(
+      '[WarehouseService.update] Starting warehouse update transaction',
+    );
     try {
       const [existingWarehouse] = await this.db
         .select({ id: warehouse.id, address_id: warehouse.address_id })
@@ -212,9 +275,12 @@ export class WarehouseService {
       if (!existingWarehouse?.id) {
         throw new HttpException('Warehouse not found', HttpStatus.NOT_FOUND);
       }
-      console.log('transaction starting', existingWarehouse);
+      console.log('[WarehouseService.update] Existing warehouse resolved');
       await this.db.transaction(async (tx) => {
         if (updateWarehouseDto.is_default) {
+          console.log(
+            '[WarehouseService.update] Resetting default address before update',
+          );
           await tx
             .update(address)
             .set({ is_default: false })
@@ -254,7 +320,10 @@ export class WarehouseService {
               cause: error,
             });
           });
-        console.log('address updated', addressUpdate);
+        console.log(
+          '[WarehouseService.update] Address updated successfully',
+          addressUpdate,
+        );
         const updatedWarehouse = await tx
           .update(warehouse)
           .set({
@@ -276,7 +345,10 @@ export class WarehouseService {
               },
             );
           });
-        console.log('updated warehouse', updatedWarehouse);
+        console.log(
+          '[WarehouseService.update] Warehouse updated successfully',
+          updatedWarehouse,
+        );
         return {
           message: 'Warehouse updated successfully',
         };
@@ -297,8 +369,12 @@ export class WarehouseService {
 
   async remove(id: string, domain: string) {
     try {
+      console.log('[WarehouseService.remove] Request received', { id, domain });
+      console.log('[WarehouseService.remove] Resolving company id');
       const companyId = await this.resolveCompanyId(domain);
-      console.log('deleting warehouse');
+      console.log(
+        `[WarehouseService.remove] Deleting warehouse: ${id} for company_id: ${companyId}`,
+      );
       const deleted = await this.db
         .delete(warehouse)
         .where(and(eq(warehouse.id, id), eq(warehouse.company_id, companyId)))
@@ -308,10 +384,13 @@ export class WarehouseService {
             cause: error,
           });
         });
-      console.log('deleted warehouse', deleted);
+      console.log('[WarehouseService.remove] Warehouse deleted successfully');
       return deleted;
     } catch (error) {
-      console.error('Error deleting warehouse:', error);
+      console.error(
+        '[WarehouseService.remove] Error deleting warehouse:',
+        error,
+      );
       if (
         error instanceof HttpException ||
         error instanceof InternalServerErrorException

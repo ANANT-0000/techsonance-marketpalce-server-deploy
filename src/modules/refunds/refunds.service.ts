@@ -32,7 +32,16 @@ export class RefundsService {
   ) {}
 
   private async resolveCompanyId(domain: string): Promise<string> {
+    console.log(
+      `[RefundsService.resolveCompanyId] Resolving company for domain: ${domain}`,
+    );
     const filteredDomain = domainExtractor(domain);
+    console.log(
+      `[RefundsService.resolveCompanyId] Extracted filter domain: ${filteredDomain}`,
+    );
+    console.log(
+      '[RefundsService.resolveCompanyId] Querying CompanyService.find(...)',
+    );
     return this.companyService.find(filteredDomain);
   }
 
@@ -48,10 +57,22 @@ export class RefundsService {
     domain: string;
   }) {
     try {
+      console.log('[RefundsService.initiateRefund] Request received', {
+        orderId,
+        orderItemId,
+        domain,
+      });
+      console.log('[RefundsService.initiateRefund] Resolving company id');
       // domain can be a domain string OR a company UUID (called internally from returns.service)
       const companyId = await this.resolveCompanyId(domain);
+      console.log(
+        `[RefundsService.initiateRefund] Company ID resolved: ${companyId}`,
+      );
 
       // ── 1. Validate order belongs to company ─────────────────────────
+      console.log(
+        '[RefundsService.initiateRefund] Querying order for refund scope validation',
+      );
       const [order] = await this.db
         .select({
           id: orders.id,
@@ -65,6 +86,9 @@ export class RefundsService {
       if (!order) {
         throw new HttpException('Order not found', HttpStatus.NOT_FOUND);
       }
+      console.log(
+        '[RefundsService.initiateRefund] Order found, determining refund scope',
+      );
 
       // ── 2. Resolve refund scope: single item OR whole order ───────────
       const isSingleItem = !!orderItemId;
@@ -72,6 +96,9 @@ export class RefundsService {
       let resolvedOrderItemId: string | undefined;
 
       if (isSingleItem) {
+        console.log(
+          '[RefundsService.initiateRefund] Processing item-level refund',
+        );
         // Fetch the specific order item to calculate its refund amount
         const [orderItem] = await this.db
           .select({
@@ -97,6 +124,9 @@ export class RefundsService {
         }
 
         // ── Guard: no duplicate refund for this specific item ────────────
+        console.log(
+          '[RefundsService.initiateRefund] Checking for existing item-level refund',
+        );
         const [existingItemRefund] = await this.db
           .select({ id: refunds.id, refund_status: refunds.refund_status })
           .from(refunds)
@@ -120,7 +150,13 @@ export class RefundsService {
           2,
         );
         resolvedOrderItemId = orderItem.id;
+        console.log(
+          `[RefundsService.initiateRefund] Item refund amount calculated: ${refundAmount}`,
+        );
       } else {
+        console.log(
+          '[RefundsService.initiateRefund] Processing order-level refund',
+        );
         // Whole-order refund — guard against duplicate order-level refund
         // (allow if only item-level refunds exist for other items)
         const [existingOrderRefund] = await this.db
@@ -158,9 +194,13 @@ export class RefundsService {
 
         refundAmount = order.total_amount;
         resolvedOrderItemId = undefined;
+        console.log(
+          `[RefundsService.initiateRefund] Order refund amount resolved: ${refundAmount}`,
+        );
       }
 
       // ── 3. Fetch payment record ───────────────────────────────────────
+      console.log('[RefundsService.initiateRefund] Querying payment record');
       const [paymentRecord] = await this.db
         .select({ id: payments.id })
         .from(payments)
@@ -175,6 +215,7 @@ export class RefundsService {
       }
 
       // ── 4. Create the refund record ───────────────────────────────────
+      console.log('[RefundsService.initiateRefund] Creating refund record');
       const [newRefund] = await this.db
         .insert(refunds)
         .values({
@@ -187,9 +228,15 @@ export class RefundsService {
           company_id: companyId,
         })
         .returning();
+      console.log(
+        '[RefundsService.initiateRefund] Refund record created successfully',
+      );
 
       // ── 5. Notify customer ────────────────────────────────────────────
       if (order.user_id) {
+        console.log(
+          '[RefundsService.initiateRefund] Resolving customer email for notification',
+        );
         const [customerRecord] = await this.db
           .select({ email: user.email })
           .from(user)
@@ -197,6 +244,9 @@ export class RefundsService {
           .limit(1);
 
         if (customerRecord?.email) {
+          console.log(
+            '[RefundsService.initiateRefund] Sending refund initiation email',
+          );
           const scope = isSingleItem ? 'item' : 'order';
           await this.mailService.sendEmail(
             customerRecord.email,
@@ -227,6 +277,9 @@ export class RefundsService {
         }
       }
 
+      console.log(
+        '[RefundsService.initiateRefund] Refund initiation completed',
+      );
       return {
         message: isSingleItem
           ? 'Item refund initiated successfully'
@@ -254,7 +307,15 @@ export class RefundsService {
   // ── Get refund status for a specific order ───────────────────────────────
   async getRefundStatus(orderId: string, domain: string) {
     try {
+      console.log('[RefundsService.getRefundStatus] Request received', {
+        orderId,
+        domain,
+      });
+      console.log('[RefundsService.getRefundStatus] Resolving company id');
       const companyId = await this.resolveCompanyId(domain);
+      console.log(
+        `[RefundsService.getRefundStatus] Querying refunds for order_id: ${orderId}`,
+      );
 
       const refundRecords = await this.db.query.refunds.findMany({
         where: and(
@@ -287,6 +348,9 @@ export class RefundsService {
           HttpStatus.NOT_FOUND,
         );
       }
+      console.log(
+        `[RefundsService.getRefundStatus] Retrieved ${refundRecords.length} refund record(s)`,
+      );
 
       const totalRefundAmount = refundRecords.reduce(
         (sum, r) => sum + Number(r.refund_amount),
@@ -325,14 +389,17 @@ export class RefundsService {
   // ── Mark a refund as processed (vendor confirms money sent) ─────────────
   async processRefund(refundId: string, domain: string) {
     try {
+      console.log(
+        `[RefundsService.processRefund] Request to process refund: ${refundId}`,
+      );
+      console.log('[RefundsService.processRefund] Resolving company id');
       const companyId = await this.resolveCompanyId(domain);
-      console.log('refundId', refundId);
       const [existingRefund] = await this.db
         .select()
         .from(refunds)
         .where(and(eq(refunds.id, refundId), eq(refunds.company_id, companyId)))
         .limit(1);
-      console.log('existingRefund', existingRefund);
+      console.log('[RefundsService.processRefund] Refund record located');
       if (!existingRefund) {
         throw new HttpException('Refund not found', HttpStatus.NOT_FOUND);
       }
@@ -350,8 +417,13 @@ export class RefundsService {
           HttpStatus.BAD_REQUEST,
         );
       }
-      console.log('traction is starting');
+      console.log(
+        '[RefundsService.processRefund] Starting database transaction',
+      );
       return await this.db.transaction(async (tx) => {
+        console.log(
+          '[RefundsService.processRefund] Updating refund status to PROCESSED',
+        );
         const [updatedRefund] = await tx
           .update(refunds)
           .set({ refund_status: refundStatusEnum.PROCESSED })
@@ -363,10 +435,15 @@ export class RefundsService {
               { cause: error },
             );
           });
-        console.log('updatedRefund', updatedRefund);
+        console.log(
+          '[RefundsService.processRefund] Refund status updated successfully',
+        );
 
         const isOrderLevelRefund = existingRefund.order_items_id === null;
         if (existingRefund.payment_id && isOrderLevelRefund) {
+          console.log(
+            '[RefundsService.processRefund] Updating payment status to REFUNDED',
+          );
           await tx
             .update(payments)
             .set({ payment_status: PaymentStatus.REFUNDED })
@@ -381,6 +458,9 @@ export class RefundsService {
 
         // Notify customer
         if (existingRefund.order_id) {
+          console.log(
+            '[RefundsService.processRefund] Resolving customer email for refund notification',
+          );
           const [orderRecord] = await tx
             .select({ user_id: orders.user_id })
             .from(orders)
@@ -395,6 +475,9 @@ export class RefundsService {
               .limit(1);
 
             if (customerRecord?.email) {
+              console.log(
+                '[RefundsService.processRefund] Sending refund processed email',
+              );
               await this.mailService.sendEmail(
                 customerRecord.email,
                 'Your Refund Has Been Processed',
@@ -410,6 +493,9 @@ export class RefundsService {
           }
         }
 
+        console.log(
+          '[RefundsService.processRefund] Refund processing completed',
+        );
         return {
           message: 'Refund processed successfully',
           refundId: updatedRefund.id,
@@ -434,7 +520,14 @@ export class RefundsService {
 
   async getCompanyRefunds(domain: string) {
     try {
+      console.log('[RefundsService.getCompanyRefunds] Request received', {
+        domain,
+      });
+      console.log('[RefundsService.getCompanyRefunds] Resolving company id');
       const companyId = await this.resolveCompanyId(domain);
+      console.log(
+        `[RefundsService.getCompanyRefunds] Querying refunds for company_id: ${companyId}`,
+      );
 
       // 1. Fetch raw data
       const refundRecords = await this.db.query.refunds.findMany({
@@ -512,7 +605,9 @@ export class RefundsService {
             new Date(b.created_at).getTime() - new Date(a.created_at).getTime(),
         ),
       };
-      console.log('rufund reponse', reponse);
+      console.log(
+        `[RefundsService.getCompanyRefunds] Retrieved ${formattedRefunds.length} refund record(s)`,
+      );
       return reponse;
     } catch (error) {
       if (

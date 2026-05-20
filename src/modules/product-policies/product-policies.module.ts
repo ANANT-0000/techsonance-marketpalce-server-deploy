@@ -8,7 +8,7 @@ import { PuppeteerWarrantyTemplate } from './templates/puppeteer-warranty.templa
 import { PolicyTemplateRegistry } from './policy-template.registry';
 import { PolicyDocumentService } from './policy-document.service';
 import { PolicyPayloadBuilderService } from './policy-payload-builder.service';
-import { UploadToCloudModule } from 'src/utils/upload-to-cloud/upload-to-cloud.module';
+import { UploadToCloudModule } from '../../utils/upload-to-cloud/upload-to-cloud.module';
 import { PolicyResolutionService } from './policy-resolution.service';
 @Module({
   imports: [

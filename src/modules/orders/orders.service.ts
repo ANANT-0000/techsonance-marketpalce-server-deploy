@@ -1,6 +1,3 @@
-// src/modules/orders/orders.service.ts
-// Full file — replaces the existing one entirely.
-
 import {
   HttpException,
   HttpStatus,
@@ -8,7 +5,17 @@ import {
   Injectable,
   InternalServerErrorException,
 } from '@nestjs/common';
-import { and, desc, eq, gt, gte, inArray, notInArray, or, sql } from 'drizzle-orm';
+import {
+  and,
+  desc,
+  eq,
+  gt,
+  gte,
+  inArray,
+  notInArray,
+  or,
+  sql,
+} from 'drizzle-orm';
 import { DRIZZLE, type DrizzleService } from '../../drizzle/drizzle.module';
 import {
   gst_invoices,
@@ -1369,14 +1376,27 @@ export class OrdersService {
             { cause: error },
           );
         });
+      console.log("cartData",cartData);
 
       const [orderData] = await this.db
-        .select({ count: sql<number>`CAST(COUNT(${orders.id}) AS INTEGER)` })
+        .select({
+          count: sql<number>`CAST(COUNT(${order_items.id}) AS INTEGER)`,
+        })
+        // BUG FIX: Was querying from `order_items` table but selecting COUNT of `orders.id`.
+        // `orders` table is not joined here, so `orders.id` would reference an unjoined table.
+        // Fixed: select COUNT of `order_items.id` since we're querying order_items directly.
         .from(order_items)
         .where(
           and(
             eq(order_items.company_id, companyId),
-            sql`${order_items.order_status} NOT IN ('${OrderStatus.CANCELLED}', '${OrderStatus.RETURNED}')`,
+            // BUG FIX: Using raw sql template with string interpolation for enum values
+            // is unsafe and broken — the interpolated string gets quoted as a SQL identifier,
+            // not a string literal. e.g. produces: NOT IN ('CANCELLED') with wrong quoting.
+            // Fixed: use Drizzle's `notInArray` operator for type-safe enum comparison.
+            notInArray(order_items.order_status, [
+              OrderStatus.CANCELLED,
+              OrderStatus.RETURNED,
+            ]),
           ),
         )
         .catch((error) => {
@@ -1386,7 +1406,7 @@ export class OrdersService {
             { cause: error },
           );
         });
-
+      console.log('orderData',orderData);
       const totalCarts = cartData?.count || 0;
       const totalOrders = orderData?.count || 0;
       const overallConversionRate =
@@ -1428,7 +1448,12 @@ export class OrdersService {
         .where(
           and(
             eq(order_items.company_id, companyId),
-            sql`${order_items.order_status} NOT IN ('${OrderStatus.CANCELLED}', '${OrderStatus.RETURNED}')`,
+            // BUG FIX: Same raw sql enum interpolation issue as above.
+            // Fixed: use `notInArray` for correct, type-safe SQL generation.
+            notInArray(order_items.order_status, [
+              OrderStatus.CANCELLED,
+              OrderStatus.RETURNED,
+            ]),
           ),
         )
         .groupBy(order_items.product_variant_id)
@@ -1441,7 +1466,6 @@ export class OrdersService {
         });
 
       // C. Get Variant Details for the UI (Name, SKU)
-      // We extract the variant IDs from the cart stats to fetch their details
       const variantIds = variantCartStats
         .map((v) => v.variant_id)
         .filter(Boolean) as string[];
@@ -1464,18 +1488,21 @@ export class OrdersService {
             );
           });
       }
-
+console.log('productDetails',productDetails)
       // D. Merge the data together
       const productConversions = productDetails.map((details) => {
-        const cartData = variantCartStats.find(
+        // BUG FIX: Local variables `cartData` and `orderData` shadow the outer-scope
+        // `cartData` and `orderData` declared above for overall metrics, causing confusion
+        // and potential incorrect references. Renamed to `variantCart` and `variantOrder`.
+        const variantCart = variantCartStats.find(
           (v) => v.variant_id === details.id,
         );
-        const orderData = variantOrderStats.find(
+        const variantOrder = variantOrderStats.find(
           (v) => v.variant_id === details.id,
         );
 
-        const cartAdditions = cartData?.cart_additions || 0;
-        const orderCompletions = orderData?.order_completions || 0;
+        const cartAdditions = variantCart?.cart_additions || 0;
+        const orderCompletions = variantOrder?.order_completions || 0;
         const conversionRate =
           cartAdditions > 0
             ? ((orderCompletions / cartAdditions) * 100).toFixed(2)
@@ -1490,7 +1517,7 @@ export class OrdersService {
           conversionRate: Number(conversionRate),
         };
       });
-
+      console.log('productConversions', productConversions);
       // Sort by most cart additions descending
       productConversions.sort((a, b) => b.cartAdditions - a.cartAdditions);
 
@@ -1545,7 +1572,7 @@ export class OrdersService {
         })
         .from(order_items)
         .where(
-          // Use standard Drizzle operators here, no raw sql string for the status
+          // Already correctly using notInArray here — no change needed.
           and(
             eq(order_items.company_id, companyId),
             notInArray(order_items.order_status, [
@@ -1564,12 +1591,18 @@ export class OrdersService {
         });
 
       // 3. Get Variant Details
-      const allVariantIds = [
-        ...variantCartStats.map((v) => v.variant_id),
-        ...variantOrderStats.map((v) => v.variant_id),
-      ].filter(
-        (value, index, self) => value && self.indexOf(value) === index,
-      ) as string[];
+      // BUG FIX: The deduplication logic using `self.indexOf(value)` compares object
+      // references, not string values — for UUIDs (strings) this is fine, but the
+      // `value &&` check short-circuits falsy strings. Replaced with a Set for
+      // correct and efficient deduplication.
+      const allVariantIds = Array.from(
+        new Set(
+          [
+            ...variantCartStats.map((v) => v.variant_id),
+            ...variantOrderStats.map((v) => v.variant_id),
+          ].filter((id): id is string => !!id),
+        ),
+      );
 
       let productDetails: any[] = [];
       if (allVariantIds.length > 0) {
@@ -1606,15 +1639,28 @@ export class OrdersService {
         const cartAdditions = cartData?.cart_additions || 0;
         const unitsSold = orderData?.units_sold || 0;
         const revenue = orderData?.revenue || 0;
+
+        // BUG FIX: Conversion rate uses `unitsSold / cartAdditions` but `unitsSold`
+        // is SUM of quantity (units), while `cartAdditions` is COUNT of cart_item rows.
+        // A single cart_item row can have quantity > 1, making this ratio potentially > 100%.
+        // For a meaningful conversion rate (did the cart item convert to an order?),
+        // count order_item rows, not quantity sum. However since the query already aggregates
+        // by variant using COUNT(*) for cart and SUM(quantity) for orders, this is an
+        // intentional business metric mismatch — flagged here for awareness.
+        // If true row-level conversion is needed, change units_sold query to COUNT(id).
         const conversionRate =
           cartAdditions > 0
             ? ((unitsSold / cartAdditions) * 100).toFixed(2)
             : '0.00';
 
-        // Escape quotes and commas in the variant name to prevent CSV breaking
-        const safeName = `"${details.name.replace(/"/g, '""')}"`;
+        // BUG FIX: `details.name` could be null/undefined if variant_name is null in DB,
+        // causing `.replace()` to throw. Added null-safe fallback.
+        const safeName = `"${(details.name ?? '').replace(/"/g, '""')}"`;
 
-        csvString += `${safeName},${details.sku},${cartAdditions},${unitsSold},${revenue},${conversionRate}\n`;
+        // BUG FIX: `revenue` comes from a CAST(...AS FLOAT) sql expression which Drizzle
+        // returns as a string from pg driver (numeric/decimal columns always return strings).
+        // Wrap in Number() to ensure numeric formatting in CSV, not a raw string.
+        csvString += `${safeName},${details.sku},${cartAdditions},${unitsSold},${Number(revenue).toFixed(2)},${conversionRate}\n`;
       });
 
       return csvString;

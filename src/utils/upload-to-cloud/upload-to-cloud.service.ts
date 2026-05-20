@@ -9,21 +9,37 @@ export class UploadToCloudService {
   async uploadFile(
     file: Express.Multer.File,
   ): Promise<{ secure_url: string; type: string }> {
+    console.log(
+      `[UploadToCloudService.uploadFile] Uploading file: ${file?.originalname ?? 'unknown'}`,
+    );
     return await this.cloudinaryService
       .uploadFile(file)
       .then((data) => {
+        console.log(
+          '[UploadToCloudService.uploadFile] File uploaded successfully',
+        );
         return { secure_url: data.secure_url, type: productImageType.MAIN };
       })
       .catch((err) => {
+        console.error(
+          '[UploadToCloudService.uploadFile] File upload failed:',
+          err,
+        );
         throw new Error(err);
       });
   }
   async uploadFiles(
     files: Express.Multer.File[],
   ): Promise<{ secure_url: string; type: string }[]> {
+    console.log(
+      `[UploadToCloudService.uploadFiles] Uploading ${files.length} file(s)`,
+    );
     return await this.cloudinaryService
       .uploadFiles(files)
       .then((data) => {
+        console.log(
+          '[UploadToCloudService.uploadFiles] Files uploaded successfully',
+        );
         return data.map((item) => ({
           // @ts-ignore
           secure_url: item.secure_url,
@@ -31,6 +47,10 @@ export class UploadToCloudService {
         }));
       })
       .catch((err) => {
+        console.error(
+          '[UploadToCloudService.uploadFiles] File upload failed:',
+          err,
+        );
         throw new Error(err);
       });
   }
@@ -38,31 +58,54 @@ export class UploadToCloudService {
     file: Express.Multer.File,
     fileType: string,
   ): Promise<{ secure_url: string; type: string }> {
+    console.log(
+      `[UploadToCloudService.uploadDocument] Uploading document: ${file?.originalname ?? 'unknown'} as ${fileType}`,
+    );
     return await this.cloudinaryService
       .uploadFile(file)
       .then((data) => {
         // @ts-ignore
+        console.log(
+          '[UploadToCloudService.uploadDocument] Document uploaded successfully',
+        );
         return { secure_url: data.secure_url, type: fileType };
       })
       .catch((err) => {
+        console.error(
+          '[UploadToCloudService.uploadDocument] Document upload failed:',
+          err,
+        );
         throw new Error(err);
       });
   }
   async uploadEvidenceFiles(
     files: Express.Multer.File[],
   ): Promise<{ secure_url: string }[]> {
+    console.log(
+      `[UploadToCloudService.uploadEvidenceFiles] Uploading ${files.length} evidence file(s)`,
+    );
     return await this.cloudinaryService
       .uploadFiles(files)
       .then((data) => {
+        console.log(
+          '[UploadToCloudService.uploadEvidenceFiles] Evidence files uploaded successfully',
+        );
         return data.map((item) => ({
           secure_url: item.secure_url,
         }));
       })
       .catch((err) => {
+        console.error(
+          '[UploadToCloudService.uploadEvidenceFiles] Evidence upload failed:',
+          err,
+        );
         throw new Error(err);
       });
   }
   async uploadInvoice(buffer: Buffer, orderId: string): Promise<string> {
+    console.log(
+      `[UploadToCloudService.uploadInvoice] Uploading invoice for order_id: ${orderId}`,
+    );
     return new Promise((resolve, reject) => {
       const uploadStream = cloudinary.uploader.upload_stream(
         {
@@ -71,14 +114,27 @@ export class UploadToCloudService {
           public_id: `invoice_${orderId}`,
         },
         (error, result) => {
-          if (result) resolve(result.secure_url);
-          else reject(error);
+          if (result) {
+            console.log(
+              '[UploadToCloudService.uploadInvoice] Invoice uploaded successfully',
+            );
+            resolve(result.secure_url);
+          } else {
+            console.error(
+              '[UploadToCloudService.uploadInvoice] Invoice upload failed:',
+              error,
+            );
+            reject(error);
+          }
         },
       );
       streamifier.createReadStream(buffer).pipe(uploadStream);
     });
   }
   async uploadTemplate(buffer: Buffer, template_name: string): Promise<string> {
+    console.log(
+      `[UploadToCloudService.uploadTemplate] Uploading template: ${template_name}`,
+    );
     return new Promise((resolve, reject) => {
       const uploadStream = cloudinary.uploader.upload_stream(
         {
@@ -87,8 +143,18 @@ export class UploadToCloudService {
           public_id: `template_${template_name}`,
         },
         (error, result) => {
-          if (result) resolve(result.secure_url);
-          else reject(error);
+          if (result) {
+            console.log(
+              '[UploadToCloudService.uploadTemplate] Template uploaded successfully',
+            );
+            resolve(result.secure_url);
+          } else {
+            console.error(
+              '[UploadToCloudService.uploadTemplate] Template upload failed:',
+              error,
+            );
+            reject(error);
+          }
         },
       );
       streamifier.createReadStream(buffer).pipe(uploadStream);
@@ -96,6 +162,9 @@ export class UploadToCloudService {
   }
 
   async uploadWarranty(buffer: Buffer, fileName: string): Promise<string> {
+    console.log(
+      `[UploadToCloudService.uploadWarranty] Uploading warranty file: ${fileName}`,
+    );
     return new Promise((resolve, reject) => {
       const uploadStream = cloudinary.uploader.upload_stream(
         {
@@ -104,8 +173,18 @@ export class UploadToCloudService {
           public_id: `warranty_${fileName}`,
         },
         (error, result) => {
-          if (result) resolve(result.secure_url);
-          else reject(error);
+          if (result) {
+            console.log(
+              '[UploadToCloudService.uploadWarranty] Warranty uploaded successfully',
+            );
+            resolve(result.secure_url);
+          } else {
+            console.error(
+              '[UploadToCloudService.uploadWarranty] Warranty upload failed:',
+              error,
+            );
+            reject(error);
+          }
         },
       );
       streamifier.createReadStream(buffer).pipe(uploadStream);

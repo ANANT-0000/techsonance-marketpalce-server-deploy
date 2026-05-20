@@ -12,7 +12,7 @@ import * as puppeteer from 'puppeteer';
 import * as handlebars from 'handlebars';
 import * as fs from 'fs';
 import * as path from 'path';
-import { resolveTemplatePath } from 'src/utils/resolve-template-path.util';
+import { resolveTemplatePath } from '../../../utils/resolve-template-path.util';
 
 @Injectable()
 export class PuppeteerMinimalTemplate

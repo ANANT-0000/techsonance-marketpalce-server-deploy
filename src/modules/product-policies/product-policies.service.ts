@@ -25,8 +25,8 @@ import {
   product_policies,
   product_policy_override,
 } from '../../drizzle/schema/product_policy.schema';
-import { domainExtractor } from 'src/common/filters/domainExtractor.filter';
-import { orders } from 'src/drizzle/schema';
+import { domainExtractor } from '../../common/filters/domainExtractor.filter';
+import { orders } from '../../drizzle/schema';
 
 @Injectable()
 export class ProductPoliciesService {

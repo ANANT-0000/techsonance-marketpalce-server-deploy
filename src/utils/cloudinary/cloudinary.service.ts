@@ -2,13 +2,17 @@ import { Injectable } from '@nestjs/common';
 import { v2 as cloudinary } from 'cloudinary';
 import { CloudinaryResponse } from './cloudinary-response';
 import toStream from 'buffer-to-stream';
- 
+
 import 'multer';
 @Injectable()
 export class CloudinaryService {
   uploadFile(file: Express.Multer.File): Promise<CloudinaryResponse> {
+    console.log(
+      `[CloudinaryService.uploadFile] Upload request received for file: ${file?.originalname ?? 'unknown'}`,
+    );
     return new Promise((resolve, reject) => {
       if (!file || !file.buffer) {
+        console.error('[CloudinaryService.uploadFile] No file provided');
         reject(new Error('No file provided'));
         return;
       }
@@ -20,14 +24,24 @@ export class CloudinaryService {
         },
         (error, result) => {
           if (error) {
+            console.error(
+              '[CloudinaryService.uploadFile] Upload failed:',
+              error,
+            );
             reject(error as Error);
           } else {
+            console.log(
+              '[CloudinaryService.uploadFile] Upload completed successfully',
+            );
             resolve(result as CloudinaryResponse);
           }
         },
       );
       if (!file || !file.buffer) {
-        console.log(file);
+        console.error(
+          '[CloudinaryService.uploadFile] No file buffer available',
+          file,
+        );
         reject(new Error('No file provided'));
         return;
       }
@@ -38,9 +52,15 @@ export class CloudinaryService {
   async uploadFiles(
     files: Express.Multer.File[],
   ): Promise<CloudinaryResponse[]> {
-    console.log(files);
+    console.log(
+      `[CloudinaryService.uploadFiles] Uploading ${files.length} file(s)`,
+    );
 
     const uploadPromises = files.map((file) => this.uploadFile(file));
-    return Promise.all(uploadPromises);
+    const results = await Promise.all(uploadPromises);
+    console.log(
+      '[CloudinaryService.uploadFiles] Batch upload completed successfully',
+    );
+    return results;
   }
 }

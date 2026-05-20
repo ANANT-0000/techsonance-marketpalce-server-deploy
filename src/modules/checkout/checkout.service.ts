@@ -27,7 +27,16 @@ export class CheckoutService {
   ) {}
 
   private async resolveCompanyId(domain: string): Promise<string> {
+    console.log(
+      `[CheckoutService.resolveCompanyId] Resolving company for domain: ${domain}`,
+    );
     const filteredDomain = domainExtractor(domain);
+    console.log(
+      `[CheckoutService.resolveCompanyId] Extracted filter domain: ${filteredDomain}`,
+    );
+    console.log(
+      '[CheckoutService.resolveCompanyId] Querying CompanyService.find(...)',
+    );
     return this.companyService.find(filteredDomain);
   }
   async initiateCheckout(
@@ -37,14 +46,19 @@ export class CheckoutService {
   ) {
     const { addressId, paymentMethod, cartId, productVariantId } =
       initiateCheckoutDto;
-    console.log('cartId ', cartId, ' productVariantId ', productVariantId);
+    console.log('[CheckoutService.initiateCheckout] Request received', {
+      userId,
+      cartId,
+      productVariantId,
+      domain,
+    });
     if (!cartId && !productVariantId) {
       throw new HttpException(
         'Either cartId or productVariantId must be provided',
         HttpStatus.BAD_REQUEST,
       );
     }
-    console.log('domain', domain);
+    console.log('[CheckoutService.initiateCheckout] Resolving company id');
     if (!domain) {
       throw new HttpException(
         'Company domain must be provided in headers',
@@ -52,7 +66,11 @@ export class CheckoutService {
       );
     }
     const companyId = await this.resolveCompanyId(domain);
+    console.log(
+      `[CheckoutService.initiateCheckout] Company ID resolved: ${companyId}`,
+    );
 
+    console.log('[CheckoutService.initiateCheckout] Querying customer address');
     const addressRecord = await this.db
       .select()
       .from(address)
@@ -69,6 +87,7 @@ export class CheckoutService {
     if (!addressRecord) {
       throw new HttpException('Address not found', HttpStatus.NOT_FOUND);
     }
+    console.log('[CheckoutService.initiateCheckout] Resolving order lines');
     const orderLines = await this._resolveOrderLines(
       userId,
       cartId,
@@ -80,6 +99,9 @@ export class CheckoutService {
         HttpStatus.BAD_REQUEST,
       );
     }
+    console.log(
+      '[CheckoutService.initiateCheckout] Creating order through OrdersService',
+    );
     return await this.ordersService.createOrder({
       userId,
       companyId,
@@ -91,9 +113,15 @@ export class CheckoutService {
 
   async verifyCheckout(dto: VerifyCheckoutDto, domain: string) {
     const { orderId, isSuccess, cartId, productVariantId } = dto;
-    console.log(orderId, '==orderId');
-    console.log('verifyCheckoutDto check', dto);
+    console.log('[CheckoutService.verifyCheckout] Request received', {
+      orderId,
+      isSuccess,
+      cartId,
+      productVariantId,
+      domain,
+    });
 
+    console.log('[CheckoutService.verifyCheckout] Resolving company id');
     const companyId = await this.resolveCompanyId(domain);
     if (!companyId) {
       throw new HttpException('Company not found', HttpStatus.NOT_FOUND);
@@ -108,6 +136,7 @@ export class CheckoutService {
       throw new HttpException('user not found', HttpStatus.BAD_REQUEST);
     }
     try {
+      console.log('[CheckoutService.verifyCheckout] Querying customer record');
       const [customerRecord] = await this.db
         .select({
           email: user.email,
@@ -139,7 +168,11 @@ export class CheckoutService {
           companyId,
         );
       if (verificationResult.success) {
+        console.log('[CheckoutService.verifyCheckout] Verification successful');
         if (cartId) {
+          console.log(
+            '[CheckoutService.verifyCheckout] Clearing cart after checkout',
+          );
           await this._clearCart(this.db, cartId, orderId);
         }
       }
@@ -162,6 +195,9 @@ export class CheckoutService {
     { variantId: string; price: number; quantity: number }[] | undefined
   > {
     if (productVariantId) {
+      console.log(
+        '[CheckoutService._resolveOrderLines] Resolving single product variant checkout line',
+      );
       const [variant] = await this.db
         .select({
           id: product_variants.id,
@@ -185,6 +221,9 @@ export class CheckoutService {
       ];
     }
     if (cartId) {
+      console.log(
+        '[CheckoutService._resolveOrderLines] Resolving cart checkout lines',
+      );
       const [cartRecord] = await this.db
         .select({ id: carts.id })
         .from(carts)
@@ -214,7 +253,13 @@ export class CheckoutService {
   }
 
   private async _clearCart(tx: DrizzleDB, cartId: string, userId: string) {
-    console.log('clearing cart');
+    console.log(
+      '[CheckoutService._clearCart] Clearing cart after successful checkout',
+      {
+        cartId,
+        userId,
+      },
+    );
     await tx
       .delete(carts)
       .where(and(eq(carts.id, cartId), eq(carts.user_id, userId)))
@@ -237,6 +282,6 @@ export class CheckoutService {
           { cause: error },
         );
       });
-    console.log('cleared cart successfully');
+    console.log('[CheckoutService._clearCart] Cart cleared successfully');
   }
 }

@@ -33,7 +33,16 @@ export class FinancesService {
   ) {}
 
   private async resolveCompanyId(domain: string): Promise<string> {
+    console.log(
+      `[FinancesService.resolveCompanyId] Resolving company for domain: ${domain}`,
+    );
     const filteredDomain = domainExtractor(domain);
+    console.log(
+      `[FinancesService.resolveCompanyId] Extracted filter domain: ${filteredDomain}`,
+    );
+    console.log(
+      '[FinancesService.resolveCompanyId] Querying CompanyService.find(...)',
+    );
     return this.companyService.find(filteredDomain);
   }
 
@@ -45,6 +54,9 @@ export class FinancesService {
     try {
       console.log('[FinancesService.getVendorEarnings] Resolving company id');
       const companyId = await this.resolveCompanyId(domain);
+      console.log(
+        `[FinancesService.getVendorEarnings] Querying orders for company_id: ${companyId}`,
+      );
 
       // Using Drizzle's Relational Query API
       // This automatically checks your schema relations and connects the IDs
@@ -141,6 +153,9 @@ export class FinancesService {
       if (!vendorRecord || !vendorRecord.company_id) {
         throw new NotFoundException('Vendor or associated company not found');
       }
+      console.log(
+        `[FinancesService.getVendorFinancial] Vendor company resolved: ${vendorRecord.company_id}`,
+      );
 
       // 2. Fetch all orders and their associated payments for this company
       const orderRecords = await this.db.query.orders.findMany({
@@ -229,7 +244,11 @@ export class FinancesService {
       '[FinancesService.getGstRegistrations] Request received for domain:',
       domain,
     );
+    console.log('[FinancesService.getGstRegistrations] Resolving company id');
     const companyId = await this.resolveCompanyId(domain);
+    console.log(
+      `[FinancesService.getGstRegistrations] Querying GST registrations for company_id: ${companyId}`,
+    );
 
     const records = await this.db.query.gst_registrations.findMany({
       where: eq(gst_registrations.company_id, companyId),
@@ -243,6 +262,7 @@ export class FinancesService {
       '[FinancesService.addGstRegistration] Request received for domain:',
       domain,
     );
+    console.log('[FinancesService.addGstRegistration] Resolving company id');
     const companyId = await this.resolveCompanyId(domain);
     console.log(
       '[FinancesService.addGstRegistration] Adding GST Registration for Company ID:',
@@ -271,6 +291,9 @@ export class FinancesService {
         is_default: data.is_default || false,
       })
       .returning();
+    console.log(
+      '[FinancesService.addGstRegistration] GST registration created successfully',
+    );
 
     return {
       success: true,
@@ -283,7 +306,11 @@ export class FinancesService {
       '[FinancesService.createTaxProfile] Request received for domain:',
       domain,
     );
+    console.log('[FinancesService.createTaxProfile] Resolving company id');
     const companyId = await this.resolveCompanyId(domain);
+    console.log(
+      `[FinancesService.createTaxProfile] Creating tax profile for company_id: ${companyId}`,
+    );
 
     const newProfile = await this.db
       .insert(tax_profiles)
@@ -295,14 +322,24 @@ export class FinancesService {
       })
       .returning();
 
+    console.log(
+      '[FinancesService.createTaxProfile] Tax profile created successfully',
+    );
+
     return { success: true, message: 'Tax profile created', data: newProfile };
   }
 
   // 2. Create Tax Rate (Combines Tax Type + Tax Rate insertion)
   async createTaxRate(domain: string, data: any) {
+    console.log('[FinancesService.createTaxRate] Request received', { domain });
+    console.log('[FinancesService.createTaxRate] Resolving company id');
     const companyId = await this.resolveCompanyId(domain);
+    console.log(
+      `[FinancesService.createTaxRate] Creating tax type and rate for company_id: ${companyId}`,
+    );
 
     // Step A: Insert into tax_types
+    console.log('[FinancesService.createTaxRate] Inserting tax type');
     const newTaxType = await this.db
       .insert(tax_types)
       .values({
@@ -315,6 +352,7 @@ export class FinancesService {
       .returning();
 
     // Step B: Insert into tax_rates using the new tax_type.id
+    console.log('[FinancesService.createTaxRate] Inserting tax rate');
     const newTaxRate = await this.db
       .insert(tax_rates)
       .values({
@@ -333,6 +371,10 @@ export class FinancesService {
       })
       .returning();
 
+    console.log(
+      '[FinancesService.createTaxRate] Tax rate created successfully',
+    );
+
     return {
       success: true,
       message: 'Tax rule created successfully',
@@ -341,7 +383,14 @@ export class FinancesService {
   }
   // 2. Tax Profiles
   async getTaxProfiles(domain: string) {
+    console.log('[FinancesService.getTaxProfiles] Request received', {
+      domain,
+    });
+    console.log('[FinancesService.getTaxProfiles] Resolving company id');
     const companyId = await this.resolveCompanyId(domain);
+    console.log(
+      `[FinancesService.getTaxProfiles] Querying tax profiles for company_id: ${companyId}`,
+    );
 
     const records = await this.db.query.tax_profiles.findMany({
       where: eq(tax_profiles.company_id, companyId),
@@ -352,7 +401,12 @@ export class FinancesService {
 
   // 3. Tax Rates
   async getTaxRates(domain: string) {
+    console.log('[FinancesService.getTaxRates] Request received', { domain });
+    console.log('[FinancesService.getTaxRates] Resolving company id');
     const companyId = await this.resolveCompanyId(domain);
+    console.log(
+      `[FinancesService.getTaxRates] Querying tax rates for company_id: ${companyId}`,
+    );
 
     const records = await this.db.query.tax_rates.findMany({
       where: eq(tax_rates.company_id, companyId),
@@ -361,7 +415,14 @@ export class FinancesService {
     return records;
   }
   async getTaxRateOptions(domain: string) {
+    console.log('[FinancesService.getTaxRateOptions] Request received', {
+      domain,
+    });
+    console.log('[FinancesService.getTaxRateOptions] Resolving company id');
     const companyId = await this.resolveCompanyId(domain);
+    console.log(
+      `[FinancesService.getTaxRateOptions] Querying tax rate options for company_id: ${companyId}`,
+    );
 
     const records = await this.db.query.tax_rates.findMany({
       where: eq(tax_rates.company_id, companyId),
@@ -377,7 +438,11 @@ export class FinancesService {
       '[FinancesService.getProductTaxMapping] Request received for domain:',
       domain,
     );
+    console.log('[FinancesService.getProductTaxMapping] Resolving company id');
     const companyId = await this.resolveCompanyId(domain);
+    console.log(
+      `[FinancesService.getProductTaxMapping] Querying mapped products for company_id: ${companyId}`,
+    );
 
     // Because a product can have multiple variants (and thus multiple SKUs),
     // we use an aggregation to grab either the first SKU or an array of SKUs.
@@ -416,6 +481,10 @@ export class FinancesService {
       is_mapped: !!item.is_mapped,
     }));
 
+    console.log(
+      `[FinancesService.getProductTaxMapping] Retrieved ${formattedData.length} mapped product record(s)`,
+    );
+
     return { success: true, data: formattedData };
   }
 
@@ -425,7 +494,11 @@ export class FinancesService {
       '[FinancesService.getGstInvoices] Request received for domain:',
       domain,
     );
+    console.log('[FinancesService.getGstInvoices] Resolving company id');
     const companyId = await this.resolveCompanyId(domain);
+    console.log(
+      `[FinancesService.getGstInvoices] Querying GST invoices for company_id: ${companyId}`,
+    );
 
     const records = await this.db.query.gst_invoices.findMany({
       where: eq(gst_invoices.company_id, companyId),
@@ -434,7 +507,17 @@ export class FinancesService {
     return { success: true, data: records };
   }
   async getSingleGstRegistration(id: string, domain: string) {
+    console.log('[FinancesService.getSingleGstRegistration] Request received', {
+      id,
+      domain,
+    });
+    console.log(
+      '[FinancesService.getSingleGstRegistration] Resolving company id',
+    );
     const companyId = await this.resolveCompanyId(domain);
+    console.log(
+      `[FinancesService.getSingleGstRegistration] Querying GST registration: ${id}`,
+    );
 
     const record = await this.db.query.gst_registrations.findFirst({
       where: and(
@@ -447,7 +530,15 @@ export class FinancesService {
 
   // Handle the PATCH update
   async updateGstRegistration(id: string, domain: string, data: any) {
+    console.log('[FinancesService.updateGstRegistration] Request received', {
+      id,
+      domain,
+    });
+    console.log('[FinancesService.updateGstRegistration] Resolving company id');
     const companyId = await this.resolveCompanyId(domain);
+    console.log(
+      `[FinancesService.updateGstRegistration] Updating GST registration: ${id}`,
+    );
 
     const updatedRecord = await this.db
       .update(gst_registrations)
@@ -474,6 +565,10 @@ export class FinancesService {
       )
       .returning();
 
+    console.log(
+      '[FinancesService.updateGstRegistration] GST registration updated successfully',
+    );
+
     return {
       success: true,
       message: 'GST updated successfully',
@@ -483,7 +578,15 @@ export class FinancesService {
 
   // --- REPEAT PATTERN FOR PROFILES & RATES ---
   async updateTaxProfile(id: string, domain: string, data: any) {
+    console.log('[FinancesService.updateTaxProfile] Request received', {
+      id,
+      domain,
+    });
+    console.log('[FinancesService.updateTaxProfile] Resolving company id');
     const companyId = await this.resolveCompanyId(domain);
+    console.log(
+      `[FinancesService.updateTaxProfile] Updating tax profile: ${id}`,
+    );
 
     const updated = await this.db
       .update(tax_profiles)
@@ -497,6 +600,10 @@ export class FinancesService {
       )
       .returning();
 
+    console.log(
+      '[FinancesService.updateTaxProfile] Tax profile updated successfully',
+    );
+
     return { success: true, data: updated };
   }
   // 6. Assign Tax to Product (Upsert Logic)
@@ -508,15 +615,25 @@ export class FinancesService {
       '[FinancesService.assignTaxToProduct] Request received for domain:',
       domain,
     );
+    console.log('[FinancesService.assignTaxToProduct] Resolving company id');
     const companyId = await this.resolveCompanyId(domain); // Used for security validation if needed
+    console.log(
+      `[FinancesService.assignTaxToProduct] Company ID resolved: ${companyId}`,
+    );
 
     // Check if the product already has a tax mapped
+    console.log(
+      '[FinancesService.assignTaxToProduct] Checking existing tax mapping',
+    );
     const existingMapping = await this.db.query.product_tax.findFirst({
       where: eq(product_tax.product_id, data.product_id),
     });
 
     if (existingMapping) {
       // UPDATE existing mapping
+      console.log(
+        '[FinancesService.assignTaxToProduct] Updating existing tax mapping',
+      );
       const updated = await this.db
         .update(product_tax)
         .set({ tax_rate_id: data.tax_rate_id })
@@ -529,6 +646,9 @@ export class FinancesService {
       };
     } else {
       // INSERT new mapping
+      console.log(
+        '[FinancesService.assignTaxToProduct] Creating new tax mapping',
+      );
       const inserted = await this.db
         .insert(product_tax)
         .values({
@@ -547,7 +667,15 @@ export class FinancesService {
     domain: string,
     data: { product_ids: string[]; tax_rate_id: string },
   ) {
+    console.log('[FinancesService.bulkAssignProductTax] Request received', {
+      domain,
+      count: data.product_ids.length,
+    });
+    console.log('[FinancesService.bulkAssignProductTax] Resolving company id');
     const companyId = await this.resolveCompanyId(domain);
+    console.log(
+      `[FinancesService.bulkAssignProductTax] Company ID resolved: ${companyId}`,
+    );
 
     // Prepare the batch data
     const valuesToUpsert = data.product_ids.map((id) => ({
@@ -560,6 +688,9 @@ export class FinancesService {
     }
 
     // Use Upsert: Insert new ones, or update tax_rate_id if product_id already exists
+    console.log(
+      '[FinancesService.bulkAssignProductTax] Performing bulk upsert',
+    );
     const results = await this.db
       .insert(product_tax)
       .values(valuesToUpsert)
@@ -589,6 +720,9 @@ export class FinancesService {
       '[FinancesService.calculateOrderTaxes] Request received for company:',
       companyId,
     );
+    console.log(
+      '[FinancesService.calculateOrderTaxes] Resolving customer state',
+    );
     // 1. Fetch Customer's State
     const [customerAddr] = await tx
       .select({ state: address.state })
@@ -602,8 +736,14 @@ export class FinancesService {
       );
     }
     const customerState = customerAddr.state.trim().toLowerCase();
+    console.log(
+      `[FinancesService.calculateOrderTaxes] Customer state resolved: ${customerState}`,
+    );
 
     // 2. Fetch Vendor's Active GST Registration State
+    console.log(
+      '[FinancesService.calculateOrderTaxes] Resolving vendor GST registration',
+    );
     const [vendorGst] = await tx
       .select()
       .from(gst_registrations)
@@ -630,6 +770,9 @@ export class FinancesService {
         HttpStatus.BAD_REQUEST,
       );
     }
+    console.log(
+      `[FinancesService.calculateOrderTaxes] Vendor GST state code resolved: ${vendorGst.state_code}`,
+    );
 
     // In India, state_code in GSTIN indicates the state.
     const vendorState = getStateByCode(vendorGst.state_code)
@@ -651,6 +794,13 @@ export class FinancesService {
 
     // 4. Loop through cart items and calculate
     for (const item of cartItems) {
+      console.log(
+        '[FinancesService.calculateOrderTaxes] Calculating tax for cart item',
+        {
+          variantId: item.variantId,
+          quantity: item.quantity,
+        },
+      );
       const baseItemTotal = Number(item.price) * item.quantity;
       subTotal += baseItemTotal;
       const [variantRecord] = await tx
@@ -688,6 +838,9 @@ export class FinancesService {
 
       const mapping = productTaxMapping[0];
       const taxPercentage = mapping ? Number(mapping.rate) : 0;
+      console.log(
+        `[FinancesService.calculateOrderTaxes] Applied tax percentage: ${taxPercentage}`,
+      );
 
       if (mapping && mapping.taxTypeId) {
         appliedTaxTypeIds.add(mapping.taxTypeId);

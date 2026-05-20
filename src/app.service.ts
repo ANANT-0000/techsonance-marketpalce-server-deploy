@@ -6,6 +6,7 @@ import { type DrizzleDB } from './drizzle/types/drizzle';
 export class AppService {
   constructor(@Inject(DRIZZLE) private db: DrizzleDB) {}
   getHello(): string {
+    console.log('[AppService.getHello] Health check requested');
     return 'Hello World!';
   }
 }

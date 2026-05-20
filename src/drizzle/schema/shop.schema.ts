@@ -32,25 +32,66 @@ export const categories = pg.pgTable('categories', {
 });
 export const coupons = pg.pgTable('coupons', {
   id: pg.uuid('id').primaryKey().defaultRandom(),
-  code: pg.text('code').notNull(),
-  description: pg.text('description').notNull(),
+  company_id: pg
+    .uuid('company_id')
+    .references(() => company.id, { onDelete: 'cascade' })
+    .notNull(),
+
+  // Basic Info
+  code: pg.text('code').notNull(), // e.g., 'SUMMER20' (Can be nullable if is_auto_applied is true)
+  description: pg.text('description'),
+
+  // Discount Definition
+  // Recommended types: 'percentage', 'fixed_cart', 'fixed_product', 'free_shipping'
   discount_type: pg.text('discount_type').notNull(),
   discount_value: pg
     .decimal('discount_value', { precision: 10, scale: 2 })
     .notNull(),
+
+  // Caps and Requirements
+  min_order_amount: pg.decimal('min_order_amount', { precision: 10, scale: 2 }), // Minimum cart value required
+  max_discount_amount: pg.decimal('max_discount_amount', {
+    precision: 10,
+    scale: 2,
+  }), // Max discount for percentage types
+
+  // Usage Limits
+  max_uses: pg.integer('max_uses'), 
+  max_uses_per_user: pg.integer('max_uses_per_user').default(1), // How many times a single user can use it
+  total_used: pg.integer('total_used').default(0).notNull(),
+  // Configuration
+  is_auto_applied: pg.boolean('is_auto_applied').notNull().default(false), // True for site-wide sales requiring no code
+  is_active: pg.boolean('is_active').notNull().default(true),
   valid_from: pg.timestamp('valid_from').notNull(),
   valid_to: pg.timestamp('valid_to').notNull(),
-  is_active: pg.boolean('is_active').notNull().default(true),
   created_at: pg.timestamp('created_at').notNull().defaultNow(),
   updated_at: pg
     .timestamp('updated_at')
     .notNull()
     .defaultNow()
     .$onUpdate(() => new Date()),
-  company_id: pg
-    .uuid('company_id')
-    .references(() => company.id, { onDelete: 'cascade' }),
 });
+// export const coupons = pg.pgTable('coupons', {
+//   id: pg.uuid('id').primaryKey().defaultRandom(),
+//   code: pg.text('code').notNull(),
+//   description: pg.text('description').notNull(),
+//   discount_type: pg.text('discount_type').notNull(),
+//   discount_value: pg
+//     .decimal('discount_value', { precision: 10, scale: 2 })
+//     .notNull(),
+//   valid_from: pg.timestamp('valid_from').notNull(),
+//   valid_to: pg.timestamp('valid_to').notNull(),
+//   is_active: pg.boolean('is_active').notNull().default(true),
+//   created_at: pg.timestamp('created_at').notNull().defaultNow(),
+//   updated_at: pg
+//     .timestamp('updated_at')
+//     .notNull()
+//     .defaultNow()
+//     .$onUpdate(() => new Date()),
+//   company_id: pg
+//     .uuid('company_id')
+//     .references(() => company.id, { onDelete: 'cascade' }),
+// });
 
 export const carts = pg.pgTable('carts', {
   id: pg.uuid('id').primaryKey().defaultRandom(),
@@ -85,20 +126,29 @@ export const wishlist = pg.pgTable('wishlist', {
 });
 export const coupon_usage = pg.pgTable('coupon_usage', {
   id: pg.uuid('id').primaryKey().defaultRandom(),
-  coupon_id: pg
-    .uuid('coupon_id')
-    .references(() => coupons.id, { onDelete: 'cascade' }),
-  user_id: pg
-    .uuid('user_id')
-    .references(() => user.id, { onDelete: 'cascade' }),
   company_id: pg
     .uuid('company_id')
-    .references(() => company.id, { onDelete: 'cascade' }),
-  created_at: pg
-    .timestamp('created_at')
-    .$default(() => new Date())
+    .references(() => company.id, { onDelete: 'cascade' })
     .notNull(),
+  coupon_id: pg
+    .uuid('coupon_id')
+    .references(() => coupons.id, { onDelete: 'cascade' })
+    .notNull(),
+  user_id: pg
+    .uuid('user_id')
+    .references(() => user.id, { onDelete: 'cascade' })
+    .notNull(),
+  order_id: pg
+    .uuid('order_id')
+    .references(() => orders.id, { onDelete: 'cascade' })
+    .notNull(),
+  discount_applied: pg
+    .decimal('discount_applied', { precision: 10, scale: 2 })
+    .notNull(),
+
+  created_at: pg.timestamp('created_at').defaultNow().notNull(),
 });
+
 export const ProductStatusEnum = pg.pgEnum(
   'product_status_enum',
   ProductStatus,
@@ -194,7 +244,21 @@ export const order_items = pg.pgTable(
   },
   (table) => [pg.index('idx_order_items_order_id').on(table.order_id)],
 );
-
+export const coupon_products = pg.pgTable(
+  'coupon_products',
+  {
+    id: pg.uuid('id').primaryKey().defaultRandom(),
+    coupon_id: pg
+      .uuid('coupon_id')
+      .references(() => coupons.id, { onDelete: 'cascade' })
+      .notNull(),
+    product_id: pg
+      .uuid('product_id')
+      .references(() => products.id, { onDelete: 'cascade' })
+      .notNull(),
+  },
+  (t) => [pg.uniqueIndex('unq_coupon_product').on(t.coupon_id, t.product_id)],
+);
 export const cancelled_by_enum = pg.pgEnum('canceled_by_enum', CancelledByEnum);
 export const order_item_cancelled = pg.pgTable('order_item_canceled', {
   id: pg.uuid('id').primaryKey().defaultRandom(),

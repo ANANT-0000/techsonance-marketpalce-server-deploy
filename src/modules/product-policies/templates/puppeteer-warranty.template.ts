@@ -1,11 +1,10 @@
-// src/modules/product-policies/templates/puppeteer-warranty.template.ts
 import { Injectable } from '@nestjs/common';
 import * as puppeteer from 'puppeteer';
 import * as handlebars from 'handlebars';
 import * as fs from 'fs';
 import { PolicyDocumentPayload } from '../interfaces/policy-document.interface';
 import { IPolicyTemplate } from '../policy-template.registry';
-import { resolveTemplatePath } from 'src/utils/resolve-template-path.util';
+import { resolveTemplatePath } from '../../../utils/resolve-template-path.util';
 
 @Injectable()
 export class PuppeteerWarrantyTemplate implements IPolicyTemplate {

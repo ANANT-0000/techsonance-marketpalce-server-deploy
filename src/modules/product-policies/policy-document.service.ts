@@ -1,4 +1,4 @@
-// src/modules/product-policies/services/policy-document.service.ts
+// ../modules/product-policies/services/policy-document.service.ts
 import { Injectable, Inject, Logger } from '@nestjs/common';
 import { PolicyPayloadBuilderService } from './policy-payload-builder.service';
 import { UploadToCloudService } from '../../utils/upload-to-cloud/upload-to-cloud.service';

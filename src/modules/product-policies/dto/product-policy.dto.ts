@@ -1,4 +1,3 @@
-// src/modules/product-policies/dto/assign-policy.dto.ts
 import {
   IsNotEmpty,
   IsOptional,

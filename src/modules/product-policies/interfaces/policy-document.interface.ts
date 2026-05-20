@@ -1,5 +1,3 @@
-// src/modules/product-policies/interfaces/policy-document.interface.ts
-
 export interface PolicyDocumentPayload {
   meta: {
     documentId: string;

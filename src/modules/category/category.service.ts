@@ -32,7 +32,12 @@ export class CategoryService {
     return this.CompanyService.find(filterDomain);
   }
   async findAll(domain: string) {
+    console.log('[CategoryService.findAll] Request received', { domain });
+    console.log('[CategoryService.findAll] Resolving company id');
     const companyId = await this.resolveCompanyId(domain);
+    console.log(
+      `[CategoryService.findAll] Querying categories for company_id: ${companyId}`,
+    );
     const allCategories = await this.db
       .select()
       .from(categories)
@@ -46,12 +51,18 @@ export class CategoryService {
           cause: error,
         });
       });
-    console.log('all category', allCategories);
+    console.log(
+      `[CategoryService.findAll] Retrieved ${allCategories.length} category record(s)`,
+    );
     return allCategories;
   }
 
   async create(createCategoryDto: CreateCategoryDto, domain: string) {
-    console.log('category', createCategoryDto);
+    console.log('[CategoryService.create] Request received', {
+      name: createCategoryDto.name,
+      domain,
+    });
+    console.log('[CategoryService.create] Resolving company id');
     const companyId = await this.resolveCompanyId(domain);
     if (!companyId) {
       throw new InternalServerErrorException(
@@ -59,13 +70,14 @@ export class CategoryService {
       );
     }
     try {
-      const newCategory = await this.db.insert(categories).values({
+      console.log('[CategoryService.create] Inserting category record');
+      await this.db.insert(categories).values({
         name: createCategoryDto.name,
         description: createCategoryDto.description,
         parent_id: createCategoryDto.parent_id || null,
         company_id: companyId || null,
       });
-      console.log(newCategory);
+      console.log('[CategoryService.create] Category created successfully');
       return {
         message: 'Category created successfully',
         status: HttpStatus.CREATED,
@@ -81,6 +93,11 @@ export class CategoryService {
 
     domain: string,
   ) {
+    console.log('[CategoryService.createMany] Request received', {
+      count: createCategoryDto.length,
+      domain,
+    });
+    console.log('[CategoryService.createMany] Resolving company id');
     const companyId = await this.resolveCompanyId(domain);
     if (!companyId) {
       throw new InternalServerErrorException(
@@ -88,6 +105,7 @@ export class CategoryService {
       );
     }
     try {
+      console.log('[CategoryService.createMany] Inserting category batch');
       const categoryValues = createCategoryDto.map((dto) => ({
         name: dto.name,
         description: dto.description,
@@ -106,6 +124,8 @@ export class CategoryService {
     }
   }
   async findOne(id: string, domain: string) {
+    console.log('[CategoryService.findOne] Request received', { id, domain });
+    console.log('[CategoryService.findOne] Resolving company id');
     const companyId = await this.resolveCompanyId(domain);
     if (!companyId) {
       throw new InternalServerErrorException(
@@ -113,6 +133,7 @@ export class CategoryService {
       );
     }
 
+    console.log('[CategoryService.findOne] Querying category by id');
     const category = await this.db
       .select()
       .from(categories)
@@ -124,6 +145,12 @@ export class CategoryService {
     domain: string,
     updateCategoryDto: CreateCategoryDto,
   ) {
+    console.log('[CategoryService.update] Request received', {
+      id,
+      domain,
+      name: updateCategoryDto.name,
+    });
+    console.log('[CategoryService.update] Resolving company id');
     const companyId = await this.resolveCompanyId(domain);
     if (!companyId) {
       throw new InternalServerErrorException(
@@ -131,6 +158,7 @@ export class CategoryService {
       );
     }
     try {
+      console.log('[CategoryService.update] Updating category record');
       await this.db
         .update(categories)
         .set({
@@ -152,6 +180,8 @@ export class CategoryService {
     }
   }
   async delete(id: string, domain: string) {
+    console.log('[CategoryService.delete] Request received', { id, domain });
+    console.log('[CategoryService.delete] Resolving company id');
     const companyId = await this.resolveCompanyId(domain);
     if (!companyId) {
       throw new InternalServerErrorException(
@@ -159,12 +189,13 @@ export class CategoryService {
       );
     }
     try {
+      console.log('[CategoryService.delete] Deleting category record');
       await this.db
         .delete(categories)
         .where(
           and(eq(categories.id, id), eq(categories.company_id, companyId)),
         );
-      console.log('delete successfully');
+      console.log('[CategoryService.delete] Category deleted successfully');
       return {
         message: 'Category deleted successfully',
         status: HttpStatus.OK,

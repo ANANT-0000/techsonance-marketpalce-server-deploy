@@ -1,6 +1,13 @@
 import { OrdersService } from '../orders/orders.service';
 import { VendorsService } from './vendors.service';
-import { Controller, Get, Headers, HttpCode, HttpStatus } from '@nestjs/common';
+import {
+  Controller,
+  Get,
+  Headers,
+  HttpCode,
+  HttpStatus,
+  Query,
+} from '@nestjs/common';
 
 @Controller({ version: '1', path: 'vendors' })
 export class VendorsController {
@@ -12,5 +19,14 @@ export class VendorsController {
   @HttpCode(HttpStatus.OK)
   getTopProducts(@Headers('company-domain') domain: string) {
     return this.ordersService.getTopSellingProducts(domain, 5);
+  }
+  @Get('analytics')
+  @HttpCode(HttpStatus.OK)
+  getVendorDashboardData(
+    @Headers('company-domain') domain: string,
+    @Query('startDate') startDate?: string,
+    @Query('endDate') endDate?: string,
+  ) {
+    return this.vendorsService.getAnalyticsData(domain, startDate, endDate);
   }
 }

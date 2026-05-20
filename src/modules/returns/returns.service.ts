@@ -81,7 +81,16 @@ export class ReturnsService {
   ) {}
 
   private async resolveCompanyId(domain: string): Promise<string> {
+    console.log(
+      `[ReturnsService.resolveCompanyId] Resolving company for domain: ${domain}`,
+    );
     const filteredDomain = domainExtractor(domain);
+    console.log(
+      `[ReturnsService.resolveCompanyId] Extracted filter domain: ${filteredDomain}`,
+    );
+    console.log(
+      '[ReturnsService.resolveCompanyId] Querying CompanyService.find(...)',
+    );
     return this.companyService.find(filteredDomain);
   }
 
@@ -92,10 +101,18 @@ export class ReturnsService {
     files: { evidence_images?: Express.Multer.File[] },
     domain: string,
   ) {
-    // console.log(" inservce dto",dto, "files",files)
     try {
+      console.log('[ReturnsService.createReturnRequest] Request received', {
+        userId,
+        orderItemId: dto.order_item_id,
+        type: dto.type,
+        domain,
+      });
+      console.log('[ReturnsService.createReturnRequest] Resolving company id');
       const companyId = await this.resolveCompanyId(domain);
-      console.log('serching orderitem');
+      console.log(
+        `[ReturnsService.createReturnRequest] Querying order item: ${dto.order_item_id}`,
+      );
       const [userDetails] = await this.db
         .select({
           first_name: user.first_name,
@@ -107,7 +124,7 @@ export class ReturnsService {
       if (!userDetails) {
         throw new NotFoundException('User not found');
       }
-      console.log('userDetails', userDetails);
+      console.log('[ReturnsService.createReturnRequest] User details resolved');
       const orderItem = await this.db.query.order_items
         .findFirst({
           where: eq(order_items.id, dto.order_item_id),
@@ -122,7 +139,9 @@ export class ReturnsService {
       if (!orderItem || !orderItem.order) {
         throw new NotFoundException('Order item not found');
       }
-      console.log('found orderitem', orderItem);
+      console.log(
+        '[ReturnsService.createReturnRequest] Order item found, validating status',
+      );
 
       // Only delivered items can be returned/replaced/refunded
       if (orderItem.order_status !== OrderStatus.DELIVERED) {
@@ -130,8 +149,12 @@ export class ReturnsService {
           `Cannot raise a return request for an item with status: ${orderItem.order_status}. Item must be delivered first.`,
         );
       }
-      console.log('orderItem.order_status ', orderItem.order_status);
-      console.log('serching return request');
+      console.log(
+        `[ReturnsService.createReturnRequest] Order item status: ${orderItem.order_status}`,
+      );
+      console.log(
+        '[ReturnsService.createReturnRequest] Checking for existing return request',
+      );
       const existingReturn = await this.db.query.return_requests
         .findFirst({
           where: eq(return_requests.order_item_id, dto.order_item_id),
@@ -148,19 +171,27 @@ export class ReturnsService {
           'A return or replacement request already exists for this item.',
         );
       }
-      console.log('existingReturn ', existingReturn);
+      console.log(
+        '[ReturnsService.createReturnRequest] No existing request found',
+      );
       // Upload evidence images if provided
       const finalResults: { url: string }[] = [];
       if (files?.evidence_images && files.evidence_images.length > 0) {
-        console.log('evidence_images found');
+        console.log(
+          `[ReturnsService.createReturnRequest] Uploading ${files.evidence_images.length} evidence image(s)`,
+        );
         const uploaded = await this.uploadToCloudService.uploadEvidenceFiles(
           files.evidence_images,
         );
         finalResults.push(...uploaded.map((res) => ({ url: res.secure_url })));
       }
-      console.log('evidence_images uploaded', finalResults);
+      console.log(
+        '[ReturnsService.createReturnRequest] Evidence upload completed',
+      );
 
-      console.log('creating return request');
+      console.log(
+        '[ReturnsService.createReturnRequest] Creating return request record',
+      );
       const [newReturn] = await this.db
         .insert(return_requests)
         .values({
@@ -175,14 +206,22 @@ export class ReturnsService {
         })
         .returning()
         .catch((error) => {
-          console.log('Failed to create return request', error);
+          console.error(
+            '[ReturnsService.createReturnRequest] Failed to create return request',
+            error,
+          );
           throw new InternalServerErrorException(
             'Failed to create return request',
             { cause: error },
           );
         });
-      console.log('newReturn ', newReturn);
+      console.log(
+        '[ReturnsService.createReturnRequest] Return request created successfully',
+      );
       // Notify vendor (via mail) that a new return request has been raised
+      console.log(
+        '[ReturnsService.createReturnRequest] Sending customer notification email',
+      );
       if (newReturn.type == ReturnType.RETURN) {
         await this.mailService.sendReturnRequestedEmail(
           userDetails.first_name + ' ' + userDetails.last_name,
@@ -196,6 +235,9 @@ export class ReturnsService {
           orderItem.order_id ?? '',
         );
       }
+      console.log(
+        '[ReturnsService.createReturnRequest] Return request process completed',
+      );
       return newReturn;
     } catch (error) {
       if (
@@ -215,9 +257,17 @@ export class ReturnsService {
   // ── Get customer returns ──────────────────────────────────────────────────
   async getCustomerReturns(userId: string, domain: string) {
     try {
+      console.log('[ReturnsService.getCustomerReturns] Request received', {
+        userId,
+        domain,
+      });
+      console.log('[ReturnsService.getCustomerReturns] Resolving company id');
       const companyId = await this.resolveCompanyId(domain);
+      console.log(
+        `[ReturnsService.getCustomerReturns] Querying returns for company_id: ${companyId}`,
+      );
 
-      return await this.db.query.return_requests
+      const returns = await this.db.query.return_requests
         .findMany({
           where: and(
             eq(return_requests.user_id, userId),
@@ -226,11 +276,19 @@ export class ReturnsService {
           orderBy: (returns, { desc }) => [desc(returns.created_at)],
         })
         .catch((error) => {
+          console.error(
+            '[ReturnsService.getCustomerReturns] Failed to find return requests',
+            error,
+          );
           throw new InternalServerErrorException(
             'Failed to find return requests',
             { cause: error },
           );
         });
+      console.log(
+        `[ReturnsService.getCustomerReturns] Retrieved ${returns.length} return request(s)`,
+      );
+      return returns;
     } catch (error) {
       if (error instanceof InternalServerErrorException) throw error;
       throw new InternalServerErrorException('Failed to get customer returns', {
@@ -242,9 +300,16 @@ export class ReturnsService {
   // ── Get vendor returns list ───────────────────────────────────────────────
   async getVendorReturns(domain: string) {
     try {
+      console.log('[ReturnsService.getVendorReturns] Request received', {
+        domain,
+      });
+      console.log('[ReturnsService.getVendorReturns] Resolving company id');
       const companyId = await this.resolveCompanyId(domain);
+      console.log(
+        `[ReturnsService.getVendorReturns] Querying vendor returns for company_id: ${companyId}`,
+      );
 
-      return await this.db.query.return_requests
+      const returns = await this.db.query.return_requests
         .findMany({
           with: {
             user: {
@@ -290,11 +355,19 @@ export class ReturnsService {
           orderBy: (returns, { desc }) => [desc(returns.created_at)],
         })
         .catch((error) => {
+          console.error(
+            '[ReturnsService.getVendorReturns] Failed to find return requests',
+            error,
+          );
           throw new InternalServerErrorException(
             'Failed to find return requests',
             { cause: error },
           );
         });
+      console.log(
+        `[ReturnsService.getVendorReturns] Retrieved ${returns.length} return request(s)`,
+      );
+      return returns;
     } catch (error) {
       if (error instanceof InternalServerErrorException) throw error;
       throw new InternalServerErrorException('Failed to get vendor returns', {
@@ -306,7 +379,15 @@ export class ReturnsService {
   // ── Get single vendor return by ID ────────────────────────────────────────
   async getVendorReturnById(returnId: string, domain: string) {
     try {
+      console.log('[ReturnsService.getVendorReturnById] Request received', {
+        returnId,
+        domain,
+      });
+      console.log('[ReturnsService.getVendorReturnById] Resolving company id');
       const companyId = await this.resolveCompanyId(domain);
+      console.log(
+        `[ReturnsService.getVendorReturnById] Querying return request: ${returnId}`,
+      );
 
       const requestDetails = await this.db.query.return_requests
         .findFirst({
@@ -354,6 +435,10 @@ export class ReturnsService {
           },
         })
         .catch((error) => {
+          console.error(
+            '[ReturnsService.getVendorReturnById] Failed to find return request',
+            error,
+          );
           throw new InternalServerErrorException(
             'Failed to find return request',
             { cause: error },
@@ -364,6 +449,7 @@ export class ReturnsService {
         throw new NotFoundException('Return request not found');
       }
 
+      console.log('[ReturnsService.getVendorReturnById] Return request found');
       return requestDetails;
     } catch (error) {
       if (
@@ -385,7 +471,16 @@ export class ReturnsService {
     dto: UpdateReturnDto,
   ) {
     try {
+      console.log('[ReturnsService.updateReturnStatus] Request received', {
+        returnId,
+        domain,
+        status: dto.status,
+      });
+      console.log('[ReturnsService.updateReturnStatus] Resolving company id');
       const companyId = await this.resolveCompanyId(domain);
+      console.log(
+        `[ReturnsService.updateReturnStatus] Querying return request: ${returnId}`,
+      );
 
       // ── Fetch the full return request ──────────────────────────────────
       const [returnRequest] = await this.db
@@ -398,6 +493,10 @@ export class ReturnsService {
           ),
         )
         .catch((error) => {
+          console.error(
+            '[ReturnsService.updateReturnStatus] Failed to find return request',
+            error,
+          );
           throw new InternalServerErrorException(
             'Failed to find return request',
             { cause: error },
@@ -411,6 +510,11 @@ export class ReturnsService {
       const currentStatus = returnRequest.status as ReturnStatus;
       const newStatus = dto.status;
       const returnType = returnRequest.type as ReturnType;
+      console.log('[ReturnsService.updateReturnStatus] Validating transition', {
+        currentStatus,
+        newStatus,
+        returnType,
+      });
 
       // ── Guard: already in a terminal state ────────────────────────────
       const terminalStatuses: ReturnStatus[] = [
@@ -462,9 +566,18 @@ export class ReturnsService {
       const customerEmail = await this._getCustomerEmailByUserId(
         returnRequest.user_id,
       );
+      console.log(
+        `[ReturnsService.updateReturnStatus] Customer email resolved: ${Boolean(customerEmail)}`,
+      );
 
       // ── Execute status-specific side effects ──────────────────────────
+      console.log(
+        '[ReturnsService.updateReturnStatus] Starting database transaction for status update',
+      );
       await this.db.transaction(async (tx) => {
+        console.log(
+          '[ReturnsService.updateReturnStatus] Persisting return status update',
+        );
         // 1. Persist the status update first
         await tx
           .update(return_requests)
@@ -500,6 +613,9 @@ export class ReturnsService {
           company_id: orderItemRecord.company_id,
         };
         // 2. Run side effects based on type + newStatus
+        console.log(
+          '[ReturnsService.updateReturnStatus] Running side effects for return update',
+        );
         await this._handleSideEffects({
           tx: tx as DrizzleService,
           returnRequest,
@@ -512,6 +628,9 @@ export class ReturnsService {
         });
       });
 
+      console.log(
+        '[ReturnsService.updateReturnStatus] Return status updated successfully',
+      );
       return {
         message: `Return request updated to ${newStatus}`,
         returnId,
@@ -559,10 +678,18 @@ export class ReturnsService {
     customerEmail: string | null;
     dto: UpdateReturnDto;
   }) {
+    console.log('[ReturnsService._handleSideEffects] Evaluating side effects', {
+      returnType,
+      newStatus,
+      orderItemId: orderItem.id,
+    });
     //  RETURN type side effects
     if (returnType === ReturnType.RETURN) {
       switch (newStatus) {
         case ReturnStatus.APPROVED: {
+          console.log(
+            '[ReturnsService._handleSideEffects] RETURN approved, notifying customer',
+          );
           // Inform customer to ship the item back
           if (customerEmail) {
             await this.mailService.sendEmail(
@@ -580,6 +707,9 @@ export class ReturnsService {
         }
 
         case ReturnStatus.IN_TRANSIT: {
+          console.log(
+            '[ReturnsService._handleSideEffects] RETURN in transit, acknowledging shipment',
+          );
           // Customer has shipped the item back — acknowledge receipt of shipment
           if (customerEmail) {
             await this.mailService.sendEmail(
@@ -597,6 +727,9 @@ export class ReturnsService {
         }
 
         case ReturnStatus.DELIVERED: {
+          console.log(
+            '[ReturnsService._handleSideEffects] RETURN delivered, awaiting quality check',
+          );
           // Item physically received by vendor — waiting for QC
           if (customerEmail) {
             await this.mailService.sendEmail(
@@ -613,6 +746,9 @@ export class ReturnsService {
         }
 
         case ReturnStatus.QC_PASSED: {
+          console.log(
+            '[ReturnsService._handleSideEffects] RETURN QC passed, restoring stock and initiating refund',
+          );
           // ✅ Item passed QC — restock inventory + initiate refund
           const [inventoryRecord] = await tx
             .select({ id: inventory.id, warehouse_id: inventory.warehouse_id })
@@ -671,6 +807,9 @@ export class ReturnsService {
         }
 
         case ReturnStatus.QC_FAILED: {
+          console.log(
+            '[ReturnsService._handleSideEffects] RETURN QC failed, notifying customer',
+          );
           // ❌ Item failed QC — no refund, notify customer with reason
           if (customerEmail) {
             await this.mailService.sendEmail(
@@ -688,6 +827,9 @@ export class ReturnsService {
         }
 
         case ReturnStatus.REJECTED: {
+          console.log(
+            '[ReturnsService._handleSideEffects] RETURN rejected, notifying customer',
+          );
           if (customerEmail) {
             await this.mailService.sendEmail(
               customerEmail,
@@ -704,6 +846,9 @@ export class ReturnsService {
         }
 
         case ReturnStatus.COMPLETED: {
+          console.log(
+            '[ReturnsService._handleSideEffects] RETURN completed, final notification',
+          );
           // QC_PASSED → COMPLETED is automatic after refund is confirmed
           // Nothing extra needed here — refund was already initiated at QC_PASSED
           if (customerEmail) {
@@ -727,6 +872,9 @@ export class ReturnsService {
     if (returnType === ReturnType.REPLACEMENT) {
       switch (newStatus) {
         case ReturnStatus.APPROVED: {
+          console.log(
+            '[ReturnsService._handleSideEffects] REPLACEMENT approved, checking inventory',
+          );
           // ✅ Check stock before approving — don't approve if out of stock
           const [inventoryRecord] = await tx
             .select({
@@ -768,6 +916,9 @@ export class ReturnsService {
         }
 
         case ReturnStatus.IN_TRANSIT: {
+          console.log(
+            '[ReturnsService._handleSideEffects] REPLACEMENT in transit, deducting stock and creating shipping record',
+          );
           // Replacement is being shipped out — deduct stock + create shipping record
           await this.inventoryService.deductStockForOrder(
             [
@@ -826,6 +977,9 @@ export class ReturnsService {
         }
 
         case ReturnStatus.DELIVERED: {
+          console.log(
+            '[ReturnsService._handleSideEffects] REPLACEMENT delivered, rolling back original stock',
+          );
           // Replacement delivered to customer + original item returned by customer
           // Restock the original returned item
           await this.inventoryService.rollbackStockForOrder(
@@ -852,6 +1006,9 @@ export class ReturnsService {
         }
 
         case ReturnStatus.QC_PASSED: {
+          console.log(
+            '[ReturnsService._handleSideEffects] REPLACEMENT QC passed, notifying customer',
+          );
           // Original returned item passed QC — replacement process fully completed
           if (customerEmail) {
             await this.mailService.sendEmail(
@@ -867,6 +1024,9 @@ export class ReturnsService {
         }
 
         case ReturnStatus.QC_FAILED: {
+          console.log(
+            '[ReturnsService._handleSideEffects] REPLACEMENT QC failed, notifying customer',
+          );
           // Replacement: original item returned by customer failed QC
           // Replacement was already shipped — no inventory rollback needed
           if (customerEmail) {
@@ -885,6 +1045,9 @@ export class ReturnsService {
         }
 
         case ReturnStatus.REJECTED: {
+          console.log(
+            '[ReturnsService._handleSideEffects] REPLACEMENT rejected, notifying customer',
+          );
           if (customerEmail) {
             await this.mailService.sendEmail(
               customerEmail,
@@ -901,6 +1064,9 @@ export class ReturnsService {
         }
 
         case ReturnStatus.COMPLETED: {
+          console.log(
+            '[ReturnsService._handleSideEffects] REPLACEMENT completed, final notification',
+          );
           if (customerEmail) {
             await this.mailService.sendEmail(
               customerEmail,
@@ -922,6 +1088,9 @@ export class ReturnsService {
     if (returnType === ReturnType.REFUND) {
       switch (newStatus) {
         case ReturnStatus.APPROVED: {
+          console.log(
+            '[ReturnsService._handleSideEffects] REFUND approved, updating item status and initiating refund',
+          );
           // Directly initiate refund — no shipping/QC needed
           await tx
             .update(order_items)
@@ -956,6 +1125,9 @@ export class ReturnsService {
         }
 
         case ReturnStatus.REJECTED: {
+          console.log(
+            '[ReturnsService._handleSideEffects] REFUND rejected, notifying customer',
+          );
           if (customerEmail) {
             await this.mailService.sendEmail(
               customerEmail,
@@ -972,6 +1144,9 @@ export class ReturnsService {
         }
 
         case ReturnStatus.COMPLETED: {
+          console.log(
+            '[ReturnsService._handleSideEffects] REFUND completed, notifying customer',
+          );
           if (customerEmail) {
             await this.mailService.sendEmail(
               customerEmail,
@@ -994,6 +1169,9 @@ export class ReturnsService {
     userId: string,
   ): Promise<string | null> {
     try {
+      console.log(
+        `[ReturnsService._getCustomerEmailByUserId] Querying customer email for user_id: ${userId}`,
+      );
       const [customerRecord] = await this.db
         .select({ email: user.email })
         .from(user)
@@ -1001,18 +1179,31 @@ export class ReturnsService {
         .limit(1);
       return customerRecord?.email ?? null;
     } catch {
+      console.log(
+        '[ReturnsService._getCustomerEmailByUserId] Failed to resolve customer email, continuing without notification',
+      );
       return null; // email failure should never block status updates
     }
   }
 
   private async _notifyCustomer(userId: string, subject: string, html: string) {
     try {
+      console.log(
+        '[ReturnsService._notifyCustomer] Sending customer notification',
+        {
+          userId,
+          subject,
+        },
+      );
       const email = await this._getCustomerEmailByUserId(userId);
       if (email) {
         await this.mailService.sendEmail(email, subject, html);
       }
     } catch (error) {
-      console.log('feiled to sned mail', error);
+      console.log(
+        '[ReturnsService._notifyCustomer] Failed to send mail',
+        error,
+      );
     }
   }
 }

@@ -2,8 +2,8 @@ import {
   Body,
   Controller,
   Get,
-  Header,
   Headers,
+  Res,
   HttpCode,
   HttpStatus,
   Param,
@@ -18,7 +18,7 @@ import { RoleGuard } from '../../guards/role.guard';
 import { Role } from '../../enums/role.enum';
 import { Roles } from '../../common/decorators/roles.decorator';
 import { ProductPoliciesService } from '../product-policies/product-policies.service';
-
+import type { Response } from 'express';
 @Controller({
   version: '1',
   path: 'orders',
@@ -120,12 +120,20 @@ export class OrdersController {
   }
 
   @Get('analytics/export')
-  @Header('Content-Type', 'text/csv')
-  @Header(
-    'Content-Disposition',
-    'attachment; filename="product_performance.csv"',
-  )
-  exportAnalytics(@Headers('company-domain') domain: string) {
-    return this.ordersService.exportVendorAnalytics(domain);
+  async exportAnalytics(
+    @Headers('company-domain') domain: string,
+    @Res() res: Response,
+  ) {
+    const csv = await this.ordersService.exportVendorAnalytics(domain);
+
+    // Write headers and body manually — interceptors never see this response.
+    const dateStr = new Date().toISOString().split('T')[0];
+    res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+    res.setHeader(
+      'Content-Disposition',
+      `attachment; filename="store_analytics_${dateStr}.csv"`,
+    );
+    // Send raw CSV string — no JSON wrapping.
+    res.send(csv);
   }
 }

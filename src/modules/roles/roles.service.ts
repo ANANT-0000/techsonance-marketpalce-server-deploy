@@ -21,13 +21,16 @@ export class RolesService {
 
   async getAllRoles() {
     try {
+      console.log('[RolesService.getAllRoles] Querying roles');
       const roles = await this.db
         .select({
           id: user_roles.id,
           role_name: user_roles.role_name,
         })
         .from(user_roles);
-      console.log('roles', roles);
+      console.log(
+        `[RolesService.getAllRoles] Retrieved ${roles.length} role record(s)`,
+      );
       return roles;
     } catch (error) {
       throw new InternalServerErrorException('Failed to fetch roles', {
@@ -36,23 +39,25 @@ export class RolesService {
     }
   }
   async createRole(role: Role) {
-    console.log('role creating', role);
+    console.log('[RolesService.createRole] Request received', { role });
     if (!role) {
       throw new BadRequestException('Role is required');
     }
     try {
+      console.log('[RolesService.createRole] Checking for existing role');
       const existing = await this.db
         .select()
         .from(user_roles)
         .where(eq(user_roles.role_name, role))
         .limit(1);
-      console.log('existing', existing);
       if (existing.length > 0) {
         throw new Error('Role already exists');
       }
+      console.log('[RolesService.createRole] Inserting new role');
       const insertResult = await this.db.insert(user_roles).values({
         role_name: role,
       });
+      console.log('[RolesService.createRole] Role created successfully');
       return insertResult;
     } catch (error) {
       throw new InternalServerErrorException('Failed to create role', {
@@ -73,6 +78,8 @@ export class RolesService {
       throw new BadRequestException('Role ID  are required');
     }
     try {
+      console.log('[RolesService.updateRole] Request received', { id, role });
+      console.log('[RolesService.updateRole] Updating role record');
       const result = await this.db
         .update(user_roles)
         .set({ role_name: role })
@@ -89,6 +96,8 @@ export class RolesService {
       throw new BadRequestException('Both Role  ID are required');
     }
     try {
+      console.log('[RolesService.removeRole] Request received', { id });
+      console.log('[RolesService.removeRole] Checking existing role');
       const existing = await this.db
         .select()
         .from(user_roles)
@@ -97,7 +106,9 @@ export class RolesService {
       if (existing.length === 0) {
         throw new Error('Role not found');
       }
+      console.log('[RolesService.removeRole] Deleting role record');
       await this.db.delete(user_roles).where(eq(user_roles.id, id));
+      console.log('[RolesService.removeRole] Role removed successfully');
       return {
         success: true,
         status: HttpStatus.OK,
@@ -111,8 +122,13 @@ export class RolesService {
   }
   async getRolePermissions() {
     try {
+      console.log(
+        '[RolesService.getRolePermissions] Querying role permissions',
+      );
       const allRolePermissions = await this.db.select().from(role_permissions);
-      console.log('allRolePermissions', allRolePermissions);
+      console.log(
+        `[RolesService.getRolePermissions] Retrieved ${allRolePermissions.length} role_permission record(s)`,
+      );
       if (!allRolePermissions) {
         return {
           status: HttpStatus.NOT_FOUND,
@@ -138,7 +154,9 @@ export class RolesService {
           permissions: permissionsForRole,
         };
       });
-      console.log(rolePermissions);
+      console.log(
+        '[RolesService.getRolePermissions] Role permissions resolved successfully',
+      );
       return rolePermissions;
     } catch (error) {
       throw new InternalServerErrorException(
@@ -157,6 +175,13 @@ export class RolesService {
     }
 
     try {
+      console.log('[RolesService.addPermissionToRole] Request received', {
+        roleId,
+        permissionId,
+      });
+      console.log(
+        '[RolesService.addPermissionToRole] Checking existing role permission',
+      );
       const existing = await this.db
         .select()
         .from(role_permissions)
@@ -167,14 +192,19 @@ export class RolesService {
           ),
         )
         .limit(1);
-      console.log('existing role permission', existing);
       if (existing.length > 0) {
         throw new Error('Permission already assigned to role');
       }
+      console.log(
+        '[RolesService.addPermissionToRole] Inserting role permission',
+      );
       const insertResult = await this.db.insert(role_permissions).values({
         role_id: roleId,
         permission_id: permissionId,
       });
+      console.log(
+        '[RolesService.addPermissionToRole] Permission assigned to role successfully',
+      );
       return insertResult;
     } catch (error) {
       throw new InternalServerErrorException(
@@ -193,6 +223,13 @@ export class RolesService {
     }
 
     try {
+      console.log('[RolesService.removePermissionFromRole] Request received', {
+        roleId,
+        permissionId,
+      });
+      console.log(
+        '[RolesService.removePermissionFromRole] Deleting role permission',
+      );
       await this.db
         .delete(role_permissions)
         .where(

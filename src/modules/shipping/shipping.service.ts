@@ -20,10 +20,17 @@ export class ShippingService {
     private readonly mailService: MailService,
   ) {}
   async addTrackingUrl(orderId: string, trackingUrl: string, domain: string) {
-    console.log('adding tracking Url');
+    console.log('[ShippingService.addTrackingUrl] Request received', {
+      orderId,
+      trackingUrl,
+      domain,
+    });
+    console.log('[ShippingService.addTrackingUrl] Resolving company id');
     const filteredDomain = domainExtractor(domain);
     const companyId = await this.companyService.find(filteredDomain);
-    console.log(companyId);
+    console.log(
+      `[ShippingService.addTrackingUrl] Company ID resolved: ${companyId}`,
+    );
     if (!companyId) {
       throw new HttpException(
         `Company with domain ${domain} not found`,
@@ -31,6 +38,9 @@ export class ShippingService {
       );
     }
     try {
+      console.log(
+        '[ShippingService.addTrackingUrl] Validating order ownership',
+      );
       const [isOrderValid] = await this.db
         .select({ id: orders.id })
         .from(orders)
@@ -39,6 +49,9 @@ export class ShippingService {
       if (!isOrderValid.id) {
         throw new HttpException('Order not found', HttpStatus.NOT_FOUND);
       }
+      console.log(
+        '[ShippingService.addTrackingUrl] Inserting shipping details',
+      );
       await this.db
         .insert(shipping_details)
         .values({
@@ -72,6 +85,9 @@ export class ShippingService {
       if (!orderDetail?.customer) {
         throw new HttpException('Order not found', HttpStatus.NOT_FOUND);
       }
+      console.log(
+        '[ShippingService.addTrackingUrl] Sending shipping notification email',
+      );
       const firstItem = orderDetail.items[0];
       const productName = firstItem?.variant?.variant_name || 'Item';
       const itemName =
@@ -102,6 +118,12 @@ export class ShippingService {
     trackingUrl: string,
     domain: string,
   ) {
+    console.log('[ShippingService.updateTrackingUrl] Request received', {
+      orderId,
+      trackingUrl,
+      domain,
+    });
+    console.log('[ShippingService.updateTrackingUrl] Resolving company id');
     const filteredDomain = domainExtractor(domain);
     const companyId = await this.companyService.find(filteredDomain);
     if (!companyId) {
@@ -111,6 +133,9 @@ export class ShippingService {
       );
     }
     try {
+      console.log(
+        '[ShippingService.updateTrackingUrl] Validating order ownership',
+      );
       const [isOrderValid] = await this.db
         .select({ id: orders.id })
         .from(orders)
@@ -119,6 +144,9 @@ export class ShippingService {
       if (!isOrderValid.id) {
         throw new HttpException('Order not found', HttpStatus.NOT_FOUND);
       }
+      console.log(
+        '[ShippingService.updateTrackingUrl] Checking existing shipping details',
+      );
       const [existingShipping] = await this.db
         .select({ id: shipping_details.id })
         .from(shipping_details)
@@ -136,6 +164,7 @@ export class ShippingService {
         );
       }
 
+      console.log('[ShippingService.updateTrackingUrl] Updating tracking URL');
       await this.db
         .update(shipping_details)
         .set({ tracking_url: trackingUrl })
@@ -152,6 +181,9 @@ export class ShippingService {
             HttpStatus.INTERNAL_SERVER_ERROR,
           );
         });
+      console.log(
+        '[ShippingService.updateTrackingUrl] Tracking URL updated successfully',
+      );
     } catch (error) {
       if (error instanceof HttpException) {
         throw error;

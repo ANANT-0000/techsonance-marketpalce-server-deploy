@@ -8,7 +8,7 @@ import {
   Delete,
 } from '@nestjs/common';
 import { CouponService } from './coupon.service';
-import { CreateCouponDto } from './dto/create-coupon.dto';
+import { CreateCouponDto } from './dto/coupon.dto';
 import { UpdateCouponDto } from './dto/update-coupon.dto';
 
 @Controller('coupon')
