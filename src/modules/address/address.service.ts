@@ -24,15 +24,17 @@ export class AddressService {
   }
   async findAddressesByUserId(userId: string) {
     if (!userId) {
-      console.log('**************************** user ', userId);
+      console.log('[AddressService.findAddressesByUserId] User ID is missing');
       return new HttpException('User ID is required', HttpStatus.BAD_REQUEST);
     }
     try {
+      console.log('[AddressService.findAddressesByUserId] Request received', { userId });
+      console.log('[AddressService.findAddressesByUserId] Querying addresses from database');
       const addressRecords = await this.db
         .select()
         .from(address)
         .where(eq(address.user_id, userId));
-      console.log('addressRecords ******************* \n', addressRecords);
+      console.log('[AddressService.findAddressesByUserId] Addresses found', { count: addressRecords.length });
       if (!addressRecords) {
         throw new HttpException(
           'No addresses found for this user',
@@ -51,17 +53,19 @@ export class AddressService {
   }
   async checkAddressByUserId(userId: string) {
     if (!userId) {
-      console.log('**************************** user ', userId);
+      console.log('[AddressService.checkAddressByUserId] User ID is missing');
       return new HttpException('User ID is required', HttpStatus.BAD_REQUEST);
     }
     try {
+      console.log('[AddressService.checkAddressByUserId] Request received', { userId });
+      console.log('[AddressService.checkAddressByUserId] Counting addresses from database');
       const [result] = await this.db
         .select({ value: count() })
         .from(address)
         .where(eq(address.user_id, userId));
 
       const addressCount = result.value;
-      console.log(result);
+      console.log('[AddressService.checkAddressByUserId] Address check completed', { addressCount, hasAddresses: addressCount > 0 });
       return { hasAddresses: addressCount > 0, count: addressCount };
     } catch (error) {
       if (error instanceof HttpException) {
@@ -75,16 +79,20 @@ export class AddressService {
   // find a address by address id
   async findAddressById(addressId: string) {
     if (!addressId) {
+      console.log('[AddressService.findAddressById] Address ID is missing');
       return new HttpException(
         'Address ID is required',
         HttpStatus.BAD_REQUEST,
       );
     }
     try {
+      console.log('[AddressService.findAddressById] Request received', { addressId });
+      console.log('[AddressService.findAddressById] Querying address by ID from database');
       const [addressRecord] = await this.db
         .select()
         .from(address)
         .where(eq(address.id, addressId));
+      console.log('[AddressService.findAddressById] Address found successfully', { addressId });
       return addressRecord;
     } catch (error) {
       if (error instanceof HttpException) {
@@ -97,11 +105,14 @@ export class AddressService {
   }
   async findCompanyAddress(domain: string) {
     if (!domain) {
+      console.log('[AddressService.findCompanyAddress] Domain is missing');
       return new HttpException('Domain is required', HttpStatus.BAD_REQUEST);
     }
 
-    const companyId = await this.resolveCompanyId(domain);
     try {
+      console.log('[AddressService.findCompanyAddress] Request received', { domain });
+      console.log('[AddressService.findCompanyAddress] Resolving company ID from domain');
+      const companyId = await this.resolveCompanyId(domain);
       const vendorUserId = await this.db.query.vendor.findFirst({
         where: eq(vendor.company_id, companyId),
         columns: { id: true },
@@ -112,12 +123,13 @@ export class AddressService {
         },
       });
       if (!vendorUserId || !vendorUserId.user) {
+        console.log('[AddressService.findCompanyAddress] Vendor not found for company', { companyId });
         throw new HttpException(
           'Vendor not found for the given company domain',
           HttpStatus.NOT_FOUND,
         );
       }
-
+      console.log('[AddressService.findCompanyAddress] Querying addresses for company and vendor');
       const addressRecord = await this.db
         .select()
         .from(address)
@@ -127,7 +139,7 @@ export class AddressService {
             eq(address.company_id, companyId),
           ),
         );
-      console.log('founded address', addressRecord);
+      console.log('[AddressService.findCompanyAddress] Company addresses retrieved', { count: addressRecord.length });
       return addressRecord;
     } catch (error) {
       if (error instanceof HttpException) {
@@ -140,8 +152,10 @@ export class AddressService {
   }
   async createCompanyAddress(domain: string, addressData: CreateAddressDto) {
     try {
-      console.log('recived', addressData);
+      console.log('[AddressService.createCompanyAddress] Request received', { domain });
+      console.log('[AddressService.createCompanyAddress] Resolving company ID from domain');
       const companyId = await this.resolveCompanyId(domain);
+      console.log('[AddressService.createCompanyAddress] Querying vendor record for company');
       const vendorRecord = await this.db.query.vendor.findFirst({
         where: eq(vendor.company_id, companyId),
 
@@ -158,17 +172,20 @@ export class AddressService {
 
       const newAddress = await this.db.transaction(async (tx) => {
         if (!vendorRecord || !vendorRecord.user || !vendorRecord.company) {
+          console.log('[AddressService.createCompanyAddress] Vendor or company not found', { companyId });
           throw new HttpException(
             'Vendor not found for the given company domain',
             HttpStatus.NOT_FOUND,
           );
         }
         if (addressData.is_default) {
+          console.log('[AddressService.createCompanyAddress] Setting previous default address to non-default');
           await tx
             .update(address)
             .set({ is_default: false })
             .where(eq(address.company_id, companyId));
         }
+        console.log('[AddressService.createCompanyAddress] Inserting new company address into database');
         const [insertedAddress] = await tx
           .insert(address)
           .values({
@@ -189,11 +206,12 @@ export class AddressService {
           })
           .returning()
           .catch((error) => {
-            console.error('Error inserting address:', error);
+            console.error('[AddressService.createCompanyAddress] Error inserting address:', error);
             throw new InternalServerErrorException('Failed to create address', {
               cause: error,
             });
           });
+        console.log('[AddressService.createCompanyAddress] Company address created successfully', { addressId: insertedAddress.id });
         return insertedAddress;
       });
       console.log('newAddress ********', newAddress);

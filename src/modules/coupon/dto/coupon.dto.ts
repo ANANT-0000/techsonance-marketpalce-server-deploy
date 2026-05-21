@@ -19,7 +19,7 @@ export enum DiscountType {
   FREE_SHIPPING = 'free_shipping',
 }
 
-export class CreateCouponDTO {
+export class CreateCouponDto {
   @IsString()
   @IsNotEmpty()
   code!: string;
@@ -31,15 +31,19 @@ export class CreateCouponDTO {
   @IsEnum(DiscountType)
   discount_type!: DiscountType;
 
+  // Use @Type to convert the incoming number to string
+  @Type(() => String)
   @IsString()
   @IsNotEmpty()
   discount_value!: string;
 
   @IsOptional()
+  @Type(() => String)
   @IsString()
   min_order_amount?: string;
 
   @IsOptional()
+  @Type(() => String)
   @IsString()
   max_discount_amount?: string;
 
@@ -75,4 +79,8 @@ export class CreateCouponDTO {
   applicable_product_ids?: string[];
 }
 
-export class UpdateCouponDTO extends PartialType(CreateCouponDTO) {}
+export class UpdateCouponDto extends PartialType(CreateCouponDto) {
+  @IsBoolean()
+  @IsOptional()
+  is_active?: boolean;
+}

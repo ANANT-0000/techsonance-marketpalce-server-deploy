@@ -63,10 +63,7 @@ export class CartController {
     @Body('cartItemId') cartItemId: string,
     @Headers('company-domain') domain: string,
   ) {
-    console.log('customerId remove ', customerId);
-    console.log('cartId remove ', cartId);
-    console.log('cartItemId remove ', cartItemId);
-    console.log('domain remove ', domain);
+ 
     return this.cartService.removeCartItem(
       customerId,
       cartId,

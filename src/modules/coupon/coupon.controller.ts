@@ -6,37 +6,70 @@ import {
   Patch,
   Param,
   Delete,
+  Headers,
 } from '@nestjs/common';
 import { CouponService } from './coupon.service';
-import { CreateCouponDto } from './dto/coupon.dto';
-import { UpdateCouponDto } from './dto/update-coupon.dto';
+import { CreateCouponDto, UpdateCouponDto } from './dto/coupon.dto';
 
-@Controller('coupon')
+@Controller({ version: '1', path: 'coupon' })
 export class CouponController {
   constructor(private readonly couponService: CouponService) {}
 
-  // @Post()
-  // create(@Body() createCouponDto: CreateCouponDto) {
-  //   return this.couponService.create(createCouponDto);
-  // }
+  @Post()
+  create(
+    @Body() createCouponDto: CreateCouponDto,
+    @Headers('company-domain') domain: string,
+  ) {
+    console.log(createCouponDto);
+    return this.couponService.create(createCouponDto, domain);
+  }
 
-  // @Get()
-  // findAll() {
-  //   return this.couponService.findAll();
-  // }
+  @Get()
+  findAll(@Headers('company-domain') domain: string) {
+    return this.couponService.findAll(domain);
+  }
+  @Get('product/:id')
+  findCoupons(
+    @Headers('company-domain') domain: string,
+    @Param('id') productId: string,
+  ) {
+    return this.couponService.findCoupons(domain, productId);
+  }
 
-  // @Get(':id')
-  // findOne(@Param('id') id: string) {
-  //   return this.couponService.findOne(+id);
-  // }
+  @Get(':id')
+  findOne(@Param('id') id: string, @Headers('company-domain') domain: string) {
+    return this.couponService.findOne(id, domain);
+  }
 
-  // @Patch(':id')
-  // update(@Param('id') id: string, @Body() updateCouponDto: UpdateCouponDto) {
-  //   return this.couponService.update(+id, updateCouponDto);
-  // }
+  @Patch(':id')
+  update(
+    @Param('id') id: string,
+    @Body() updateCouponDto: UpdateCouponDto,
+    @Headers('company-domain') domain: string,
+  ) {
+    return this.couponService.update(id, updateCouponDto, domain);
+  }
 
-  // @Delete(':id')
-  // remove(@Param('id') id: string) {
-  //   return this.couponService.remove(+id);
-  // }
+  @Delete(':id')
+  remove(@Param('id') id: string, @Headers('company-domain') domain: string) {
+    return this.couponService.remove(id, domain);
+  }
+  @Post('verify/:userId')
+  verify(
+    @Param('userId') userId: string,
+    @Body('code') code: string,
+    @Headers('company-domain') domain: string,
+  ) {
+    return this.couponService.verifyCoupon(code, userId, domain);
+  }
+  @Post('validate')
+  async validateCoupon(
+    @Body() body: { code: string; cartTotal: number; productIds: string[] },
+  ) {
+    return await this.couponService.validateAppliedCoupon(
+      body.code,
+      body.cartTotal,
+      body.productIds,
+    );
+  }
 }
