@@ -59,6 +59,27 @@ export class FinancesController {
   ) {
     return this.financesService.bulkAssignProductTax(domain, payload);
   }
+  @Post('calculate-order-taxes')
+  async calculateOrderTaxes(
+    @Headers('company-domain') domain: string,
+    @Body()
+    payload: {
+      customerAddressId: string;
+      cartItems: {
+        variantId: string;
+        quantity: number;
+        price: number;
+      }[];
+    },
+  ) {
+    return this.financesService.calculateOrderTaxes(
+      payload.customerAddressId,
+      payload.cartItems,
+      undefined,
+      undefined,
+      domain,
+    );
+  }
   @Get('tax-profiles')
   async getTaxProfiles(@Headers('company-domain') domain: string) {
     return this.financesService.getTaxProfiles(domain);

@@ -64,9 +64,16 @@ export class CouponController {
   }
   @Post('validate')
   async validateCoupon(
-    @Body() body: { code: string; cartTotal: number; productIds: string[] },
+    @Body()
+    body: {
+      userId: string;
+      code: string;
+      cartTotal: number;
+      productIds: string[];
+    },
   ) {
     return await this.couponService.validateAppliedCoupon(
+      body.userId,
       body.code,
       body.cartTotal,
       body.productIds,

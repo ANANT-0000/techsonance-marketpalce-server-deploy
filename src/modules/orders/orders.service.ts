@@ -124,10 +124,10 @@ export class OrdersService {
 
         console.log('[OrdersService.createOrder] Calculating taxes for order');
         const taxData = await this.financesService.calculateOrderTaxes(
-          tx as DrizzleService,
-          companyId,
           addressId,
           orderLines,
+          tx as DrizzleService,
+          companyId,
         );
 
         // 3. Create the main Order
@@ -404,7 +404,12 @@ export class OrdersService {
     orderId: string,
     isSuccess: boolean,
     companyId?: string,
-  ): Promise<{ success: boolean; orderId: string; message: string }> {
+  ): Promise<{
+    tx: DrizzleService;
+    success: boolean;
+    orderId: string;
+    message: string;
+  }> {
     if (!orderId) {
       throw new HttpException('Order ID is required', HttpStatus.BAD_REQUEST);
     }
@@ -566,6 +571,7 @@ export class OrdersService {
             `[OrdersService.completeOrderVerification] Verification completed successfully for order ${orderId}`,
           );
           return {
+            tx: tx as DrizzleService,
             success: true,
             orderId,
             message: 'Order placed successfully',
@@ -631,6 +637,7 @@ export class OrdersService {
             `[OrdersService.completeOrderVerification] Verification completed with failure branch for order ${existingOrder.id}`,
           );
           return {
+            tx: tx as DrizzleService,
             success: false,
             orderId: existingOrder.id,
             message: 'Payment failed. Order has been cancelled.',
@@ -1376,7 +1383,7 @@ export class OrdersService {
             { cause: error },
           );
         });
-      console.log("cartData",cartData);
+      console.log('cartData', cartData);
 
       const [orderData] = await this.db
         .select({
@@ -1406,7 +1413,7 @@ export class OrdersService {
             { cause: error },
           );
         });
-      console.log('orderData',orderData);
+      console.log('orderData', orderData);
       const totalCarts = cartData?.count || 0;
       const totalOrders = orderData?.count || 0;
       const overallConversionRate =
@@ -1488,7 +1495,7 @@ export class OrdersService {
             );
           });
       }
-console.log('productDetails',productDetails)
+      console.log('productDetails', productDetails);
       // D. Merge the data together
       const productConversions = productDetails.map((details) => {
         // BUG FIX: Local variables `cartData` and `orderData` shadow the outer-scope

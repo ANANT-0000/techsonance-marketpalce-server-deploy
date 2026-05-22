@@ -1,3 +1,4 @@
+import { user } from './../../drizzle/schema/users.schema';
 import { coupon_products } from './../../drizzle/schema/shop.schema';
 import {
   BadRequestException,
@@ -9,7 +10,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { DRIZZLE, type DrizzleService } from '../../drizzle/drizzle.module';
-import { and, eq, gte, isNull, or } from 'drizzle-orm';
+import { and, count, eq, gte, isNull, or } from 'drizzle-orm';
 import { coupon_usage, coupons } from '../../drizzle/schema';
 import { CompanyService } from '../company/company.service';
 import { domainExtractor } from '../../common/filters/domainExtractor.filter';
@@ -82,6 +83,7 @@ export class CouponService {
     }
   }
   async validateAppliedCoupon(
+    userId: string,
     code: string,
     cartTotal: number,
     currentProductIds: string[],
@@ -109,7 +111,29 @@ export class CouponService {
       if (!coupon) {
         throw new NotFoundException('Invalid or inactive promo code.');
       }
-
+      const [usageCount] = await this.db
+        .select({ id: count() })
+        .from(coupon_usage)
+        .where(
+          and(
+            eq(coupon_usage.coupon_id, coupon.id),
+            eq(coupon_usage.user_id, userId),
+          ),
+        )
+        .catch((error) => {
+          console.error('Error counting coupon usage:', error);
+          throw new InternalServerErrorException('Failed to validate coupon', {
+            cause: error,
+          });
+        });
+      if (
+        coupon.max_uses_per_user &&
+        usageCount.id >= coupon.max_uses_per_user
+      ) {
+        throw new BadRequestException(
+          'You have already used this coupon the maximum number of times allowed.',
+        );
+      }
       // 3. Date Checks
       const now = new Date();
       if (coupon.valid_from && new Date(coupon.valid_from) > now) {

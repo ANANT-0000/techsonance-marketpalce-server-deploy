@@ -1,4 +1,5 @@
 import { IsBoolean, IsNotEmpty, IsOptional, IsString } from 'class-validator';
+import { Type } from 'class-transformer';
 
 export class CreateCheckoutDto {}
 export class InitiateCheckoutDto {
@@ -20,6 +21,15 @@ export class InitiateCheckoutDto {
 }
 
 export class VerifyCheckoutDto {
+  @IsOptional()
+  @IsString()
+  couponId?: string;
+
+  @IsOptional()
+  @Type(() => String)
+  @IsString()
+  discountApplied?: string;
+
   @IsString()
   @IsNotEmpty()
   orderId!: string;

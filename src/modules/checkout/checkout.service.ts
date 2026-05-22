@@ -1,12 +1,14 @@
 import { HttpException, HttpStatus, Inject, Injectable } from '@nestjs/common';
 import { InitiateCheckoutDto, VerifyCheckoutDto } from './dto/checkout.dto';
 import { type DrizzleDB } from '../../drizzle/types/drizzle';
-import { DRIZZLE } from '../../drizzle/drizzle.module';
+import { DRIZZLE, DrizzleService } from '../../drizzle/drizzle.module';
 import {
   address,
   cart_items,
   carts,
   company,
+  coupon_usage,
+  coupons,
   orders,
   product_variants,
   user,
@@ -112,8 +114,17 @@ export class CheckoutService {
   }
 
   async verifyCheckout(dto: VerifyCheckoutDto, domain: string) {
-    const { orderId, isSuccess, cartId, productVariantId } = dto;
+    const {
+      discountApplied,
+      couponId,
+      orderId,
+      isSuccess,
+      cartId,
+      productVariantId,
+    } = dto;
     console.log('[CheckoutService.verifyCheckout] Request received', {
+      discountApplied,
+      couponId,
       orderId,
       isSuccess,
       cartId,
@@ -169,11 +180,68 @@ export class CheckoutService {
         );
       if (verificationResult.success) {
         console.log('[CheckoutService.verifyCheckout] Verification successful');
+        if (couponId && discountApplied) {
+          console.log(
+            '[CheckoutService.verifyCheckout] Recording coupon usage after successful checkout',
+          );
+          const [isCouponExits] = await verificationResult.tx
+            .select()
+            .from(coupons)
+            .where(eq(coupons.id, couponId))
+            .limit(1);
+          if (!isCouponExits.id) {
+            throw new HttpException('Coupon not found', HttpStatus.NOT_FOUND);
+          }
+          await verificationResult.tx
+            .update(coupons)
+            .set({
+              total_used: Number(isCouponExits.total_used) + 1,
+              is_active:
+                isCouponExits.total_used + 1 >= Number(isCouponExits.max_uses)
+                  ? false
+                  : coupons.is_active,
+            })
+            .where(eq(coupons.id, couponId))
+            .catch((error) => {
+              console.error('Error updating coupon usage count:', error);
+              throw new HttpException(
+                'Failed to update coupon usage count after successful checkout',
+                HttpStatus.INTERNAL_SERVER_ERROR,
+                { cause: error },
+              );
+            });
+          await verificationResult.tx.insert(coupon_usage).values({
+            company_id: companyId,
+            order_id: orderId,
+            coupon_id: couponId,
+            user_id: existingOrder.user_id,
+            discount_applied: discountApplied,
+          });
+        }
+        if (productVariantId) {
+          console.log(
+            '[CheckoutService.verifyCheckout] Clearing single product variant checkout record after successful checkout',
+          );
+          await verificationResult.tx
+            .delete(cart_items)
+            .where(eq(cart_items.product_variant_id, productVariantId))
+            .catch((error) => {
+              console.error(
+                'Error clearing single product variant checkout record:',
+                error,
+              );
+              throw new HttpException(
+                'Failed to clear single product variant checkout record after successful checkout',
+                HttpStatus.INTERNAL_SERVER_ERROR,
+                { cause: error },
+              );
+            });
+        }
         if (cartId) {
           console.log(
             '[CheckoutService.verifyCheckout] Clearing cart after checkout',
           );
-          await this._clearCart(this.db, cartId, orderId);
+          await this._clearCart(verificationResult.tx, cartId, orderId);
         }
       }
     } catch (error) {
@@ -252,7 +320,7 @@ export class CheckoutService {
     }
   }
 
-  private async _clearCart(tx: DrizzleDB, cartId: string, userId: string) {
+  private async _clearCart(tx: DrizzleService, cartId: string, userId: string) {
     console.log(
       '[CheckoutService._clearCart] Clearing cart after successful checkout',
       {

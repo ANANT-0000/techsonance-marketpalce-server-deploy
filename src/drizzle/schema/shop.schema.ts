@@ -56,7 +56,7 @@ export const coupons = pg.pgTable('coupons', {
   }), // Max discount for percentage types
 
   // Usage Limits
-  max_uses: pg.integer('max_uses'), 
+  max_uses: pg.integer('max_uses'),
   max_uses_per_user: pg.integer('max_uses_per_user').default(1), // How many times a single user can use it
   total_used: pg.integer('total_used').default(0).notNull(),
   // Configuration

@@ -1,3 +1,4 @@
+import { company } from './../../drizzle/schema/main.schema';
 import {
   Injectable,
   InternalServerErrorException,
@@ -707,22 +708,31 @@ export class FinancesService {
     };
   }
   async calculateOrderTaxes(
-    tx: DrizzleService,
-    companyId: string,
     customerAddressId: string,
     cartItems: {
       variantId: string;
       quantity: number;
       price: number;
     }[],
+    transaction?: DrizzleService,
+    company_id?: string,
+    domain?: string,
   ) {
     console.log(
       '[FinancesService.calculateOrderTaxes] Request received for company:',
-      companyId,
+      company_id,
     );
     console.log(
       '[FinancesService.calculateOrderTaxes] Resolving customer state',
     );
+    const companyId = domain ? await this.resolveCompanyId(domain) : company_id;
+    const tx = transaction ? transaction : this.db;
+    if (!companyId) {
+      throw new HttpException(
+        'Company ID is required for tax calculation',
+        HttpStatus.BAD_REQUEST,
+      );
+    }
     // 1. Fetch Customer's State
     const [customerAddr] = await tx
       .select({ state: address.state })
