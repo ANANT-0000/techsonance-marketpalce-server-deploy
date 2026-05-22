@@ -10,7 +10,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { DRIZZLE, type DrizzleService } from '../../drizzle/drizzle.module';
-import { and, count, eq, gte, isNull, or } from 'drizzle-orm';
+import { and, count, desc, eq, gte, isNull, or } from 'drizzle-orm';
 import { coupon_usage, coupons } from '../../drizzle/schema';
 import { CompanyService } from '../company/company.service';
 import { domainExtractor } from '../../common/filters/domainExtractor.filter';
@@ -317,11 +317,12 @@ export class CouponService {
   async findAll(domain: string) {
     try {
       const companyId = await this.resolveCompanyId(domain);
-      console.log('coupon findAll');
+      console.log('coupon findAll', Date.now());
       return await this.db
         .select()
         .from(coupons)
         .where(eq(coupons.company_id, companyId))
+        .orderBy(desc(coupons.created_at))
         .catch((error) => {
           console.error('Error loading coupons:', error);
           throw new InternalServerErrorException('Failed to load coupons', {

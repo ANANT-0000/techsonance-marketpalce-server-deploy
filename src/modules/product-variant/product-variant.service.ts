@@ -242,8 +242,16 @@ export class ProductVariantService {
           sku: product_variants.sku,
           price: product_variants.price,
           status: product_variants.status,
+          images: product_images.image_url,
         })
         .from(product_variants)
+        .innerJoin(
+          product_images,
+          and(
+            eq(product_images.variant_id, product_variants.id),
+            eq(product_images.is_primary, true),
+          ),
+        )
         .where(eq(product_variants.id, variantId))
         .limit(1);
       if (!productVariant) {

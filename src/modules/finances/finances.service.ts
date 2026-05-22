@@ -792,7 +792,8 @@ export class FinancesService {
     const isIntraState = customerState === vendorState;
 
     // 3. Initialize Math Variables
-    let subTotal = 0;
+    let subTotal = 0; // total as received (tax-inclusive)
+    let netSubTotal = 0; // subtotal after extracting tax
     let totalCgst = 0;
     let totalSgst = 0;
     let totalIgst = 0;
@@ -847,6 +848,7 @@ export class FinancesService {
         .limit(1);
 
       const mapping = productTaxMapping[0];
+
       const taxPercentage = mapping ? Number(mapping.rate) : 0;
       console.log(
         `[FinancesService.calculateOrderTaxes] Applied tax percentage: ${taxPercentage}`,
@@ -856,27 +858,28 @@ export class FinancesService {
         appliedTaxTypeIds.add(mapping.taxTypeId);
       }
 
-      const itemTaxAmount = (baseItemTotal * taxPercentage) / 100;
+      const itemTaxAmount =
+        baseItemTotal - baseItemTotal / (1 + taxPercentage / 100);
+      const itemNetAmount = baseItemTotal - itemTaxAmount;
+      netSubTotal += itemNetAmount;
 
-      // Apply the GST Rules
       if (isIntraState) {
         totalCgst += itemTaxAmount / 2;
         totalSgst += itemTaxAmount / 2;
       } else {
         totalIgst += itemTaxAmount;
       }
-
       totalTax += itemTaxAmount;
     }
 
     // 5. Return the finalized financial breakdown shaped for your schema
     return {
-      subTotal: Number(subTotal.toFixed(2)),
+      subTotal: Number(netSubTotal.toFixed(2)), // ex-tax subtotal
       totalCgst: Number(totalCgst.toFixed(2)),
       totalSgst: Number(totalSgst.toFixed(2)),
       totalIgst: Number(totalIgst.toFixed(2)),
       totalTax: Number(totalTax.toFixed(2)),
-      grandTotal: Number((subTotal + totalTax).toFixed(2)),
+      grandTotal: Number(subTotal.toFixed(2)), // = netSubTotal + totalTax (same as original price)
       vendorGstId: vendorGst.id,
       appliedTaxTypeIds: Array.from(appliedTaxTypeIds),
     };
