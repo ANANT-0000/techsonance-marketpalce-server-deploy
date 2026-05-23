@@ -159,9 +159,6 @@ export const promotions = pg.pgTable(
     is_exclusive: pg.boolean('is_exclusive').notNull().default(false),
     // UUIDs of other promotions this one can stack with.
     // Empty array = no stacking allowed (other than auto-applied ones).
-    stackable_with: pg.jsonb('stackable_with').default('[]'),
-    // Platform-level cap: max concurrent promotions allowed on one order
-    // (enforced in PromotionService, not per-row)
 
     // ── Status & Lifecycle ──
     status: promotionStatusEnum('status')
@@ -740,15 +737,15 @@ export const promotionsRelations = relations(promotions, ({ one, many }) => ({
     fields: [promotions.vendor_id],
     references: [vendor.id],
   }),
-  created_by_user: one(user, {
+  createdByUser: one(user, {
     fields: [promotions.created_by],
     references: [user.id],
-    relationName: 'promotions_created_by',
+    relationName: 'promotionsCreatedBy',
   }),
-  approved_by_user: one(user, {
+  approvedByUser: one(user, {
     fields: [promotions.approved_by],
     references: [user.id],
-    relationName: 'promotions_approved_by',
+    relationName: 'promotionsApprovedBy',
   }),
   coupon: one(coupons, {
     fields: [promotions.coupon_id],
@@ -762,7 +759,41 @@ export const promotionsRelations = relations(promotions, ({ one, many }) => ({
   banners: many(marketing_banners),
   order_item_snapshots: many(order_item_promotion_snapshot),
 }));
-
+export const promotion_stackable = pg.pgTable(
+  'promotion_stackable',
+  {
+    id: pg.uuid('id').primaryKey().defaultRandom(),
+    promotion_id: pg
+      .uuid('promotion_id')
+      .notNull()
+      .references(() => promotions.id, { onDelete: 'cascade' }),
+    stackablePromotion_id: pg
+      .uuid('stackable_promotion_id')
+      .notNull()
+      .references(() => promotions.id, { onDelete: 'cascade' }),
+    created_at: pg.timestamp('created_at').notNull().defaultNow(),
+  },
+  (table) => [
+    pg
+      .uniqueIndex('uq_promotion_stackable')
+      .on(table.promotion_id, table.stackablePromotion_id),
+    pg.index('idx_promotion_stackable_a').on(table.promotion_id),
+    pg.index('idx_promotion_stackable_b').on(table.stackablePromotion_id),
+  ],
+);
+export const promotionStackableRelations = relations(
+  promotion_stackable,
+  ({ one }) => ({
+    promotion: one(promotions, {
+      fields: [promotion_stackable.promotion_id],
+      references: [promotions.id],
+    }),
+    stackablePromotion: one(promotions, {
+      fields: [promotion_stackable.stackablePromotion_id],
+      references: [promotions.id],
+    }),
+  }),
+);
 export const promotionRulesRelations = relations(
   promotion_rules,
   ({ one }) => ({
@@ -812,7 +843,7 @@ export const promotionChangelogRelations = relations(
       fields: [promotion_changelog.promotion_id],
       references: [promotions.id],
     }),
-    changed_by_user: one(user, {
+    changedByUser: one(user, {
       fields: [promotion_changelog.changed_by],
       references: [user.id],
     }),
@@ -855,7 +886,7 @@ export const marketingBannersRelations = relations(
       fields: [marketing_banners.promotion_id],
       references: [promotions.id],
     }),
-    created_by_user: one(user, {
+    createdByUser: one(user, {
       fields: [marketing_banners.created_by],
       references: [user.id],
     }),

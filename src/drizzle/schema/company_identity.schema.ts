@@ -70,7 +70,6 @@ export const company_legal_profile = pg.pgTable('company_legal_profile', {
   // Must match the name on tax registration documents exactly
   legal_name: pg.text('legal_name').notNull(),
   // Trade / brand name shown to customers (can differ from legal name)
-  trade_name: pg.text('trade_name'),
 
   // Country of incorporation — drives which compliance fields are shown
   // ISO 3166-1 alpha-2, e.g. "IN", "US", "GB"

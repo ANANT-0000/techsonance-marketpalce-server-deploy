@@ -22,7 +22,7 @@ import {
   order_item_policy,
   order_items,
   orders,
-  orders_tax,
+ 
   payments,
   product_images,
   product_policy_override,

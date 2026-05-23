@@ -12,7 +12,7 @@ import { DRIZZLE, type DrizzleService } from '../../drizzle/drizzle.module';
 import {
   address,
   gst_invoices,
-  gst_registrations,
+ 
   orders,
   product_tax,
   product_variants,
@@ -593,7 +593,6 @@ export class FinancesService {
       .update(tax_profiles)
       .set({
         profile_type: data.profile_type,
-        tax_profile_description: data.tax_profile_description,
         is_default: data.is_default,
       })
       .where(

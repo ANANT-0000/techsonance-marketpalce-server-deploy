@@ -235,7 +235,6 @@ export const product_variants = pg.pgTable(
     price: pg.decimal('price', { precision: 10, scale: 2 }).notNull(),
     attributes: pg.jsonb('attributes').notNull(),
     status: ProductStatusEnum().notNull().default(ProductStatus.INACTIVE),
-    seo_meta: pg.jsonb('seo_meta'),
     created_at: pg.timestamp('created_at').notNull().defaultNow(),
     updated_at: pg
       .timestamp('updated_at')
@@ -495,80 +494,3 @@ export const invoices = pg.pgTable('invoices', {
   created_at: pg.timestamp('created_at').notNull().defaultNow(),
 });
 
-export const offers = pg.pgTable('offers', {
-  id: pg.uuid('id').primaryKey().defaultRandom(),
-  title: pg.text('title').notNull(),
-  description: pg.text('description'),
-  discount_type: pg.text('discount_type').notNull(),
-  discount_value: pg
-    .decimal('discount_value', { precision: 10, scale: 2 })
-    .notNull(),
-  valid_from: pg.timestamp('valid_from').notNull(),
-  valid_to: pg.timestamp('valid_to').notNull(),
-  is_active: pg.boolean('is_active').notNull().default(true),
-  created_at: pg.timestamp('created_at').notNull().defaultNow(),
-  updated_at: pg
-    .timestamp('updated_at')
-    .notNull()
-    .defaultNow()
-    .$onUpdate(() => new Date()),
-  company_id: pg
-    .uuid('company_id')
-    .references(() => company.id, { onDelete: 'cascade' }),
-});
-export const offer_products = pg.pgTable(
-  'offer_products',
-  {
-    id: pg.uuid('id').primaryKey().defaultRandom(),
-    offer_id: pg
-      .uuid('offer_id')
-      .references(() => offers.id, { onDelete: 'cascade' })
-      .notNull(),
-    variant_id: pg
-      .uuid('variant_id')
-      .references(() => product_variants.id, { onDelete: 'cascade' })
-      .notNull(),
-  },
-  (t) => [pg.uniqueIndex('unq_offer_product').on(t.offer_id, t.variant_id)],
-);
-export enum OfferPlacementEnum {
-  HOMEPAGE = 'home_page',
-  PRODUCT_PAGE = 'product_page',
-  FOOTER = 'footer',
-  SIDEBAR = 'sidebar',
-}
-
-// Define the enum column
-export const placements = pgEnum('placement', OfferPlacementEnum);
-
-export const offer_display_config = pg.pgTable('offer_display_config', {
-  id: pg.uuid('id').primaryKey().defaultRandom(),
-  offer_id: pg
-    .uuid('offer_id')
-    .references(() => offers.id, { onDelete: 'cascade' })
-    .notNull(),
-  poster_url: pg.text('poster_url').array(),
-  display_priority: pg.integer('display_priority').default(0),
-  theme_config: pg.jsonb('theme_config'),
-  placement: placements('placement').array(),
-  created_at: pg.timestamp('created_at').notNull().defaultNow(),
-  updated_at: pg
-
-    .timestamp('updated_at')
-    .notNull()
-    .defaultNow()
-    .$onUpdate(() => new Date()),
-});
-
-export const offer_coupon = pg.pgTable('offer_coupon', {
-  id: pg.uuid('id').primaryKey().defaultRandom(),
-  offer_id: pg
-    .uuid('offer_id')
-    .references(() => offers.id, { onDelete: 'cascade' })
-    .notNull(),
-  coupon_id: pg
-    .uuid('coupon_id')
-    .references(() => coupons.id, { onDelete: 'cascade' })
-    .notNull(),
-  created_at: pg.timestamp('created_at').notNull().defaultNow(),
-});

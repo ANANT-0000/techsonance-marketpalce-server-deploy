@@ -6,7 +6,7 @@ import { relations } from 'drizzle-orm';
 export const tax_profiles = pg.pgTable('tax_profiles', {
   id: pg.uuid('id').primaryKey().defaultRandom(),
   profile_type: pg.text('profile_type').notNull(),
-  tax_profile_description: pg.text('tax_profile_description').notNull(),
+
   is_default: pg.boolean('is_default').notNull().default(false),
   created_at: pg.timestamp('created_at').notNull().defaultNow(),
   updated_at: pg
@@ -33,25 +33,7 @@ export const tax_types = pg.pgTable('tax_types', {
     .references(() => tax_profiles.id, { onDelete: 'cascade' }),
   company_id: pg.uuid('company_id').references(() => company.id),
 });
-export const gst_registrations = pg.pgTable('gst_registrations', {
-  id: pg.uuid('id').primaryKey().defaultRandom(),
-  gst_number: pg.text('gst_number').notNull(),
-  legal_name: pg.text('legal_name').notNull(),
-  trade_name: pg.text('trade_name').notNull(),
-  state_code: pg.text('state_code').notNull(),
-  registration_type: pg.text('registration_type').notNull(),
-  registration_date: pg.date('registration_date').notNull(),
-  effective_from: pg.date('effective_from').notNull(),
-  effective_to: pg.date('effective_to').notNull(),
-  is_default: pg.boolean('is_default').notNull().default(false),
-  created_at: pg.timestamp('created_at').notNull().defaultNow(),
-  updated_at: pg
-    .timestamp('updated_at')
-    .notNull()
-    .defaultNow()
-    .$onUpdate(() => new Date()),
-  company_id: pg.uuid('company_id').references(() => company.id),
-});
+
 export const tax_rates = pg.pgTable('tax_rates', {
   id: pg.uuid('id').primaryKey().defaultRandom(),
   tax_rate_name: pg.text('tax_rate_name').notNull(),
@@ -88,12 +70,7 @@ export const product_tax = pg.pgTable('product_tax', {
     .defaultNow()
     .$onUpdate(() => new Date()),
 });
-export const orders_tax = pg.pgTable('orders_tax', {
-  id: pg.uuid('id').primaryKey().defaultRandom(),
-  created_at: pg.timestamp('created_at').notNull().defaultNow(),
-  order_id: pg.uuid('order_id').references(() => orders.id),
-  tax_types_id: pg.uuid('tax_types_id').references(() => tax_types.id),
-});
+
 export const gst_invoices = pg.pgTable('gst_invoices', {
   id: pg.uuid('id').primaryKey().defaultRandom(),
   invoice_number: pg.text('invoice_number').notNull(),
@@ -110,9 +87,7 @@ export const gst_invoices = pg.pgTable('gst_invoices', {
     .defaultNow()
     .$onUpdate(() => new Date()),
   order_id: pg.uuid('order_id').references(() => orders.id),
-  gst_registration_id: pg
-    .uuid('gst_registration_id')
-    .references(() => gst_registrations.id),
+
   company_id: pg.uuid('company_id').references(() => company.id),
 });
 
@@ -124,10 +99,6 @@ export const gstInvoicesRelations = relations(gst_invoices, ({ one }) => ({
   company: one(company, {
     fields: [gst_invoices.company_id],
     references: [company.id],
-  }),
-  registration: one(gst_registrations, {
-    fields: [gst_invoices.gst_registration_id],
-    references: [gst_registrations.id],
   }),
 }));
 // --- Product Tax Mapping ---

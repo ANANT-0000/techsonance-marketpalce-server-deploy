@@ -15,9 +15,7 @@ import {
   coupon_usage,
   coupons,
   invoices,
-  offer_coupon,
-  offer_products,
-  offers,
+ 
   order_item_cancelled,
   order_items,
   orders,
@@ -111,7 +109,7 @@ export const companyRelations = relations(company, ({ one, many }) => ({
     fields: [company.id],
     references: [company_document_config.company_id],
   }),
-  offers: many(offers),
+ 
 }));
 
 // --- User Relations ---
@@ -224,10 +222,10 @@ export const categoriesRelations = relations(categories, ({ one, many }) => ({
   parent: one(categories, {
     fields: [categories.parent_id],
     references: [categories.id],
-    relationName: 'sub_categories',
+    relationName: 'subCategories',
   }),
   children: many(categories, {
-    relationName: 'sub_categories',
+    relationName: 'subCategories',
   }),
   products: many(products),
 }));
@@ -242,7 +240,7 @@ export const productVariantsRelations = relations(
     orderItem: many(order_items),
     images: many(product_images),
     reviews: many(product_reviews),
-    offerProducts: many(offer_products),
+  
     inventory: one(inventory, {
       fields: [product_variants.id],
       references: [inventory.product_variant_id],
@@ -418,7 +416,7 @@ export const couponsRelations = relations(coupons, ({ one, many }) => ({
   }),
   usage: many(coupon_usage),
   products: many(coupon_products),
-  offers: many(offer_coupon),
+ 
 }));
 export const couponUsageRelations = relations(coupon_usage, ({ one }) => ({
   coupon: one(coupons, {
@@ -451,34 +449,7 @@ export const couponProductsRelations = relations(
     }),
   }),
 );
-export const offersRelations = relations(offers, ({ one }) => ({
-  company: one(company, {
-    fields: [offers.company_id],
-    references: [company.id],
-  }),
-}));
-export const offerProductsRelations = relations(offer_products, ({ one }) => ({
-  offer: one(offers, {
-    fields: [offer_products.offer_id],
-    references: [offers.id],
-  }),
-  variant: one(product_variants, {
-    fields: [offer_products.variant_id],
-    references: [product_variants.id],
-  }),
-}));
-
-export const offerCouponRelations = relations(offer_coupon, ({ one }) => ({
-  offer: one(offers, {
-    fields: [offer_coupon.offer_id],
-    references: [offers.id],
-  }),
-  coupon: one(coupons, {
-    fields: [offer_coupon.coupon_id],
-    references: [coupons.id],
-  }),
-}));
-
+ 
 // --- Inventory & Warehouse Relations ---
 export const inventoryRelations = relations(inventory, ({ one }) => ({
   variant: one(product_variants, {
