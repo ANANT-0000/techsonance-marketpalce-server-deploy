@@ -135,10 +135,7 @@ export const audit_logs = pg.pgTable(
       .timestamp('created_at')
       .$default(() => new Date())
       .notNull(),
-    updated_at: pg
-      .timestamp('updated_at')
-      .$onUpdate(() => new Date())
-      .notNull(),
+ 
     user_id: pg
       .uuid('user_id')
       .references(() => user.id, { onDelete: 'cascade' }),

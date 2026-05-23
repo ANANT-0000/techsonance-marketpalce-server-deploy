@@ -19,15 +19,16 @@ export class CouponController {
   create(
     @Body() createCouponDto: CreateCouponDto,
     @Headers('company-domain') domain: string,
+    @Headers('user-id') userId: string, // Required for promotion 'created_by'
   ) {
-    console.log(createCouponDto);
-    return this.couponService.create(createCouponDto, domain);
+    return this.couponService.create(createCouponDto, domain, userId);
   }
 
   @Get()
   findAll(@Headers('company-domain') domain: string) {
     return this.couponService.findAll(domain);
   }
+
   @Get('product/:id')
   findCoupons(
     @Headers('company-domain') domain: string,
@@ -54,6 +55,7 @@ export class CouponController {
   remove(@Param('id') id: string, @Headers('company-domain') domain: string) {
     return this.couponService.remove(id, domain);
   }
+
   @Post('verify/:userId')
   verify(
     @Param('userId') userId: string,
@@ -62,6 +64,7 @@ export class CouponController {
   ) {
     return this.couponService.verifyCoupon(code, userId, domain);
   }
+
   @Post('validate')
   async validateCoupon(
     @Body()

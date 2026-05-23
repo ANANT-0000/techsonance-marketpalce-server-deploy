@@ -642,7 +642,7 @@ export class UsersService {
       otpExpires.setMinutes(otpExpires.getMinutes() + 15); //15 minutes from now
       await this.db
         .update(user)
-        .set({ otp: otp, otpExpires: otpExpires })
+        .set({ otp: otp, otp_expires: otpExpires })
         .where(eq(user.id, userRecord.id));
       const formattedExpireTime = new Intl.DateTimeFormat('en-US', {
         hour: 'numeric',
@@ -736,17 +736,17 @@ export class UsersService {
       console.log(
         '[UsersService.confirmAccountAction] OTP matches successfully',
       );
-      if (!userRecord.otpExpires) {
+      if (!userRecord.otp_expires) {
         throw new UnauthorizedException('Invalid OTP');
       }
       console.log(
         '[UsersService.confirmAccountAction] Validating OTP expiration',
-        { expires: userRecord.otpExpires, current: new Date() },
+        { expires: userRecord.otp_expires , current: new Date() },
       );
-      if (new Date() > new Date(userRecord.otpExpires)) {
+      if (new Date() > new Date(userRecord.otp_expires)) {
         await this.db
           .update(user)
-          .set({ otp: null, otpExpires: null })
+          .set({ otp: null, otp_expires: null })
           .where(eq(user.id, userRecord.id));
         throw new UnauthorizedException(
           'OTP has expired. Please request a new one.',
@@ -794,7 +794,7 @@ export class UsersService {
         );
       await this.db
         .update(user)
-        .set({ otp: null, otpExpires: null })
+        .set({ otp: null, otp_expires: null })
         .where(eq(user.id, userRecord.id));
       console.log(
         '[UsersService.confirmAccountAction] Action confirmed and records updated successfully',

@@ -129,7 +129,7 @@ export class AuthService {
       otpExpires.setMinutes(otpExpires.getMinutes() + 15); //15 minutes from now
       await this.db
         .update(user)
-        .set({ otp: otp, otpExpires: otpExpires })
+        .set({ otp: otp, otp_expires: otpExpires })
         .where(eq(user.email, email));
       const formattedExpireTime = new Intl.DateTimeFormat('en-US', {
         hour: 'numeric',
@@ -165,14 +165,14 @@ export class AuthService {
     if (!userRecord.otp || userRecord.otp !== otp) {
       throw new UnauthorizedException('Invalid OTP');
     }
-    if (!userRecord.otpExpires) {
+    if (!userRecord.otp_expires) {
       throw new UnauthorizedException('Invalid OTP');
     }
 
-    if (new Date() > new Date(userRecord.otpExpires)) {
+    if (new Date() > new Date(userRecord.otp_expires)) {
       await this.db
         .update(user)
-        .set({ otp: null, otpExpires: null })
+        .set({ otp: null, otp_expires: null })
         .where(eq(user.id, userRecord.id));
       throw new UnauthorizedException(
         'OTP has expired. Please request a new one.',
@@ -185,7 +185,7 @@ export class AuthService {
       .set({
         password_hash: hashedPassword,
         otp: null,
-        otpExpires: null,
+        otp_expires: null,
       })
       .where(eq(user.id, userRecord.id));
 

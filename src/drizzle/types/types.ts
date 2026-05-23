@@ -106,6 +106,166 @@ export enum refundStatusEnum {
   PROCESSED = 'processed',
   REJECTED = 'rejected',
 }
+export enum PromotionType {
+  PERCENTAGE_OFF = 'percentage_off',
+  FIXED_AMOUNT = 'fixed_amount',
+  BUY_X_GET_Y = 'buy_x_get_y',
+  FREE_SHIPPING = 'free_shipping',
+  TIERED_DISCOUNT = 'tiered_discount',
+  BUNDLE_DEAL = 'bundle_deal',
+}
+
+export enum PromotionStatus {
+  DRAFT = 'DRAFT',
+  PENDING_REVIEW = 'PENDING_REVIEW',
+  ACTIVE = 'ACTIVE',
+  PAUSED = 'PAUSED',
+  REJECTED = 'REJECTED',
+  EXPIRED = 'EXPIRED',
+}
+
+export enum PromotionTargetType {
+  ALL_PRODUCTS = 'all_products',
+  CATEGORY = 'category',
+  PRODUCT = 'product',
+  VENDOR = 'vendor',
+  PRODUCT_VARIANT = 'product_variant',
+}
+
+export enum PromotionRuleType {
+  MIN_CART_VALUE = 'min_cart_value',
+  MIN_QTY = 'min_qty',
+  CUSTOMER_SEGMENT = 'customer_segment',
+  FIRST_ORDER_ONLY = 'first_order_only',
+  PRODUCT_IN_CART = 'product_in_cart',
+  NEW_CUSTOMER = 'new_customer',
+  DATE_RANGE = 'date_range',
+  MAX_USES_PER_USER = 'max_uses_per_user',
+}
+
+export enum BannerPlacement {
+  HOMEPAGE_HERO = 'homepage_hero',
+  HOMEPAGE_SECONDARY = 'homepage_secondary',
+  CATEGORY_TOP = 'category_top',
+  PRODUCT_PAGE = 'product_page',
+  CART_SIDEBAR = 'cart_sidebar',
+  CHECKOUT_TOP = 'checkout_top',
+  MY_OFFERS_PAGE = 'my_offers_page',
+}
+
+export enum PromoEventType {
+  VIEWED = 'viewed',
+  CLICKED = 'clicked',
+  APPLIED = 'applied',
+  REDEEMED = 'redeemed',
+  REMOVED = 'removed',
+  DISMISSED = 'dismissed',
+}
+
+export enum SegmentCriteriaOperator {
+  AND = 'AND',
+  OR = 'OR',
+}
+
+export enum ChangelogAction {
+  CREATED = 'created',
+  UPDATED = 'updated',
+  SUBMITTED = 'submitted',
+  APPROVED = 'approved',
+  REJECTED = 'rejected',
+  PAUSED = 'paused',
+  RESUMED = 'resumed',
+  EXPIRED = 'expired',
+  DELETED = 'deleted',
+}
+
+// ================================================================
+// DISCOUNT CONFIG TYPE HELPERS (add to src/drizzle/types/promotions.ts)
+// ================================================================
+
+export type PercentageOffConfig = {
+  value: number; // e.g. 20 (= 20%)
+  cap?: number; // max discount in ₹; undefined = no cap
+};
+
+export type FixedAmountConfig = {
+  value: number; // flat ₹ discount
+};
+
+export type BuyXGetYConfig = {
+  buy_qty: number; // items customer must buy
+  get_qty: number; // items given free / discounted
+  get_product_variant_id?: string; // specific free item; null = cheapest in cart
+  get_discount_percent: number; // 100 = free; 50 = half price
+};
+
+export type FreeShippingConfig = {
+  max_shipping_waived?: number; // cap on shipping fee waived; undefined = all
+};
+
+export type TieredDiscountConfig = {
+  tiers: Array<{
+    min_cart: number; // cart subtotal threshold in ₹
+    percent: number; // discount percent at this tier
+  }>;
+};
+
+export type BundleDealConfig = {
+  product_variant_ids: string[]; // all must be in cart
+  bundle_price: number; // total price for the bundle
+};
+
+export type DiscountConfig =
+  | PercentageOffConfig
+  | FixedAmountConfig
+  | BuyXGetYConfig
+  | FreeShippingConfig
+  | TieredDiscountConfig
+  | BundleDealConfig;
+
+// ────────────────────────────────────────────────────────────────
+// PROMOTION EVALUATION RESULT TYPE
+// Returned by PromotionService.evaluateCart() to the frontend
+// ────────────────────────────────────────────────────────────────
+
+export type DiscountLine = {
+  promotion_id: string;
+  promotion_name: string;
+  promotion_type: string;
+  coupon_code: string | null;
+  discount_amount: number;
+  applied_to: 'cart' | 'item' | 'shipping';
+  item_discounts?: Array<{
+    order_item_id: string;
+    product_variant_id: string;
+    unit_discount: number;
+    discounted_qty: number;
+  }>;
+};
+
+export type CartEvaluationResult = {
+  subtotal_before_discount: number;
+  total_discount: number;
+  subtotal_after_discount: number;
+  shipping_discount: number;
+  final_total: number;
+  applied_promotions: Array<{
+    promotion_id: string;
+    name: string;
+    promotion_type: string;
+    coupon_code: string | null;
+  }>;
+  eligible_but_not_applied: Array<{
+    promotion_id: string;
+    name: string;
+    reason_not_applied: string;
+    // e.g. "Exclusive promotion — removes other discounts"
+    // e.g. "Add ₹200 more to qualify"
+    shortfall?: number;
+  }>;
+  discount_lines: DiscountLine[];
+};
+
 export interface VendorType {
   user_role: Role;
   store_name: string;

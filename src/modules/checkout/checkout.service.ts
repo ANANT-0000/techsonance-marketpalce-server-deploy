@@ -13,11 +13,15 @@ import {
   product_variants,
   user,
 } from '../../drizzle/schema';
-import { and, eq, or } from 'drizzle-orm';
+import { and, eq, isNull, or, sql } from 'drizzle-orm';
 import { OrdersService } from '../orders/orders.service';
 import { CompanyService } from '../company/company.service';
 import { MailService } from '../../common/services/mail/mail.service';
 import { domainExtractor } from '../../common/filters/domainExtractor.filter';
+import {
+  promotion_usage,
+  promotions,
+} from 'src/drizzle/schema/promotions.schema';
 
 @Injectable()
 export class CheckoutService {
@@ -116,7 +120,7 @@ export class CheckoutService {
   async verifyCheckout(dto: VerifyCheckoutDto, domain: string) {
     const {
       discountApplied,
-      couponId,
+      promotionId,
       orderId,
       isSuccess,
       cartId,
@@ -124,7 +128,7 @@ export class CheckoutService {
     } = dto;
     console.log('[CheckoutService.verifyCheckout] Request received', {
       discountApplied,
-      couponId,
+      promotionId,
       orderId,
       isSuccess,
       cartId,
@@ -180,42 +184,50 @@ export class CheckoutService {
         );
       if (verificationResult.success) {
         console.log('[CheckoutService.verifyCheckout] Verification successful');
-        if (couponId && discountApplied) {
+        if (promotionId && discountApplied) {
           console.log(
-            '[CheckoutService.verifyCheckout] Recording coupon usage after successful checkout',
+            '[CheckoutService.verifyCheckout] Recording promotion usage after successful checkout',
           );
-          const [isCouponExits] = await verificationResult.tx
-            .select()
-            .from(coupons)
-            .where(eq(coupons.id, couponId))
-            .limit(1);
-          if (!isCouponExits.id) {
-            throw new HttpException('Coupon not found', HttpStatus.NOT_FOUND);
-          }
-          await verificationResult.tx
-            .update(coupons)
+
+          // 1. Atomic Update: Increment counter only if within limits
+          const [updatedPromo] = await verificationResult.tx
+            .update(promotions)
             .set({
-              total_used: Number(isCouponExits.total_used) + 1,
-              is_active:
-                isCouponExits.total_used + 1 >= Number(isCouponExits.max_uses)
-                  ? false
-                  : coupons.is_active,
+              total_used: sql`${promotions.total_used} + 1`,
+              // Auto-deactivate if max limit reached
+              status: sql`CASE 
+          WHEN ${promotions.max_uses_total} IS NOT NULL AND (${promotions.total_used} + 1) >= ${promotions.max_uses_total} 
+          THEN 'EXPIRED' 
+          ELSE ${promotions.status} 
+        END`,
             })
-            .where(eq(coupons.id, couponId))
-            .catch((error) => {
-              console.error('Error updating coupon usage count:', error);
-              throw new HttpException(
-                'Failed to update coupon usage count after successful checkout',
-                HttpStatus.INTERNAL_SERVER_ERROR,
-                { cause: error },
-              );
-            });
-          await verificationResult.tx.insert(coupon_usage).values({
+            .where(
+              and(
+                eq(promotions.id, promotionId),
+                // Ensure we don't exceed limits even with concurrent requests
+                or(
+                  isNull(promotions.max_uses_total),
+                  sql`${promotions.total_used} < ${promotions.max_uses_total}`,
+                ),
+              ),
+            )
+            .returning();
+
+          if (!updatedPromo) {
+            throw new HttpException(
+              'Promotion is no longer valid or usage limit reached',
+              HttpStatus.BAD_REQUEST,
+            );
+          }
+
+          // 2. Insert into Usage Log (The new source of truth)
+          await verificationResult.tx.insert(promotion_usage).values({
+            promotion_id: promotionId,
             company_id: companyId,
             order_id: orderId,
-            coupon_id: couponId,
             user_id: existingOrder.user_id,
-            discount_applied: discountApplied,
+            discount_amount: discountApplied.toString(),
+            promotion_snapshot: updatedPromo, // Save state for immutable history
           });
         }
         if (productVariantId) {

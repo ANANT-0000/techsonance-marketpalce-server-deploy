@@ -8,6 +8,7 @@ export const DRIZZLE: unique symbol = Symbol('DRIZZLE');
 export type DrizzleService = NodePgDatabase<typeof schema>;
 
 @Module({
+  imports: [],
   providers: [
     {
       provide: DRIZZLE,

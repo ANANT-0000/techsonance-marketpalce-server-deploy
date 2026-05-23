@@ -16,7 +16,7 @@ export const user = pg.pgTable(
     password_hash: pg.text('password_hash').notNull(),
     user_status: UserStatusEnum().default(UserStatus.PENDING),
     otp: pg.varchar('otp', { length: 6 }),
-    otpExpires: pg.timestamp('otp_expires'),
+    otp_expires: pg.timestamp('otp_expires'),
     created_at: pg.timestamp('created_at').notNull().defaultNow(),
     updated_at: pg
       .timestamp('updated_at')

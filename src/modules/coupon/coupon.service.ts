@@ -1,5 +1,3 @@
-import { user } from './../../drizzle/schema/users.schema';
-import { coupon_products } from './../../drizzle/schema/shop.schema';
 import {
   BadRequestException,
   HttpException,
@@ -11,10 +9,17 @@ import {
 } from '@nestjs/common';
 import { DRIZZLE, type DrizzleService } from '../../drizzle/drizzle.module';
 import { and, count, desc, eq, gte, isNull, or } from 'drizzle-orm';
-import { coupon_usage, coupons } from '../../drizzle/schema';
+import {
+  coupons,
+  promotions,
+  promotion_rules,
+  promotion_targets,
+  promotion_usage,
+} from '../../drizzle/schema';
 import { CompanyService } from '../company/company.service';
 import { domainExtractor } from '../../common/filters/domainExtractor.filter';
 import { CreateCouponDto, UpdateCouponDto } from './dto/coupon.dto';
+import { PromotionStatus } from 'src/drizzle/types/types';
 
 @Injectable()
 export class CouponService {
@@ -32,146 +37,134 @@ export class CouponService {
     try {
       const companyId = await this.resolveCompanyId(domain);
 
-      console.log('coupon verifying');
-      const couponRecord = await this.db
-        .select()
-        .from(coupons)
+      const [promoData] = await this.db
+        .select({ promoId: promotions.id })
+        .from(promotions)
+        .innerJoin(coupons, eq(promotions.coupon_id, coupons.id))
         .where(
           and(
-            eq(coupons.code, code),
-            eq(coupons.company_id, companyId),
-            eq(coupons.is_active, true),
+            eq(coupons.code, code.toUpperCase()),
+            eq(promotions.company_id, companyId),
+            eq(promotions.status, PromotionStatus.ACTIVE),
           ),
         )
-        .limit(1)
-        .catch((error) => {
-          console.error('Error loading coupon record:', error);
-          throw new InternalServerErrorException('Failed to load coupon', {
-            cause: error,
-          });
-        });
-      if (couponRecord.length === 0) {
-        return { valid: false, message: 'Invalid coupon code' };
+        .limit(1);
+
+      if (!promoData) {
+        return { valid: false, message: 'Invalid or inactive coupon code' };
       }
+
       const isUsed = await this.db
         .select()
-        .from(coupon_usage)
+        .from(promotion_usage)
         .where(
           and(
-            eq(coupon_usage.coupon_id, couponRecord[0].id),
-            eq(coupon_usage.user_id, userId),
+            eq(promotion_usage.promotion_id, promoData.promoId),
+            eq(promotion_usage.user_id, userId),
           ),
         )
-        .limit(1)
-        .catch((error) => {
-          console.error('Error loading coupon usage:', error);
-          throw new InternalServerErrorException(
-            'Failed to load coupon usage',
-            {
-              cause: error,
-            },
-          );
-        });
+        .limit(1);
+
       if (isUsed.length > 0) {
         return { valid: false, message: 'Coupon already used' };
       }
+
+      return { valid: true, message: 'Coupon is valid' };
     } catch (error) {
-      console.error('Error verifying coupon:', error);
       throw new InternalServerErrorException('Failed to verify coupon', {
         cause: error,
       });
     }
   }
+
   async validateAppliedCoupon(
     userId: string,
     code: string,
     cartTotal: number,
     currentProductIds: string[],
   ) {
-    // 1. Fetch the coupon and its linked products
     try {
-      const coupon = await this.db.query.coupons
-        .findFirst({
-          where: and(
-            eq(coupons.code, code.toUpperCase()),
-            eq(coupons.is_active, true),
-          ),
-          with: {
-            products: true,
-          },
-        })
-        .catch((error) => {
-          console.error('Error fetching coupon for validation:', error);
-          throw new InternalServerErrorException('Failed to fetch coupon', {
-            cause: error,
-          });
-        });
+      // 1. Fetch the unified promotion and its targets/rules
+      const couponPromotion = await this.db.query.promotions.findFirst({
+        where: and(eq(promotions.status, PromotionStatus.ACTIVE)),
+        with: {
+          coupon: true,
+          rules: true,
+          targets: true,
+        },
+      });
 
-      // 2. Existence Check
-      if (!coupon) {
+      // Match explicit code
+      if (
+        !couponPromotion ||
+        couponPromotion.coupon?.code !== code.toUpperCase()
+      ) {
         throw new NotFoundException('Invalid or inactive promo code.');
       }
+
+      // 2. Usage Limits
       const [usageCount] = await this.db
         .select({ id: count() })
-        .from(coupon_usage)
+        .from(promotion_usage)
         .where(
           and(
-            eq(coupon_usage.coupon_id, coupon.id),
-            eq(coupon_usage.user_id, userId),
+            eq(promotion_usage.promotion_id, couponPromotion.id),
+            eq(promotion_usage.user_id, userId),
           ),
-        )
-        .catch((error) => {
-          console.error('Error counting coupon usage:', error);
-          throw new InternalServerErrorException('Failed to validate coupon', {
-            cause: error,
-          });
-        });
+        );
+
       if (
-        coupon.max_uses_per_user &&
-        usageCount.id >= coupon.max_uses_per_user
+        couponPromotion.max_uses_per_user &&
+        usageCount.id >= couponPromotion.max_uses_per_user
       ) {
         throw new BadRequestException(
           'You have already used this coupon the maximum number of times allowed.',
         );
       }
+
       // 3. Date Checks
       const now = new Date();
-      if (coupon.valid_from && new Date(coupon.valid_from) > now) {
+      if (
+        couponPromotion.valid_from &&
+        new Date(couponPromotion.valid_from) > now
+      ) {
         throw new BadRequestException('This offer is not yet active.');
       }
-      if (coupon.valid_to && new Date(coupon.valid_to) < now) {
+      if (
+        couponPromotion.valid_to &&
+        new Date(couponPromotion.valid_to) < now
+      ) {
         throw new BadRequestException('This offer has expired.');
       }
 
-      // 4. Minimum Spend Check
-      if (
-        coupon.min_order_amount &&
-        cartTotal < Number(coupon.min_order_amount)
-      ) {
-        throw new BadRequestException(
-          `Add ₹${Number(coupon?.min_order_amount) - cartTotal} more to unlock this offer.`,
-        );
+      // 4. Minimum Spend Check (from Rules Engine)
+      const minCartRule = couponPromotion.rules.find(
+        (r) => r.rule_type === 'min_cart_value',
+      );
+      if (minCartRule) {
+        const requiredAmount = (minCartRule.rule_config as any).amount;
+        if (cartTotal < Number(requiredAmount)) {
+          throw new BadRequestException(
+            `Add ₹${Number(requiredAmount) - cartTotal} more to unlock this offer.`,
+          );
+        }
       }
 
-      // 5. Product Applicability Check
-      // If the junction table is empty, this coupon applies to the whole store.
-      const isGlobalCoupon = coupon.products.length === 0;
-
+      // 5. Product Applicability Check (from Targets Engine)
+      const isGlobalCoupon = couponPromotion.targets.length === 0;
       let validForProductIds: string[] = [];
 
       if (isGlobalCoupon) {
-        // It's global, so it applies to everything currently in the cart/page
         validForProductIds = currentProductIds;
       } else {
-        // It is restricted. Extract the IDs this coupon is allowed to be used on.
-        const allowedProductIds = coupon.products.map((product) => product.id);
+        const allowedProductIds = couponPromotion.targets
+          .filter((t) => t.target_type === 'product' && !t.exclude)
+          .map((t) => t.target_id);
 
-        // Find the intersection: which products in the cart are actually allowed?
         validForProductIds = currentProductIds.filter((id) =>
           allowedProductIds.includes(id),
         );
 
-        // If none of the products in the cart are allowed, reject it.
         if (validForProductIds.length === 0) {
           throw new BadRequestException(
             'This coupon is not applicable to the selected product(s).',
@@ -179,43 +172,36 @@ export class CouponService {
         }
       }
 
-      // 6. Return Success with the filtered IDs
-      const result = {
-        id: coupon.id,
-        code: coupon.code,
-        discount_type: coupon.discount_type,
-        discount_value: Number(coupon.discount_value),
-        max_discount_amount: coupon.max_discount_amount
-          ? Number(coupon.max_discount_amount)
+      const discountConfig: any = couponPromotion.discount_config;
+
+      return {
+        id: couponPromotion.coupon_id, // Returning Coupon ID for backwards compatibility
+        promotion_id: couponPromotion.id,
+        code: couponPromotion.coupon.code,
+        discount_type: couponPromotion.promotion_type,
+        discount_value: Number(discountConfig.value || 0),
+        max_discount_amount: discountConfig.cap
+          ? Number(discountConfig.cap)
           : null,
         isGlobal: isGlobalCoupon,
         applicableProductIds: validForProductIds,
       };
-      console.log('result ', result);
-      return result;
     } catch (error) {
-      console.error('Error validating applied coupon:', error);
-      if (
-        error instanceof NotFoundException ||
-        error instanceof BadRequestException ||
-        error instanceof HttpException ||
-        error instanceof InternalServerErrorException
-      ) {
-        throw error;
-      }
+      if (error instanceof HttpException) throw error;
       throw new InternalServerErrorException('Failed to validate coupon', {
         cause: error,
       });
     }
   }
-  async create(dto: CreateCouponDto, domain: string) {
+
+  async create(
+    dto: CreateCouponDto,
+    domain: string,
+    userId: string = '00000000-0000-0000-0000-000000000000',
+  ) {
     try {
       const companyId = await this.resolveCompanyId(domain);
-      if (!companyId) {
-        throw new InternalServerErrorException(
-          `Company with domain ${domain} not found`,
-        );
-      }
+
       return await this.db.transaction(async (tx) => {
         if (!dto.is_auto_applied && dto.code) {
           const [existingCoupon] = await tx
@@ -226,88 +212,95 @@ export class CouponService {
                 eq(coupons.company_id, companyId),
                 eq(coupons.code, dto.code.toUpperCase()),
               ),
-            )
-            .catch((error) => {
-              console.error(
-                'Error checking coupon existence during create:',
-                error,
-              );
-              throw new InternalServerErrorException(
-                'Failed to check coupon existence',
-                {
-                  cause: error,
-                },
-              );
-            });
+            );
 
-          if (existingCoupon && existingCoupon.id) {
-            console.log(existingCoupon);
+          if (existingCoupon) {
             throw new HttpException(
-              `Coupon code ${dto.code} already exists for this company.`,
+              `Coupon code ${dto.code} already exists.`,
               HttpStatus.BAD_REQUEST,
             );
           }
         }
+
+        // 1. Insert Base Lookup Code
         const [newCoupon] = await tx
           .insert(coupons)
           .values({
             code: dto.code.toUpperCase(),
             description: dto.description || null,
-            discount_type: dto.discount_type,
-            discount_value: dto.discount_value.toString(),
-            min_order_amount: dto.min_order_amount?.toString(),
-            max_discount_amount: dto.max_discount_amount?.toString(),
-            max_uses: dto.max_uses || null,
-            max_uses_per_user: dto.max_uses_per_user ?? 1,
-            total_used: 0,
-            is_auto_applied: dto.is_auto_applied ?? false,
             is_active: dto.is_active ?? true,
-            valid_from: new Date(dto.valid_from),
-            valid_to: new Date(dto.valid_to),
             company_id: companyId,
           })
-          .returning()
-          .catch((error) => {
-            console.error('Error inserting coupon:', error);
-            throw new InternalServerErrorException('Failed to insert coupon', {
-              cause: error,
-            });
+          .returning();
+
+        // 2. Setup Config Strategy Pattern
+        let discountConfig: any = {};
+        let promoType = 'fixed_amount';
+
+        if (dto.discount_type === 'percentage') {
+          promoType = 'percentage_off';
+          discountConfig = {
+            value: Number(dto.discount_value),
+            cap: dto.max_discount_amount
+              ? Number(dto.max_discount_amount)
+              : null,
+          };
+        } else if (dto.discount_type === 'free_shipping') {
+          promoType = 'free_shipping';
+          discountConfig = { max_shipping_waived: Number(dto.discount_value) };
+        } else {
+          discountConfig = { value: Number(dto.discount_value) };
+        }
+
+        // 3. Insert Unified Promotion
+        const [newPromotion] = await tx
+          .insert(promotions)
+          .values({
+            company_id: companyId,
+            created_by: userId,
+            name: `Coupon - ${dto.code.toUpperCase()}`,
+            description: dto.description || null,
+            promotion_type: promoType as any,
+            discount_config: discountConfig,
+            coupon_id: newCoupon.id,
+            is_auto_applied: dto.is_auto_applied ?? false,
+            status: dto.is_active
+              ? PromotionStatus.ACTIVE
+              : PromotionStatus.DRAFT,
+            valid_from: new Date(dto.valid_from),
+            valid_to: new Date(dto.valid_to),
+            max_uses_total: dto.max_uses || null,
+            max_uses_per_user: dto.max_uses_per_user ?? 1,
+          })
+          .returning();
+
+        // 4. Attach Min Cart Rule (if exists)
+        if (dto.min_order_amount) {
+          await tx.insert(promotion_rules).values({
+            promotion_id: newPromotion.id,
+            rule_type: 'min_cart_value' as any,
+            rule_config: { amount: Number(dto.min_order_amount) },
           });
+        }
+
+        // 5. Attach Product Targets (if restricted)
         if (
           dto.applicable_product_ids &&
           dto.applicable_product_ids.length > 0
         ) {
-          const productLinks = dto.applicable_product_ids.map((productId) => ({
-            coupon_id: newCoupon.id,
-            product_id: productId,
+          const targets = dto.applicable_product_ids.map((id) => ({
+            promotion_id: newPromotion.id,
+            target_type: 'product' as any,
+            target_id: id,
+            exclude: false,
           }));
-          await tx
-            .insert(coupon_products)
-            .values(productLinks)
-            .catch((error) => {
-              console.error('Error linking coupon products:', error);
-              throw new InternalServerErrorException(
-                'Failed to link coupon products',
-                {
-                  cause: error,
-                },
-              );
-            });
+          await tx.insert(promotion_targets).values(targets);
         }
 
-        return newCoupon;
+        return { ...newCoupon, promotion_id: newPromotion.id };
       });
     } catch (error) {
-      console.error('Error creating coupon:', error);
-      if (
-        error instanceof InternalServerErrorException ||
-        error instanceof NotFoundException
-      ) {
-        throw new InternalServerErrorException(
-          `Failed to create coupon: ${error.message}`,
-          { cause: error },
-        );
-      }
+      if (error instanceof HttpException) throw error;
       throw new InternalServerErrorException('Failed to create coupon', {
         cause: error,
       });
@@ -317,20 +310,49 @@ export class CouponService {
   async findAll(domain: string) {
     try {
       const companyId = await this.resolveCompanyId(domain);
-      console.log('coupon findAll', Date.now());
-      return await this.db
-        .select()
+
+      const results = await this.db
+        .select({
+          id: coupons.id,
+          code: coupons.code,
+          description: coupons.description,
+          is_active: coupons.is_active,
+          created_at: coupons.created_at,
+          promo_id: promotions.id,
+          promotion_type: promotions.promotion_type,
+          discount_config: promotions.discount_config,
+          valid_from: promotions.valid_from,
+          valid_to: promotions.valid_to,
+          max_uses_total: promotions.max_uses_total,
+          max_uses_per_user: promotions.max_uses_per_user,
+        })
         .from(coupons)
+        .innerJoin(promotions, eq(promotions.coupon_id, coupons.id))
         .where(eq(coupons.company_id, companyId))
-        .orderBy(desc(coupons.created_at))
-        .catch((error) => {
-          console.error('Error loading coupons:', error);
-          throw new InternalServerErrorException('Failed to load coupons', {
-            cause: error,
-          });
-        });
+        .orderBy(desc(coupons.created_at));
+
+      // Reconstruct UI Payload Expectation
+      return results.map((row) => {
+        const config = row.discount_config as any;
+        return {
+          id: row.id,
+          code: row.code,
+          description: row.description,
+          is_active: row.is_active,
+          created_at: row.created_at,
+          discount_type:
+            row.promotion_type === 'percentage_off'
+              ? 'percentage'
+              : 'fixed_cart',
+          discount_value: config?.value || 0,
+          max_discount_amount: config?.cap || null,
+          valid_from: row.valid_from,
+          valid_to: row.valid_to,
+          max_uses: row.max_uses_total,
+          max_uses_per_user: row.max_uses_per_user,
+        };
+      });
     } catch (error) {
-      console.error('Error fetching coupons:', error);
       throw new InternalServerErrorException('Failed to fetch coupons', {
         cause: error,
       });
@@ -340,185 +362,173 @@ export class CouponService {
   async findCoupons(domain: string, productId?: string) {
     try {
       const companyId = await this.resolveCompanyId(domain);
-      console.log('coupon findCoupons', { productId, companyId });
-
       const cleanProductId =
         productId === 'null' || productId === 'undefined' || !productId
           ? undefined
           : productId;
-      console.log('cleanProductId', cleanProductId);
-      // --- 2. DYNAMIC APPLICABILITY RULE ---
-      // Use the cleaned variable here!
-      const applicabilityRule = cleanProductId
+
+      const dynamicApplicabilityRule = cleanProductId
         ? or(
-            eq(coupon_products.product_id, cleanProductId),
-            isNull(coupon_products.coupon_id),
+            isNull(promotion_targets.id),
+            eq(promotion_targets.target_id, cleanProductId),
           )
-        : isNull(coupon_products.coupon_id);
-      console.log('applicabilityRule', applicabilityRule);
+        : isNull(promotion_targets.id);
+
       const validCoupons = await this.db
         .select({
           id: coupons.id,
           code: coupons.code,
           description: coupons.description,
-          discount_type: coupons.discount_type,
-          discount_value: coupons.discount_value,
-          min_order_amount: coupons.min_order_amount,
-          max_discount_amount: coupons.max_discount_amount,
-          valid_from: coupons.valid_from,
-          valid_to: coupons.valid_to,
+          promotion_type: promotions.promotion_type,
+          discount_config: promotions.discount_config,
+          valid_from: promotions.valid_from,
+          valid_to: promotions.valid_to,
         })
-        .from(coupons)
-        .leftJoin(coupon_products, eq(coupons.id, coupon_products.coupon_id))
+        .from(promotions)
+        .innerJoin(coupons, eq(promotions.coupon_id, coupons.id))
+        .leftJoin(
+          promotion_targets,
+          eq(promotion_targets.promotion_id, promotions.id),
+        )
         .where(
           and(
-            eq(coupons.company_id, companyId),
-            eq(coupons.is_active, true),
-            gte(coupons.valid_to, new Date()),
-
-            // Inject the dynamic rule here!
-            applicabilityRule,
+            eq(promotions.company_id, companyId),
+            eq(promotions.status, PromotionStatus.ACTIVE),
+            gte(promotions.valid_to, new Date()),
+            dynamicApplicabilityRule,
           ),
         )
-        .groupBy(coupons.id)
-        .catch((error) => {
-          console.error('Error executing Drizzle query for coupons:', error);
-          throw new InternalServerErrorException(
-            'Database error while loading coupons',
-          );
-        });
+        .groupBy(coupons.id, promotions.id); // Deduplicate rows if multiple targets trigger
 
-      return validCoupons;
+      return validCoupons.map((row) => {
+        const config = row.discount_config as any;
+        return {
+          ...row,
+          discount_type:
+            row.promotion_type === 'percentage_off'
+              ? 'percentage'
+              : 'fixed_cart',
+          discount_value: config?.value || 0,
+          max_discount_amount: config?.cap || null,
+        };
+      });
     } catch (error) {
-      console.error('Error fetching coupons for product:', error);
-      if (error instanceof HttpException) {
-        throw error;
-      }
       throw new InternalServerErrorException('Failed to fetch coupons', {
         cause: error,
       });
     }
   }
+
   async findOne(id: string, domain: string) {
     try {
       const companyId = await this.resolveCompanyId(domain);
-      console.log('coupon findOne', { couponId: id });
       const [coupon] = await this.db
-        .select()
+        .select({
+          id: coupons.id,
+          code: coupons.code,
+          description: coupons.description,
+          is_active: coupons.is_active,
+          created_at: coupons.created_at,
+          promo_id: promotions.id,
+          promotion_type: promotions.promotion_type,
+          discount_config: promotions.discount_config,
+          valid_from: promotions.valid_from,
+          valid_to: promotions.valid_to,
+          max_uses_total: promotions.max_uses_total,
+          max_uses_per_user: promotions.max_uses_per_user,
+        })
         .from(coupons)
+        .innerJoin(promotions, eq(promotions.coupon_id, coupons.id))
         .where(and(eq(coupons.id, id), eq(coupons.company_id, companyId)))
-        .limit(1)
-        .catch((error) => {
-          console.error('Error loading coupon by id:', error);
-          throw new InternalServerErrorException('Failed to load coupon', {
-            cause: error,
-          });
-        });
+        .limit(1);
 
       if (!coupon) throw new NotFoundException('Coupon not found');
-      return coupon;
+
+      const config = coupon.discount_config as any;
+      return {
+        id: coupon.id,
+        code: coupon.code,
+        description: coupon.description,
+        is_active: coupon.is_active,
+        created_at: coupon.created_at,
+        discount_type:
+          coupon.promotion_type === 'percentage_off'
+            ? 'percentage'
+            : 'fixed_cart',
+        discount_value: config?.value || 0,
+        max_discount_amount: config?.cap || null,
+        valid_from: coupon.valid_from,
+        valid_to: coupon.valid_to,
+        max_uses: coupon.max_uses_total,
+        max_uses_per_user: coupon.max_uses_per_user,
+      };
     } catch (error) {
-      console.error('Error fetching coupon:', error);
-      if (error instanceof NotFoundException) {
-        throw error;
-      }
+      if (error instanceof HttpException) throw error;
       throw new InternalServerErrorException('Failed to fetch coupon', {
         cause: error,
       });
     }
   }
-  async checkExistingWithId(id: string) {
-    try {
-      const [existingCoupon] = await this.db
-        .select({ id: coupons.id })
-        .from(coupons)
-        .where(eq(coupons.id, id))
-        .limit(1)
-        .catch((error) => {
-          console.error('Error checking existing coupon:', error);
-          throw new InternalServerErrorException('Failed to check coupon', {
-            cause: error,
-          });
-        });
-      return existingCoupon;
-    } catch (error) {
-      console.error('Error in checkExistingWithId:', error);
-      if (error instanceof InternalServerErrorException) {
-        throw error;
-      }
-      throw new InternalServerErrorException('Failed to check coupon', {
-        cause: error,
-      });
-    }
-  }
-  async checkExistingCode(code: string) {
-    try {
-      const [existingCoupon] = await this.db
-        .select({ id: coupons.id })
-        .from(coupons)
-        .where(eq(coupons.code, code.toUpperCase()))
-        .limit(1)
-        .catch((error) => {
-          console.error('Error checking existing coupon:', error);
-          throw new InternalServerErrorException('Failed to check coupon', {
-            cause: error,
-          });
-        });
-      return existingCoupon;
-    } catch (error) {
-      console.error('Error in checkExistingCode:', error);
-      if (error instanceof InternalServerErrorException) {
-        throw error;
-      }
-      throw new InternalServerErrorException('Failed to check coupon', {
-        cause: error,
-      });
-    }
-  }
+
   async update(id: string, updateCouponDto: UpdateCouponDto, domain: string) {
     try {
       const companyId = await this.resolveCompanyId(domain);
-      console.log('coupon update', { couponId: id });
 
-      const existingCoupon = await this.checkExistingWithId(id);
-      console.log('existing coupon', existingCoupon);
-      if (!existingCoupon) {
-        throw new HttpException('Coupon not found', HttpStatus.NOT_FOUND);
-      }
+      const [existingCoupon] = await this.db
+        .select()
+        .from(coupons)
+        .where(eq(coupons.id, id))
+        .limit(1);
 
-      const [updatedCoupon] = await this.db
+      if (!existingCoupon) throw new NotFoundException('Coupon not found');
+
+      // Update base lookup
+      await this.db
         .update(coupons)
-        .set({
-          ...updateCouponDto,
-          // Convert numbers to strings for Drizzle decimal types if provided
-          discount_value: updateCouponDto.discount_value?.toString(),
-          min_order_amount: updateCouponDto.min_order_amount?.toString(),
-          max_discount_amount: updateCouponDto.max_discount_amount?.toString(),
-          valid_from: updateCouponDto.valid_from
-            ? new Date(updateCouponDto.valid_from)
-            : undefined,
-          valid_to: updateCouponDto.valid_to
-            ? new Date(updateCouponDto.valid_to)
-            : undefined,
-        })
-        .where(and(eq(coupons.id, id), eq(coupons.company_id, companyId)))
-        .returning()
-        .catch((error) => {
-          console.error('Error updating coupon in database:', error);
-          throw new InternalServerErrorException('Failed to update coupon', {
-            cause: error,
-          });
-        });
+        .set({ is_active: updateCouponDto.is_active })
+        .where(and(eq(coupons.id, id), eq(coupons.company_id, companyId)));
 
-      return updatedCoupon;
-    } catch (error) {
-      console.error('Error updating coupon:', error);
-      if (
-        error instanceof HttpException ||
-        error instanceof NotFoundException
-      ) {
-        throw error;
+      // Prepare updated payload for unified promotions engine
+      const promoUpdates: any = {};
+      if (updateCouponDto.is_active !== undefined) {
+        promoUpdates.status = updateCouponDto.is_active
+          ? PromotionStatus.ACTIVE
+          : PromotionStatus.DRAFT;
       }
+      if (updateCouponDto.valid_from)
+        promoUpdates.valid_from = new Date(updateCouponDto.valid_from);
+      if (updateCouponDto.valid_to)
+        promoUpdates.valid_to = new Date(updateCouponDto.valid_to);
+      if (updateCouponDto.max_uses)
+        promoUpdates.max_uses_total = updateCouponDto.max_uses;
+
+      if (
+        updateCouponDto.discount_value ||
+        updateCouponDto.max_discount_amount
+      ) {
+        // Fetch current to merge state properly if needed
+        const [currentPromo] = await this.db
+          .select()
+          .from(promotions)
+          .where(eq(promotions.coupon_id, id));
+        let newConfig = { ...(currentPromo.discount_config as any) };
+        if (updateCouponDto.discount_value)
+          newConfig.value = Number(updateCouponDto.discount_value);
+        if (updateCouponDto.max_discount_amount)
+          newConfig.cap = Number(updateCouponDto.max_discount_amount);
+        promoUpdates.discount_config = newConfig;
+      }
+
+      if (Object.keys(promoUpdates).length > 0) {
+        await this.db
+          .update(promotions)
+          .set(promoUpdates)
+          .where(eq(promotions.coupon_id, id));
+      }
+
+      return { message: 'Coupon successfully updated.' };
+    } catch (error) {
+      if (error instanceof HttpException) throw error;
       throw new InternalServerErrorException('Failed to update coupon', {
         cause: error,
       });
@@ -528,33 +538,21 @@ export class CouponService {
   async remove(id: string, domain: string) {
     try {
       const companyId = await this.resolveCompanyId(domain);
-      console.log('coupon remove', { couponId: id });
-      const existingCoupon = await this.checkExistingWithId(id); // Verify existence
-      if (!existingCoupon) {
-        throw new HttpException('Coupon not found', HttpStatus.NOT_FOUND);
-      }
-      // It is usually better to SOFT DELETE coupons so historical order data doesn't break
-      const [deleted] = await this.db
+
+      // Deactivate base code
+      await this.db
         .update(coupons)
         .set({ is_active: false })
-        .where(and(eq(coupons.id, id), eq(coupons.company_id, companyId)))
-        .returning()
-        .catch((error) => {
-          console.error('Error deactivating coupon in database:', error);
-          throw new InternalServerErrorException('Failed to remove coupon', {
-            cause: error,
-          });
-        });
+        .where(and(eq(coupons.id, id), eq(coupons.company_id, companyId)));
 
-      return { message: 'Coupon deactivated successfully', coupon: deleted };
+      // Deactivate parent promotion link
+      await this.db
+        .update(promotions)
+        .set({ status: 'INACTIVE' as any })
+        .where(eq(promotions.coupon_id, id));
+
+      return { message: 'Coupon deactivated successfully' };
     } catch (error) {
-      console.error('Error removing coupon:', error);
-      if (
-        error instanceof HttpException ||
-        error instanceof NotFoundException
-      ) {
-        throw error;
-      }
       throw new InternalServerErrorException('Failed to remove coupon', {
         cause: error,
       });

@@ -8,7 +8,7 @@ import {
   refunds,
 } from '../../drizzle/schema';
 import { gst_invoices } from '../../drizzle/schema/finance.schema';
-import { DrizzleService } from 'src/drizzle/drizzle.module';
+import { DrizzleService } from '../../drizzle/drizzle.module';
 
 export type DashboardFilter = {
   companyId: string;

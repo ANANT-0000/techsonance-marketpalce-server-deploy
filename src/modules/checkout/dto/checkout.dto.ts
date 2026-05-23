@@ -23,7 +23,7 @@ export class InitiateCheckoutDto {
 export class VerifyCheckoutDto {
   @IsOptional()
   @IsString()
-  couponId?: string;
+  promotionId?: string;
 
   @IsOptional()
   @Type(() => String)

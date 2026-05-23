@@ -31,7 +31,6 @@ export class CreateCouponDto {
   @IsEnum(DiscountType)
   discount_type!: DiscountType;
 
-  // Use @Type to convert the incoming number to string
   @Type(() => String)
   @IsString()
   @IsNotEmpty()

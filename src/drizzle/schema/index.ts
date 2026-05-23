@@ -3,6 +3,7 @@ export * from './main.schema';
 export * from './utils.schema';
 export * from './finance.schema';
 export * from './shop.schema';
+export * from './promotions.schema';
 export * from './product_policy.schema';
 export * from './company_identity.schema';
 import { address, user, vendor } from './users.schema';
@@ -14,6 +15,9 @@ import {
   coupon_usage,
   coupons,
   invoices,
+  offer_coupon,
+  offer_products,
+  offers,
   order_item_cancelled,
   order_items,
   orders,
@@ -52,6 +56,15 @@ import {
   company_legal_profile,
 } from './company_identity.schema';
 import { order_item_policy } from './product_policy.schema';
+import {
+  customer_segments,
+  marketing_banners,
+  order_item_promotion_snapshot,
+  promotion_analytics_events,
+  promotion_usage,
+  promotions,
+  segment_members,
+} from './promotions.schema';
 
 export const companyRelations = relations(company, ({ one, many }) => ({
   roles: many(user_roles),
@@ -65,7 +78,11 @@ export const companyRelations = relations(company, ({ one, many }) => ({
   address: many(address),
   coupons: many(coupons),
   coupon_usage: many(coupon_usage),
-
+  promotions: many(promotions),
+  promotion_usage: many(promotion_usage),
+  customer_segments: many(customer_segments),
+  marketing_banners: many(marketing_banners),
+  promotion_analytics_events: many(promotion_analytics_events),
   carts: many(carts),
   wishlist: many(wishlist),
   products: many(products),
@@ -78,6 +95,23 @@ export const companyRelations = relations(company, ({ one, many }) => ({
   audit_logs: many(audit_logs),
   inventory: many(inventory),
   warehouse: many(warehouse),
+  companyBranding: one(company_branding, {
+    fields: [company.id],
+    references: [company_branding.company_id],
+  }),
+  companyLegalProfile: one(company_legal_profile, {
+    fields: [company.id],
+    references: [company_legal_profile.company_id],
+  }),
+  companyCompliance: one(company_compliance, {
+    fields: [company.id],
+    references: [company_compliance.company_id],
+  }),
+  companyDocumentConfig: one(company_document_config, {
+    fields: [company.id],
+    references: [company_document_config.company_id],
+  }),
+  offers: many(offers),
 }));
 
 // --- User Relations ---
@@ -98,6 +132,8 @@ export const userRelations = relations(user, ({ one, many }) => ({
   wishlist: many(wishlist),
   carts: many(carts),
   coupon_usage: many(coupon_usage),
+  segment_memberships: many(segment_members),
+  promotion_usage: many(promotion_usage),
 }));
 
 export const userAndCompanyRelations = relations(
@@ -206,6 +242,7 @@ export const productVariantsRelations = relations(
     orderItem: many(order_items),
     images: many(product_images),
     reviews: many(product_reviews),
+    offerProducts: many(offer_products),
     inventory: one(inventory, {
       fields: [product_variants.id],
       references: [inventory.product_variant_id],
@@ -279,8 +316,11 @@ export const ordersRelations = relations(orders, ({ one, many }) => ({
     fields: [orders.id],
     references: [invoices.order_id],
   }),
+  promotion_usage: many(promotion_usage),
+  promotion_analytics_events: many(promotion_analytics_events),
+  item_promotion_snapshots: many(order_item_promotion_snapshot),
 }));
-export const orderItemsRelations = relations(order_items, ({ one }) => ({
+export const orderItemsRelations = relations(order_items, ({ one, many }) => ({
   order: one(orders, {
     fields: [order_items.order_id],
     references: [orders.id],
@@ -301,6 +341,8 @@ export const orderItemsRelations = relations(order_items, ({ one }) => ({
     fields: [order_items.id],
     references: [return_requests.order_item_id],
   }),
+  item_promotion_snapshots: many(order_item_promotion_snapshot),
+
   invoice: one(invoices, {
     fields: [order_items.id],
     references: [invoices.order_item_id],
@@ -376,6 +418,7 @@ export const couponsRelations = relations(coupons, ({ one, many }) => ({
   }),
   usage: many(coupon_usage),
   products: many(coupon_products),
+  offers: many(offer_coupon),
 }));
 export const couponUsageRelations = relations(coupon_usage, ({ one }) => ({
   coupon: one(coupons, {
@@ -408,6 +451,33 @@ export const couponProductsRelations = relations(
     }),
   }),
 );
+export const offersRelations = relations(offers, ({ one }) => ({
+  company: one(company, {
+    fields: [offers.company_id],
+    references: [company.id],
+  }),
+}));
+export const offerProductsRelations = relations(offer_products, ({ one }) => ({
+  offer: one(offers, {
+    fields: [offer_products.offer_id],
+    references: [offers.id],
+  }),
+  variant: one(product_variants, {
+    fields: [offer_products.variant_id],
+    references: [product_variants.id],
+  }),
+}));
+
+export const offerCouponRelations = relations(offer_coupon, ({ one }) => ({
+  offer: one(offers, {
+    fields: [offer_coupon.offer_id],
+    references: [offers.id],
+  }),
+  coupon: one(coupons, {
+    fields: [offer_coupon.coupon_id],
+    references: [coupons.id],
+  }),
+}));
 
 // --- Inventory & Warehouse Relations ---
 export const inventoryRelations = relations(inventory, ({ one }) => ({

@@ -91,11 +91,6 @@ export const product_tax = pg.pgTable('product_tax', {
 export const orders_tax = pg.pgTable('orders_tax', {
   id: pg.uuid('id').primaryKey().defaultRandom(),
   created_at: pg.timestamp('created_at').notNull().defaultNow(),
-  updated_at: pg
-    .timestamp('updated_at')
-    .notNull()
-    .defaultNow()
-    .$onUpdate(() => new Date()),
   order_id: pg.uuid('order_id').references(() => orders.id),
   tax_types_id: pg.uuid('tax_types_id').references(() => tax_types.id),
 });

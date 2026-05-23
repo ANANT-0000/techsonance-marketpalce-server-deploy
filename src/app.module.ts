@@ -42,6 +42,10 @@ import { InvoiceModule } from './modules/invoice/invoice.module';
 import { ProductPoliciesModule } from './modules/product-policies/product-policies.module';
 import { CompanyIdentityModule } from './modules/company-identity/company-identity.module';
 import { TemplateModule } from './modules/template/template.module';
+import { OffersModule } from './modules/offers/offers.module';
+import { DrizzleHealthIndicator } from './drizzle/drizzle.health';
+import { HealthCheckService, TerminusModule } from '@nestjs/terminus';
+import { HealthCheckExecutor } from '@nestjs/terminus/dist/health-check/health-check-executor.service';
 @Module({
   imports: [
     DrizzleModule,
@@ -81,6 +85,8 @@ import { TemplateModule } from './modules/template/template.module';
     ProductPoliciesModule,
     CompanyIdentityModule,
     TemplateModule,
+    OffersModule,
+TerminusModule,
     // ThrottlerModule.forRoot([
     //   {
     //     name: "short",
@@ -100,6 +106,10 @@ import { TemplateModule } from './modules/template/template.module';
     // ]),
   ],
   controllers: [AppController, UsersController],
-  providers: [AppService, UsersService],
+  providers: [
+    AppService,
+    UsersService,
+    DrizzleHealthIndicator,
+  ],
 })
 export class AppModule {}
