@@ -132,7 +132,7 @@ export interface companyLegal {
   id: string;
   company_id: string;
   legal_name: string;
-  trade_name: string | null;
+ 
   country_code: string;
   registered_address_id: string | null;
   support_email: string | null;

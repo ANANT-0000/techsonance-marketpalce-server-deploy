@@ -12,12 +12,7 @@ import {
 } from 'class-validator';
 import { Type } from 'class-transformer';
 
-export enum DiscountType {
-  PERCENTAGE = 'percentage',
-  FIXED_CART = 'fixed_cart',
-  FIXED_PRODUCT = 'fixed_product',
-  FREE_SHIPPING = 'free_shipping',
-}
+import { PromotionRuleType, PromotionType } from '../../../drizzle/types/types';
 
 export class CreateCouponDto {
   @IsString()
@@ -28,8 +23,8 @@ export class CreateCouponDto {
   @IsString()
   description?: string;
 
-  @IsEnum(DiscountType)
-  discount_type!: DiscountType;
+  @IsEnum(PromotionType)
+  discount_type!: PromotionType;
 
   @Type(() => String)
   @IsString()
@@ -39,7 +34,12 @@ export class CreateCouponDto {
   @IsOptional()
   @Type(() => String)
   @IsString()
-  min_order_amount?: string;
+  rule_type?: PromotionRuleType;
+
+  @IsOptional()
+  @Type(() => String)
+  @IsString()
+  rule_value?: string;
 
   @IsOptional()
   @Type(() => String)

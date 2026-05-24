@@ -15,11 +15,11 @@ import { CreateCouponDto, UpdateCouponDto } from './dto/coupon.dto';
 export class CouponController {
   constructor(private readonly couponService: CouponService) {}
 
-  @Post()
+  @Post('/:userId')
   create(
     @Body() createCouponDto: CreateCouponDto,
     @Headers('company-domain') domain: string,
-    @Headers('user-id') userId: string, // Required for promotion 'created_by'
+    @Param('userId') userId: string, // Required for promotion 'created_by'
   ) {
     return this.couponService.create(createCouponDto, domain, userId);
   }

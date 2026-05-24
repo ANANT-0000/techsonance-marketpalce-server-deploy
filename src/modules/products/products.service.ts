@@ -549,7 +549,7 @@ export class ProductsService {
             attributes: productDto.attributes,
             status: productDto.status,
 
-            seo_meta: productDto.seo_meta ?? null,
+        
             product_id: createdProduct.id,
           })
           .returning({

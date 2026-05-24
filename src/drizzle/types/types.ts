@@ -101,15 +101,16 @@ export enum CancelledByEnum {
   VENDOR = 'vendor',
   SYSTEM = 'system',
 }
-export enum refundStatusEnum {
+export enum RefundStatusEnum {
   PENDING = 'pending',
   PROCESSED = 'processed',
   REJECTED = 'rejected',
 }
 export enum PromotionType {
-  PERCENTAGE_OFF = 'percentage_off',
+  PERCENTAGE = 'percentage',
   FIXED_AMOUNT = 'fixed_amount',
   BUY_X_GET_Y = 'buy_x_get_y',
+  BOGO = 'bogo',
   FREE_SHIPPING = 'free_shipping',
   TIERED_DISCOUNT = 'tiered_discount',
   BUNDLE_DEAL = 'bundle_deal',
@@ -120,6 +121,7 @@ export enum PromotionStatus {
   PENDING_REVIEW = 'PENDING_REVIEW',
   ACTIVE = 'ACTIVE',
   PAUSED = 'PAUSED',
+  SCHEDULED = 'SCHEDULED',
   REJECTED = 'REJECTED',
   EXPIRED = 'EXPIRED',
 }

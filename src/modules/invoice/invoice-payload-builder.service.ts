@@ -6,7 +6,7 @@ import {
   NotFoundException,
   Logger,
 } from '@nestjs/common';
-import { eq } from 'drizzle-orm';
+import { and, eq } from 'drizzle-orm';
 import { DRIZZLE, type DrizzleService } from '../../drizzle/drizzle.module';
 import {
   company_branding,
@@ -14,7 +14,6 @@ import {
   company_document_config,
   company_legal_profile,
   gst_invoices,
-  gst_registrations,
   orders,
   payments,
 } from '../../drizzle/schema';
@@ -272,21 +271,57 @@ export class InvoicePayloadBuilderService {
     totalTax: number;
     vendorGstin: string | null;
   } | null> {
+    // 1. Fetch the pre-computed GST amounts from gst_invoices
     const row = await this.db.query.gst_invoices
-      .findFirst({
-        where: eq(gst_invoices.order_id, orderId),
-        with: { registration: true },
-      })
+      .findFirst({ where: eq(gst_invoices.order_id, orderId) })
       .catch(() => null);
 
     if (!row) return null;
+
+    // 2. Fetch the vendor GSTIN from company_compliance
+    //    (the default GST registration's gst_number row)
+    const defaultFlagRow = await this.db
+      .select()
+      .from(company_compliance)
+      .where(
+        and(
+          eq(company_compliance.company_id, companyId),
+          eq(company_compliance.country_code, 'IN'),
+          eq(company_compliance.field_key, 'gst_is_default'),
+          eq(company_compliance.field_value, 'true'),
+          eq(company_compliance.is_active, true),
+        ),
+      )
+      .limit(1)
+      .then((rows) => rows[0] ?? null);
+
+    let vendorGstin: string | null = null;
+
+    if (defaultFlagRow) {
+      const gstNumberRow = await this.db
+        .select()
+        .from(company_compliance)
+        .where(
+          and(
+            eq(company_compliance.company_id, companyId),
+            eq(company_compliance.country_code, 'IN'),
+            eq(company_compliance.field_key, 'gst_number'),
+            eq(company_compliance.valid_until, defaultFlagRow.valid_until!),
+            eq(company_compliance.is_active, true),
+          ),
+        )
+        .limit(1)
+        .then((rows) => rows[0] ?? null);
+
+      vendorGstin = gstNumberRow?.field_value ?? null;
+    }
 
     return {
       totalCgst: Number(row.cgst_amount),
       totalSgst: Number(row.sgst_amount),
       totalIgst: Number(row.igst_amount),
       totalTax: Number(row.total_tax),
-      vendorGstin: row.registration?.gst_number ?? null,
+      vendorGstin,
     };
   }
 
@@ -427,43 +462,82 @@ export class InvoicePayloadBuilderService {
     const { config, branding, legal } = context;
 
     // ── 1. Compliance IDs (GSTIN, PAN, CIN, FSSAI …) ─────────────
+    // let complianceRows: (typeof company_compliance.$inferSelect)[] = [];
+    // try {
+    //   complianceRows = await this.db
+    //     .select()
+    //     .from(company_compliance)
+    //     .where(eq(company_compliance.company_id, group.items[0].company_id));
+    // } catch {
+    //   complianceRows = [];
+    // }
+    // // Build taxIds from compliance table first; fall back to GST registration row
+    // const taxIds: Array<{ key: string; value: string }> = complianceRows
+    //   .filter((r) => r.is_active)
+    //   .map((r) => ({ key: r.field_key.toUpperCase(), value: r.field_value }));
+
     let complianceRows: (typeof company_compliance.$inferSelect)[] = [];
     try {
       complianceRows = await this.db
         .select()
         .from(company_compliance)
-        .where(eq(company_compliance.company_id, group.items[0].company_id));
+        .where(
+          and(
+            eq(company_compliance.company_id, group.items[0].company_id),
+            eq(company_compliance.is_active, true),
+          ),
+        );
     } catch {
       complianceRows = [];
     }
-    // Build taxIds from compliance table first; fall back to GST registration row
-    const taxIds: Array<{ key: string; value: string }> = complianceRows
-      .filter((r) => r.is_active)
-      .map((r) => ({ key: r.field_key.toUpperCase(), value: r.field_value }));
 
-    // If no compliance rows, try gst_registrations table directly
-    if (taxIds.length === 0) {
-      const gstRow = await this.db.query.gst_registrations
-        .findFirst({
-          where: eq(gst_registrations.company_id, group.items[0].company_id),
-        })
-        .catch(() => null);
-      if (gstRow?.gst_number) {
-        taxIds.push({ key: 'GST Registration No', value: gstRow.gst_number });
-      }
-      // Vendor GST from gst_invoices
-      if (gstData?.vendorGstin && gstData.vendorGstin !== 'N/A') {
-        const alreadyHasGst = taxIds.some(
-          (t) => t.value === gstData.vendorGstin,
-        );
-        if (!alreadyHasGst) {
-          taxIds.unshift({
-            key: 'GST Registration No',
-            value: gstData.vendorGstin,
-          });
-        }
+    // Build taxIds — filter to GST-related keys for the invoice header
+    const taxIds: Array<{ key: string; value: string }> = complianceRows
+      .filter((r) => r.is_active && r.field_key === 'gst_number')
+      .map((r) => ({ key: 'GST Registration No', value: r.field_value }));
+
+    // Add PAN if present
+    const panRow = complianceRows.find((r) => r.field_key === 'pan_number');
+    if (panRow) taxIds.push({ key: 'PAN', value: panRow.field_value });
+
+    // Add CIN if present
+    const cinRow = complianceRows.find((r) => r.field_key === 'cin');
+    if (cinRow) taxIds.push({ key: 'CIN', value: cinRow.field_value });
+
+    // If gstData has a vendorGstin not already in taxIds, prepend it
+    if (gstData?.vendorGstin && gstData.vendorGstin !== 'N/A') {
+      const alreadyHasGst = taxIds.some((t) => t.value === gstData.vendorGstin);
+      if (!alreadyHasGst) {
+        taxIds.unshift({
+          key: 'GST Registration No',
+          value: gstData.vendorGstin,
+        });
       }
     }
+
+    // If no compliance rows, try gst_registrations table directly
+    // if (taxIds.length === 0) {
+    //   const gstRow = await this.db.query.gst_registrations
+    //     .findFirst({
+    //       where: eq(gst_registrations.company_id, group.items[0].company_id),
+    //     })
+    //     .catch(() => null);
+    //   if (gstRow?.gst_number) {
+    //     taxIds.push({ key: 'GST Registration No', value: gstRow.gst_number });
+    //   }
+    //   // Vendor GST from gst_invoices
+    //   if (gstData?.vendorGstin && gstData.vendorGstin !== 'N/A') {
+    //     const alreadyHasGst = taxIds.some(
+    //       (t) => t.value === gstData.vendorGstin,
+    //     );
+    //     if (!alreadyHasGst) {
+    //       taxIds.unshift({
+    //         key: 'GST Registration No',
+    //         value: gstData.vendorGstin,
+    //       });
+    //     }
+    //   }
+    // }
 
     // Determine intra/inter state from seller GSTIN vs buyer state
     const sellerGstin =
@@ -600,7 +674,6 @@ export class InvoicePayloadBuilderService {
 
     const seller: InvoiceSeller = {
       legalName: legal?.legal_name ?? vendorInfo.companyName,
-      tradeName: legal?.trade_name ?? vendorInfo.companyName,
       address: sellerAddress,
       taxIds,
       supportEmail: legal?.support_email ?? vendorInfo.email ?? undefined,
@@ -671,7 +744,6 @@ export class InvoicePayloadBuilderService {
     };
     const legalPayload: InvoiceLegal = {
       legalName: legal?.legal_name ?? vendorInfo.companyName,
-      tradeName: legal?.trade_name ?? undefined,
       supportEmail: legal?.support_email ?? undefined,
       supportPhone: legal?.support_phone ?? undefined,
       websiteUrl: legal?.website_url ?? undefined,

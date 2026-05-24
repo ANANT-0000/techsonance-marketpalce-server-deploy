@@ -15,11 +15,12 @@ import {
   promotion_rules,
   promotion_targets,
   promotion_usage,
+  user,
 } from '../../drizzle/schema';
 import { CompanyService } from '../company/company.service';
 import { domainExtractor } from '../../common/filters/domainExtractor.filter';
 import { CreateCouponDto, UpdateCouponDto } from './dto/coupon.dto';
-import { PromotionStatus } from 'src/drizzle/types/types';
+import { PromotionStatus, PromotionType } from 'src/drizzle/types/types';
 
 @Injectable()
 export class CouponService {
@@ -194,14 +195,17 @@ export class CouponService {
     }
   }
 
-  async create(
-    dto: CreateCouponDto,
-    domain: string,
-    userId: string = '00000000-0000-0000-0000-000000000000',
-  ) {
+  async create(dto: CreateCouponDto, domain: string, userId: string) {
     try {
       const companyId = await this.resolveCompanyId(domain);
-
+      const [isUserExist] = await this.db
+        .select({ id: user.id })
+        .from(user)
+        .where(eq(user.id, userId))
+        .limit(1);
+      if (!isUserExist.id) {
+        throw new HttpException('User not found.', HttpStatus.NOT_FOUND);
+      }
       return await this.db.transaction(async (tx) => {
         if (!dto.is_auto_applied && dto.code) {
           const [existingCoupon] = await tx
@@ -235,18 +239,20 @@ export class CouponService {
 
         // 2. Setup Config Strategy Pattern
         let discountConfig: any = {};
-        let promoType = 'fixed_amount';
+        let promoType = PromotionType.FIXED_AMOUNT;
 
-        if (dto.discount_type === 'percentage') {
-          promoType = 'percentage_off';
+        //@ts-expect-error
+        if (dto.discount_type === PromotionType.PERCENTAGE) {
+          promoType = PromotionType.PERCENTAGE;
           discountConfig = {
             value: Number(dto.discount_value),
             cap: dto.max_discount_amount
               ? Number(dto.max_discount_amount)
               : null,
           };
-        } else if (dto.discount_type === 'free_shipping') {
-          promoType = 'free_shipping';
+          //@ts-expect-error
+        } else if (dto.discount_type === PromotionType.FREE_SHIPPING) {
+          promoType = PromotionType.FREE_SHIPPING;
           discountConfig = { max_shipping_waived: Number(dto.discount_value) };
         } else {
           discountConfig = { value: Number(dto.discount_value) };
@@ -260,7 +266,7 @@ export class CouponService {
             created_by: userId,
             name: `Coupon - ${dto.code.toUpperCase()}`,
             description: dto.description || null,
-            promotion_type: promoType as any,
+            promotion_type: promoType as PromotionType,
             discount_config: discountConfig,
             coupon_id: newCoupon.id,
             is_auto_applied: dto.is_auto_applied ?? false,

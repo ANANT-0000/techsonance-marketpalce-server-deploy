@@ -42,7 +42,6 @@ import { InvoiceModule } from './modules/invoice/invoice.module';
 import { ProductPoliciesModule } from './modules/product-policies/product-policies.module';
 import { CompanyIdentityModule } from './modules/company-identity/company-identity.module';
 import { TemplateModule } from './modules/template/template.module';
-import { OffersModule } from './modules/offers/offers.module';
 import { DrizzleHealthIndicator } from './drizzle/drizzle.health';
 import { HealthCheckService, TerminusModule } from '@nestjs/terminus';
 import { HealthCheckExecutor } from '@nestjs/terminus/dist/health-check/health-check-executor.service';
@@ -85,7 +84,6 @@ import { HealthCheckExecutor } from '@nestjs/terminus/dist/health-check/health-c
     ProductPoliciesModule,
     CompanyIdentityModule,
     TemplateModule,
-    OffersModule,
 TerminusModule,
     // ThrottlerModule.forRoot([
     //   {

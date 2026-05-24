@@ -14,16 +14,12 @@ import {
   company,
   company as companyTable,
   gst_invoices,
-  gst_registrations,
+ 
   order_items,
   orders,
   product_variants,
   products,
   refunds,
-  tax_profiles,
-  tax_rates,
-  tax_types,
-  user,
   user as userTable,
   user_and_company,
   user_roles,
@@ -40,7 +36,6 @@ import {
   eq,
   gte,
   lte,
-  or,
   sql,
 } from 'drizzle-orm';
 import {

@@ -167,7 +167,7 @@ export class OrdersService {
               tax_types_id: taxTypeId,
             }),
           );
-          await tx.insert(orders_tax).values(orderTaxInserts);
+          // await tx.insert(orders_tax).values(orderTaxInserts);
         }
 
         // 5. Create GST Invoice record
@@ -175,7 +175,6 @@ export class OrdersService {
         await tx.insert(gst_invoices).values({
           company_id: companyId,
           order_id: newOrder.id,
-          gst_registration_id: taxData.vendorGstId,
           invoice_number: `INV-${Date.now()}`,
           invoice_date: new Date().toISOString().split('T')[0],
           cgst_amount: String(taxData.totalCgst),

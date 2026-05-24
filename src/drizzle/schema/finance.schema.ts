@@ -87,7 +87,6 @@ export const gst_invoices = pg.pgTable('gst_invoices', {
     .defaultNow()
     .$onUpdate(() => new Date()),
   order_id: pg.uuid('order_id').references(() => orders.id),
-
   company_id: pg.uuid('company_id').references(() => company.id),
 });
 
