@@ -21,7 +21,13 @@ export class PolicyPayloadBuilderService {
   constructor(@Inject(DRIZZLE) private readonly db: DrizzleService) {}
 
   async buildPayload(orderItemId: string): Promise<PolicyDocumentPayload> {
+    console.log(
+      `[PolicyPayloadBuilderService.buildPayload] Request received for orderItemId: ${orderItemId}`,
+    );
     // 1. Fetch the order item policy snapshot and related data
+    console.log(
+      '[PolicyPayloadBuilderService.buildPayload] Querying order item policy snapshot',
+    );
     const itemPolicy = await this.db.query.order_item_policy.findFirst({
       where: eq(order_item_policy.order_item_id, orderItemId),
       with: {
@@ -45,6 +51,10 @@ export class PolicyPayloadBuilderService {
       );
     }
 
+    console.log(
+      '[PolicyPayloadBuilderService.buildPayload] Policy snapshot loaded',
+    );
+
     const { orderItem, policy_snapshot } = itemPolicy;
     const snapshot = policy_snapshot as PolicySnapshot;
     const orderData = orderItem.order;
@@ -67,6 +77,9 @@ export class PolicyPayloadBuilderService {
         `Order ${orderData?.id} is not associated with any company.`,
       );
     }
+    console.log(
+      `[PolicyPayloadBuilderService.buildPayload] Querying branding and company data for companyId: ${orderData.company_id}`,
+    );
     const [branding] = await this.db
       .select()
       .from(company_branding)
@@ -94,6 +107,9 @@ export class PolicyPayloadBuilderService {
       });
 
     // 3. Construct and return the Payload
+    console.log(
+      `[PolicyPayloadBuilderService.buildPayload] Payload assembled for orderItemId: ${orderItemId}`,
+    );
     return {
       meta: {
         documentId: itemPolicy.id,

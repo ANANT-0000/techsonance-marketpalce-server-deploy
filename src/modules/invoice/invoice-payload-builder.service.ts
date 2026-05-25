@@ -193,6 +193,12 @@ export class InvoicePayloadBuilderService {
   // ══════════════════════════════════════════════════════════════════
 
   async fetchOrderWithRelations(orderId: string): Promise<OrderWithRelations> {
+    console.log(
+      `[InvoicePayloadBuilderService.fetchOrderWithRelations] Request received for orderId: ${orderId}`,
+    );
+    console.log(
+      '[InvoicePayloadBuilderService.fetchOrderWithRelations] Querying order with relations',
+    );
     const orderData = (await this.db.query.orders
       .findFirst({
         where: eq(orders.id, orderId),
@@ -230,6 +236,9 @@ export class InvoicePayloadBuilderService {
     if (!orderData) throw new NotFoundException(`Order ${orderId} not found`);
     if (!orderData.items?.length)
       throw new NotFoundException(`Order ${orderId} has no items`);
+    console.log(
+      `[InvoicePayloadBuilderService.fetchOrderWithRelations] Order loaded with ${orderData.items.length} item(s)`,
+    );
     return orderData;
   }
 
@@ -238,6 +247,12 @@ export class InvoicePayloadBuilderService {
   // ══════════════════════════════════════════════════════════════════
 
   async fetchCompanyContext(companyId: string): Promise<CompanyContext> {
+    console.log(
+      `[InvoicePayloadBuilderService.fetchCompanyContext] Request received for companyId: ${companyId}`,
+    );
+    console.log(
+      '[InvoicePayloadBuilderService.fetchCompanyContext] Querying branding, legal, and document config',
+    );
     const [config, branding, legal] = await Promise.all([
       this.db.query.company_document_config.findFirst({
         where: eq(company_document_config.company_id, companyId),

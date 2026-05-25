@@ -26,24 +26,36 @@ export class PolicyDocumentService {
     templateId: string = 'standard-warranty',
   ) {
     try {
-      this.logger.log(
-        `Generating policy document for OrderItem: ${orderItemId}`,
+      console.log(
+        `[PolicyDocumentService.generatePolicyDocument] Request received for orderItemId: ${orderItemId}, templateId: ${templateId}`,
       );
 
       // 1. Build Payload
+      console.log(
+        '[PolicyDocumentService.generatePolicyDocument] Building policy payload',
+      );
       const payload = await this.payloadBuilder.buildPayload(orderItemId);
 
       // 2. Render PDF
+      console.log(
+        '[PolicyDocumentService.generatePolicyDocument] Rendering policy template',
+      );
       const template = this.templateRegistry.getTemplate(templateId);
       const pdfBuffer = await template.render(payload);
 
       // 3. Upload to Cloud Storage
+      console.log(
+        '[PolicyDocumentService.generatePolicyDocument] Uploading rendered policy document',
+      );
       const documentUrl = await this.uploadToCloudService.uploadWarranty(
         pdfBuffer,
         `warranty_${payload.meta.orderNumber}_${orderItemId}`,
       );
 
       // 4. Update Database
+      console.log(
+        '[PolicyDocumentService.generatePolicyDocument] Updating policy document URL in database',
+      );
       await this.db
         .update(order_item_policy)
         .set({
@@ -52,22 +64,22 @@ export class PolicyDocumentService {
         })
         .where(eq(order_item_policy.order_item_id, orderItemId))
         .catch((err) => {
-          this.logger.error(
-            `Failed to update policy record with document URL for item ${orderItemId}`,
-            err.stack,
+          console.error(
+            `[PolicyDocumentService.generatePolicyDocument] Failed to update policy record with document URL for item ${orderItemId}`,
+            err,
           );
           throw err;
         });
 
-      this.logger.log(
-        `Successfully generated and linked policy document: ${documentUrl}`,
+      console.log(
+        `[PolicyDocumentService.generatePolicyDocument] Successfully generated policy document: ${documentUrl}`,
       );
 
       return documentUrl;
     } catch (error) {
-      this.logger.error(
-        `Failed to generate policy document for item ${orderItemId}`,
-        error.stack,
+      console.error(
+        `[PolicyDocumentService.generatePolicyDocument] Failed to generate policy document for item ${orderItemId}`,
+        error,
       );
       throw error;
     }

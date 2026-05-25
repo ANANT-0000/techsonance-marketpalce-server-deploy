@@ -18,7 +18,7 @@ import {
 import {
   OrderStatus,
   PaymentStatus,
-  refundStatusEnum,
+  RefundStatusEnum,
 } from '../../drizzle/types/types';
 import { CompanyService } from '../company/company.service';
 import { domainExtractor } from '../../common/filters/domainExtractor.filter';
@@ -221,7 +221,7 @@ export class RefundsService {
         .values({
           refund_amount: refundAmount,
           refund_reason: reason,
-          refund_status: refundStatusEnum.PENDING,
+          refund_status: RefundStatusEnum.PENDING,
           order_id: orderId,
           order_items_id: resolvedOrderItemId ?? null, // null = whole-order refund
           payment_id: paymentRecord.id,
@@ -404,14 +404,14 @@ export class RefundsService {
         throw new HttpException('Refund not found', HttpStatus.NOT_FOUND);
       }
 
-      if (existingRefund.refund_status === refundStatusEnum.PROCESSED) {
+      if (existingRefund.refund_status === RefundStatusEnum.PROCESSED) {
         throw new HttpException(
           'Refund has already been processed',
           HttpStatus.BAD_REQUEST,
         );
       }
 
-      if (existingRefund.refund_status === refundStatusEnum.REJECTED) {
+      if (existingRefund.refund_status === RefundStatusEnum.REJECTED) {
         throw new HttpException(
           'Cannot process a rejected refund',
           HttpStatus.BAD_REQUEST,
@@ -426,7 +426,7 @@ export class RefundsService {
         );
         const [updatedRefund] = await tx
           .update(refunds)
-          .set({ refund_status: refundStatusEnum.PROCESSED })
+          .set({ refund_status: RefundStatusEnum.PROCESSED })
           .where(eq(refunds.id, refundId))
           .returning()
           .catch((error) => {
@@ -596,7 +596,7 @@ export class RefundsService {
       const reponse = {
         total: formattedRefunds.length,
         totalPendingAmount: formattedRefunds
-          .filter((r) => r.refund_status === refundStatusEnum.PENDING)
+          .filter((r) => r.refund_status === RefundStatusEnum.PENDING)
           .reduce((sum, r) => sum + Number(r.refund_amount), 0),
         itemRefunds: formattedRefunds.filter((r) => r.scope === 'item'),
         orderRefunds: formattedRefunds.filter((r) => r.scope === 'order'),

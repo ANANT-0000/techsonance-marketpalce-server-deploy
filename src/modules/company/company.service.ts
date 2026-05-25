@@ -18,6 +18,8 @@ export class CompanyService {
   ) {}
   async listCompanies() {
     try {
+      console.log('[CompanyService.listCompanies] Request received');
+      console.log('[CompanyService.listCompanies] Querying company table');
       const companies = await this.db
         .select()
         .from(company)
@@ -30,6 +32,9 @@ export class CompanyService {
       if (!companies) {
         throw new InternalServerErrorException(`Companies not found`);
       }
+      console.log(
+        `[CompanyService.listCompanies] Retrieved ${companies.length} company record(s)`,
+      );
       return companies;
     } catch (error) {
       if (error instanceof InternalServerErrorException) {
@@ -43,13 +48,24 @@ export class CompanyService {
 
   async activateCompany(id: string) {
     try {
+      console.log(
+        `[CompanyService.activateCompany] Request received for company id: ${id}`,
+      );
       if (!id) {
         throw new InternalServerErrorException(
           `Company with ID ${id} not found`,
         );
       }
+      console.log('[CompanyService.activateCompany] Resolving company identifier');
       const companyId = await this.find(id);
+      console.log(
+        `[CompanyService.activateCompany] Company resolved: ${companyId}`,
+      );
+      console.log('[CompanyService.activateCompany] Starting database transaction');
       const result = await this.db.transaction(async (tx) => {
+        console.log(
+          `[CompanyService.activateCompany] Activating company record ${companyId}`,
+        );
         const [companyRecord] = await tx
           .update(company)
           .set({ company_status: UserStatus.ACTIVE })
@@ -69,6 +85,9 @@ export class CompanyService {
             `Company with ID ${companyId} not found`,
           );
         }
+        console.log(
+          `[CompanyService.activateCompany] Updating user-company access for company ${companyId}`,
+        );
         const userCompanyRecord = await tx
           .update(user_and_company)
           .set({ access_status: AccessStatus.ACTIVE })
@@ -91,6 +110,9 @@ export class CompanyService {
             `User and company record with company ID ${companyId} not found`,
           );
         }
+        console.log(
+          `[CompanyService.activateCompany] Activating vendor records for company ${companyId}`,
+        );
         await tx
           .update(vendor)
           .set({ vendor_status: UserStatus.ACTIVE })
@@ -113,6 +135,9 @@ export class CompanyService {
           data: null,
         };
       });
+      console.log(
+        `[CompanyService.activateCompany] Company activation completed for ${companyId}`,
+      );
       return result;
     } catch (error) {
       if (error instanceof InternalServerErrorException) {
@@ -126,13 +151,24 @@ export class CompanyService {
 
   async deactivateCompany(id: string) {
     try {
+      console.log(
+        `[CompanyService.deactivateCompany] Request received for company id: ${id}`,
+      );
       if (!id) {
         throw new InternalServerErrorException(
           `Company with ID ${id} not found`,
         );
       }
+      console.log('[CompanyService.deactivateCompany] Resolving company identifier');
       const companyId = await this.find(id);
+      console.log(
+        `[CompanyService.deactivateCompany] Company resolved: ${companyId}`,
+      );
+      console.log('[CompanyService.deactivateCompany] Starting database transaction');
       const result = await this.db.transaction(async (tx) => {
+        console.log(
+          `[CompanyService.deactivateCompany] Deactivating company record ${companyId}`,
+        );
         const [companyRecord] = await tx
           .update(company)
           .set({ company_status: UserStatus.INACTIVE })
@@ -152,6 +188,9 @@ export class CompanyService {
             `Company with ID ${companyId} not found`,
           );
         }
+        console.log(
+          `[CompanyService.deactivateCompany] Updating user-company access for company ${companyId}`,
+        );
         const userCompanyRecord = await tx
           .update(user_and_company)
           .set({ access_status: AccessStatus.INACTIVE })
@@ -174,6 +213,9 @@ export class CompanyService {
             `User and company record with company ID ${companyId} not found`,
           );
         }
+        console.log(
+          `[CompanyService.deactivateCompany] Deactivating vendor records for company ${companyId}`,
+        );
         await tx
           .update(vendor)
           .set({ vendor_status: UserStatus.INACTIVE })
@@ -196,6 +238,9 @@ export class CompanyService {
           data: null,
         };
       });
+      console.log(
+        `[CompanyService.deactivateCompany] Company deactivation completed for ${companyId}`,
+      );
       return result;
     } catch (error) {
       if (error instanceof InternalServerErrorException) {
@@ -208,13 +253,24 @@ export class CompanyService {
   }
   async suspendCompany(id: string) {
     try {
+      console.log(
+        `[CompanyService.suspendCompany] Request received for company id: ${id}`,
+      );
       if (!id) {
         throw new InternalServerErrorException(
           `Company with ID ${id} not found`,
         );
       }
+      console.log('[CompanyService.suspendCompany] Resolving company identifier');
       const companyId = await this.find(id);
+      console.log(
+        `[CompanyService.suspendCompany] Company resolved: ${companyId}`,
+      );
+      console.log('[CompanyService.suspendCompany] Starting database transaction');
       const result = await this.db.transaction(async (tx) => {
+        console.log(
+          `[CompanyService.suspendCompany] Suspending company record ${companyId}`,
+        );
         const [companyRecord] = await tx
           .update(company)
           .set({ company_status: UserStatus.SUSPENDED })
@@ -234,6 +290,9 @@ export class CompanyService {
             `Company with ID ${companyId} not found`,
           );
         }
+        console.log(
+          `[CompanyService.suspendCompany] Updating user-company access for company ${companyId}`,
+        );
         const userCompanyRecord = await tx
           .update(user_and_company)
           .set({ access_status: AccessStatus.INACTIVE })
@@ -256,6 +315,9 @@ export class CompanyService {
             `User and company record with company ID ${companyId} not found`,
           );
         }
+        console.log(
+          `[CompanyService.suspendCompany] Suspending vendor records for company ${companyId}`,
+        );
         await tx
           .update(vendor)
           .set({ vendor_status: UserStatus.SUSPENDED })
@@ -278,6 +340,9 @@ export class CompanyService {
           data: null,
         };
       });
+      console.log(
+        `[CompanyService.suspendCompany] Company suspension completed for ${companyId}`,
+      );
       return result;
     } catch (error) {
       if (error instanceof InternalServerErrorException) {
@@ -291,6 +356,7 @@ export class CompanyService {
 
   async find(domain: string) {
     try {
+      console.log(`[CompanyService.find] Request received for domain: ${domain}`);
       // const whereClause = eq(
       //   company.id,
       //   'cbbed76f-7f72-4266-9912-afd63b903833',
@@ -318,6 +384,9 @@ export class CompanyService {
           `Company with domain ${domain} not found`,
         );
       }
+      console.log(
+        `[CompanyService.find] Company resolved for domain ${domain}: ${companyRecord.id}`,
+      );
       return companyRecord?.id ?? null;
     } catch (error) {
       if (error instanceof InternalServerErrorException) {

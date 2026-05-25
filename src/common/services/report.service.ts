@@ -23,6 +23,9 @@ export async function getVendorDashboardData({
   endDate,
   db,
 }: DashboardFilter) {
+  console.log(
+    `[report.getVendorDashboardData] Request received for companyId: ${companyId}, startDate: ${startDate.toISOString()}, endDate: ${endDate.toISOString()}`,
+  );
   // Base filter matching your snake_case column definitions
   const baseFilter = and(
     eq(orders.company_id, companyId),
@@ -38,6 +41,7 @@ export async function getVendorDashboardData({
     })
     .from(orders)
     .where(baseFilter);
+  console.log('[report.getVendorDashboardData] Sales stats loaded');
 
   // 1B. Tax Collected (From gst_invoices joined to orders)
   const [taxStats] = await db
@@ -47,6 +51,7 @@ export async function getVendorDashboardData({
     .from(gst_invoices)
     .innerJoin(orders, eq(gst_invoices.order_id, orders.id))
     .where(baseFilter);
+  console.log('[report.getVendorDashboardData] Tax stats loaded');
 
   // 1C. Refunds (From refunds table joined to orders)
   const [refundStats] = await db
@@ -56,6 +61,7 @@ export async function getVendorDashboardData({
     .from(refunds)
     .innerJoin(orders, eq(refunds.order_id, orders.id))
     .where(baseFilter);
+  console.log('[report.getVendorDashboardData] Refund stats loaded');
 
   // Compute Net Earnings
   const platformFees = 0; // Update this if you add platform_fee to your schema
@@ -89,6 +95,7 @@ export async function getVendorDashboardData({
       sql`TO_CHAR(${orders.created_at}, 'YYYY-MM')`,
     )
     .orderBy(sql`TO_CHAR(${orders.created_at}, 'YYYY-MM')`);
+  console.log('[report.getVendorDashboardData] Monthly trend loaded');
 
   // 3. Top Selling Products (SKUs)
   const topProducts = await db
@@ -106,6 +113,7 @@ export async function getVendorDashboardData({
     .groupBy(product_variants.sku)
     .orderBy(desc(sql`SUM(${order_items.price} * ${order_items.quantity})`))
     .limit(5);
+  console.log('[report.getVendorDashboardData] Top products loaded');
 
   // 4. Category-Wise Performance
   const categoryPerformance = await db
@@ -123,6 +131,8 @@ export async function getVendorDashboardData({
     .innerJoin(categories, eq(products.category_id, categories.id))
     .where(baseFilter)
     .groupBy(categories.name);
+
+  console.log('[report.getVendorDashboardData] Category performance loaded');
 
   return {
     summary,

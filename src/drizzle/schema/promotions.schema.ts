@@ -89,11 +89,6 @@ export const promotions = pg.pgTable(
       .notNull()
       .references(() => company.id, { onDelete: 'cascade' }),
 
-    // null = admin-created (sitewide); set = vendor-scoped (vendor's products only)
-    vendor_id: pg
-      .uuid('vendor_id')
-      .references(() => vendor.id, { onDelete: 'cascade' }),
-
     // User who created this promotion (admin or vendor user)
     created_by: pg
       .uuid('created_by')
@@ -197,13 +192,10 @@ export const promotions = pg.pgTable(
       .index('idx_promotions_company_status')
       .on(table.company_id, table.status),
     // Partial index for hot path — only ACTIVE rows
-    pg
-      .index('idx_promotions_active')
-      .on(table.company_id, table.valid_from, table.valid_to)
-      .where(sql`status = 'ACTIVE'`),
-    // Vendor-scoped lookup
-    pg.index('idx_promotions_vendor_id').on(table.vendor_id),
-    // Coupon ID lookup (case-insensitive search done in app layer via UPPER())
+    // pg
+    //   .index('idx_promotions_active')
+    //   .on(table.company_id, table.valid_from, table.valid_to)
+    //   .where(sql`status = '${PromotionStatus.ACTIVE}'`),
     pg
       .index('idx_promotions_coupon_id')
       .on(table.company_id, table.coupon_id)
@@ -732,10 +724,6 @@ export const promotionsRelations = relations(promotions, ({ one, many }) => ({
   company: one(company, {
     fields: [promotions.company_id],
     references: [company.id],
-  }),
-  vendor: one(vendor, {
-    fields: [promotions.vendor_id],
-    references: [vendor.id],
   }),
   createdByUser: one(user, {
     fields: [promotions.created_by],

@@ -140,7 +140,7 @@ export class CreateCouponDto {
   @Type(() => PromotionRuleDto)
   rules?: PromotionRuleDto[];
 }
-
+        
 // ─── UPDATE COUPON DTO ───────────────────────────────────────────
 
 export class UpdateCouponDto {

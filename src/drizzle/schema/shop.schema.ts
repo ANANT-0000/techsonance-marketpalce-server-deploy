@@ -7,7 +7,7 @@ import {
   PaymentStatus,
   productImageType,
   ProductStatus,
-  refundStatusEnum,
+  RefundStatusEnum,
   ReturnStatus,
   ReturnType,
   ShippingStatus,
@@ -394,7 +394,7 @@ export const shipping_details = pg.pgTable('shipping_details', {
 
 export const refund_status_enum = pg.pgEnum(
   'refund_status_enum',
-  refundStatusEnum,
+  RefundStatusEnum,
 );
 export const refunds = pg.pgTable(
   'refunds',

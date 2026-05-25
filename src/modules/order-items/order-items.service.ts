@@ -11,7 +11,7 @@ import {
   OrderStatus,
   PaymentStatus,
   productImageType,
-  refundStatusEnum,
+  RefundStatusEnum,
 } from '../../drizzle/types/types';
 import { CompanyService } from '../company/company.service';
 import { InventoryService } from '../inventory/inventory.service';
@@ -563,7 +563,7 @@ export class OrderItemsService {
             .values({
               refund_amount: String(refundAmount),
               refund_reason: cancelReason,
-              refund_status: refundStatusEnum.PENDING,
+              refund_status: RefundStatusEnum.PENDING,
               order_id: existingOrderItem.order_id,
               order_items_id: existingOrderItem.id,
               payment_id: paymentRecord.id,
@@ -677,7 +677,7 @@ export class OrderItemsService {
           orderItemId,
           cancelledQuantity: existingOrderItem.quantity,
           refundAmount: String(refundAmount),
-          refundStatus: refundStatusEnum.PENDING,
+          refundStatus: RefundStatusEnum.PENDING,
           newOrderTotal: String(newOrderTotal),
           orderFullyCancelled: allItemsNowCancelled,
         };
