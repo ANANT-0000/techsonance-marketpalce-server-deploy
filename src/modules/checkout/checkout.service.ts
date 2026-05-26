@@ -21,7 +21,7 @@ import { domainExtractor } from '../../common/filters/domainExtractor.filter';
 import {
   promotion_usage,
   promotions,
-} from 'src/drizzle/schema/promotions.schema';
+} from '../../drizzle/schema/promotions.schema';
 
 @Injectable()
 export class CheckoutService {

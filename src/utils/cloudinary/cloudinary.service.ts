@@ -63,4 +63,20 @@ export class CloudinaryService {
     );
     return results;
   }
+  async deleteFile(publicId: string): Promise<void> {
+    console.log(
+      `[CloudinaryService.deleteFile] Deletion request received for public ID: ${publicId}`,
+    );
+    return new Promise((resolve, reject) => {
+      cloudinary.uploader
+        .destroy(publicId, { resource_type: 'auto' })
+        .catch((err) => {
+          console.error(
+            '[CloudinaryService.deleteFile] Deletion encountered an error:',
+            err,
+          );
+          reject(err as Error);
+        });
+    });
+  }
 }

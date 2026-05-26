@@ -1,7 +1,6 @@
 import * as pg from 'drizzle-orm/pg-core';
 import { relations, sql } from 'drizzle-orm';
 import { company } from './main.schema';
-import { user, vendor } from './users.schema';
 import { orders, order_items, coupons } from './shop.schema';
 import {
   BannerPlacement,
@@ -13,6 +12,7 @@ import {
   PromotionType,
   SegmentCriteriaOperator,
 } from '../types/types';
+import { user } from './users.schema';
 
 // ================================================================
 // PROMOTIONS & MARKETING SCHEMA

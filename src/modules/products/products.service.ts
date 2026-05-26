@@ -23,6 +23,7 @@ import {
   eq,
   gte,
   ilike,
+  inArray,
   lte,
   or,
   sql,
@@ -36,6 +37,7 @@ import { InventoryService } from '../inventory/inventory.service';
 import { product_tax, warehouse } from '../../drizzle/schema';
 import { domainExtractor } from '../../common/filters/domainExtractor.filter';
 import { GetProductsQueryDto, SortBy } from './dto/get-products-query.dto';
+import { extractCloudinaryPublicId } from '../../common/filters/extractCloudinaryPublicId.filter';
 
 @Injectable()
 export class ProductsService {
@@ -549,7 +551,6 @@ export class ProductsService {
             attributes: productDto.attributes,
             status: productDto.status,
 
-        
             product_id: createdProduct.id,
           })
           .returning({
@@ -780,6 +781,47 @@ export class ProductsService {
               });
             console.log('createdImages', createdImages);
             console.log('imagesToDelete', imagesToDelete);
+            const imagesToDeleteIds = imagesToDelete?.map((id) => id);
+            if (imagesToDeleteIds && imagesToDeleteIds.length > 0) {
+              const urls = await tx
+                .select({ image_url: product_images.image_url })
+                .from(product_images)
+                .where(inArray(product_images.id, imagesToDeleteIds))
+                .then((res) => {
+                  console.log('urls to delete', res);
+                  return res.map((item) => item.image_url);
+                })
+                .catch((error) => {
+                  console.error(
+                    'Error fetching image URLs for deletion:',
+                    error,
+                  );
+                  throw new InternalServerErrorException(
+                    'Failed to fetch image URLs for deletion',
+                    {
+                      cause: error,
+                    },
+                  );
+                });
+              if (urls && urls.length > 0) {
+                for (const url of urls) {
+                  console.log('deleting image from cloudinary', url);
+                  const publicId = extractCloudinaryPublicId(url);
+                  console.log('extracted publicId', publicId);
+                  await this.uploadToCloudService
+                    .deleteFile(publicId!)
+                    .then(() => {
+                      console.log(`Deleted image from cloud storage: ${url}`);
+                    })
+                    .catch((error) => {
+                      console.error(
+                        'Error deleting image from cloud storage:',
+                        error,
+                      );
+                    });
+                }
+              }
+            }
             if (imagesToDelete) {
               console.log('starting deleting images');
               const deletePromises = imagesToDelete.map(

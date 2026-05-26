@@ -45,6 +45,9 @@ import { TemplateModule } from './modules/template/template.module';
 import { DrizzleHealthIndicator } from './drizzle/drizzle.health';
 import { HealthCheckService, TerminusModule } from '@nestjs/terminus';
 import { HealthCheckExecutor } from '@nestjs/terminus/dist/health-check/health-check-executor.service';
+import { PromotionsModule } from './modules/promotions/promotions.module';
+import { BannersModule } from './modules/banners/banners.module';
+import { AudiencesModule } from './modules/audiences/audiences.module';
 @Module({
   imports: [
     DrizzleModule,
@@ -85,6 +88,9 @@ import { HealthCheckExecutor } from '@nestjs/terminus/dist/health-check/health-c
     CompanyIdentityModule,
     TemplateModule,
 TerminusModule,
+PromotionsModule,
+BannersModule,
+AudiencesModule,
     // ThrottlerModule.forRoot([
     //   {
     //     name: "short",

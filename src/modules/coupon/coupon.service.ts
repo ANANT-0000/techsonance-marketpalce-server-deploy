@@ -29,7 +29,7 @@ import {
   PromotionStatus,
   PromotionTargetType,
   PromotionType,
-} from 'src/drizzle/types/types';
+} from '../../drizzle/types/types';
 
 @Injectable()
 export class CouponService {

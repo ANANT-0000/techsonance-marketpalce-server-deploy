@@ -28,7 +28,6 @@ import { getStateByCode } from '../../common/state_code';
 
 // ─── helpers ────────────────────────────────────────────────────
 
- 
 async function getGstComplianceMap(
   db: DrizzleService,
   companyId: string,
@@ -46,7 +45,6 @@ async function getGstComplianceMap(
   return new Map(rows.map((r) => [r.field_key, r.field_value]));
 }
 
- 
 function groupComplianceAsGstRegistrations(
   rows: (typeof company_compliance.$inferSelect)[],
 ): GstRegistrationView[] {
@@ -247,7 +245,6 @@ export class FinancesService {
     }
   }
 
- 
   async getGstRegistrations(domain: string) {
     const companyId = await this.resolveCompanyId(domain);
 
@@ -760,7 +757,7 @@ export class FinancesService {
     // 2. Vendor GST state — read from company_compliance
     //    Find the compliance row where gst_is_default = 'true',
     //    then get the matching gst_state_code row by valid_until.
-    const defaultFlagRow = await tx
+    const [defaultFlagRow] = await tx
       .select()
       .from(company_compliance)
       .where(
@@ -773,7 +770,12 @@ export class FinancesService {
         ),
       )
       .limit(1)
-      .then((rows) => rows[0] ?? null);
+      .catch((error) => {
+        throw new HttpException(
+          'Error fetching default GST registration: ' + error.message,
+          HttpStatus.INTERNAL_SERVER_ERROR,
+        );
+      });
 
     if (!defaultFlagRow) {
       throw new HttpException(
@@ -783,7 +785,7 @@ export class FinancesService {
     }
 
     // Fetch the state_code row that shares the same valid_until
-    const stateCodeRow = await tx
+    const [stateCodeRow] = await tx
       .select()
       .from(company_compliance)
       .where(
@@ -795,11 +797,15 @@ export class FinancesService {
           eq(company_compliance.is_active, true),
         ),
       )
-      .limit(1)
-      .then((rows) => rows[0] ?? null);
+      .catch((error) => {
+        throw new HttpException(
+          'Error fetching vendor GST state code: ' + error.message,
+          HttpStatus.INTERNAL_SERVER_ERROR,
+        );
+      });
 
     // Also fetch the gst_number for returning vendorGstId
-    const gstNumberRow = await tx
+    const [gstNumberRow] = await tx
       .select()
       .from(company_compliance)
       .where(
@@ -811,8 +817,12 @@ export class FinancesService {
           eq(company_compliance.is_active, true),
         ),
       )
-      .limit(1)
-      .then((rows) => rows[0] ?? null);
+      .catch((error) => {
+        throw new HttpException(
+          'Error fetching vendor GST number: ' + error.message,
+          HttpStatus.INTERNAL_SERVER_ERROR,
+        );
+      });
 
     if (!stateCodeRow?.field_value) {
       throw new HttpException(
@@ -859,7 +869,13 @@ export class FinancesService {
         .from(product_tax)
         .leftJoin(tax_rates, eq(product_tax.tax_rate_id, tax_rates.id))
         .where(eq(product_tax.product_id, variantRecord.product_id))
-        .limit(1);
+        .limit(1)
+        .catch((error) => {
+          throw new HttpException(
+            'Error fetching tax mapping for product: ' + error.message,
+            HttpStatus.INTERNAL_SERVER_ERROR,
+          );
+        });
 
       const mapping = productTaxMapping[0];
       const taxPercentage = mapping ? Number(mapping.rate) : 0;

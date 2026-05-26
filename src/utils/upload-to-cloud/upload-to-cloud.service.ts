@@ -190,4 +190,60 @@ export class UploadToCloudService {
       streamifier.createReadStream(buffer).pipe(uploadStream);
     });
   }
+  async uploadBanner(
+    buffer: Buffer,
+    fileName: string,
+  ): Promise<string> {
+    console.log(
+      `[UploadToCloudService.uploadBanner] Uploading banner file: ${fileName}`,
+    );
+    if (!buffer || !Buffer.isBuffer(buffer)) {
+      throw new Error(
+        'Invalid file buffer: The file was not provided or is not a buffer.',
+      );
+    }
+    return new Promise((resolve, reject) => {
+      const uploadStream = cloudinary.uploader.upload_stream(
+        {
+          folder: 'techsonance_banners',
+          resource_type: 'auto',
+          public_id: `banner_${fileName}`,
+        },
+        (error, result) => {
+          if (result) {
+            console.log(
+              '[UploadToCloudService.uploadBanner] Banner uploaded successfully',
+            );
+            resolve(result.secure_url);
+          } else {
+            console.error(
+              '[UploadToCloudService.uploadBanner] Banner upload failed:',
+              error,
+            );
+            reject(error);
+          }
+        },
+      );
+      streamifier.createReadStream(buffer).pipe(uploadStream);
+    });
+  }
+  async deleteFile(publicId: string): Promise<void> {
+    console.log(
+      `[UploadToCloudService.deleteFile] Deletion request received for public ID: ${publicId}`,
+    );
+    return this.cloudinaryService
+      .deleteFile(publicId)
+      .then(() => {
+        console.log(
+          '[UploadToCloudService.deleteFile] File deleted successfully',
+        );
+      })
+      .catch((err) => {
+        console.error(
+          '[UploadToCloudService.deleteFile] File deletion failed:',
+          err,
+        );
+        throw new Error(err);
+      });
+  }
 }
