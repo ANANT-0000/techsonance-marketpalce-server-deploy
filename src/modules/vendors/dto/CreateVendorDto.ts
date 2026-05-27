@@ -9,6 +9,18 @@ import {
   Length,
   ValidateNested,
 } from 'class-validator';
+
+export class CompanyComplianceDetailsDto {
+  @IsOptional()
+  @Length(2, 100)
+  @Transform(({ value }: { value: string }) => value.trim())
+  sub_field_key!: string;
+  @IsString()
+  @IsOptional()
+  @Length(2, 500)
+  @Transform(({ value }: { value: string }) => value.trim())
+  sub_field_value?: string;
+}
 export class CompanyComplianceItemDto {
   @IsString()
   @IsNotEmpty()
@@ -23,6 +35,12 @@ export class CompanyComplianceItemDto {
     typeof value === 'string' ? value.trim() : value,
   )
   field_value!: string;
+
+  @IsOptional()
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => CompanyComplianceDetailsDto)
+  field_details?: CompanyComplianceDetailsDto[];
 
   @IsBoolean()
   @IsOptional()

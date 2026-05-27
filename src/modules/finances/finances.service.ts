@@ -24,7 +24,7 @@ import {
 } from '../../drizzle/schema';
 import { CompanyService } from '../company/company.service';
 import { domainExtractor } from '../../common/filters/domainExtractor.filter';
-import { getStateByCode } from '../../common/state_code';
+import { COUNTRIES_COMPLIANCE, getStateByCode } from '../../common/constants';
 
 // ─── helpers ────────────────────────────────────────────────────
 
@@ -754,86 +754,83 @@ export class FinancesService {
     }
     const customerState = customerAddr.state.trim().toLowerCase();
 
-    // 2. Vendor GST state — read from company_compliance
-    //    Find the compliance row where gst_is_default = 'true',
-    //    then get the matching gst_state_code row by valid_until.
-    const [defaultFlagRow] = await tx
+    // Fetch the state_code row that shares the same valid_until
+
+    // Also fetch the gst_number for returning vendorGstId
+    const [countryCompliance] = await tx
       .select()
       .from(company_compliance)
-      .where(
-        and(
-          eq(company_compliance.company_id, companyId),
-          eq(company_compliance.country_code, 'IN'),
-          eq(company_compliance.field_key, 'gst_is_default'),
-          eq(company_compliance.field_value, 'true'),
-          eq(company_compliance.is_active, true),
-        ),
-      )
-      .limit(1)
+      .where(eq(company_compliance.company_id, companyId))
       .catch((error) => {
+        console.error('Error fetching company compliance:', error);
         throw new HttpException(
-          'Error fetching default GST registration: ' + error.message,
+          'Error fetching company compliance: ' + error,
           HttpStatus.INTERNAL_SERVER_ERROR,
         );
       });
 
-    if (!defaultFlagRow) {
+    const fields = COUNTRIES_COMPLIANCE.find(
+      (c) => c.country_code === countryCompliance.country_code,
+    )?.fields;
+    if (!fields) {
       throw new HttpException(
-        'Vendor GST configuration is missing. Please add a default GST registration.',
+        'Country compliance config not found.',
         HttpStatus.BAD_REQUEST,
       );
     }
+    console.log('Compliance fields:', fields);
+    /**
+     * Find tax field (GSTIN for India)
+     */
+    const gstField = fields.find(
+      (f) => f.is_primary_tax_id || f.value === 'gstin',
+    );
 
-    // Fetch the state_code row that shares the same valid_until
-    const [stateCodeRow] = await tx
-      .select()
-      .from(company_compliance)
-      .where(
-        and(
-          eq(company_compliance.company_id, companyId),
-          eq(company_compliance.country_code, 'IN'),
-          eq(company_compliance.field_key, 'gst_state_code'),
-          eq(company_compliance.valid_until, defaultFlagRow.valid_until!),
-          eq(company_compliance.is_active, true),
-        ),
-      )
-      .catch((error) => {
-        throw new HttpException(
-          'Error fetching vendor GST state code: ' + error.message,
-          HttpStatus.INTERNAL_SERVER_ERROR,
-        );
-      });
-
-    // Also fetch the gst_number for returning vendorGstId
+    if (!gstField?.value) {
+      throw new HttpException(
+        'GST field config missing.',
+        HttpStatus.BAD_REQUEST,
+      );
+    }
+    console.log('Found GST field:', gstField);
     const [gstNumberRow] = await tx
       .select()
       .from(company_compliance)
       .where(
         and(
           eq(company_compliance.company_id, companyId),
-          eq(company_compliance.country_code, 'IN'),
-          eq(company_compliance.field_key, 'gst_number'),
-          eq(company_compliance.valid_until, defaultFlagRow.valid_until!),
+          eq(company_compliance.field_key, gstField.value),
           eq(company_compliance.is_active, true),
         ),
       )
       .catch((error) => {
+        console.error('Error fetching vendor GST number:', error);
         throw new HttpException(
-          'Error fetching vendor GST number: ' + error.message,
+          'Error fetching vendor GST number: ' + error,
           HttpStatus.INTERNAL_SERVER_ERROR,
         );
       });
 
-    if (!stateCodeRow?.field_value) {
+    if (!gstNumberRow?.field_value) {
+      throw new HttpException(
+        'Vendor GST number is missing.',
+        HttpStatus.BAD_REQUEST,
+      );
+    }
+
+    /**
+     * State code = first 2 digits of GSTIN
+     * Example: 24ABCDE1234F1Z5 => 24
+     */
+    const stateCode = gstNumberRow.field_value.slice(0, 2);
+
+    if (!stateCode) {
       throw new HttpException(
         'Vendor GST state code is missing.',
         HttpStatus.BAD_REQUEST,
       );
     }
-
-    const vendorState = getStateByCode(stateCodeRow.field_value)
-      ?.state.trim()
-      .toLowerCase();
+    const vendorState = getStateByCode(stateCode)?.state.trim().toLowerCase();
     const isIntraState = customerState === vendorState;
 
     // 3. Calculate taxes (logic unchanged from original)

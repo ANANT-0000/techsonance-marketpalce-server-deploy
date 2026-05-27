@@ -59,10 +59,6 @@ export class AdminService {
           HttpStatus.UNAUTHORIZED,
         );
       }
-      console.log(
-        'Admin password from config:',
-        this.configService.get('ADMIN_PASSWORD'),
-      );
 
       console.log('existing user', existingUser);
 

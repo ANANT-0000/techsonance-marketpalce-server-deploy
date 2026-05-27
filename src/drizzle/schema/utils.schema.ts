@@ -3,9 +3,6 @@ import { company } from './main.schema';
 import { address, user, vendor } from './users.schema';
 import { product_variants } from './shop.schema';
 import { SupportTicketPriority, SupportTicketStatus } from '../types/types';
-import { company_compliance } from './company_identity.schema';
-import { relations } from 'drizzle-orm';
-
 export const support_tickets_status_enum = pg.pgEnum(
   'support_tickets_status_enum',
   SupportTicketStatus,

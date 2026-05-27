@@ -324,6 +324,7 @@ export class VendorsService {
               country_code: vendorData.country_code,
               field_key: compliance.field_key,
               field_value: compliance.field_value,
+              field_details: compliance.field_details,
               is_active: compliance.is_active ?? true,
               valid_until: compliance.valid_until ?? null,
               document_id: matchedDocId, // null if no matching doc
