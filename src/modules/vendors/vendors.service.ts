@@ -14,7 +14,6 @@ import {
   company,
   company as companyTable,
   gst_invoices,
- 
   order_items,
   orders,
   product_variants,
@@ -26,18 +25,9 @@ import {
   user_roles as user_rolesTable,
   vendor,
   vendor as vendorTable,
-  vendor_document as vendor_documentTable,
+  company_document as vendor_documentTable,
 } from '../../drizzle/schema';
-import {
-  and,
-  asc,
-  countDistinct,
-  desc,
-  eq,
-  gte,
-  lte,
-  sql,
-} from 'drizzle-orm';
+import { and, asc, countDistinct, desc, eq, gte, lte, sql } from 'drizzle-orm';
 import {
   AccessStatus,
   ProductStatus,

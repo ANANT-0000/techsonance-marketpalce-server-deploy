@@ -59,6 +59,11 @@ export class AdminService {
           HttpStatus.UNAUTHORIZED,
         );
       }
+      console.log(
+        'Admin password from config:',
+        this.configService.get('ADMIN_PASSWORD'),
+      );
+
       console.log('existing user', existingUser);
 
       //--------------------------------------
@@ -80,11 +85,14 @@ export class AdminService {
       // }
 
       //--------------------------------------
+      console.log('checking password');
       const isPasswordValid: boolean =
         password === this.configService.get('ADMIN_PASSWORD');
       if (!isPasswordValid) {
+        console.log('Invalid password');
         throw new HttpException('Invalid password', HttpStatus.UNAUTHORIZED);
       }
+      console.log('password is valid');
       const payload: {
         sub: string;
         email: string;

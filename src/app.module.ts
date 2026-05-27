@@ -48,6 +48,7 @@ import { HealthCheckExecutor } from '@nestjs/terminus/dist/health-check/health-c
 import { PromotionsModule } from './modules/promotions/promotions.module';
 import { BannersModule } from './modules/banners/banners.module';
 import { AudiencesModule } from './modules/audiences/audiences.module';
+import { ComplianceModule } from './modules/compliance/compliance.module';
 @Module({
   imports: [
     DrizzleModule,
@@ -91,6 +92,7 @@ TerminusModule,
 PromotionsModule,
 BannersModule,
 AudiencesModule,
+ComplianceModule,
     // ThrottlerModule.forRoot([
     //   {
     //     name: "short",

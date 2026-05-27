@@ -3,6 +3,8 @@ import { company } from './main.schema';
 import { address, user, vendor } from './users.schema';
 import { product_variants } from './shop.schema';
 import { SupportTicketPriority, SupportTicketStatus } from '../types/types';
+import { company_compliance } from './company_identity.schema';
+import { relations } from 'drizzle-orm';
 
 export const support_tickets_status_enum = pg.pgEnum(
   'support_tickets_status_enum',
@@ -13,7 +15,7 @@ export const support_tickets_priority_enum = pg.pgEnum(
   SupportTicketPriority,
 );
 
-export const vendor_document = pg.pgTable('vendor_document', {
+export const company_document = pg.pgTable('company_document', {
   id: pg.uuid('id').primaryKey().defaultRandom(),
   document_type: pg.text('document_type').notNull(),
   document_url: pg.text('document_url').notNull(),
@@ -26,8 +28,10 @@ export const vendor_document = pg.pgTable('vendor_document', {
     .$onUpdate(() => new Date()),
   vendor_id: pg
     .uuid('vendor_id')
-    .references(() => vendor.id, { onDelete: 'cascade' })
-    .notNull(),
+    .references(() => vendor.id, { onDelete: 'cascade' }),
+  company_id: pg
+    .uuid('company_id')
+    .references(() => company.id, { onDelete: 'cascade' }),
 });
 
 export const warehouse = pg.pgTable('warehouse', {
@@ -135,7 +139,7 @@ export const audit_logs = pg.pgTable(
       .timestamp('created_at')
       .$default(() => new Date())
       .notNull(),
- 
+
     user_id: pg
       .uuid('user_id')
       .references(() => user.id, { onDelete: 'cascade' }),
@@ -170,3 +174,4 @@ export const templates = pg.pgTable('templates', {
     .uuid('vendor_id')
     .references(() => vendor.id, { onDelete: 'cascade' }),
 });
+// ================================================================

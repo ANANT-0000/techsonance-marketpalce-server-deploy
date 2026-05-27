@@ -9,6 +9,8 @@ import {
   Query,
   UploadedFiles,
   Param,
+  HttpCode,
+  HttpStatus,
 } from '@nestjs/common';
 import { UploadToCloud } from '../../common/decorators/upload.decorator';
 import { ProductsService } from './products.service';
@@ -86,6 +88,7 @@ export class ProductsController {
   }
 
   @Get('main-details/:id')
+  @HttpCode(HttpStatus.OK)
   async getProductMainDetails(
     @Param('id') id: string,
     @Headers('company-domain') domain: string,
@@ -131,6 +134,7 @@ export class ProductsController {
   }
 
   @Get(':id')
+  @HttpCode(HttpStatus.OK)
   async getProductById(
     @Param('id') id: string,
     @Headers('company-domain') domain: string,

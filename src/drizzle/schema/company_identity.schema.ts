@@ -1,7 +1,7 @@
 import * as pg from 'drizzle-orm/pg-core';
 import { company } from './main.schema';
-import { address } from './users.schema';
-import { templates, vendor_document } from './utils.schema';
+import { address, user } from './users.schema';
+import { company_document, templates } from './utils.schema';
 
 // ================================================================
 // COMPANY IDENTITY SCHEMA
@@ -127,13 +127,15 @@ export const company_compliance = pg.pgTable(
 
     document_id: pg
       .uuid('document_id')
-      .references(() => vendor_document.id, { onDelete: 'set null' }),
+      .references(() => company_document.id, { onDelete: 'set null' }),
 
     // Whether this registration is currently valid / active
     is_active: pg.boolean('is_active').notNull().default(true),
 
     // For registrations that expire (GST, VAT, etc.)
     valid_until: pg.date('valid_until'),
+    display_name: pg.text('display_name'),
+    rejection_reason: pg.text('rejection_reason'),
 
     created_at: pg.timestamp('created_at').notNull().defaultNow(),
     updated_at: pg
@@ -141,6 +143,7 @@ export const company_compliance = pg.pgTable(
       .notNull()
       .defaultNow()
       .$onUpdate(() => new Date()),
+    verified_by: pg.uuid('user_id').references(() => user.id),
   },
   (table) => [
     // One value per field_key per country per company — no duplicates

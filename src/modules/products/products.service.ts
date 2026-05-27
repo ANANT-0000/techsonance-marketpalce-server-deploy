@@ -322,9 +322,14 @@ export class ProductsService {
             cause: error,
           });
         });
+
       if (!productRecord) {
         throw new HttpException('Product not found', HttpStatus.NOT_FOUND);
       }
+      console.log(
+        `[ProductsService.getProductById] Product record:`,
+        productRecord?.id,
+      );
       return productRecord;
     } catch (error) {
       throw new InternalServerErrorException('Failed to fetch product', {

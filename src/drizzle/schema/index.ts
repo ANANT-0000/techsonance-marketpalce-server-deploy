@@ -15,7 +15,6 @@ import {
   coupon_usage,
   coupons,
   invoices,
- 
   order_item_cancelled,
   order_items,
   orders,
@@ -44,7 +43,7 @@ import {
   audit_logs,
   inventory,
   templates,
-  vendor_document,
+  company_document,
   warehouse,
 } from './utils.schema';
 import {
@@ -109,7 +108,6 @@ export const companyRelations = relations(company, ({ one, many }) => ({
     fields: [company.id],
     references: [company_document_config.company_id],
   }),
- 
 }));
 
 // --- User Relations ---
@@ -185,12 +183,12 @@ export const vendorRelations = relations(vendor, ({ one, many }) => ({
     fields: [vendor.user_id],
     references: [user.id],
   }),
-  documents: many(vendor_document),
+  documents: many(company_document),
 }));
-export const documentRelations = relations(vendor_document, ({ one }) => ({
-  vendor: one(vendor, {
-    fields: [vendor_document.vendor_id],
-    references: [vendor.id],
+export const documentRelations = relations(company_document, ({ one }) => ({
+  company: one(company, {
+    fields: [company_document.company_id],
+    references: [company.id],
   }),
 }));
 export const productsRelations = relations(products, ({ one, many }) => ({
@@ -240,7 +238,7 @@ export const productVariantsRelations = relations(
     orderItem: many(order_items),
     images: many(product_images),
     reviews: many(product_reviews),
-  
+
     inventory: one(inventory, {
       fields: [product_variants.id],
       references: [inventory.product_variant_id],
@@ -416,7 +414,6 @@ export const couponsRelations = relations(coupons, ({ one, many }) => ({
   }),
   usage: many(coupon_usage),
   products: many(coupon_products),
- 
 }));
 export const couponUsageRelations = relations(coupon_usage, ({ one }) => ({
   coupon: one(coupons, {
@@ -449,7 +446,7 @@ export const couponProductsRelations = relations(
     }),
   }),
 );
- 
+
 // --- Inventory & Warehouse Relations ---
 export const inventoryRelations = relations(inventory, ({ one }) => ({
   variant: one(product_variants, {
@@ -567,9 +564,9 @@ export const companyComplianceRelations = relations(
       fields: [company_compliance.company_id],
       references: [company.id],
     }),
-    document: one(vendor_document, {
+    document: one(company_document, {
       fields: [company_compliance.document_id],
-      references: [vendor_document.id],
+      references: [company_document.id],
     }),
   }),
 );

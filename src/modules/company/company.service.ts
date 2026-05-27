@@ -1,21 +1,81 @@
+ 
 import {
   Inject,
   Injectable,
   InternalServerErrorException,
 } from '@nestjs/common';
 import { eq, or } from 'drizzle-orm';
-// import { CreateCompanyDto } from './dto/create-company.dto';
-// import { UpdateCompanyDto } from './dto/update-company.dto';
+
 import { DRIZZLE, type DrizzleService } from '../../drizzle/drizzle.module';
 import { company, user, user_and_company, vendor } from '../../drizzle/schema';
 import { AccessStatus, UserStatus } from '../../drizzle/types/types';
 import { ConfigService } from '@nestjs/config';
+import { domainExtractor } from 'src/common/filters/domainExtractor.filter';
 @Injectable()
 export class CompanyService {
   constructor(
     @Inject(DRIZZLE) private readonly db: DrizzleService,
     private configService: ConfigService,
   ) {}
+  private async resolveCompanyId(domain: string): Promise<string> {
+    const filteredDomain = domainExtractor(domain);
+    console.log(
+      `[CompanyService.resolveCompanyId] Resolving company for domain: ${domain}`,
+    );
+    console.log(
+      `[CompanyService.resolveCompanyId] Extracted filter domain: ${filteredDomain}`,
+    );
+    console.log(
+      `[CompanyService.resolveCompanyId] Querying CompanyService.find(...)`,
+    );
+    const companyId = await this.find(filteredDomain);
+    console.log(
+      `[CompanyService.resolveCompanyId] Company resolved: ${companyId}`,
+    );
+    return companyId;
+  }
+
+  async findProfile(domain: string) {
+    console.log(
+      `[CompanyService.findProfile] starting profile retrieval for domain: ${domain}`,
+    );
+    const filteredDomain = domainExtractor(domain);
+    const companyId = await this.find(filteredDomain);
+    console.log(
+      `[CompanyService.findProfile] Resolved company ID: ${companyId}`,
+    );
+    const companyProfile = await this.db.query.company
+      .findFirst({
+        where: eq(company.id, companyId),
+        with: {
+          vendor: true,
+          companyBranding: true,
+        },
+      })
+      .catch((error) => {
+        console.error(
+          `Error finding company profile for domain ${domain}:`,
+          error,
+        );
+        throw new InternalServerErrorException(
+          `Failed to find company profile for domain ${domain}`,
+          {
+            cause: error,
+          },
+        );
+      });
+    if (!companyProfile) {
+      console.error(`Company profile with domain ${domain} not found`);
+      throw new InternalServerErrorException(
+        `Company profile with domain ${domain} not found`,
+      );
+    }
+    console.log(
+      `[CompanyService.findProfile] Retrieved company profile : ${JSON.stringify(companyProfile)}`,
+    );
+    return companyProfile;
+  }
+
   async listCompanies() {
     try {
       console.log('[CompanyService.listCompanies] Request received');
@@ -56,12 +116,16 @@ export class CompanyService {
           `Company with ID ${id} not found`,
         );
       }
-      console.log('[CompanyService.activateCompany] Resolving company identifier');
+      console.log(
+        '[CompanyService.activateCompany] Resolving company identifier',
+      );
       const companyId = await this.find(id);
       console.log(
         `[CompanyService.activateCompany] Company resolved: ${companyId}`,
       );
-      console.log('[CompanyService.activateCompany] Starting database transaction');
+      console.log(
+        '[CompanyService.activateCompany] Starting database transaction',
+      );
       const result = await this.db.transaction(async (tx) => {
         console.log(
           `[CompanyService.activateCompany] Activating company record ${companyId}`,
@@ -159,12 +223,16 @@ export class CompanyService {
           `Company with ID ${id} not found`,
         );
       }
-      console.log('[CompanyService.deactivateCompany] Resolving company identifier');
+      console.log(
+        '[CompanyService.deactivateCompany] Resolving company identifier',
+      );
       const companyId = await this.find(id);
       console.log(
         `[CompanyService.deactivateCompany] Company resolved: ${companyId}`,
       );
-      console.log('[CompanyService.deactivateCompany] Starting database transaction');
+      console.log(
+        '[CompanyService.deactivateCompany] Starting database transaction',
+      );
       const result = await this.db.transaction(async (tx) => {
         console.log(
           `[CompanyService.deactivateCompany] Deactivating company record ${companyId}`,
@@ -261,12 +329,16 @@ export class CompanyService {
           `Company with ID ${id} not found`,
         );
       }
-      console.log('[CompanyService.suspendCompany] Resolving company identifier');
+      console.log(
+        '[CompanyService.suspendCompany] Resolving company identifier',
+      );
       const companyId = await this.find(id);
       console.log(
         `[CompanyService.suspendCompany] Company resolved: ${companyId}`,
       );
-      console.log('[CompanyService.suspendCompany] Starting database transaction');
+      console.log(
+        '[CompanyService.suspendCompany] Starting database transaction',
+      );
       const result = await this.db.transaction(async (tx) => {
         console.log(
           `[CompanyService.suspendCompany] Suspending company record ${companyId}`,
@@ -354,13 +426,12 @@ export class CompanyService {
     }
   }
 
+  //  Important note: The find method is designed to be flexible in resolving a company based on either its domain or its ID, depending on the environment. In production, it looks up companies by their domain, while in development, it allows for direct ID lookup to facilitate testing and debugging. This dual functionality is crucial for ensuring that the service can operate effectively across different stages of deployment while maintaining security and ease of use.
   async find(domain: string) {
     try {
-      console.log(`[CompanyService.find] Request received for domain: ${domain}`);
-      // const whereClause = eq(
-      //   company.id,
-      //   'cbbed76f-7f72-4266-9912-afd63b903833',
-      // );
+      console.log(
+        `[CompanyService.find] Request received for domain: ${domain}`,
+      );
       const whereClause =
         process.env.NODE_ENV == 'production'
           ? eq(company.company_domain, domain)
