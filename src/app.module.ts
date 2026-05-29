@@ -49,6 +49,7 @@ import { PromotionsModule } from './modules/promotions/promotions.module';
 import { BannersModule } from './modules/banners/banners.module';
 import { AudiencesModule } from './modules/audiences/audiences.module';
 import { ComplianceModule } from './modules/compliance/compliance.module';
+import { SubscriptionModule } from './modules/subscription/subscription.module';
 @Module({
   imports: [
     DrizzleModule,
@@ -93,6 +94,7 @@ PromotionsModule,
 BannersModule,
 AudiencesModule,
 ComplianceModule,
+SubscriptionModule,
     // ThrottlerModule.forRoot([
     //   {
     //     name: "short",

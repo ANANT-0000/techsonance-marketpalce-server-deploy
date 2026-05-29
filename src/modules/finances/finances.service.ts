@@ -7,13 +7,25 @@ import {
   HttpException,
   HttpStatus,
 } from '@nestjs/common';
-import { eq, desc, sql, and } from 'drizzle-orm';
+import {
+  eq,
+  desc,
+  sql,
+  and,
+  ilike,
+  gte,
+  lte,
+  asc,
+  lt,
+  count,
+} from 'drizzle-orm';
 import { DRIZZLE, type DrizzleService } from '../../drizzle/drizzle.module';
 import {
   address,
   company_compliance,
   gst_invoices,
   orders,
+  payments,
   product_tax,
   product_variants,
   products,
@@ -25,6 +37,7 @@ import {
 import { CompanyService } from '../company/company.service';
 import { domainExtractor } from '../../common/filters/domainExtractor.filter';
 import { COUNTRIES_COMPLIANCE, getStateByCode } from '../../common/constants';
+import { PaymentStatus } from '../../drizzle/types/types';
 
 // ─── helpers ────────────────────────────────────────────────────
 
@@ -110,12 +123,87 @@ export class FinancesService {
   }
 
   // ── Earnings ────────────────────────────────────────────────
+  async getVendorEarnings(
+    domain: string,
+    filters: {
+      search: string;
+      offset: number;
+      status: PaymentStatus | undefined;
+      date: string;
+      sortby: 'asc' | 'desc' | 'highest' | 'lowest';
+    },
+  ) {
+    const { search, offset, status, date, sortby } = filters;
 
-  async getVendorEarnings(domain: string) {
     try {
       const companyId = await this.resolveCompanyId(domain);
+
+      const whereConditions = [eq(orders.company_id, companyId)];
+
+      // Search
+      if (search) {
+        whereConditions.push(eq(orders.id, search));
+      }
+
+      // Date
+      if (date) {
+        const startDate = new Date(date);
+
+        const endDate = new Date(date);
+        endDate.setDate(endDate.getDate() + 1);
+
+        whereConditions.push(
+          gte(orders.created_at, startDate),
+          lt(orders.created_at, endDate),
+        );
+      }
+
+      // Status
+      switch (status?.toLowerCase()) {
+        case PaymentStatus.COMPLETED:
+          whereConditions.push(
+            eq(payments.payment_status, PaymentStatus.COMPLETED),
+          );
+          break;
+
+        case PaymentStatus.PENDING:
+          whereConditions.push(
+            eq(payments.payment_status, PaymentStatus.PENDING),
+          );
+          break;
+      }
+
+      // Sort
+      let orderByClause = [desc(orders.created_at)];
+
+      switch (sortby) {
+        case 'asc':
+          orderByClause = [asc(orders.created_at)];
+          break;
+
+        case 'desc':
+          orderByClause = [desc(orders.created_at)];
+          break;
+
+        case 'highest':
+          orderByClause = [desc(orders.total_amount)];
+          break;
+
+        case 'lowest':
+          orderByClause = [asc(orders.total_amount)];
+          break;
+      }
+      const [totalOrders] = await this.db
+        .select({
+          total: count(orders.id),
+        })
+        .from(orders)
+        .where(eq(orders.company_id, companyId));
       const orderRecords = await this.db.query.orders.findMany({
-        where: eq(orders.company_id, companyId),
+        where: and(...whereConditions),
+        limit: 10,
+        offset: Number(offset) || 0,
+        orderBy: orderByClause,
         with: {
           payment: {
             columns: {
@@ -125,27 +213,28 @@ export class FinancesService {
             },
           },
         },
-        orderBy: [desc(orders.created_at)],
       });
 
-      const PLATFORM_FEE_PERCENTAGE = 0.1;
       const earnings = orderRecords.map((order) => {
         const grossAmount = Number(order.total_amount || 0);
-        const platformFee = grossAmount * PLATFORM_FEE_PERCENTAGE;
-        const netEarning = grossAmount - platformFee;
-        let earningStatus = 'PENDING';
-        if (order.payment) {
-          const status = order.payment.payment_status?.toUpperCase();
-          if (status === 'PAID' || status === 'SUCCESS')
-            earningStatus = 'CLEARED';
-          else if (status === 'REFUNDED') earningStatus = 'REVERSED';
+
+        let earningStatus = PaymentStatus.PENDING;
+
+        const filterStatus: PaymentStatus | undefined =
+          order.payment?.payment_status?.toUpperCase() as
+            | PaymentStatus
+            | undefined;
+
+        if (filterStatus === PaymentStatus.COMPLETED) {
+          earningStatus = PaymentStatus.COMPLETED;
+        } else if (filterStatus === PaymentStatus.REFUNDED) {
+          earningStatus = PaymentStatus.REFUNDED;
         }
+
         return {
           id: order.payment?.id || `calc-${order.id}`,
           order_id: order.id,
-          gross_amount: grossAmount.toFixed(2),
-          platform_fee: platformFee.toFixed(2),
-          net_earning: netEarning.toFixed(2),
+          net_earning: grossAmount.toFixed(2),
           status: earningStatus,
           created_at: order.created_at,
           transaction_ref: order.payment?.transaction_ref || 'N/A',
@@ -153,16 +242,18 @@ export class FinancesService {
       });
 
       const totalCleared = earnings
-        .filter((e) => e.status === 'CLEARED')
+        .filter((e) => e.status === PaymentStatus.COMPLETED)
         .reduce((sum, e) => sum + Number(e.net_earning), 0);
+
       const totalPending = earnings
-        .filter((e) => e.status === 'PENDING')
+        .filter((e) => e.status === PaymentStatus.PENDING)
         .reduce((sum, e) => sum + Number(e.net_earning), 0);
 
       return {
-        total_transactions: earnings.length,
+        total_transactions:totalOrders.total,
         total_cleared_earnings: totalCleared.toFixed(2),
         total_pending_earnings: totalPending.toFixed(2),
+        // total_orders: totalOrders.total,
         earnings,
       };
     } catch (error) {
@@ -198,13 +289,14 @@ export class FinancesService {
 
       const earnings = orderRecords.map((order) => {
         const grossAmount = Number(order.total_amount || 0);
-        let earningStatus = 'PENDING';
+        let earningStatus = PaymentStatus.PENDING;
         if (order.payment) {
-          const status = order.payment.payment_status?.toUpperCase();
-          if (status === 'PAID' || status === 'SUCCESS')
-            earningStatus = 'CLEARED';
-          else if (status === 'REFUNDED' || status === 'FAILED')
-            earningStatus = 'REVERSED';
+          const status: PaymentStatus =
+            order.payment.payment_status?.toUpperCase() as PaymentStatus;
+          if (status === PaymentStatus.COMPLETED)
+            earningStatus = PaymentStatus.COMPLETED;
+          else if (status === PaymentStatus.REFUNDED)
+            earningStatus = PaymentStatus.REFUNDED;
         }
         return {
           id: order.payment?.id || `calc-${order.id}`,
@@ -212,7 +304,9 @@ export class FinancesService {
           gross_amount: grossAmount.toFixed(2),
           platform_fee: '0.00',
           net_earning:
-            earningStatus === 'REVERSED' ? '0.00' : grossAmount.toFixed(2),
+            earningStatus === PaymentStatus.REFUNDED
+              ? '0.00'
+              : grossAmount.toFixed(2),
           status: earningStatus,
           created_at: order.created_at,
           transaction_ref: order.payment?.transaction_ref || 'N/A',
@@ -220,10 +314,10 @@ export class FinancesService {
       });
 
       const totalCleared = earnings
-        .filter((e) => e.status === 'CLEARED')
+        .filter((e) => e.status === PaymentStatus.COMPLETED)
         .reduce((sum, e) => sum + Number(e.net_earning), 0);
       const totalPending = earnings
-        .filter((e) => e.status === 'PENDING')
+        .filter((e) => e.status === PaymentStatus.PENDING)
         .reduce((sum, e) => sum + Number(e.net_earning), 0);
 
       return {

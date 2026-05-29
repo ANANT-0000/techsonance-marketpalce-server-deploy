@@ -9,14 +9,28 @@ import {
   Query,
 } from '@nestjs/common';
 import { FinancesService } from './finances.service';
+import { PaymentStatus } from '../../drizzle/types/types';
 
 @Controller({ version: '1', path: 'finances' })
 export class FinancesController {
   constructor(private readonly financesService: FinancesService) {}
 
   @Get('earnings')
-  async getVendorEarnings(@Headers('company-domain') domain: string) {
-    return this.financesService.getVendorEarnings(domain);
+  async getVendorEarnings(
+    @Headers('company-domain') domain: string,
+    @Query('search') search?: string,
+    @Query('offset') offset?: number,
+    @Query('status') status?: string,
+    @Query('date') date?: string,
+    @Query('sortby') sortby?: 'asc' | 'desc' | 'highest' | 'lowest',
+  ) {
+    return this.financesService.getVendorEarnings(domain, {
+      search: search ?? '',
+      offset: Number(offset) || 0,
+      status: status ? (status.toUpperCase() as PaymentStatus) : undefined,
+      date: date ?? '',
+      sortby: sortby ?? 'desc',
+    });
   }
   @Get('gst')
   async getGstRegistrations(@Headers('company-domain') domain: string) {

@@ -1,4 +1,10 @@
-import { HttpException, HttpStatus, Inject, Injectable } from '@nestjs/common';
+import {
+  HttpException,
+  HttpStatus,
+  Inject,
+  Injectable,
+  InternalServerErrorException,
+} from '@nestjs/common';
 import { InitiateCheckoutDto, VerifyCheckoutDto } from './dto/checkout.dto';
 import { type DrizzleDB } from '../../drizzle/types/drizzle';
 import { DRIZZLE, DrizzleService } from '../../drizzle/drizzle.module';
@@ -22,6 +28,7 @@ import {
   promotion_usage,
   promotions,
 } from '../../drizzle/schema/promotions.schema';
+import { PromotionStatus } from '../../drizzle/types/types';
 
 @Injectable()
 export class CheckoutService {
@@ -197,7 +204,7 @@ export class CheckoutService {
               // Auto-deactivate if max limit reached
               status: sql`CASE 
           WHEN ${promotions.max_uses_total} IS NOT NULL AND (${promotions.total_used} + 1) >= ${promotions.max_uses_total} 
-          THEN 'EXPIRED' 
+          THEN ${PromotionStatus.EXPIRED} 
           ELSE ${promotions.status} 
         END`,
             })
@@ -211,24 +218,37 @@ export class CheckoutService {
                 ),
               ),
             )
-            .returning();
+            .returning()
+            .catch((error) => {
+              console.error('Error updating promotion usage:', error);
+              throw new HttpException(
+                'Failed to record promotion usage after checkout',
+                HttpStatus.INTERNAL_SERVER_ERROR,
+                { cause: error },
+              );
+            });
 
           if (!updatedPromo) {
-            throw new HttpException(
-              'Promotion is no longer valid or usage limit reached',
-              HttpStatus.BAD_REQUEST,
-            );
+            console.log('updatedPromo', !updatedPromo, '\n', updatedPromo);
+            // throw new HttpException(
+            //   'Promotion is no longer valid or usage limit reached',
+            //   HttpStatus.BAD_REQUEST,
+            // );
           }
-
-          // 2. Insert into Usage Log (The new source of truth)
-          await verificationResult.tx.insert(promotion_usage).values({
-            promotion_id: promotionId,
-            company_id: companyId,
-            order_id: orderId,
-            user_id: existingOrder.user_id,
-            discount_amount: discountApplied.toString(),
-            promotion_snapshot: updatedPromo, // Save state for immutable history
-          });
+          if (updatedPromo) {
+            // 2. Insert into Usage Log (The new source of truth)
+            console.log(
+              '[CheckoutService.verifyCheckout] Inserting promotion usage record',
+            );
+            await verificationResult.tx.insert(promotion_usage).values({
+              promotion_id: promotionId,
+              company_id: companyId,
+              order_id: orderId,
+              user_id: existingOrder.user_id,
+              discount_amount: discountApplied.toString(),
+              promotion_snapshot: updatedPromo, // Save state for immutable history
+            });
+          }
         }
         if (productVariantId) {
           console.log(
@@ -256,14 +276,25 @@ export class CheckoutService {
           await this._clearCart(verificationResult.tx, cartId, orderId);
         }
       }
+      return {
+        success: true,
+        message: verificationResult.message,
+        orderId: verificationResult.orderId,
+      };
     } catch (error) {
-      throw new HttpException(
-        'Failed to verify checkout',
-        HttpStatus.INTERNAL_SERVER_ERROR,
-        {
-          cause: error,
-        },
+      console.log(
+        '[CheckoutService.verifyCheckout] Error occurred while verifying checkout:',
+        error,
       );
+      if (
+        error instanceof HttpException ||
+        error instanceof InternalServerErrorException
+      ) {
+        throw error; // Re-throw known HTTP exceptions
+      }
+      throw new InternalServerErrorException('Failed to verify checkout', {
+        cause: error,
+      });
     }
   }
   // private helpers

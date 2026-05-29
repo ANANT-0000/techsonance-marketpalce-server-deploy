@@ -524,7 +524,6 @@ export class ProductsService {
           description: productDto.description,
           base_price: productDto.base_price.toString(),
           discount_percent: (productDto.discount_percent || 0).toString(),
-
           status: productDto.status,
           features: productDto.features,
           category_id: productDto.category_id,
@@ -635,6 +634,11 @@ export class ProductsService {
         };
       });
     } catch (error) {
+      for (const file of finalResults) {
+        const publicId = extractCloudinaryPublicId(file.url);
+        if (publicId) await this.uploadToCloudService.deleteFile(publicId);
+      }
+
       if (
         error instanceof HttpException ||
         error instanceof InternalServerErrorException
@@ -661,6 +665,10 @@ export class ProductsService {
       '[ProductsService.updateProduct] imagesToDelete:',
       imagesToDelete,
     );
+    const imageToDeleteUrl: {
+      toDeleteUrl: string | undefined;
+      url: string | undefined;
+    }[] = [];
     if (!productVariantId) {
       return new HttpException(
         'Product Variant ID is required',
@@ -754,6 +762,12 @@ export class ProductsService {
               ...galleryRes.map((res) => ({
                 url: res.secure_url,
                 type: productImageType.GALLERY,
+              })),
+            );
+            imageToDeleteUrl.push(
+              ...galleryRes.map((res) => ({
+                url: res.secure_url,
+                toDeleteUrl: undefined,
               })),
             );
           }
@@ -901,6 +915,24 @@ export class ProductsService {
           };
         })
         .catch((error) => {
+          for (const file of imageToDeleteUrl) {
+            const publicId = extractCloudinaryPublicId(file.url!);
+            if (publicId) {
+              this.uploadToCloudService
+                .deleteFile(publicId)
+                .then(() => {
+                  console.log(
+                    `Deleted image from cloud storage due to transaction failure: ${file.url}`,
+                  );
+                })
+                .catch((err) => {
+                  console.error(
+                    'Error deleting image from cloud storage after transaction failure:',
+                    err,
+                  );
+                });
+            }
+          }
           console.error('Error in transaction:', error);
           throw new InternalServerErrorException('Failed to update product', {
             cause: error,

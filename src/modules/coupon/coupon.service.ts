@@ -709,11 +709,30 @@ export class CouponService {
       console.log(
         '[CouponService.validateAppliedCoupon] Querying active promotion and coupon',
       );
+      const [isCouponExist] = await this.db
+        .select({ id: coupons.id })
+        .from(coupons)
+        .where(eq(coupons.code, code.toUpperCase()))
+        .limit(1);
+      const [isCouponUsed] = await this.db
+        .select()
+        .from(promotion_usage)
+        .where(
+          and(
+            eq(promotion_usage.user_id, userId),
+            eq(promotion_usage.promotion_id, isCouponExist?.id ?? ''),
+          ),
+        )
+        .limit(1);
+
       const couponPromotion = await this.db.query.promotions.findFirst({
-        where: and(eq(promotions.status, PromotionStatus.ACTIVE)),
+        where: and(
+          eq(promotions.status, PromotionStatus.ACTIVE),
+          eq(promotions.coupon_id, isCouponExist?.id ?? ''),
+        ),
         with: { coupon: true, rules: true, targets: true },
       });
-
+      console.log('couponPromotion?.coupon', couponPromotion?.coupon);
       if (
         !couponPromotion ||
         couponPromotion.coupon?.code !== code.toUpperCase()
@@ -724,24 +743,6 @@ export class CouponService {
       console.log(
         '[CouponService.validateAppliedCoupon] Checking per-user usage limits',
       );
-      const [usageCount] = await this.db
-        .select({ id: count() })
-        .from(promotion_usage)
-        .where(
-          and(
-            eq(promotion_usage.promotion_id, couponPromotion.id),
-            eq(promotion_usage.user_id, userId),
-          ),
-        );
-
-      if (
-        couponPromotion.max_uses_per_user &&
-        usageCount.id >= couponPromotion.max_uses_per_user
-      ) {
-        throw new BadRequestException(
-          'You have already used this coupon the maximum number of times allowed.',
-        );
-      }
 
       console.log(
         '[CouponService.validateAppliedCoupon] Checking validity window',

@@ -6,6 +6,7 @@ export * from './shop.schema';
 export * from './promotions.schema';
 export * from './product_policy.schema';
 export * from './company_identity.schema';
+export * from './subscription.schema';
 import { address, user, vendor } from './users.schema';
 import {
   cart_items,
@@ -62,6 +63,11 @@ import {
   promotions,
   segment_members,
 } from './promotions.schema';
+import {
+  subscription_events,
+  subscription_plans,
+  vendor_subscriptions,
+} from './subscription.schema';
 
 export const companyRelations = relations(company, ({ one, many }) => ({
   roles: many(user_roles),
@@ -108,6 +114,13 @@ export const companyRelations = relations(company, ({ one, many }) => ({
     fields: [company.id],
     references: [company_document_config.company_id],
   }),
+
+  subscription: one(vendor_subscriptions, {
+    fields: [company.id],
+    references: [vendor_subscriptions.company_id],
+  }),
+  subscriptionEvents: many(subscription_events),
+  subscriptionPlans: many(subscription_plans),
 }));
 
 // --- User Relations ---

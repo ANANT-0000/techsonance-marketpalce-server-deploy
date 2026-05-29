@@ -10,7 +10,7 @@ import { DRIZZLE, type DrizzleService } from '../../drizzle/drizzle.module';
 import { company, user, user_and_company, vendor } from '../../drizzle/schema';
 import { AccessStatus, UserStatus } from '../../drizzle/types/types';
 import { ConfigService } from '@nestjs/config';
-import { domainExtractor } from 'src/common/filters/domainExtractor.filter';
+import { domainExtractor } from '../../common/filters/domainExtractor.filter';
 @Injectable()
 export class CompanyService {
   constructor(

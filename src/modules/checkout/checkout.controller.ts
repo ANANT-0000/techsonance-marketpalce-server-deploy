@@ -7,6 +7,8 @@ import {
   Param,
   Delete,
   Headers,
+  HttpCode,
+  HttpStatus,
 } from '@nestjs/common';
 import { CheckoutService } from './checkout.service';
 import { InitiateCheckoutDto, VerifyCheckoutDto } from './dto/checkout.dto';
@@ -37,6 +39,7 @@ export class CheckoutController {
   }
 
   @Post('verify')
+  @HttpCode(HttpStatus.OK)
   verifyCheckout(
     @Body() verifyCheckoutDto: VerifyCheckoutDto,
     @Headers('company-domain') domain: string,
@@ -45,6 +48,7 @@ export class CheckoutController {
   }
 
   @Post('apply-coupon/:userId')
+  @HttpCode(HttpStatus.OK)
   applyCoupon(
     @Body('couponCode') couponCode: string,
     @Param('userId') userId: string,

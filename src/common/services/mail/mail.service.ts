@@ -126,7 +126,9 @@ export class MailService {
       )
       .returning();
     // eslint-disable-next-line @typescript-eslint/no-unsafe-return
-    console.log('[MailService.sendResetPasswordEmail] Sending password reset email');
+    console.log(
+      '[MailService.sendResetPasswordEmail] Sending password reset email',
+    );
     return await this.sendEmail(
       email,
       'Password Reset Request',
@@ -360,6 +362,31 @@ export class MailService {
       email,
       `Confirm Account Reactivation - ${companyName}`,
       html,
+    );
+  }
+
+  // Add to your existing MailService class
+
+  async sendTrialReminderEmail(email: string, daysLeft: number): Promise<void> {
+    // Fetch company email from DB however your existing mail methods do it
+    await this.sendEmail(
+      email,
+      `Your trial ends in ${daysLeft} day${daysLeft !== 1 ? 's' : ''}`,
+      `
+      <p>Your free trial expires in <strong>${daysLeft} day${daysLeft !== 1 ? 's' : ''}</strong>.</p>
+      <p><a href="${process.env.APP_URL}/vendor/settings/billing">Upgrade now</a> to keep access.</p>
+    `,
+    );
+  }
+
+  async sendTrialExpiredEmail(email: string): Promise<void> {
+    await this.sendEmail(
+      email,
+      'Your trial has ended',
+      `
+      <p>Your free trial has ended. You have a 3-day grace period to upgrade.</p>
+      <p><a href="${process.env.APP_URL}/vendor/settings/billing">Choose a plan</a> to restore full access.</p>
+    `,
     );
   }
 }

@@ -182,6 +182,13 @@ export enum ChangelogAction {
   DELETED = 'deleted',
 }
 
+export enum SubscriptionStatus {
+  TRIAL = 'trial',
+  ACTIVE = 'active',
+  EXPIRED = 'expired',
+  CANCELLED = 'cancelled',
+  GRACE_PERIOD = 'grace_period',
+}
 // ================================================================
 // DISCOUNT CONFIG TYPE HELPERS (add to src/drizzle/types/promotions.ts)
 // ================================================================

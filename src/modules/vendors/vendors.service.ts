@@ -191,8 +191,8 @@ export class VendorsService {
         const [newUser] = await tx
           .insert(userTable)
           .values({
-            first_name: vendorData.first_name,
-            last_name: vendorData.last_name,
+            first_name: vendorData.store_owner_first_name,
+            last_name: vendorData.store_owner_last_name,
             email: vendorData.email,
             country_code: vendorData.country_code,
             phone_number: vendorData.phone_number,
@@ -247,8 +247,8 @@ export class VendorsService {
         const [newVendor] = await tx
           .insert(vendorTable)
           .values({
-            store_owner_first_name: vendorData.first_name,
-            store_owner_last_name: vendorData.last_name,
+            store_owner_first_name: vendorData.store_owner_first_name,
+            store_owner_last_name: vendorData.store_owner_last_name,
             store_name: vendorData.company_name,
             store_description: vendorData.company_description ?? '',
             category: vendorData.category,

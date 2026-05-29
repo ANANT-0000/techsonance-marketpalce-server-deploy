@@ -1,3 +1,4 @@
+import { InvoiceTotals } from './../invoice/interfaces/invoice.interface';
 import {
   HttpException,
   HttpStatus,
@@ -22,7 +23,6 @@ import {
   order_item_policy,
   order_items,
   orders,
- 
   payments,
   product_images,
   product_policy_override,
@@ -867,6 +867,23 @@ export class OrdersService {
       console.log(
         `[OrdersService.getOrdersList] Company resolved: ${companyId}`,
       );
+      const totalOrders = await this.db
+        .selectDistinct({ id: orders.id })
+        .from(orders)
+        .innerJoin(
+          order_items,
+          and(
+            eq(order_items.order_id, orders.id),
+            Object.values(OrderStatus).includes(status as OrderStatus)
+              ? and(
+                  // @ts-ignore
+                  eq(order_items.order_status, status),
+                  gt(order_items.quantity, 0),
+                )
+              : undefined,
+          ),
+        )
+        .where(eq(orders.company_id, companyId));
 
       const validOrderIds = (
         await this.db
@@ -893,7 +910,7 @@ export class OrdersService {
 
       if (validOrderIds.length === 0) return [];
 
-      return await this.db.query.orders.findMany({
+      const ordersList = await this.db.query.orders.findMany({
         where: and(
           eq(orders.company_id, companyId),
           inArray(orders.id, validOrderIds),
@@ -929,6 +946,7 @@ export class OrdersService {
           payment: true,
         },
       });
+      return { orders: ordersList, totalCount: totalOrders.length };
     } catch (error) {
       console.error('Error fetching orders list:', error);
       if (error instanceof HttpException) throw error;

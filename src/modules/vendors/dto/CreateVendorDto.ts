@@ -98,16 +98,6 @@ export class CreateVendorDto {
   @Length(2, 100)
   @Transform(({ value }: { value: string }) => value.trim())
   company_domain!: string;
-  @IsString()
-  @IsNotEmpty()
-  @Length(8, 128)
-  @Transform(({ value }: { value: string }) => value.trim())
-  first_name!: string;
-  @IsString()
-  @IsNotEmpty()
-  @Length(2, 100)
-  @Transform(({ value }: { value: string }) => value.trim())
-  last_name!: string;
   @IsArray()
   @ValidateNested({ each: true })
   @Type(() => CompanyComplianceItemDto)
