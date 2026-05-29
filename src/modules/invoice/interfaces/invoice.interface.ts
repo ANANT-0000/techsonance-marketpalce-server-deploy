@@ -1,3 +1,4 @@
+import { promotionTargetsRelations } from './../../../drizzle/schema/promotions.schema';
 import { Buffer } from 'buffer';
 
 // ================================================================
@@ -52,6 +53,18 @@ export interface OrderWithRelations {
   id: string;
   company_id: string;
   created_at: Date;
+
+  promotionUsage: {
+    promotion_id: string;
+    order_id: string;
+    discount_amount: number;
+  }
+  promotionAnalyticsEvents: {
+    id: string;
+    promotion_id: string;
+    event_type: string;
+    discount_amount: number;
+  };
   customer: {
     first_name: string | null;
     last_name: string | null;
@@ -80,6 +93,7 @@ export interface MappedOrderInfo {
   customerName: string;
   customerPhone: string | undefined;
   customerEmail: string;
+  discountAmount: number;
   shippingAddress: {
     recipientName: string;
     addressLine1: string;
@@ -132,7 +146,7 @@ export interface companyLegal {
   id: string;
   company_id: string;
   legal_name: string;
- 
+
   country_code: string;
   registered_address_id: string | null;
   support_email: string | null;

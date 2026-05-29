@@ -250,7 +250,7 @@ export class FinancesService {
         .reduce((sum, e) => sum + Number(e.net_earning), 0);
 
       return {
-        total_transactions:totalOrders.total,
+        total_transactions: totalOrders.total,
         total_cleared_earnings: totalCleared.toFixed(2),
         total_pending_earnings: totalPending.toFixed(2),
         // total_orders: totalOrders.total,
@@ -872,7 +872,7 @@ export class FinancesService {
         HttpStatus.BAD_REQUEST,
       );
     }
-    console.log('Compliance fields:', fields);
+    // console.log('Compliance fields:', fields);
     /**
      * Find tax field (GSTIN for India)
      */
@@ -993,6 +993,7 @@ export class FinancesService {
       totalIgst: Number(totalIgst.toFixed(2)),
       totalTax: Number(totalTax.toFixed(2)),
       grandTotal: Number(subTotal.toFixed(2)),
+      shippingAmount: 0,
       // [CHANGED] vendorGstId now returns the compliance row id
       // of the gst_number row (same role as old gst_registrations.id)
       vendorGstId: gstNumberRow?.id ?? null,

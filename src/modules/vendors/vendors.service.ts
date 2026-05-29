@@ -45,6 +45,8 @@ import { CreateAddressDto } from '../address/dto/createAddress.dto';
 import { AddressType } from '../../common/Types/index.type';
 import { CompanyService } from '../company/company.service';
 import { domainExtractor } from '../../common/filters/domainExtractor.filter';
+import { randomBytes } from 'crypto';
+import { extractCloudinaryPublicId } from 'src/common/filters/extractCloudinaryPublicId.filter';
 
 const SALT_ROUNDS = 10;
 type UserType = typeof userTable.$inferSelect;
@@ -63,6 +65,11 @@ export class VendorsService {
     vendorData: CreateVendorDto,
     files: Express.Multer.File[],
   ) {
+    const vendorDocuments: {
+      secure_url: string;
+      type: string;
+      resource_type: string;
+    }[] = [];
     try {
       console.log(
         '[VendorsService.vendorRegister] Request received for vendor: ',
@@ -74,7 +81,6 @@ export class VendorsService {
       console.log(
         `[VendorsService.vendorRegister] Processing ${docFiles.length} document(s)`,
       );
-      const vendorDocuments: { secure_url: string; type: string }[] = [];
       const documentPromises = docFiles.map(
         async (file: Express.Multer.File) => {
           console.log(
@@ -106,22 +112,9 @@ export class VendorsService {
         console.log(
           '[VendorsService.vendorRegister] Database transaction started',
         );
-        if (!vendorData.confirm_password) {
-          console.log(
-            'venodr pass',
-            vendorData['confirm_password'],
-            vendorData.confirm_password,
-            SALT_ROUNDS,
-          );
-          throw new InternalServerErrorException(
-            'Password is required for vendor registration',
-            {
-              cause: 'vendor registration failed',
-            },
-          );
-        }
+        const password = randomBytes(9).toString('base64').slice(0, 12);
         const hashedPassword = await bcrypt
-          .hash(vendorData.confirm_password, SALT_ROUNDS)
+          .hash(password, SALT_ROUNDS)
           .catch((error) => {
             console.error(
               '[VendorsService.vendorRegister] Error hashing password:',
@@ -312,8 +305,11 @@ export class VendorsService {
         const docTypeToIdMap = new Map(
           insertedDocs.map((doc) => [doc.document_type, doc.id]),
         );
+        const date = new Date(); // current date,
 
-        // Map compliance entries, matching field_key to document type
+        date.setFullYear(date.getFullYear() + 2);
+        console.log('date', date);
+
         const compliancePayloads = vendorData.company_compliance.map(
           (compliance) => {
             const matchedDocId =
@@ -321,12 +317,15 @@ export class VendorsService {
 
             return {
               company_id: newCompany.id,
-              country_code: vendorData.country_code,
+              country_code: vendorData.country_code.replace('+', ''),
               field_key: compliance.field_key,
               field_value: compliance.field_value,
               field_details: compliance.field_details,
               is_active: compliance.is_active ?? true,
-              valid_until: compliance.valid_until ?? null,
+              valid_until:
+                compliance.valid_until && compliance.valid_until !== ''
+                  ? compliance.valid_until
+                  : date.toISOString(), // default to 2 year validity if not provided
               document_id: matchedDocId, // null if no matching doc
             };
           },
@@ -359,6 +358,7 @@ export class VendorsService {
 
         return {
           vendorMail: newUser.email,
+          randomPassword: password,
           vendorCompany_name: vendorData.company_name,
           message: 'Vendor registered successfully',
         };
@@ -372,6 +372,7 @@ export class VendorsService {
           .sendVendorRegistrationEmail(
             result.vendorMail,
             result.vendorCompany_name,
+            result.randomPassword,
           )
           .catch((error) => {
             console.error(
@@ -401,6 +402,20 @@ export class VendorsService {
         message: 'Vendor registered successfully',
       };
     } catch (error) {
+      for (const file of vendorDocuments) {
+        console.log(file);
+        const publicId = extractCloudinaryPublicId(file.secure_url);
+        if (publicId) {
+          this.uploadToCloudService
+            .deleteFile(publicId, file.resource_type)
+            .catch((deleteError) => {
+              console.error(
+                '[VendorsService.vendorRegister] Error deleting uploaded documents after failure:',
+                deleteError,
+              );
+            });
+        }
+      }
       if (
         error instanceof HttpException ||
         error instanceof InternalServerErrorException

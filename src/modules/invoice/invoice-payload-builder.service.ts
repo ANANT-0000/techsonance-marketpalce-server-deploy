@@ -5,6 +5,8 @@ import {
   InternalServerErrorException,
   NotFoundException,
   Logger,
+  HttpException,
+  HttpStatus,
 } from '@nestjs/common';
 import { and, eq } from 'drizzle-orm';
 import { DRIZZLE, type DrizzleService } from '../../drizzle/drizzle.module';
@@ -40,6 +42,7 @@ import {
 } from './interfaces/invoice.interface';
 import { randomUUID } from 'crypto';
 import { fetchImageAsBuffer } from '../../utils/image-fetcher.util';
+import { COUNTRIES_COMPLIANCE, getStateByCode } from 'src/common/constants';
 
 // ─── helpers ────────────────────────────────────────────────────
 
@@ -205,6 +208,14 @@ export class InvoicePayloadBuilderService {
         with: {
           customer: true,
           address: true,
+          promotionUsage: true,
+          promotionAnalyticsEvents: {
+            columns: {
+              promotion_id: true,
+              event_type: true,
+              discount_amount: true,
+            },
+          },
           items: {
             with: {
               variant: {
@@ -293,42 +304,68 @@ export class InvoicePayloadBuilderService {
 
     if (!row) return null;
 
-    // 2. Fetch the vendor GSTIN from company_compliance
-    //    (the default GST registration's gst_number row)
-    const defaultFlagRow = await this.db
+    // Fetch the state_code row that shares the same valid_until
+
+    // Also fetch the gst_number for returning vendorGstId
+    const [countryCompliance] = await this.db
+      .select()
+      .from(company_compliance)
+      .where(eq(company_compliance.company_id, companyId))
+      .catch((error) => {
+        console.error('Error fetching company compliance:', error);
+        throw new HttpException(
+          'Error fetching company compliance: ' + error,
+          HttpStatus.INTERNAL_SERVER_ERROR,
+        );
+      });
+
+    const fields = COUNTRIES_COMPLIANCE.find(
+      (c) => c.country_code === countryCompliance.country_code,
+    )?.fields;
+    if (!fields) {
+      throw new HttpException(
+        'Country compliance config not found.',
+        HttpStatus.BAD_REQUEST,
+      );
+    }
+    // console.log('Compliance fields:', fields);
+    /**
+     * Find tax field (GSTIN for India)
+     */
+    const gstField = fields.find(
+      (f) => f.is_primary_tax_id || f.value === 'gstin',
+    );
+
+    if (!gstField?.value) {
+      throw new HttpException(
+        'GST field config missing.',
+        HttpStatus.BAD_REQUEST,
+      );
+    }
+    console.log('Found GST field:', gstField);
+    const [gstNumberRow] = await this.db
       .select()
       .from(company_compliance)
       .where(
         and(
           eq(company_compliance.company_id, companyId),
-          eq(company_compliance.country_code, 'IN'),
-          eq(company_compliance.field_key, 'gst_is_default'),
-          eq(company_compliance.field_value, 'true'),
+          eq(company_compliance.field_key, gstField.value),
           eq(company_compliance.is_active, true),
         ),
       )
-      .limit(1)
-      .then((rows) => rows[0] ?? null);
+      .catch((error) => {
+        console.error('Error fetching vendor GST number:', error);
+        throw new HttpException(
+          'Error fetching vendor GST number: ' + error,
+          HttpStatus.INTERNAL_SERVER_ERROR,
+        );
+      });
 
-    let vendorGstin: string | null = null;
-
-    if (defaultFlagRow) {
-      const gstNumberRow = await this.db
-        .select()
-        .from(company_compliance)
-        .where(
-          and(
-            eq(company_compliance.company_id, companyId),
-            eq(company_compliance.country_code, 'IN'),
-            eq(company_compliance.field_key, 'gst_number'),
-            eq(company_compliance.valid_until, defaultFlagRow.valid_until!),
-            eq(company_compliance.is_active, true),
-          ),
-        )
-        .limit(1)
-        .then((rows) => rows[0] ?? null);
-
-      vendorGstin = gstNumberRow?.field_value ?? null;
+    if (!gstNumberRow?.field_value) {
+      throw new HttpException(
+        'Vendor GST number is missing.',
+        HttpStatus.BAD_REQUEST,
+      );
     }
 
     return {
@@ -336,7 +373,7 @@ export class InvoicePayloadBuilderService {
       totalSgst: Number(row.sgst_amount),
       totalIgst: Number(row.igst_amount),
       totalTax: Number(row.total_tax),
-      vendorGstin,
+      vendorGstin: gstNumberRow.field_value,
     };
   }
 
@@ -369,7 +406,14 @@ export class InvoicePayloadBuilderService {
       [order.customer.first_name, order.customer.last_name]
         .filter(Boolean)
         .join(' ') || 'Customer';
-
+    console.log(
+      `\n\n\n\n[InvoicePayloadBuilderService.mapOrderInfo] Mapping order discount amount from promotion usage`,
+      order.promotionUsage,
+    );
+    console.log(
+      `\n\n\n[InvoicePayloadBuilderService.mapOrderInfo] Mapping order discount amount from promotion analytics events`,
+      order.promotionAnalyticsEvents,
+    );
     const addr = order.address;
     return {
       id: order.id,
@@ -377,6 +421,7 @@ export class InvoicePayloadBuilderService {
       customerName,
       customerPhone: order.customer.phone_number ?? undefined,
       customerEmail: order.customer.email,
+      discountAmount: 0,
       shippingAddress: {
         recipientName: customerName,
         addressLine1: addr.address_line_1,
@@ -569,7 +614,7 @@ export class InvoicePayloadBuilderService {
     const items: InvoiceLineItem[] = group.items.map((item) => {
       const unitPrice = Number(item.price);
       const qty = item.quantity;
-      const discount = 0; // extend here when discount schema is added
+      const discount = orderInfo.discountAmount; // extend here when discount schema is added
       const netAmount = unitPrice * qty - discount;
 
       // Distribute total tax proportionally across lines

@@ -8,6 +8,10 @@ export class InitiateCheckoutDto {
   addressId!: string;
 
   @IsString()
+  @IsOptional()
+  promotion_id!: string;
+
+  @IsString()
   @IsNotEmpty()
   paymentMethod!: string;
 

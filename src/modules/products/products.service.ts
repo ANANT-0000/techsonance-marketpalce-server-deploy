@@ -473,7 +473,11 @@ export class ProductsService {
       '[ProductsService.createProduct] Incoming payload:',
       productDto,
     );
-    const finalResults: { url: string; type: productImageType }[] = [];
+    const finalResults: {
+      url: string;
+      type: productImageType;
+      resource_type: string;
+    }[] = [];
 
     if (files?.product?.[0]) {
       const mainRes = await this.uploadToCloudService.uploadFile(
@@ -484,6 +488,7 @@ export class ProductsService {
       finalResults.push({
         url: mainRes.secure_url,
         type: productImageType.MAIN,
+        resource_type: mainRes.resource_type,
       });
     }
 
@@ -495,6 +500,7 @@ export class ProductsService {
         ...galleryRes.map((res) => ({
           url: res.secure_url,
           type: productImageType.GALLERY,
+          resource_type: res.resource_type,
         })),
       );
     }
@@ -636,7 +642,11 @@ export class ProductsService {
     } catch (error) {
       for (const file of finalResults) {
         const publicId = extractCloudinaryPublicId(file.url);
-        if (publicId) await this.uploadToCloudService.deleteFile(publicId);
+        if (publicId)
+          await this.uploadToCloudService.deleteFile(
+            publicId,
+            file.resource_type,
+          );
       }
 
       if (
@@ -828,7 +838,7 @@ export class ProductsService {
                   const publicId = extractCloudinaryPublicId(url);
                   console.log('extracted publicId', publicId);
                   await this.uploadToCloudService
-                    .deleteFile(publicId!)
+                    .deleteFile(publicId!, 'image')
                     .then(() => {
                       console.log(`Deleted image from cloud storage: ${url}`);
                     })
@@ -919,7 +929,7 @@ export class ProductsService {
             const publicId = extractCloudinaryPublicId(file.url!);
             if (publicId) {
               this.uploadToCloudService
-                .deleteFile(publicId)
+                .deleteFile(publicId, 'image')
                 .then(() => {
                   console.log(
                     `Deleted image from cloud storage due to transaction failure: ${file.url}`,

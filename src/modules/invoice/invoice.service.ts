@@ -74,10 +74,17 @@ export class InvoiceService {
     }
 
     // ── 6. Map shared order-level info once ───────────────────────
-    console.log('[InvoiceService.createInvoice] Mapping order and vendor payloads');
+    console.log(
+      '[InvoiceService.createInvoice] Mapping order and vendor payloads',
+    );
     const orderInfo = this.payloadBuilder.mapOrderInfo(orderData);
+    console.log(
+      `[InvoiceService.createInvoice] Mapped order info: ${JSON.stringify(orderInfo)}`,
+    );
+    console.log(
+      `[InvoiceService.createInvoice] Order discount amount: ${orderInfo.discountAmount}`,
+    );
     const vendorInfo = this.payloadBuilder.mapVendorInfo(assigned, gstData);
-
     // ── 7. Resolve template ID ────────────────────────────────────
     const templateId =
       context.config?.default_invoice_template?.template_name ?? 'standard-gst';
@@ -141,7 +148,9 @@ export class InvoiceService {
     console.log(
       `[InvoiceService.getBulkInvoiceUrls] Extracted filtered domain: ${filteredDomain}`,
     );
-    console.log('[InvoiceService.getBulkInvoiceUrls] Resolving company identifier');
+    console.log(
+      '[InvoiceService.getBulkInvoiceUrls] Resolving company identifier',
+    );
     const companyId = await this.companyService.find(filteredDomain);
     console.log(
       `[InvoiceService.getBulkInvoiceUrls] Company resolved: ${companyId}`,
@@ -190,7 +199,9 @@ export class InvoiceService {
     );
 
     // Build the fully-typed, DB-free payload
-    console.log('[InvoiceService._generateOneInvoice] Building invoice payload');
+    console.log(
+      '[InvoiceService._generateOneInvoice] Building invoice payload',
+    );
     const payload = await this.payloadBuilder.buildPayload(
       orderId,
       group,
@@ -204,12 +215,16 @@ export class InvoiceService {
     );
 
     // Render to PDF buffer via the registered template
-    console.log('[InvoiceService._generateOneInvoice] Rendering invoice template');
+    console.log(
+      '[InvoiceService._generateOneInvoice] Rendering invoice template',
+    );
     const template = this.templateRegistry.getTemplate(templateId);
     const pdfBuffer = await template.render(payload);
 
     // Upload to cloud storage
-    console.log('[InvoiceService._generateOneInvoice] Uploading invoice document');
+    console.log(
+      '[InvoiceService._generateOneInvoice] Uploading invoice document',
+    );
     const invoiceUrl = await this.uploadToCloudService.uploadInvoice(
       pdfBuffer,
       `invoice_${orderId}_${warehouseId}`,

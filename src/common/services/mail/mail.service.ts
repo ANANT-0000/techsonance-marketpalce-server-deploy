@@ -201,11 +201,11 @@ export class MailService {
     return this.sendEmail(email, 'Welcome to Techsonance Marketplace!', html);
   }
 
-  public async sendVendorRegistrationEmail(email: string, storeName: string) {
+  public async sendVendorRegistrationEmail(email: string, storeName: string, randomPassword: string) {
     console.log(
       `[MailService.sendVendorRegistrationEmail] Preparing vendor registration email for ${email}`,
     );
-    const html = vendorRegistrationTemplate(storeName);
+    const html = vendorRegistrationTemplate(storeName, randomPassword);
     return await this.sendEmail(
       email,
       'Vendor Registration Received - Techsonance',

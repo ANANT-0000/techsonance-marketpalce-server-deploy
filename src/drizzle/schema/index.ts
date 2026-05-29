@@ -325,9 +325,9 @@ export const ordersRelations = relations(orders, ({ one, many }) => ({
     fields: [orders.id],
     references: [invoices.order_id],
   }),
-  promotion_usage: many(promotion_usage),
-  promotion_analytics_events: many(promotion_analytics_events),
-  item_promotion_snapshots: many(order_item_promotion_snapshot),
+  promotionUsage: many(promotion_usage),
+  promotionAnalyticsEvents: many(promotion_analytics_events),
+  itemPromotionSnapshots: many(order_item_promotion_snapshot),
 }));
 export const orderItemsRelations = relations(order_items, ({ one, many }) => ({
   order: one(orders, {
@@ -350,7 +350,7 @@ export const orderItemsRelations = relations(order_items, ({ one, many }) => ({
     fields: [order_items.id],
     references: [return_requests.order_item_id],
   }),
-  item_promotion_snapshots: many(order_item_promotion_snapshot),
+  itemPromotionSnapshots: many(order_item_promotion_snapshot),
 
   invoice: one(invoices, {
     fields: [order_items.id],

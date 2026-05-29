@@ -129,7 +129,7 @@ export const company_compliance = pg.pgTable(
     // field_details :[
     //   for valid registrations  → { field_key: 'valid_from', field_value: '2023-01-01' }
     //   for valid to registrations  → { field_key: 'valid_to', field_value: '2023-12-31' }
-  // ]
+    // ]
     field_details: pg.jsonb('field_details').default('[]'),
     // Optional JSON for extra metadata (e.g. GST state code)
 

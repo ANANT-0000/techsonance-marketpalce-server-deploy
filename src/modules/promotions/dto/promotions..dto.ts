@@ -126,3 +126,21 @@ export class CreatePromotionDto {
   @IsString({ message: 'status must be a string' })
   status?: PromotionStatus;
 }
+export interface DiscountConfig {
+  // percentage_off
+  value?: number;
+  cap?: number;
+  // fixed_amount
+  // value (same field)
+  // buy_x_get_y
+  buy_qty?: number;
+  get_qty?: number;
+  get_discount_percent?: number;
+  // free_shipping
+  max_shipping_waived?: number;
+  // tiered_discount
+  tiers?: { min_cart: number; percent: number }[];
+  // bundle_deal
+  product_variant_ids?: string[];
+  bundle_price?: number;
+}

@@ -13,6 +13,8 @@ import {
   gt,
   gte,
   inArray,
+  isNull,
+  lte,
   notInArray,
   or,
   sql,
@@ -31,8 +33,19 @@ import {
   category_policy,
   carts,
   cart_items,
+  promotions,
+  promotion_usage,
+  promotion_rules,
+  user,
+  promotion_analytics_events,
 } from '../../drizzle/schema';
-import { OrderStatus, PaymentStatus } from '../../drizzle/types/types';
+import {
+  DiscountConfig,
+  OrderStatus,
+  PaymentStatus,
+  PromoEventType,
+  PromotionStatus,
+} from '../../drizzle/types/types';
 import { CompanyService } from '../company/company.service';
 import { InventoryService } from '../inventory/inventory.service';
 import { MailService } from '../../common/services/mail/mail.service';
@@ -43,6 +56,11 @@ import { PolicyDocumentService } from '../product-policies/policy-document.servi
 import { ProductPoliciesService } from '../product-policies/product-policies.service';
 import { PolicyResolutionService } from '../product-policies/policy-resolution.service'; // ← NEW
 import { PolicySnapshot } from '../product-policies/interfaces/policy-document.interface';
+import {
+  calculatePromotionDiscount,
+  CartContext,
+  DiscountResult,
+} from '../promotions/promotion-calculator';
 
 @Injectable()
 export class OrdersService {
@@ -81,12 +99,14 @@ export class OrdersService {
     addressId,
     orderLines,
     paymentMethod,
+    promotion_id,
   }: {
     userId: string;
     companyId: string;
     addressId: string;
     orderLines: { variantId: string; quantity: number; price: number }[];
     paymentMethod: string;
+    promotion_id?: string;
   }) {
     try {
       console.log(
@@ -129,15 +149,98 @@ export class OrdersService {
           tx as DrizzleService,
           companyId,
         );
+        // Replace the entire promotion block and order insert in createOrder
 
-        // 3. Create the main Order
+        let grandTotal = taxData.grandTotal;
+        let discountAmount = 0;
+        let discountResult: DiscountResult | null = null;
+        let appliedPromotion: typeof promotions.$inferSelect | null = null;
+
+        if (promotion_id) {
+          // ── 1. Fetch & validate promotion ────────────────────────────────────────
+          const [promotion] = await tx
+            .select()
+            .from(promotions)
+            .where(
+              and(
+                eq(promotions.id, promotion_id),
+                eq(promotions.company_id, companyId),
+                eq(promotions.status, PromotionStatus.ACTIVE),
+                lte(promotions.valid_from, new Date()),
+                or(
+                  isNull(promotions.valid_to),
+                  gte(promotions.valid_to, new Date()),
+                ),
+              ),
+            )
+            .limit(1);
+
+          if (!promotion) {
+            throw new HttpException(
+              'Promotion is not active or has expired',
+              HttpStatus.BAD_REQUEST,
+            );
+          }
+
+          // ── 2. Per-user usage cap ─────────────────────────────────────────────────
+          if (promotion.max_uses_per_user !== null) {
+            const [usageCount] = await tx
+              .select({ count: sql<number>`count(*)::int` })
+              .from(promotion_usage)
+              .where(
+                and(
+                  eq(promotion_usage.promotion_id, promotion_id),
+                  eq(promotion_usage.user_id, userId),
+                ),
+              );
+
+            if ((usageCount?.count ?? 0) >= promotion.max_uses_per_user) {
+              throw new HttpException(
+                `You have already used this promotion the maximum allowed times (${promotion.max_uses_per_user})`,
+                HttpStatus.BAD_REQUEST,
+              );
+            }
+          }
+
+          const cartCtx: CartContext = {
+            grandTotal: taxData.grandTotal,
+            itemCount: orderLines.reduce((sum, l) => sum + l.quantity, 0),
+            shippingAmount: taxData.shippingAmount ?? 0,
+            lineItems: orderLines.map((l) => ({
+              product_variant_id: l.variantId,
+              quantity: l.quantity,
+              unit_price: l.price,
+            })),
+          };
+
+          // ── 5. Calculate discount ─────────────────────────────────────────────────
+          discountResult = calculatePromotionDiscount(
+            promotion.promotion_type,
+            promotion.discount_config as DiscountConfig,
+            cartCtx,
+          );
+
+          discountAmount = discountResult.discountAmount;
+          grandTotal = discountResult.grandTotalAfter;
+          appliedPromotion = promotion;
+
+          console.log('\n\n\n\n[OrdersService.createOrder] Promotion applied', {
+            promotionId: promotion.id,
+            promotionType: promotion.promotion_type,
+            discountAmount,
+            grandTotalBefore: taxData.grandTotal,
+            grandTotalAfter: grandTotal,
+          });
+        }
+
+        // ── 3. Create the main Order (uses grandTotal after discount) ─────────────────
         const [newOrder] = await tx
           .insert(orders)
           .values({
             company_id: companyId,
             user_id: userId,
             address_id: addressId,
-            total_amount: String(taxData.grandTotal),
+            total_amount: String(grandTotal), // ← discounted if promotion applied
           })
           .returning({ id: orders.id })
           .catch((error) => {
@@ -147,12 +250,12 @@ export class OrdersService {
             });
           });
 
-        console.log('Order created:', newOrder.id);
-        console.log('[OrdersService.createOrder] Order row created', {
+        console.log('\n\n\n[OrdersService.createOrder] Order row created', {
           orderId: newOrder.id,
-          grandTotal: String(taxData.grandTotal),
+          grandTotalBeforeDiscount: taxData.grandTotal,
+          discountAmount,
+          grandTotalAfter: grandTotal,
         });
-
         // 4. Insert orders_tax rows
         if (taxData.appliedTaxTypeIds.length > 0) {
           console.log(
@@ -275,36 +378,108 @@ export class OrdersService {
 
         // 8. Create payment record (PENDING — confirmed later via verifyCheckout)
         console.log('[OrdersService.createOrder] Creating payment record');
+        // ── 8. Payment record ─────────────────────────────────────────────────────────
         await tx
           .insert(payments)
           .values({
             order_id: newOrder.id,
             company_id: companyId,
-            amount: String(taxData.grandTotal),
+            amount: String(grandTotal), // ← discounted amount, not taxData.grandTotal
             payment_status: PaymentStatus.PENDING,
             payment_method: paymentMethod,
             transaction_ref: `txn_${newOrder.id}_${Date.now()}`,
           })
-          .then(() => console.log('Payment record created'))
           .catch((error) => {
             console.error('Error inserting payment record:', error);
             throw new InternalServerErrorException(
               'Failed to create payment record',
-              { cause: error },
+              {
+                cause: error,
+              },
             );
           });
 
-        console.log(
-          '[OrdersService.createOrder] Order creation transaction completed',
-          {
-            orderId: newOrder.id,
-            totalAmount: String(taxData.grandTotal),
-          },
-        );
+        // ── 9. Record promotion usage (after order + payment rows exist) ──────────────
+        if (appliedPromotion && discountAmount > 0) {
+          // Atomic increment with concurrency guard
+          const [updatedPromo] = await tx
+            .update(promotions)
+            .set({
+              total_used: sql`${promotions.total_used} + 1`,
+            })
+            .where(
+              and(
+                eq(promotions.id, appliedPromotion.id),
+                or(
+                  isNull(promotions.max_uses_total),
+                  sql`(${promotions.total_used} + 1) <= ${promotions.max_uses_total}`,
+                ),
+              ),
+            )
+            .returning();
+
+          if (!updatedPromo) {
+            // Race condition — another request consumed the last slot between our check and now
+            throw new HttpException(
+              'Promotion is no longer available — please retry without it',
+              HttpStatus.CONFLICT,
+            );
+          }
+
+          // Auto-expire if limit now reached
+          if (
+            updatedPromo.max_uses_total !== null &&
+            updatedPromo.total_used >= updatedPromo.max_uses_total
+          ) {
+            await tx
+              .update(promotions)
+              .set({ status: PromotionStatus.EXPIRED, expired_at: new Date() })
+              .where(eq(promotions.id, appliedPromotion.id));
+          }
+
+          // Usage record
+          await tx.insert(promotion_usage).values({
+            promotion_id: appliedPromotion.id,
+            order_id: newOrder.id,
+            user_id: userId,
+            company_id: companyId,
+            coupon_code_used: appliedPromotion.coupon_id,
+            discount_amount: String(discountAmount),
+            promotion_snapshot: {
+              promotion_id: appliedPromotion.id,
+              name: appliedPromotion.name,
+              promotion_type: appliedPromotion.promotion_type,
+              discount_config: appliedPromotion.discount_config,
+              priority: appliedPromotion.priority,
+              is_exclusive: appliedPromotion.is_exclusive,
+              valid_from: appliedPromotion.valid_from,
+              valid_to: appliedPromotion.valid_to ?? null,
+              // preserve calculator output for reporting
+              applied_discount_detail: discountResult,
+            },
+          });
+
+          // Analytics event
+          await tx.insert(promotion_analytics_events).values({
+            promotion_id: appliedPromotion.id,
+            company_id: companyId,
+            user_id: userId,
+            order_id: newOrder.id,
+            event_type: PromoEventType.REDEEMED,
+            discount_amount: String(discountAmount),
+            context: {
+              grand_total_before: taxData.grandTotal,
+              grand_total_after: grandTotal,
+              promotion_type: appliedPromotion.promotion_type,
+            },
+          });
+        }
 
         return {
           orderId: newOrder.id,
-          totalAmount: String(taxData.grandTotal),
+          totalAmount: String(grandTotal),
+          discountAmount:
+            discountAmount > 0 ? String(discountAmount) : undefined,
           itemCount: orderLines.length,
         };
       });

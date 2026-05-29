@@ -25,10 +25,11 @@ import { CompanyService } from '../company/company.service';
 import { MailService } from '../../common/services/mail/mail.service';
 import { domainExtractor } from '../../common/filters/domainExtractor.filter';
 import {
+  promotion_analytics_events,
   promotion_usage,
   promotions,
 } from '../../drizzle/schema/promotions.schema';
-import { PromotionStatus } from '../../drizzle/types/types';
+import { PromoEventType, PromotionStatus } from '../../drizzle/types/types';
 
 @Injectable()
 export class CheckoutService {
@@ -121,6 +122,7 @@ export class CheckoutService {
       addressId,
       orderLines,
       paymentMethod,
+      promotion_id: initiateCheckoutDto.promotion_id ?? undefined,
     });
   }
 
@@ -191,68 +193,9 @@ export class CheckoutService {
         );
       if (verificationResult.success) {
         console.log('[CheckoutService.verifyCheckout] Verification successful');
-        if (promotionId && discountApplied) {
-          console.log(
-            '[CheckoutService.verifyCheckout] Recording promotion usage after successful checkout',
-          );
-
-          // 1. Atomic Update: Increment counter only if within limits
-          const [updatedPromo] = await verificationResult.tx
-            .update(promotions)
-            .set({
-              total_used: sql`${promotions.total_used} + 1`,
-              // Auto-deactivate if max limit reached
-              status: sql`CASE 
-          WHEN ${promotions.max_uses_total} IS NOT NULL AND (${promotions.total_used} + 1) >= ${promotions.max_uses_total} 
-          THEN ${PromotionStatus.EXPIRED} 
-          ELSE ${promotions.status} 
-        END`,
-            })
-            .where(
-              and(
-                eq(promotions.id, promotionId),
-                // Ensure we don't exceed limits even with concurrent requests
-                or(
-                  isNull(promotions.max_uses_total),
-                  sql`${promotions.total_used} < ${promotions.max_uses_total}`,
-                ),
-              ),
-            )
-            .returning()
-            .catch((error) => {
-              console.error('Error updating promotion usage:', error);
-              throw new HttpException(
-                'Failed to record promotion usage after checkout',
-                HttpStatus.INTERNAL_SERVER_ERROR,
-                { cause: error },
-              );
-            });
-
-          if (!updatedPromo) {
-            console.log('updatedPromo', !updatedPromo, '\n', updatedPromo);
-            // throw new HttpException(
-            //   'Promotion is no longer valid or usage limit reached',
-            //   HttpStatus.BAD_REQUEST,
-            // );
-          }
-          if (updatedPromo) {
-            // 2. Insert into Usage Log (The new source of truth)
-            console.log(
-              '[CheckoutService.verifyCheckout] Inserting promotion usage record',
-            );
-            await verificationResult.tx.insert(promotion_usage).values({
-              promotion_id: promotionId,
-              company_id: companyId,
-              order_id: orderId,
-              user_id: existingOrder.user_id,
-              discount_amount: discountApplied.toString(),
-              promotion_snapshot: updatedPromo, // Save state for immutable history
-            });
-          }
-        }
         if (productVariantId) {
           console.log(
-            '[CheckoutService.verifyCheckout] Clearing single product variant checkout record after successful checkout',
+            '\n\n\n\n\n[CheckoutService.verifyCheckout] Clearing single product variant checkout record after successful checkout',
           );
           await verificationResult.tx
             .delete(cart_items)

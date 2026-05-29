@@ -8,7 +8,7 @@ export class UploadToCloudService {
   constructor(private cloudinaryService: CloudinaryService) {}
   async uploadFile(
     file: Express.Multer.File,
-  ): Promise<{ secure_url: string; type: string }> {
+  ): Promise<{ secure_url: string; type: string; resource_type: string }> {
     console.log(
       `[UploadToCloudService.uploadFile] Uploading file: ${file?.originalname ?? 'unknown'}`,
     );
@@ -18,7 +18,11 @@ export class UploadToCloudService {
         console.log(
           '[UploadToCloudService.uploadFile] File uploaded successfully',
         );
-        return { secure_url: data.secure_url, type: productImageType.MAIN };
+        return {
+          secure_url: data.secure_url,
+          type: productImageType.MAIN,
+          resource_type: data.resource_type,
+        };
       })
       .catch((err) => {
         console.error(
@@ -30,7 +34,7 @@ export class UploadToCloudService {
   }
   async uploadFiles(
     files: Express.Multer.File[],
-  ): Promise<{ secure_url: string; type: string }[]> {
+  ): Promise<{ secure_url: string; type: string; resource_type: string }[]> {
     console.log(
       `[UploadToCloudService.uploadFiles] Uploading ${files.length} file(s)`,
     );
@@ -44,6 +48,7 @@ export class UploadToCloudService {
           // @ts-ignore
           secure_url: item.secure_url,
           type: productImageType.GALLERY,
+          resource_type: item.resource_type,
         }));
       })
       .catch((err) => {
@@ -57,7 +62,7 @@ export class UploadToCloudService {
   async uploadDocument(
     file: Express.Multer.File,
     fileType: string,
-  ): Promise<{ secure_url: string; type: string }> {
+  ): Promise<{ secure_url: string; type: string; resource_type: string }> {
     console.log(
       `[UploadToCloudService.uploadDocument] Uploading document: ${file?.originalname ?? 'unknown'} as ${fileType}`,
     );
@@ -68,7 +73,11 @@ export class UploadToCloudService {
         console.log(
           '[UploadToCloudService.uploadDocument] Document uploaded successfully',
         );
-        return { secure_url: data.secure_url, type: fileType };
+        return {
+          secure_url: data.secure_url,
+          type: fileType,
+          resource_type: data.resource_type,
+        };
       })
       .catch((err) => {
         console.error(
@@ -80,7 +89,7 @@ export class UploadToCloudService {
   }
   async uploadEvidenceFiles(
     files: Express.Multer.File[],
-  ): Promise<{ secure_url: string }[]> {
+  ): Promise<{ secure_url: string; resource_type: string }[]> {
     console.log(
       `[UploadToCloudService.uploadEvidenceFiles] Uploading ${files.length} evidence file(s)`,
     );
@@ -92,6 +101,7 @@ export class UploadToCloudService {
         );
         return data.map((item) => ({
           secure_url: item.secure_url,
+          resource_type: item.resource_type,
         }));
       })
       .catch((err) => {
@@ -190,10 +200,7 @@ export class UploadToCloudService {
       streamifier.createReadStream(buffer).pipe(uploadStream);
     });
   }
-  async uploadBanner(
-    buffer: Buffer,
-    fileName: string,
-  ): Promise<string> {
+  async uploadBanner(buffer: Buffer, fileName: string): Promise<string> {
     console.log(
       `[UploadToCloudService.uploadBanner] Uploading banner file: ${fileName}`,
     );
@@ -227,12 +234,12 @@ export class UploadToCloudService {
       streamifier.createReadStream(buffer).pipe(uploadStream);
     });
   }
-  async deleteFile(publicId: string): Promise<void> {
+  async deleteFile(publicId: string, resourceType: string): Promise<void> {
     console.log(
       `[UploadToCloudService.deleteFile] Deletion request received for public ID: ${publicId}`,
     );
     return this.cloudinaryService
-      .deleteFile(publicId)
+      .deleteFile(publicId, resourceType)
       .then(() => {
         console.log(
           '[UploadToCloudService.deleteFile] File deleted successfully',

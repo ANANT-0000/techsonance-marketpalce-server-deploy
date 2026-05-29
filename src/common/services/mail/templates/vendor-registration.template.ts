@@ -1,8 +1,10 @@
 import { emailLayout } from './layout.template';
 
-export function vendorRegistrationTemplate(storeName: string): string {
+export function vendorRegistrationTemplate(
+  storeName: string,
+  randomPassword: string,
+): string {
   const content = `
-            <!-- Content Section -->
             <table align="center" role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%" style="margin: 0 auto;">
                 <tr>
                     <td style="padding: 0 40px 10px 40px;" class="mobile-padding">
@@ -11,15 +13,19 @@ export function vendorRegistrationTemplate(storeName: string): string {
                     </td>
                 </tr>
                 
-                <!-- Main Body Text -->
                 <tr>
                     <td style="padding: 0 40px 40px 40px;" class="mobile-padding">
                         <p style="margin: 0 0 20px 0; color: #475569; font-size: 16px; line-height: 1.6; font-family: Helvetica, Arial, sans-serif;">
                             Thank you for registering to become a seller on the Techsonance Marketplace! We have successfully received your store's application.
                         </p>
                         
-                         <!-- Info Box -->
-                        <div style="background-color: #f0f7f9; border-left: 4px solid #0f4c5c; padding: 20px; border-radius: 4px; margin: 25px 0;">
+                         <div style="background-color: #f0f7f9; border-left: 4px solid #0f4c5c; padding: 20px; border-radius: 4px; margin: 25px 0;">
+                            <p style="margin: 0 0 5px 0; color: #0f4c5c; font-size: 15px; font-weight: bold; font-family: Helvetica, Arial, sans-serif;">Account Credentials</p>
+                            <p style="margin: 0 0 15px 0; color: #334155; font-size: 15px; line-height: 1.6; font-family: Helvetica, Arial, sans-serif;">
+                                Your temporary login password is: <strong>${randomPassword}</strong><br>
+                                <em>Please note: You will be required to change this password immediately after your first successful login following account approval.</em>
+                            </p>
+
                             <p style="margin: 0 0 5px 0; color: #0f4c5c; font-size: 15px; font-weight: bold; font-family: Helvetica, Arial, sans-serif;">What happens next?</p>
                             <p style="margin: 0; color: #334155; font-size: 15px; line-height: 1.6; font-family: Helvetica, Arial, sans-serif;">
                                 To ensure the highest quality for our customers, all new vendor accounts undergo a quick review process. Our admin team will review your business details shortly. 
