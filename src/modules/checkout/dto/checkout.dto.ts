@@ -1,4 +1,10 @@
-import { IsBoolean, IsNotEmpty, IsOptional, IsString } from 'class-validator';
+import {
+  IsBoolean,
+  IsNotEmpty,
+  IsNumber,
+  IsOptional,
+  IsString,
+} from 'class-validator';
 import { Type } from 'class-transformer';
 
 export class CreateCheckoutDto {}
@@ -9,7 +15,7 @@ export class InitiateCheckoutDto {
 
   @IsString()
   @IsOptional()
-  promotion_id!: string;
+  promotionId!: string;
 
   @IsString()
   @IsNotEmpty()
@@ -22,6 +28,10 @@ export class InitiateCheckoutDto {
   @IsOptional()
   @IsString()
   productVariantId?: string;
+
+  @IsOptional()
+  @IsNumber()
+  qty?: number;
 }
 
 export class VerifyCheckoutDto {

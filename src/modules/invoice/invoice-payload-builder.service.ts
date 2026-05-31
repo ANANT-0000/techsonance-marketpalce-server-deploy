@@ -406,13 +406,13 @@ export class InvoicePayloadBuilderService {
       [order.customer.first_name, order.customer.last_name]
         .filter(Boolean)
         .join(' ') || 'Customer';
+    const discountAmount = order.promotionUsage
+      ? Number(order.promotionUsage.discount_amount ?? 0)
+      : 0;
+
     console.log(
-      `\n\n\n\n[InvoicePayloadBuilderService.mapOrderInfo] Mapping order discount amount from promotion usage`,
-      order.promotionUsage,
-    );
-    console.log(
-      `\n\n\n[InvoicePayloadBuilderService.mapOrderInfo] Mapping order discount amount from promotion analytics events`,
-      order.promotionAnalyticsEvents,
+      `[InvoicePayloadBuilderService.mapOrderInfo] Resolved discount amount: ${discountAmount}`,
+      { promotionUsage: order.promotionUsage },
     );
     const addr = order.address;
     return {
@@ -421,7 +421,7 @@ export class InvoicePayloadBuilderService {
       customerName,
       customerPhone: order.customer.phone_number ?? undefined,
       customerEmail: order.customer.email,
-      discountAmount: 0,
+      discountAmount,
       shippingAddress: {
         recipientName: customerName,
         addressLine1: addr.address_line_1,
@@ -521,21 +521,6 @@ export class InvoicePayloadBuilderService {
   ): Promise<StandardizedInvoicePayload> {
     const { config, branding, legal } = context;
 
-    // ── 1. Compliance IDs (GSTIN, PAN, CIN, FSSAI …) ─────────────
-    // let complianceRows: (typeof company_compliance.$inferSelect)[] = [];
-    // try {
-    //   complianceRows = await this.db
-    //     .select()
-    //     .from(company_compliance)
-    //     .where(eq(company_compliance.company_id, group.items[0].company_id));
-    // } catch {
-    //   complianceRows = [];
-    // }
-    // // Build taxIds from compliance table first; fall back to GST registration row
-    // const taxIds: Array<{ key: string; value: string }> = complianceRows
-    //   .filter((r) => r.is_active)
-    //   .map((r) => ({ key: r.field_key.toUpperCase(), value: r.field_value }));
-
     let complianceRows: (typeof company_compliance.$inferSelect)[] = [];
     try {
       complianceRows = await this.db
@@ -553,11 +538,11 @@ export class InvoicePayloadBuilderService {
 
     // Build taxIds — filter to GST-related keys for the invoice header
     const taxIds: Array<{ key: string; value: string }> = complianceRows
-      .filter((r) => r.is_active && r.field_key === 'gst_number')
+      .filter((r) => r.is_active && r.field_key === 'gstin')
       .map((r) => ({ key: 'GST Registration No', value: r.field_value }));
 
     // Add PAN if present
-    const panRow = complianceRows.find((r) => r.field_key === 'pan_number');
+    const panRow = complianceRows.find((r) => r.field_key === 'pan');
     if (panRow) taxIds.push({ key: 'PAN', value: panRow.field_value });
 
     // Add CIN if present
@@ -575,30 +560,6 @@ export class InvoicePayloadBuilderService {
       }
     }
 
-    // If no compliance rows, try gst_registrations table directly
-    // if (taxIds.length === 0) {
-    //   const gstRow = await this.db.query.gst_registrations
-    //     .findFirst({
-    //       where: eq(gst_registrations.company_id, group.items[0].company_id),
-    //     })
-    //     .catch(() => null);
-    //   if (gstRow?.gst_number) {
-    //     taxIds.push({ key: 'GST Registration No', value: gstRow.gst_number });
-    //   }
-    //   // Vendor GST from gst_invoices
-    //   if (gstData?.vendorGstin && gstData.vendorGstin !== 'N/A') {
-    //     const alreadyHasGst = taxIds.some(
-    //       (t) => t.value === gstData.vendorGstin,
-    //     );
-    //     if (!alreadyHasGst) {
-    //       taxIds.unshift({
-    //         key: 'GST Registration No',
-    //         value: gstData.vendorGstin,
-    //       });
-    //     }
-    //   }
-    // }
-
     // Determine intra/inter state from seller GSTIN vs buyer state
     const sellerGstin =
       gstData?.vendorGstin ??
@@ -606,45 +567,53 @@ export class InvoicePayloadBuilderService {
       '';
     const buyerState = orderInfo.shippingAddress.state;
     const isInterStateSupply = isInterState(sellerGstin, buyerState);
-
     // ── 2. Line items with per-line tax breakdown ─────────────────
     let runningSubTotal = 0;
-    let runningDiscount = 0;
+    const totalNetAmount = group.items.reduce(
+      (sum, item) => sum + Number(item.price) * item.quantity,
+      0,
+    );
 
     const items: InvoiceLineItem[] = group.items.map((item) => {
-      const unitPrice = Number(item.price);
+      const unitPrice = Number(item.price); // GST-INCLUSIVE price
       const qty = item.quantity;
-      const discount = orderInfo.discountAmount; // extend here when discount schema is added
-      const netAmount = unitPrice * qty - discount;
+      const lineTotal = unitPrice * qty;
 
-      // Distribute total tax proportionally across lines
-      // until per-product tax rates are in the schema
+      const lineDiscountShare =
+        totalNetAmount > 0
+          ? (lineTotal / totalNetAmount) * orderInfo.discountAmount
+          : 0;
+      const lineDiscount = Math.round(lineDiscountShare);
+
+      // lineTotal is GST-inclusive, so extract tax first
       const taxRate = gstData
-        ? (gstData.totalTax /
-            (gstData.totalCgst + gstData.totalSgst + gstData.totalIgst || 1)) *
-          100
+        ? (gstData.totalTax / totalNetAmount) * 100 // effective GST %
         : 0;
-      const lineTaxAmount = gstData
-        ? Math.round(
-            (netAmount / (runningSubTotal || 1)) * gstData.totalTax * 100,
-          ) / 100
-        : 0;
+
+      // Back-calculate: taxableAmount = inclusiveAmount / (1 + taxRate/100)
+      const lineTaxableAmount =
+        taxRate > 0
+          ? Math.round((lineTotal / (1 + taxRate / 100)) * 100) / 100
+          : lineTotal;
+
+      const lineTaxAmount =
+        Math.round((lineTotal - lineTaxableAmount) * 100) / 100;
+
+      const netAmount = Math.round(lineTaxableAmount - lineDiscount);
 
       runningSubTotal += netAmount;
-      runningDiscount += discount;
 
       return {
         name: item.variant?.product?.name ?? 'Unknown Product',
         sku: item.variant?.sku ?? undefined,
-        // description: item.variant?.product?.description ?? undefined,
         quantity: qty,
-        unitPrice,
-        discount,
+        unitPrice: Math.round((unitPrice / (1 + taxRate / 100)) * 100) / 100, // tax-exclusive unit price
+        discount: lineDiscount,
         netAmount,
         taxRate,
         taxType: isInterStateSupply ? 'IGST' : 'CGST+SGST',
         taxAmount: lineTaxAmount,
-        totalAmount: netAmount + lineTaxAmount,
+        totalAmount: lineTotal - lineDiscount, // inclusive price minus discount — no double-add
       };
     });
 
@@ -653,7 +622,6 @@ export class InvoicePayloadBuilderService {
       let taxAssigned = 0;
       for (let i = 0; i < items.length; i++) {
         if (i === items.length - 1) {
-          // Last item gets the remainder to avoid rounding drift
           items[i].taxAmount =
             Math.round((gstData.totalTax - taxAssigned) * 100) / 100;
         } else {
@@ -664,14 +632,16 @@ export class InvoicePayloadBuilderService {
           items[i].taxAmount = share;
           taxAssigned += share;
         }
-        // Also tag individual CGST / SGST rates on the item label
+
         if (!isInterStateSupply && gstData.totalCgst > 0) {
           const cgstRate = (gstData.totalCgst / runningSubTotal) * 100;
-          items[i].taxRate = Math.round(cgstRate * 2 * 100) / 100; // total GST % = CGST% + SGST%
+          items[i].taxRate = Math.round(cgstRate * 2 * 100) / 100;
         } else if (isInterStateSupply && gstData.totalIgst > 0) {
           items[i].taxRate =
             Math.round((gstData.totalIgst / runningSubTotal) * 100 * 100) / 100;
         }
+
+        // ✅ totalAmount = taxable net + extracted tax (NOT adding fresh tax on top)
         items[i].totalAmount = items[i].netAmount + items[i].taxAmount;
       }
     }
@@ -679,22 +649,24 @@ export class InvoicePayloadBuilderService {
     // ── 3. Totals ─────────────────────────────────────────────────
     const currency = config?.default_currency ?? 'INR';
     const totalTax = gstData?.totalTax ?? 0;
+
+    // ✅ grandTotal = taxable subtotal + extracted tax
+    //    This equals the original inclusive price sum — no inflation
     const grandTotal = runningSubTotal + totalTax;
 
     const totals: InvoiceTotals = {
-      subTotal: runningSubTotal + runningDiscount,
-      totalDiscount: runningDiscount,
-      netAmount: runningSubTotal,
+      subTotal: runningSubTotal + orderInfo.discountAmount, // pre-discount taxable base
+      totalDiscount: orderInfo.discountAmount,
+      netAmount: runningSubTotal, // post-discount taxable base
       totalCgst: gstData?.totalCgst ?? 0,
       totalSgst: gstData?.totalSgst ?? 0,
       totalIgst: gstData?.totalIgst ?? 0,
       totalTax,
-      grandTotal,
+      grandTotal, // ✅ = original order value (tax already was inside prices)
       currency,
       grandTotalInWords: numberToWords(grandTotal),
       reverseCharge: false,
     };
-
     // ── 4. Branding ───────────────────────────────────────────────
     const brandingPayload: InvoiceBranding = {
       logoUrl: branding?.logo_url ?? undefined,

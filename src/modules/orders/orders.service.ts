@@ -44,6 +44,7 @@ import {
   OrderStatus,
   PaymentStatus,
   PromoEventType,
+  PromotionRuleType,
   PromotionStatus,
 } from '../../drizzle/types/types';
 import { CompanyService } from '../company/company.service';
@@ -61,6 +62,8 @@ import {
   CartContext,
   DiscountResult,
 } from '../promotions/promotion-calculator';
+import { CouponService } from '../coupon/coupon.service';
+import { PromotionsService } from '../promotions/promotions.service';
 
 @Injectable()
 export class OrdersService {
@@ -73,7 +76,9 @@ export class OrdersService {
     private readonly financesService: FinancesService,
     private readonly policyDocumentService: PolicyDocumentService,
     private readonly productPoliciesService: ProductPoliciesService,
-    private readonly policyResolutionService: PolicyResolutionService, // ← NEW
+    private readonly policyResolutionService: PolicyResolutionService,
+    private readonly promotionService: PromotionsService,
+    private readonly couponService: CouponService,
   ) {}
   private async resolveCompanyId(domain: string): Promise<string> {
     const filteredDomain = domainExtractor(domain);
@@ -142,22 +147,12 @@ export class OrdersService {
         );
         console.log('[OrdersService.createOrder] Stock deduction complete');
 
-        console.log('[OrdersService.createOrder] Calculating taxes for order');
-        const taxData = await this.financesService.calculateOrderTaxes(
-          addressId,
-          orderLines,
-          tx as DrizzleService,
-          companyId,
-        );
-        // Replace the entire promotion block and order insert in createOrder
-
-        let grandTotal = taxData.grandTotal;
+        // STEP 2: Apply promotion discount on base total BEFORE tax
         let discountAmount = 0;
         let discountResult: DiscountResult | null = null;
         let appliedPromotion: typeof promotions.$inferSelect | null = null;
 
         if (promotion_id) {
-          // ── 1. Fetch & validate promotion ────────────────────────────────────────
           const [promotion] = await tx
             .select()
             .from(promotions)
@@ -182,56 +177,65 @@ export class OrdersService {
             );
           }
 
-          // ── 2. Per-user usage cap ─────────────────────────────────────────────────
-          if (promotion.max_uses_per_user !== null) {
-            const [usageCount] = await tx
-              .select({ count: sql<number>`count(*)::int` })
-              .from(promotion_usage)
-              .where(
-                and(
-                  eq(promotion_usage.promotion_id, promotion_id),
-                  eq(promotion_usage.user_id, userId),
-                ),
-              );
+          // --- NEW: Validate per-user usage via promotion_usage records ---
+          const [existingUsage] = await tx
+            .select({ id: promotion_usage.id })
+            .from(promotion_usage)
+            .where(
+              and(
+                eq(promotion_usage.promotion_id, promotion_id),
+                eq(promotion_usage.user_id, userId),
+              ),
+            )
+            .limit(1);
 
-            if ((usageCount?.count ?? 0) >= promotion.max_uses_per_user) {
-              throw new HttpException(
-                `You have already used this promotion the maximum allowed times (${promotion.max_uses_per_user})`,
-                HttpStatus.BAD_REQUEST,
-              );
-            }
+          if (existingUsage) {
+            throw new HttpException(
+              'You have already used this promotion',
+              HttpStatus.BAD_REQUEST,
+            );
           }
-
           const cartCtx: CartContext = {
-            grandTotal: taxData.grandTotal,
+            grandTotal: totalAmount,
             itemCount: orderLines.reduce((sum, l) => sum + l.quantity, 0),
-            shippingAmount: taxData.shippingAmount ?? 0,
+            shippingAmount: 0,
             lineItems: orderLines.map((l) => ({
               product_variant_id: l.variantId,
               quantity: l.quantity,
               unit_price: l.price,
             })),
           };
-
-          // ── 5. Calculate discount ─────────────────────────────────────────────────
+          console.log(
+            '[OrdersService.createOrder] Promotion details:',
+            promotion,
+          );
           discountResult = calculatePromotionDiscount(
             promotion.promotion_type,
             promotion.discount_config as DiscountConfig,
             cartCtx,
           );
-
+          console.log(
+            '[OrdersService.createOrder] Promotion discount calculated',
+            { discountResult },
+          );
           discountAmount = discountResult.discountAmount;
-          grandTotal = discountResult.grandTotalAfter;
           appliedPromotion = promotion;
-
-          console.log('\n\n\n\n[OrdersService.createOrder] Promotion applied', {
-            promotionId: promotion.id,
-            promotionType: promotion.promotion_type,
-            discountAmount,
-            grandTotalBefore: taxData.grandTotal,
-            grandTotalAfter: grandTotal,
-          });
         }
+
+        // STEP 3: Calculate tax on the DISCOUNTED base total
+
+        const taxData = await this.financesService.calculateOrderTaxes(
+          addressId,
+          orderLines,
+          discountAmount,
+          tx as DrizzleService,
+          companyId,
+        );
+        console.log('[OrdersService.createOrder] Tax calculation complete', {
+          taxData,
+        });
+
+        const grandTotal = taxData.grandTotal;
 
         // ── 3. Create the main Order (uses grandTotal after discount) ─────────────────
         const [newOrder] = await tx
@@ -256,23 +260,6 @@ export class OrdersService {
           discountAmount,
           grandTotalAfter: grandTotal,
         });
-        // 4. Insert orders_tax rows
-        if (taxData.appliedTaxTypeIds.length > 0) {
-          console.log(
-            '[OrdersService.createOrder] Writing order tax mappings',
-            {
-              taxCount: taxData.appliedTaxTypeIds.length,
-            },
-          );
-          const orderTaxInserts = taxData.appliedTaxTypeIds.map(
-            (taxTypeId) => ({
-              order_id: newOrder.id,
-              tax_types_id: taxTypeId,
-            }),
-          );
-          // await tx.insert(orders_tax).values(orderTaxInserts);
-        }
-
         // 5. Create GST Invoice record
         console.log('[OrdersService.createOrder] Creating GST invoice record');
         await tx.insert(gst_invoices).values({
@@ -287,16 +274,28 @@ export class OrdersService {
           gst_amount: String(taxData.totalTax),
         });
 
-        // 6. Create order items
-        const orderItemsData = orderLines.map((line) => ({
-          order_id: newOrder.id,
-          product_variant_id: line.variantId,
-          quantity: line.quantity,
-          price: String(line.price),
-          order_status: OrderStatus.PENDING,
-          company_id: companyId,
-        }));
+        const lineBreakdownByVariant = new Map(
+          taxData.lineBreakdown.map((l) => [l.variantId, l]),
+        );
 
+        const orderItemsData = orderLines.map((line) => {
+          const breakdown = lineBreakdownByVariant.get(line.variantId);
+
+          // Defensive fallback: if somehow a variant has no breakdown entry, use
+          // the original price (should never happen since both arrays come from the
+          // same orderLines input, but guards against future refactors).
+          const discountedUnitPrice =
+            breakdown?.discountedUnitPrice ?? line.price;
+          return {
+            order_id: newOrder.id,
+            product_variant_id: line.variantId,
+            quantity: line.quantity,
+            // ── Discounted price (what the customer actually pays per unit) ──────
+            price: String(discountedUnitPrice),
+            order_status: OrderStatus.PENDING,
+            company_id: companyId,
+          };
+        });
         console.log('[OrdersService.createOrder] Inserting order items', {
           itemCount: orderItemsData.length,
         });
@@ -324,15 +323,6 @@ export class OrdersService {
         console.log('[OrdersService.createOrder] Order items inserted', {
           insertedItemIds: insertedItems.map((item) => item.id),
         });
-
-        // 7. Resolve and snapshot policies for every order item
-        //
-        // FIX: replaced the old ad-hoc inline lookup (which silently skipped
-        // items when category had no policy) with PolicyResolutionService which:
-        //   - checks product override first
-        //   - falls back to category policy
-        //   - logs exactly why each item did or didn't get a policy
-        //   - never throws — a missing policy never aborts the order
         const resolutions =
           await this.policyResolutionService.resolveForVariants(
             insertedItems.map((item) => ({

@@ -31,11 +31,11 @@ export interface DiscountResult {
 
 // ── helpers ────────────────────────────────────────────────────────────────
 
-function round2(n: number): number {
+export function multiplyRoundDivide(n: number): number {
   return Math.round(n * 100) / 100;
 }
 
-function clamp(discount: number, grandTotal: number): number {
+export function clamp(discount: number, grandTotal: number): number {
   return Math.min(Math.max(discount, 0), grandTotal);
 }
 
@@ -47,12 +47,14 @@ function calcPercentageOff(
 ): DiscountResult {
   const raw = (ctx.grandTotal * config.value) / 100;
   const discountAmount = clamp(
-    config.cap !== undefined ? Math.min(raw, config.cap) : raw,
+    config.cap !== undefined && config.cap !== null && config.cap > 0
+      ? Math.min(raw, config?.cap)
+      : raw,
     ctx.grandTotal,
   );
   return {
-    discountAmount: round2(discountAmount),
-    grandTotalAfter: round2(ctx.grandTotal - discountAmount),
+    discountAmount: multiplyRoundDivide(discountAmount),
+    grandTotalAfter: multiplyRoundDivide(ctx.grandTotal - discountAmount),
   };
 }
 
@@ -62,8 +64,8 @@ function calcFixedAmount(
 ): DiscountResult {
   const discountAmount = clamp(config.value, ctx.grandTotal);
   return {
-    discountAmount: round2(discountAmount),
-    grandTotalAfter: round2(ctx.grandTotal - discountAmount),
+    discountAmount: multiplyRoundDivide(discountAmount),
+    grandTotalAfter: multiplyRoundDivide(ctx.grandTotal - discountAmount),
   };
 }
 
@@ -77,7 +79,10 @@ function calcTieredDiscount(
     .find((tier) => ctx.grandTotal >= tier.min_cart);
 
   if (!applicableTier) {
-    return { discountAmount: 0, grandTotalAfter: round2(ctx.grandTotal) };
+    return {
+      discountAmount: 0,
+      grandTotalAfter: multiplyRoundDivide(ctx.grandTotal),
+    };
   }
 
   const discountAmount = clamp(
@@ -86,8 +91,8 @@ function calcTieredDiscount(
   );
 
   return {
-    discountAmount: round2(discountAmount),
-    grandTotalAfter: round2(ctx.grandTotal - discountAmount),
+    discountAmount: multiplyRoundDivide(discountAmount),
+    grandTotalAfter: multiplyRoundDivide(ctx.grandTotal - discountAmount),
     appliedTierPercent: applicableTier.percent,
   };
 }
@@ -96,7 +101,7 @@ function calcFreeShipping(
   config: FreeShippingConfig,
   ctx: CartContext,
 ): DiscountResult {
-  const shippingWaived = round2(
+  const shippingWaived = multiplyRoundDivide(
     config.max_shipping_waived !== undefined
       ? Math.min(ctx.shippingAmount, config.max_shipping_waived)
       : ctx.shippingAmount,
@@ -107,7 +112,7 @@ function calcFreeShipping(
     // Your order total_amount should already include shipping; if not, set
     // discountAmount: 0 and handle shippingWaived at the order level instead
     discountAmount: shippingWaived,
-    grandTotalAfter: round2(ctx.grandTotal - shippingWaived),
+    grandTotalAfter: multiplyRoundDivide(ctx.grandTotal - shippingWaived),
     shippingWaived,
   };
 }
@@ -120,7 +125,10 @@ function calcBuyXGetY(
 
   // Not enough items in cart to trigger the deal
   if (totalQty < config.buy_qty) {
-    return { discountAmount: 0, grandTotalAfter: round2(ctx.grandTotal) };
+    return {
+      discountAmount: 0,
+      grandTotalAfter: multiplyRoundDivide(ctx.grandTotal),
+    };
   }
 
   // How many "get" sets does this cart earn?
@@ -147,13 +155,15 @@ function calcBuyXGetY(
   }
 
   const discountAmount = clamp(
-    round2(freeUnits * freeItemPrice * (config.get_discount_percent / 100)),
+    multiplyRoundDivide(
+      freeUnits * freeItemPrice * (config.get_discount_percent / 100),
+    ),
     ctx.grandTotal,
   );
 
   return {
     discountAmount,
-    grandTotalAfter: round2(ctx.grandTotal - discountAmount),
+    grandTotalAfter: multiplyRoundDivide(ctx.grandTotal - discountAmount),
     freeItemVariantId,
   };
 }
@@ -171,21 +181,22 @@ function calcBundleDeal(
   );
 
   if (!allPresent) {
-    return { discountAmount: 0, grandTotalAfter: round2(ctx.grandTotal) };
+    return {
+      discountAmount: 0,
+      grandTotalAfter: multiplyRoundDivide(ctx.grandTotal),
+    };
   }
 
   const discountAmount = clamp(
-    round2(ctx.grandTotal - config.bundle_price),
+    multiplyRoundDivide(ctx.grandTotal - config.bundle_price),
     ctx.grandTotal,
   );
 
   return {
     discountAmount,
-    grandTotalAfter: round2(ctx.grandTotal - discountAmount),
+    grandTotalAfter: multiplyRoundDivide(ctx.grandTotal - discountAmount),
   };
 }
-
- 
 
 export function calculatePromotionDiscount(
   promotionType: PromotionType,
@@ -212,6 +223,9 @@ export function calculatePromotionDiscount(
       return calcBundleDeal(discountConfig as BundleDealConfig, ctx);
 
     default:
-      return { discountAmount: 0, grandTotalAfter: round2(ctx.grandTotal) };
+      return {
+        discountAmount: 0,
+        grandTotalAfter: multiplyRoundDivide(ctx.grandTotal),
+      };
   }
 }

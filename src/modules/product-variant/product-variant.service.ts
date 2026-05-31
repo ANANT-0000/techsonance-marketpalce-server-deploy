@@ -14,6 +14,7 @@ import {
   product_images,
   product_variants,
   products,
+  warehouse,
 } from '../../drizzle/schema';
 import { productImageType, ProductStatus } from '../../drizzle/types/types';
 import { UploadToCloudService } from '../../utils/upload-to-cloud/upload-to-cloud.service';
@@ -379,104 +380,122 @@ export class ProductVariantService {
         );
       }
       const companyId = await this.resolveCompanyId(domain);
-      const result = await this.db.transaction(async (tx) => {
-        const [existingVariant] = await tx
-          .select({
-            id: product_variants.id,
-            product_id: product_variants.product_id,
-          })
-          .from(product_variants)
-          .where(eq(product_variants.id, id))
-          .limit(1);
+      const result = await this.db
+        .transaction(async (tx) => {
+          const [existingVariant] = await tx
+            .select({
+              id: product_variants.id,
+              product_id: product_variants.product_id,
+            })
+            .from(product_variants)
+            .where(eq(product_variants.id, id))
+            .limit(1);
 
-        if (!existingVariant) {
-          console.log(
-            '[ProductVariantService.update] Stopping: Product variant not found',
-          );
-          throw new HttpException(
-            'Product variant not found',
-            HttpStatus.NOT_FOUND,
-          );
-        }
-
-        await tx
-          .update(product_variants)
-          .set(updateData)
-          .where(eq(product_variants.id, id));
-
-        if (imagesToDelete && imagesToDelete.length > 0) {
-          await tx
-            .delete(product_images)
-            .where(
-              and(
-                eq(product_images.variant_id, id),
-                inArray(product_images.id, imagesToDelete),
-              ),
+          if (!existingVariant) {
+            console.log(
+              '[ProductVariantService.update] Stopping: Product variant not found',
             );
-        }
+            throw new HttpException(
+              'Product variant not found',
+              HttpStatus.NOT_FOUND,
+            );
+          }
 
-        const finalResults: { url: string; type: productImageType }[] = [];
+          await tx
+            .update(product_variants)
+            .set(updateData)
+            .where(eq(product_variants.id, id));
 
-        if (files?.product?.[0]) {
-          const mainRes = await this.uploadToCloudService.uploadFile(
-            files.product[0],
-          );
-          finalResults.push({
-            url: mainRes.secure_url,
-            type: productImageType.MAIN,
-          });
-        }
-
-        if (files?.product_spec && files.product_spec.length > 0) {
-          const galleryRes = await this.uploadToCloudService.uploadFiles(
-            files.product_spec,
-          );
-          finalResults.push(
-            ...galleryRes.map((res) => ({
-              url: res.secure_url,
-              type: productImageType.GALLERY,
-            })),
-          );
-        }
-
-        if (finalResults.length > 0 && existingVariant.product_id !== null) {
-          const imageInserts = finalResults.map((image, index) => {
-            if (!existingVariant.product_id) {
-              console.log(
-                '[ProductVariantService.update] Stopping: existing variant id is null',
-                existingVariant,
+          if (imagesToDelete && imagesToDelete.length > 0) {
+            await tx
+              .delete(product_images)
+              .where(
+                and(
+                  eq(product_images.variant_id, id),
+                  inArray(product_images.id, imagesToDelete),
+                ),
               );
-              throw new InternalServerErrorException(
-                'Failed to update product variant',
-              );
-            }
-            return {
-              variant_id: id,
-              product_id: existingVariant.product_id,
-              image_url: image.url,
-              alt_text: `${image.type} Image ${index + 1}`,
-              is_primary: image.type === productImageType.MAIN,
-              imgType: image.type,
-            };
-          });
+          }
 
-          await tx.insert(product_images).values(imageInserts);
-        }
-        if (updateProductVariantDto.warehouse_id && existingVariant?.id) {
-          await this.inventoryService.setStock(
-            existingVariant.id,
-            updateProductVariantDto.warehouse_id,
-            updateProductVariantDto.stock_quantity ?? 0,
-            companyId,
-            tx as DrizzleService,
+          const finalResults: { url: string; type: productImageType }[] = [];
+
+          if (files?.product?.[0]) {
+            const mainRes = await this.uploadToCloudService.uploadFile(
+              files.product[0],
+            );
+            finalResults.push({
+              url: mainRes.secure_url,
+              type: productImageType.MAIN,
+            });
+          }
+
+          if (files?.product_spec && files.product_spec.length > 0) {
+            const galleryRes = await this.uploadToCloudService.uploadFiles(
+              files.product_spec,
+            );
+            finalResults.push(
+              ...galleryRes.map((res) => ({
+                url: res.secure_url,
+                type: productImageType.GALLERY,
+              })),
+            );
+          }
+
+          if (finalResults.length > 0 && existingVariant.product_id !== null) {
+            const imageInserts = finalResults.map((image, index) => {
+              if (!existingVariant.product_id) {
+                console.log(
+                  '[ProductVariantService.update] Stopping: existing variant id is null',
+                  existingVariant,
+                );
+                throw new InternalServerErrorException(
+                  'Failed to update product variant',
+                );
+              }
+              return {
+                variant_id: id,
+                product_id: existingVariant.product_id,
+                image_url: image.url,
+                alt_text: `${image.type} Image ${index + 1}`,
+                is_primary: image.type === productImageType.MAIN,
+                imgType: image.type,
+              };
+            });
+
+            await tx.insert(product_images).values(imageInserts);
+          }
+          if (updateProductVariantDto.warehouse_id && existingVariant?.id) {
+            await this.inventoryService.setStock(
+              existingVariant.id,
+              updateProductVariantDto.warehouse_id,
+              updateProductVariantDto.stock_quantity ?? 0,
+              companyId,
+              tx as DrizzleService,
+            );
+          }
+          return { ...existingVariant, ...updateData };
+        })
+        .catch((error) => {
+          console.error(
+            '[ProductVariantService.update] transaction Error updating product variant:',
+            error,
           );
-        }
-        return { ...existingVariant, ...updateData };
-      });
+          throw new InternalServerErrorException(
+            'Failed to update product variant',
+          );
+        });
 
       return result;
     } catch (error) {
-      if (error instanceof HttpException) throw error;
+      console.error(
+        '[ProductVariantService.update] Error updating product variant:',
+        error,
+      );
+      if (
+        error instanceof HttpException ||
+        error instanceof InternalServerErrorException
+      )
+        throw error;
 
       console.error('[ProductVariantService.update] Update Error:', error);
       throw new InternalServerErrorException(
@@ -484,8 +503,49 @@ export class ProductVariantService {
       );
     }
   }
+  async getVariantsForStockManager(domain: string) {
+    const filteredDomain = domainExtractor(domain);
+    const companyId = await this.companyService.find(filteredDomain);
 
-  async UpdateProductVarintStatus(status: ProductStatus, productId: string) {
+    try {
+      // Perform a direct SQL-level join to flatten the data instantly
+      return await this.db
+        .select({
+          variantId: product_variants.id,
+          productId: products.id,
+          productName: products.name,
+          variantName: product_variants.variant_name,
+          sku: product_variants.sku,
+          status: product_variants.status,
+          stock: inventory.stock_quantity,
+          warehouseId: inventory.warehouse_id,
+          warehouseName: warehouse.warehouse_name,
+        })
+        .from(product_variants)
+        .innerJoin(products, eq(product_variants.product_id, products.id))
+        .leftJoin(
+          inventory,
+          eq(product_variants.id, inventory.product_variant_id),
+        )
+        .leftJoin(warehouse, eq(inventory.warehouse_id, warehouse.id))
+        .where(eq(products.company_id, companyId))
+        .catch((error) => {
+          console.error(
+            '[ProductVariantService.getVariantsForStockManager] Error fetching stock manager variants:',
+            error,
+          );
+          throw new InternalServerErrorException(
+            'Failed to fetch stock manager data',
+          );
+        });
+    } catch (error) {
+      console.error('Error fetching stock manager variants:', error);
+      throw new InternalServerErrorException(
+        'Failed to fetch stock manager data',
+      );
+    }
+  }
+  async UpdateProductVariantStatus(status: ProductStatus, productId: string) {
     console.log(
       '[ProductVariantService.UpdateProductVarintStatus] Request received',
       { productId, status },

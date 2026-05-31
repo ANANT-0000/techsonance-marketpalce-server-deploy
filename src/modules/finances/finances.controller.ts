@@ -20,12 +20,14 @@ export class FinancesController {
     @Headers('company-domain') domain: string,
     @Query('search') search?: string,
     @Query('offset') offset?: number,
+    @Query('limit') limit?: number,
     @Query('status') status?: string,
     @Query('date') date?: string,
     @Query('sortby') sortby?: 'asc' | 'desc' | 'highest' | 'lowest',
   ) {
     return this.financesService.getVendorEarnings(domain, {
       search: search ?? '',
+      limit: Number(limit) || 10,
       offset: Number(offset) || 0,
       status: status ? (status.toUpperCase() as PaymentStatus) : undefined,
       date: date ?? '',
@@ -89,6 +91,7 @@ export class FinancesController {
     return this.financesService.calculateOrderTaxes(
       payload.customerAddressId,
       payload.cartItems,
+      0, // baseTotal
       undefined,
       undefined,
       domain,
@@ -113,10 +116,24 @@ export class FinancesController {
     return this.financesService.getProductTaxMapping(domain);
   }
 
-  @Get('get-invoices')
-  async getGstInvoices(@Headers('company-domain') domain: string) {
-    return this.financesService.getGstInvoices(domain);
+  @Get('gst-invoices')
+  async getGstInvoices(
+    @Headers('company-domain') domain: string,
+    @Query('search') search?: string,
+    @Query('date') date?: string,
+    @Query('sort_by') sortBy?: 'asc' | 'desc',
+    @Query('offset') offset?: number,
+    @Query('limit') limit?: number,
+  ) {
+    return this.financesService.getGstInvoices(domain, {
+      offset: Number(offset) || 0,
+      limit: Number(limit) || 20,
+      search: search ?? '',
+      date: date ?? '',
+      sortBy: sortBy ?? 'desc',
+    });
   }
+
   @Get('gst/:id')
   async getSingleGst(
     @Param('id') id: string,

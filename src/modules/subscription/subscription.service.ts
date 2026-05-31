@@ -1,4 +1,9 @@
-import { Inject, Injectable, Logger } from '@nestjs/common';
+import {
+  Inject,
+  Injectable,
+  InternalServerErrorException,
+  Logger,
+} from '@nestjs/common';
 import { and, asc, eq, gte, lt } from 'drizzle-orm';
 import { MailService } from '../../common/services/mail/mail.service';
 import { DRIZZLE, type DrizzleService } from '../../drizzle/drizzle.module';
@@ -62,9 +67,16 @@ export class SubscriptionService {
   ) {}
   /** Returns the plan row whose plan_name = 'trial' */
   private async getTrialPlan() {
-    const plan = await this.db.query.subscription_plans.findFirst({
-      where: eq(subscription_plans.plan_name, SubscriptionStatus.TRIAL),
-    });
+    const plan = await this.db.query.subscription_plans
+      .findFirst({
+        where: eq(subscription_plans.plan_name, SubscriptionStatus.TRIAL),
+      })
+      .catch((err) => {
+        this.logger.error('Failed to fetch trial plan from database', err);
+        throw new InternalServerErrorException('Failed to fetch trial plan', {
+          cause: err,
+        });
+      });
     if (!plan) {
       throw new Error(
         'No trial plan found in subscription_plans. Seed the plan first.',
@@ -112,9 +124,7 @@ export class SubscriptionService {
   }
 
   /** Derives banner urgency from days remaining */
-  private getBannerUrgency(
-    daysRemaining: number,
-  ): BannerUrgency {
+  private getBannerUrgency(daysRemaining: number): BannerUrgency {
     if (daysRemaining <= 1) return BannerUrgency.DANGER;
     if (daysRemaining <= 3) return BannerUrgency.WARNING;
     return BannerUrgency.INFO;
@@ -130,7 +140,10 @@ export class SubscriptionService {
     const plan = await this.getTrialPlan();
     const now = new Date();
     const trialEnd = addDays(now, plan.trial_days ?? 14);
-
+    console.log(
+      `Starting trial for company ${companyId}, ends on ${trialEnd.toISOString()} (UTC) plan trial_days=${plan.trial_days})`,
+    );
+    console.log(`Plan details: ${JSON.stringify(plan)}`);
     const [sub] = await this.db
       .insert(vendor_subscriptions)
       .values({
@@ -142,7 +155,19 @@ export class SubscriptionService {
         current_period_start: now,
         current_period_end: trialEnd,
       })
-      .returning();
+      .returning()
+      .catch((err) => {
+        this.logger.error(
+          `Failed to create trial subscription for company ${companyId}`,
+          err,
+        );
+        throw new InternalServerErrorException(
+          'Failed to start trial subscription',
+          {
+            cause: err,
+          },
+        );
+      });
 
     await this.logEvent(
       companyId,
@@ -199,7 +224,7 @@ export class SubscriptionService {
       banner_urgency:
         showBanner && daysRemaining !== null
           ? this.getBannerUrgency(daysRemaining)
-          : BannerUrgency.INFO  ,
+          : BannerUrgency.INFO,
     };
   }
 

@@ -61,10 +61,7 @@ export class CheckoutService {
     const { addressId, paymentMethod, cartId, productVariantId } =
       initiateCheckoutDto;
     console.log('[CheckoutService.initiateCheckout] Request received', {
-      userId,
-      cartId,
-      productVariantId,
-      domain,
+      initiateCheckoutDto,
     });
     if (!cartId && !productVariantId) {
       throw new HttpException(
@@ -106,6 +103,7 @@ export class CheckoutService {
       userId,
       cartId,
       productVariantId,
+      initiateCheckoutDto.qty,
     );
     if (!orderLines || orderLines.length === 0) {
       throw new HttpException(
@@ -122,7 +120,7 @@ export class CheckoutService {
       addressId,
       orderLines,
       paymentMethod,
-      promotion_id: initiateCheckoutDto.promotion_id ?? undefined,
+      promotion_id: initiateCheckoutDto.promotionId ?? undefined,
     });
   }
 
@@ -245,6 +243,7 @@ export class CheckoutService {
     userId: string,
     cartId?: string,
     productVariantId?: string,
+    qty?: number,
   ): Promise<
     { variantId: string; price: number; quantity: number }[] | undefined
   > {
@@ -270,7 +269,7 @@ export class CheckoutService {
         {
           variantId: variant.id,
           price: Number(variant.price),
-          quantity: 1,
+          quantity: qty ?? 1,
         },
       ];
     }

@@ -8,6 +8,8 @@ import { MailModule } from '../../common/services/mail/mail.module';
 import { InvoiceModule } from '../invoice/invoice.module';
 import { FinancesModule } from '../finances/finances.module';
 import { ProductPoliciesModule } from '../product-policies/product-policies.module';
+import { CouponModule } from '../coupon/coupon.module';
+import { PromotionsModule } from '../promotions/promotions.module';
 
 @Module({
   imports: [
@@ -18,6 +20,8 @@ import { ProductPoliciesModule } from '../product-policies/product-policies.modu
     InvoiceModule,
     FinancesModule,
     ProductPoliciesModule,
+    CouponModule,
+    PromotionsModule,
   ],
   controllers: [OrdersController],
   providers: [OrdersService],

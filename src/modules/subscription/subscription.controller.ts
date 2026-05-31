@@ -4,7 +4,6 @@ import {
   Post,
   Body,
   UseGuards,
-
   Headers,
 } from '@nestjs/common';
 import { SubscriptionService } from './subscription.service';
@@ -35,5 +34,13 @@ export class SubscriptionController {
     @Body() body: { plan_id: string },
   ) {
     return this.subscriptionService.upgradePlan(domain, body.plan_id);
+  }
+
+  @Post('start-trial')
+  startTrial(@Headers('company-domain') domain: string) {
+    console.log(
+      `Received request to start trial for company domain: ${domain}`,
+    );
+    return this.subscriptionService.startTrial(domain);
   }
 }

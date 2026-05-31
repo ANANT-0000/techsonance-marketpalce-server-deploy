@@ -12,18 +12,15 @@ import {
   UploadedFiles,
 } from '@nestjs/common';
 import { ComplianceService } from './compliance.service';
- 
-import { UploadToCloud } from '../../common/decorators/upload.decorator';
-import { CreateComplianceDto } from './dto/compliance.dto';
 
 @Controller({ version: '1', path: 'compliance' })
 export class ComplianceController {
   constructor(private readonly complianceService: ComplianceService) {}
-  // @Get()
-  // @HttpCode(HttpStatus.OK)
-  // async listAll(@Headers('company-domain') domain: string) {
-  //   return this.complianceService.listComplianceFields(domain);
-  // }
+  @Get()
+  @HttpCode(HttpStatus.OK)
+  async listAll(@Headers('company-domain') domain: string) {
+    return this.complianceService.listCompliance(domain);
+  }
 
   // // ── GET: list by country ────────────────────────────────────────────────
 

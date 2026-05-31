@@ -12,10 +12,8 @@ import {
   Headers,
 } from '@nestjs/common';
 import { ProductVariantService } from './product-variant.service';
-// import { CreateProductVariantDto } from './dto/create-product-variant.dto';
 import { UploadToCloud } from '../../common/decorators/upload.decorator';
 import { ParseJsonPipe } from '../../common/pipes/parseJsonPipe';
-import { UpdateProductVariantDto } from './dto/update-product-variant.dto';
 import { type ProductFiles } from '../../common/Types/index.type';
 import { ProductStatus } from '../../drizzle/types/types';
 
@@ -44,7 +42,12 @@ export class ProductVariantController {
       files,
     );
   }
-
+  // Add this new route
+  @Get('stock-manager')
+  @HttpCode(HttpStatus.OK)
+  getStockManagerVariants(@Headers('company-domain') domain: string) {
+    return this.productVariantService.getVariantsForStockManager(domain);
+  }
   @Get('vendor-products-variants/:vendorId')
   @HttpCode(HttpStatus.OK)
   findAll(@Param('vendorId') vendorId: string) {
@@ -74,18 +77,20 @@ export class ProductVariantController {
   @HttpCode(HttpStatus.OK)
   async update(
     @Param('id') id: string,
-    @Body('variant_data', ParseJsonPipe) updateProductVariantDto: any,
-    @Body('imagesToDelete', ParseJsonPipe) imagesToDelete: string[],
+    // @Body() body: any,
+    @Body(ParseJsonPipe) dto: any,
     @Headers('company-domain') domain: string,
     @UploadedFiles() files: ProductFiles,
+    @Body('imagesToDelete') imagesToDelete?: string[],
   ) {
+    // console.log('Received update request :', body);
     console.log('id', id);
-    console.log('updateProductVariantDto', updateProductVariantDto);
+    console.log('dto', dto);
     console.log('imagesToDelete', imagesToDelete);
-    console.log('fies', files);
+    console.log('files', files);
     return this.productVariantService.update(
       id,
-      updateProductVariantDto,
+      dto,
       imagesToDelete,
       files,
       domain,
@@ -97,10 +102,7 @@ export class ProductVariantController {
     @Body('status') status: ProductStatus,
     @Headers('company-domain') domain: string,
   ) {
-    console.log('id', id);
-    console.log('status', status);
-    console.log('dmoain', domain);
-    return await this.productVariantService.UpdateProductVarintStatus(
+    return await this.productVariantService.UpdateProductVariantStatus(
       status,
       id,
     );

@@ -1,3 +1,4 @@
+import { DiscountConfig } from './../../drizzle/types/types';
 // finances.service.ts
 import {
   Injectable,
@@ -24,6 +25,7 @@ import {
   address,
   company_compliance,
   gst_invoices,
+  invoiceRelations,
   orders,
   payments,
   product_tax,
@@ -38,9 +40,25 @@ import { CompanyService } from '../company/company.service';
 import { domainExtractor } from '../../common/filters/domainExtractor.filter';
 import { COUNTRIES_COMPLIANCE, getStateByCode } from '../../common/constants';
 import { PaymentStatus } from '../../drizzle/types/types';
+import { multiplyRoundDivide } from '../promotions/promotion-calculator';
+import { Console } from 'console';
 
 // ─── helpers ────────────────────────────────────────────────────
-
+export interface LineBreakdown {
+  variantId: string;
+  quantity: number;
+  originalUnitPrice: number; // the price passed in, no mutation
+  originalTotal: number; // originalUnitPrice * quantity
+  discountApplied: number; // proportional share of discountAmount
+  discountedTotal: number; // originalTotal - discountApplied
+  discountedUnitPrice: number; // discountedTotal / quantity  ← persist this on order_items
+  taxAmount: number; // GST extracted from discountedTotal (tax-inclusive model)
+  netAmount: number; // discountedTotal - taxAmount
+  cgst: number;
+  sgst: number;
+  igst: number;
+  taxTypeId: string | null;
+}
 async function getGstComplianceMap(
   db: DrizzleService,
   companyId: string,
@@ -127,13 +145,14 @@ export class FinancesService {
     domain: string,
     filters: {
       search: string;
+      limit: number;
       offset: number;
       status: PaymentStatus | undefined;
       date: string;
       sortby: 'asc' | 'desc' | 'highest' | 'lowest';
     },
   ) {
-    const { search, offset, status, date, sortby } = filters;
+    const { search, offset, status, limit, date, sortby } = filters;
 
     try {
       const companyId = await this.resolveCompanyId(domain);
@@ -142,7 +161,7 @@ export class FinancesService {
 
       // Search
       if (search) {
-        whereConditions.push(eq(orders.id, search));
+        whereConditions.push(ilike(orders.id, `%${search}%`));
       }
 
       // Date
@@ -199,21 +218,31 @@ export class FinancesService {
         })
         .from(orders)
         .where(eq(orders.company_id, companyId));
-      const orderRecords = await this.db.query.orders.findMany({
-        where: and(...whereConditions),
-        limit: 10,
-        offset: Number(offset) || 0,
-        orderBy: orderByClause,
-        with: {
-          payment: {
-            columns: {
-              id: true,
-              payment_status: true,
-              transaction_ref: true,
+      const orderRecords = await this.db.query.orders
+        .findMany({
+          where: and(...whereConditions),
+          limit: limit || 10,
+          offset: Number(offset) || 0,
+          orderBy: orderByClause,
+          with: {
+            payment: {
+              columns: {
+                id: true,
+                payment_status: true,
+                transaction_ref: true,
+              },
             },
           },
-        },
-      });
+        })
+        .catch((error) => {
+          console.error('Error fetching orders for earnings:', error);
+          throw new InternalServerErrorException(
+            'Error fetching orders for earnings: ',
+            {
+              cause: error,
+            },
+          );
+        });
 
       const earnings = orderRecords.map((order) => {
         const grossAmount = Number(order.total_amount || 0);
@@ -232,7 +261,7 @@ export class FinancesService {
         }
 
         return {
-          id: order.payment?.id || `calc-${order.id}`,
+          id: order.payment?.id,
           order_id: order.id,
           net_earning: grossAmount.toFixed(2),
           status: earningStatus,
@@ -253,7 +282,6 @@ export class FinancesService {
         total_transactions: totalOrders.total,
         total_cleared_earnings: totalCleared.toFixed(2),
         total_pending_earnings: totalPending.toFixed(2),
-        // total_orders: totalOrders.total,
         earnings,
       };
     } catch (error) {
@@ -752,21 +780,13 @@ export class FinancesService {
         .set({ tax_rate_id: data.tax_rate_id })
         .where(eq(product_tax.id, existingMapping.id))
         .returning();
-      return {
-        success: true,
-        message: 'Tax rate updated successfully',
-        data: updated,
-      };
+      return updated;
     }
     const inserted = await this.db
       .insert(product_tax)
       .values({ product_id: data.product_id, tax_rate_id: data.tax_rate_id })
       .returning();
-    return {
-      success: true,
-      message: 'Tax rate assigned successfully',
-      data: inserted,
-    };
+    return inserted;
   }
 
   async bulkAssignProductTax(
@@ -791,22 +811,78 @@ export class FinancesService {
       })
       .returning();
 
-    return {
-      success: true,
-      message: `Successfully processed ${results.length} products`,
-      data: results,
-    };
+    return results;
   }
 
   // ── GST Invoices ─────────────────────────────────────────────
 
-  async getGstInvoices(domain: string) {
+  async getGstInvoices(
+    domain: string,
+    filters: {
+      offset: number;
+      limit: number;
+      search: string;
+      date: string;
+      sortBy: 'asc' | 'desc';
+    } = {
+      limit: 10,
+      offset: 0,
+      search: '',
+      date: '',
+      sortBy: 'desc',
+    },
+  ) {
+    const { search, date, sortBy } = filters;
     const companyId = await this.resolveCompanyId(domain);
-    const records = await this.db.query.gst_invoices.findMany({
-      where: eq(gst_invoices.company_id, companyId),
-      orderBy: [desc(gst_invoices.invoice_date)],
+    console.log('Fetched GST invoices with filters:', {
+      companyId,
+      search,
+      date,
+      sortBy,
     });
-    return { success: true, data: records };
+
+    const conditions = [eq(gst_invoices.company_id, companyId)];
+
+    if (search?.trim()) {
+      conditions.push(ilike(gst_invoices.invoice_number, `%${search.trim()}%`));
+    }
+
+    if (date) {
+      const parsedDate = new Date(date);
+      console.log('Parsed date for GST invoice filtering:', parsedDate);
+      if (!Number.isNaN(parsedDate.getTime())) {
+        // conditions.push(
+        //   eq(gst_invoices.invoice_date, parsedDate.toISOString().slice(0, 10)),
+        // );
+      }
+    }
+    const [totalInvoices] = await this.db
+      .select({ count: count(gst_invoices.id) })
+      .from(gst_invoices)
+      .where(eq(gst_invoices.company_id, companyId));
+    console.log('Total GST invoices matching filters:', totalInvoices.count);
+    const records = await this.db.query.gst_invoices
+      .findMany({
+        where: and(...conditions),
+        limit: filters.limit,
+        offset: filters.offset,
+        orderBy: [
+          sortBy === 'asc'
+            ? asc(gst_invoices.invoice_date)
+            : desc(gst_invoices.invoice_date),
+        ],
+      })
+      .catch((error) => {
+        throw new InternalServerErrorException(
+          'Error fetching GST invoices: ' + error,
+        );
+      });
+    console.log(`Retrieved ${records.length} GST invoices from DB`);
+    console.log('Sample record:', records);
+    return {
+      invoices: records,
+      total: totalInvoices.count,
+    };
   }
 
   // ── Tax Calculation ──────────────────────────────────────────
@@ -819,6 +895,7 @@ export class FinancesService {
   async calculateOrderTaxes(
     customerAddressId: string,
     cartItems: { variantId: string; quantity: number; price: number }[],
+    discountAmount: number = 0,
     transaction?: DrizzleService,
     company_id?: string,
     domain?: string,
@@ -848,15 +925,11 @@ export class FinancesService {
     }
     const customerState = customerAddr.state.trim().toLowerCase();
 
-    // Fetch the state_code row that shares the same valid_until
-
-    // Also fetch the gst_number for returning vendorGstId
     const [countryCompliance] = await tx
       .select()
       .from(company_compliance)
       .where(eq(company_compliance.company_id, companyId))
       .catch((error) => {
-        console.error('Error fetching company compliance:', error);
         throw new HttpException(
           'Error fetching company compliance: ' + error,
           HttpStatus.INTERNAL_SERVER_ERROR,
@@ -872,21 +945,17 @@ export class FinancesService {
         HttpStatus.BAD_REQUEST,
       );
     }
-    // console.log('Compliance fields:', fields);
-    /**
-     * Find tax field (GSTIN for India)
-     */
+
     const gstField = fields.find(
       (f) => f.is_primary_tax_id || f.value === 'gstin',
     );
-
     if (!gstField?.value) {
       throw new HttpException(
         'GST field config missing.',
         HttpStatus.BAD_REQUEST,
       );
     }
-    console.log('Found GST field:', gstField);
+
     const [gstNumberRow] = await tx
       .select()
       .from(company_compliance)
@@ -898,7 +967,6 @@ export class FinancesService {
         ),
       )
       .catch((error) => {
-        console.error('Error fetching vendor GST number:', error);
         throw new HttpException(
           'Error fetching vendor GST number: ' + error,
           HttpStatus.INTERNAL_SERVER_ERROR,
@@ -912,12 +980,7 @@ export class FinancesService {
       );
     }
 
-    /**
-     * State code = first 2 digits of GSTIN
-     * Example: 24ABCDE1234F1Z5 => 24
-     */
     const stateCode = gstNumberRow.field_value.slice(0, 2);
-
     if (!stateCode) {
       throw new HttpException(
         'Vendor GST state code is missing.',
@@ -927,19 +990,39 @@ export class FinancesService {
     const vendorState = getStateByCode(stateCode)?.state.trim().toLowerCase();
     const isIntraState = customerState === vendorState;
 
-    // 3. Calculate taxes (logic unchanged from original)
-    let subTotal = 0;
-    let netSubTotal = 0;
+    // 2. Pre-compute base total once (used for proportional discount splitting)
+    const baseTotal = cartItems.reduce(
+      (sum, item) => sum + Number(item.price) * item.quantity,
+      0,
+    );
+
+    // 3. Per-line breakdown — this is the single source of truth for all
+    //    downstream consumers (tax aggregates + order item insertion)
+
     let totalCgst = 0;
     let totalSgst = 0;
     let totalIgst = 0;
     let totalTax = 0;
+    let netSubTotal = 0;
     const appliedTaxTypeIds = new Set<string>();
+    const lineBreakdown: LineBreakdown[] = [];
 
     for (const item of cartItems) {
-      const baseItemTotal = Number(item.price) * item.quantity;
-      subTotal += baseItemTotal;
+      const originalUnitPrice = Number(item.price);
+      const originalTotal = originalUnitPrice * item.quantity;
 
+      // Proportionally split the order-level discount across lines
+      const lineShare = baseTotal > 0 ? originalTotal / baseTotal : 0;
+      const discountApplied = discountAmount * lineShare;
+      const discountedTotal = originalTotal - discountApplied;
+
+      // discountedUnitPrice is what gets stored on the order_item row
+      const discountedUnitPrice =
+        item.quantity > 0
+          ? multiplyRoundDivide(discountedTotal / item.quantity)
+          : 0;
+
+      // Resolve tax rate for this variant
       const [variantRecord] = await tx
         .select({ product_id: product_variants.product_id })
         .from(product_variants)
@@ -970,20 +1053,40 @@ export class FinancesService {
 
       const mapping = productTaxMapping[0];
       const taxPercentage = mapping ? Number(mapping.rate) : 0;
-      if (mapping?.taxTypeId) appliedTaxTypeIds.add(mapping.taxTypeId);
+      const taxTypeId = mapping?.taxTypeId ?? null;
+      if (taxTypeId) appliedTaxTypeIds.add(taxTypeId);
 
-      const itemTaxAmount =
-        baseItemTotal - baseItemTotal / (1 + taxPercentage / 100);
-      const itemNetAmount = baseItemTotal - itemTaxAmount;
-      netSubTotal += itemNetAmount;
+      // Tax extraction from tax-inclusive discounted total
+      // Formula: taxAmount = discountedTotal - discountedTotal / (1 + rate/100)
+      const taxAmount =
+        discountedTotal - discountedTotal / (1 + taxPercentage / 100);
+      const netAmount = discountedTotal - taxAmount;
 
-      if (isIntraState) {
-        totalCgst += itemTaxAmount / 2;
-        totalSgst += itemTaxAmount / 2;
-      } else {
-        totalIgst += itemTaxAmount;
-      }
-      totalTax += itemTaxAmount;
+      const cgst = isIntraState ? taxAmount / 2 : 0;
+      const sgst = isIntraState ? taxAmount / 2 : 0;
+      const igst = !isIntraState ? taxAmount : 0;
+
+      totalCgst += cgst;
+      totalSgst += sgst;
+      totalIgst += igst;
+      totalTax += taxAmount;
+      netSubTotal += netAmount;
+
+      lineBreakdown.push({
+        variantId: item.variantId,
+        quantity: item.quantity,
+        originalUnitPrice,
+        originalTotal,
+        discountApplied: multiplyRoundDivide(discountApplied),
+        discountedTotal: multiplyRoundDivide(discountedTotal),
+        discountedUnitPrice,
+        taxAmount: multiplyRoundDivide(taxAmount),
+        netAmount: multiplyRoundDivide(netAmount),
+        cgst: multiplyRoundDivide(cgst),
+        sgst: multiplyRoundDivide(sgst),
+        igst: multiplyRoundDivide(igst),
+        taxTypeId,
+      });
     }
 
     return {
@@ -992,12 +1095,12 @@ export class FinancesService {
       totalSgst: Number(totalSgst.toFixed(2)),
       totalIgst: Number(totalIgst.toFixed(2)),
       totalTax: Number(totalTax.toFixed(2)),
-      grandTotal: Number(subTotal.toFixed(2)),
+      grandTotal: Number((baseTotal - discountAmount).toFixed(2)),
+      discountAmount: Number(discountAmount.toFixed(2)),
       shippingAmount: 0,
-      // [CHANGED] vendorGstId now returns the compliance row id
-      // of the gst_number row (same role as old gst_registrations.id)
       vendorGstId: gstNumberRow?.id ?? null,
       appliedTaxTypeIds: Array.from(appliedTaxTypeIds),
+      lineBreakdown,
     };
   }
 }

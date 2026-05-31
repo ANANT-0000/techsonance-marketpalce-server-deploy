@@ -57,13 +57,13 @@ export interface OrderWithRelations {
   promotionUsage: {
     promotion_id: string;
     order_id: string;
-    discount_amount: number;
-  }
+    discount_amount: string;
+  };
   promotionAnalyticsEvents: {
     id: string;
     promotion_id: string;
     event_type: string;
-    discount_amount: number;
+    discount_amount: string;
   };
   customer: {
     first_name: string | null;

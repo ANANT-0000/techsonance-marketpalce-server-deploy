@@ -203,6 +203,10 @@ export const documentRelations = relations(company_document, ({ one }) => ({
     fields: [company_document.company_id],
     references: [company.id],
   }),
+  vendor: one(vendor, {
+    fields: [company_document.vendor_id],
+    references: [vendor.id],
+  }),
 }));
 export const productsRelations = relations(products, ({ one, many }) => ({
   category: one(categories, {

@@ -908,13 +908,19 @@ export class VendorsService {
       );
       const applications = await this.db.query.vendor
         .findMany({
-          where: eq(vendor.vendor_status, UserStatus.PENDING),
+          // where: eq(vendor.vendor_status, UserStatus.PENDING),
           with: {
             company: true,
             user: true,
             documents: true,
           },
           orderBy: (vendor, { desc }) => desc(vendor.created_at),
+        })
+        .then((results) => {
+          console.log(
+            `[VendorsService.vendorApplications] Successfully retrieved ${results.length} applications`,
+          );
+          return results;
         })
         .catch((error) => {
           console.error(
@@ -933,7 +939,11 @@ export class VendorsService {
       );
       return applications;
     } catch (error) {
-      if (error instanceof HttpException) {
+      console.log(`[VendorsService.vendorApplications] `, error);
+      if (
+        error instanceof HttpException ||
+        error instanceof InternalServerErrorException
+      ) {
         throw error;
       }
       throw new InternalServerErrorException(

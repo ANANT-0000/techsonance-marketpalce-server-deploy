@@ -724,6 +724,9 @@ export class CouponService {
           ),
         )
         .limit(1);
+      if (isCouponUsed) {
+        throw new BadRequestException('You have already used this coupon.');
+      }
 
       const couponPromotion = await this.db.query.promotions.findFirst({
         where: and(
@@ -830,6 +833,8 @@ export class CouponService {
           ? Number(discountConfig.cap)
           : null,
         isGlobal: isGlobalCoupon,
+        discount_config: discountConfig,
+        rule: couponPromotion.rules,
         applicableProductIds: validForProductIds,
       };
     } catch (error) {
