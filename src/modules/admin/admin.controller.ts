@@ -48,8 +48,22 @@ export class AdminController {
   }
   @Get('vendor-applications')
   @HttpCode(HttpStatus.OK)
-  async getVendorApplications() {
-    return await this.vendorService.vendorApplications();
+  async getVendorApplications(
+    @Query('search') search?: string,
+    @Query('offset') offset?: number,
+    @Query('limit') limit?: number,
+    @Query('status') status?: string,
+    @Query('date') date?: string,
+    @Query('sortby') sortby?: 'asc' | 'desc' | 'highest' | 'lowest',
+  ) {
+    return await this.vendorService.vendorApplications({
+      search: search ?? '',
+      limit: Number(limit) || 10,
+      offset: Number(offset) || 0,
+      status: status as UserStatus,
+      date: date ?? '',
+      sortby: sortby as 'asc' | 'desc',
+    });
   }
   @Get('vendor-applications-count')
   @HttpCode(HttpStatus.OK)
@@ -80,8 +94,22 @@ export class AdminController {
 
   @Get('orders')
   @HttpCode(HttpStatus.OK)
-  async getAllOrders() {
-    return this.orderService.getAllOrders();
+  async getAllOrders(
+    @Query('search') search?: string,
+    @Query('offset') offset?: number,
+    @Query('limit') limit?: number,
+    @Query('status') status?: string,
+    @Query('date') date?: string,
+    @Query('sortby') sortby?: 'asc' | 'desc' | 'highest' | 'lowest',
+  ) {
+    return this.orderService.getAllOrders({
+      search: search ?? '',
+      limit: Number(limit) || 10,
+      offset: Number(offset) || 0,
+      status,
+      date: date ?? '',
+      sortby: sortby ?? 'desc',
+    });
   }
   @Get('vendors/:vendorId')
   @HttpCode(HttpStatus.OK)

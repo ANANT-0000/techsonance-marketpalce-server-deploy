@@ -17,7 +17,7 @@ import {
   products,
   warehouse,
 } from '../../drizzle/schema';
-import { and, eq, sql } from 'drizzle-orm';
+import { and, asc, desc, eq, ilike, or, SQL, sql } from 'drizzle-orm';
 import { productImageType } from '../../drizzle/types/types';
 import { domainExtractor } from '../../common/filters/domainExtractor.filter';
 export const LOW_STOCK_THRESHOLD = 5; // configurable
@@ -27,7 +27,7 @@ export class InventoryService {
   constructor(
     @Inject(DRIZZLE) private readonly db: DrizzleService,
     private readonly companyService: CompanyService,
-  ) {}
+  ) { }
 
   private async resolveCompanyId(domain: string): Promise<string> {
     const filteredDomain = domainExtractor(domain);
@@ -94,7 +94,17 @@ export class InventoryService {
     }
   }
 
-  async findAll(domain: string) {
+  async findAll(
+    domain: string,
+    filters?: {
+      search: string;
+      limit: number;
+      offset: number;
+      status: string | undefined;
+      date: string;
+      sortby: 'asc' | 'desc';
+    },
+  ) {
     console.log('[InventoryService.findAll] Request received', domain);
     try {
       console.log('[InventoryService.findAll] Resolving company id');
@@ -104,9 +114,18 @@ export class InventoryService {
         companyId,
       );
 
+      // const whereClause: SQL[] = []
+      // if (filters?.search) {
+      //   whereClause.push(
+      //     ilike(product_variants.variant_name, `%${filters.search.toLowerCase()}%`),
+      //   )
+      // }
       const rows = await this.db.query.inventory
         .findMany({
           where: eq(inventory.company_id, companyId),
+          limit: filters?.limit ?? 10,
+          offset: filters?.offset ?? 0,
+          orderBy: filters?.sortby === 'desc' ? desc(inventory.created_at) : asc(inventory.created_at),
           columns: {
             id: true,
             stock_quantity: true,
@@ -116,7 +135,7 @@ export class InventoryService {
           },
           with: {
             variant: {
-              with: {
+            with: {
                 product: {
                   columns: {
                     id: true,

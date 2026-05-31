@@ -25,7 +25,6 @@ import {
   address,
   company_compliance,
   gst_invoices,
-  invoiceRelations,
   orders,
   payments,
   product_tax,
@@ -41,7 +40,6 @@ import { domainExtractor } from '../../common/filters/domainExtractor.filter';
 import { COUNTRIES_COMPLIANCE, getStateByCode } from '../../common/constants';
 import { PaymentStatus } from '../../drizzle/types/types';
 import { multiplyRoundDivide } from '../promotions/promotion-calculator';
-import { Console } from 'console';
 
 // ─── helpers ────────────────────────────────────────────────────
 export interface LineBreakdown {
@@ -133,7 +131,7 @@ export class FinancesService {
   constructor(
     @Inject(DRIZZLE) private readonly db: DrizzleService,
     private readonly companyService: CompanyService,
-  ) {}
+  ) { }
 
   private async resolveCompanyId(domain: string): Promise<string> {
     const filteredDomain = domainExtractor(domain);
@@ -251,8 +249,8 @@ export class FinancesService {
 
         const filterStatus: PaymentStatus | undefined =
           order.payment?.payment_status?.toUpperCase() as
-            | PaymentStatus
-            | undefined;
+          | PaymentStatus
+          | undefined;
 
         if (filterStatus === PaymentStatus.COMPLETED) {
           earningStatus = PaymentStatus.COMPLETED;
@@ -367,7 +365,17 @@ export class FinancesService {
     }
   }
 
-  async getGstRegistrations(domain: string) {
+  async getGstRegistrations(
+    domain: string,
+    filters?: {
+      search: string;
+      limit: number;
+      offset: number;
+      status: string | undefined;
+      date: string;
+      sortby: string;
+    },
+  ) {
     const companyId = await this.resolveCompanyId(domain);
 
     const rows = await this.db
@@ -397,102 +405,6 @@ export class FinancesService {
    *   field_key='gst_is_default'        → 'true' | 'false'
    * valid_until on each row = effective_to date.
    */
-  async addGstRegistration(domain: string, data: any) {
-    const companyId = await this.resolveCompanyId(domain);
-    const effectiveTo = data.effective_to
-      ? new Date(data.effective_to).toISOString().split('T')[0]
-      : '2099-12-31';
-
-    // If this is marked default, unset existing defaults first
-    if (data.is_default) {
-      await this.db
-        .update(company_compliance)
-        .set({ field_value: 'false' })
-        .where(
-          and(
-            eq(company_compliance.company_id, companyId),
-            eq(company_compliance.country_code, 'IN'),
-            eq(company_compliance.field_key, 'gst_is_default'),
-          ),
-        );
-    }
-
-    const complianceRows = [
-      {
-        company_id: companyId,
-        country_code: 'IN',
-        field_key: 'gst_number',
-        field_value: data.gst_number,
-        is_active: true,
-        valid_until: effectiveTo,
-      },
-      {
-        company_id: companyId,
-        country_code: 'IN',
-        field_key: 'gst_state_code',
-        field_value: data.state_code,
-        is_active: true,
-        valid_until: effectiveTo,
-      },
-      {
-        company_id: companyId,
-        country_code: 'IN',
-        field_key: 'gst_reg_type',
-        field_value: data.registration_type,
-        is_active: true,
-        valid_until: effectiveTo,
-      },
-      {
-        company_id: companyId,
-        country_code: 'IN',
-        field_key: 'gst_registration_date',
-        field_value: new Date(data.registration_date)
-          .toISOString()
-          .split('T')[0],
-        is_active: true,
-        valid_until: effectiveTo,
-      },
-      {
-        company_id: companyId,
-        country_code: 'IN',
-        field_key: 'gst_effective_from',
-        field_value: new Date(data.effective_from).toISOString().split('T')[0],
-        is_active: true,
-        valid_until: effectiveTo,
-      },
-      {
-        company_id: companyId,
-        country_code: 'IN',
-        field_key: 'gst_is_default',
-        field_value: String(data.is_default ?? false),
-        is_active: true,
-        valid_until: effectiveTo,
-      },
-    ];
-
-    const inserted = await this.db
-      .insert(company_compliance)
-      .values(complianceRows)
-      .onConflictDoUpdate({
-        target: [
-          company_compliance.company_id,
-          company_compliance.country_code,
-          company_compliance.field_key,
-        ],
-        set: {
-          field_value: sql`excluded.field_value`,
-          valid_until: sql`excluded.valid_until`,
-          updated_at: new Date(),
-        },
-      })
-      .returning();
-
-    return {
-      success: true,
-      message: 'GST Registration added successfully',
-      data: inserted,
-    };
-  }
 
   /**
    * GET /finances/gst/:id
@@ -542,95 +454,6 @@ export class FinancesService {
    * We update all companion rows identified by their field_key
    * and the original valid_until date.
    */
-  async updateGstRegistration(id: string, domain: string, data: any) {
-    const companyId = await this.resolveCompanyId(domain);
-
-    // Fetch anchor row to get its valid_until (used to identify companion rows)
-    const [anchorRow] = await this.db
-      .select()
-      .from(company_compliance)
-      .where(
-        and(
-          eq(company_compliance.id, id),
-          eq(company_compliance.company_id, companyId),
-        ),
-      )
-      .limit(1);
-
-    if (!anchorRow) {
-      throw new NotFoundException('GST registration not found');
-    }
-
-    const newEffectiveTo = data.effective_to
-      ? new Date(data.effective_to).toISOString().split('T')[0]
-      : anchorRow.valid_until;
-
-    // If setting as default, clear existing defaults first
-    if (data.is_default) {
-      await this.db
-        .update(company_compliance)
-        .set({ field_value: 'false' })
-        .where(
-          and(
-            eq(company_compliance.company_id, companyId),
-            eq(company_compliance.country_code, 'IN'),
-            eq(company_compliance.field_key, 'gst_is_default'),
-          ),
-        );
-    }
-
-    // Build the updated rows as an upsert batch
-    const updatedRows = [
-      { field_key: 'gst_number', field_value: data.gst_number },
-      { field_key: 'gst_state_code', field_value: data.state_code },
-      { field_key: 'gst_reg_type', field_value: data.registration_type },
-      {
-        field_key: 'gst_registration_date',
-        field_value: new Date(data.registration_date)
-          .toISOString()
-          .split('T')[0],
-      },
-      {
-        field_key: 'gst_effective_from',
-        field_value: new Date(data.effective_from).toISOString().split('T')[0],
-      },
-      {
-        field_key: 'gst_is_default',
-        field_value: String(data.is_default ?? false),
-      },
-    ].map((row) => ({
-      company_id: companyId,
-      country_code: 'IN' as const,
-      field_key: row.field_key,
-      field_value: row.field_value,
-      is_active: true,
-      valid_until: newEffectiveTo,
-    }));
-
-    const result = await this.db
-      .insert(company_compliance)
-      .values(updatedRows)
-      .onConflictDoUpdate({
-        target: [
-          company_compliance.company_id,
-          company_compliance.country_code,
-          company_compliance.field_key,
-        ],
-        set: {
-          field_value: sql`excluded.field_value`,
-          valid_until: sql`excluded.valid_until`,
-          updated_at: new Date(),
-        },
-      })
-      .returning();
-
-    return {
-      success: true,
-      message: 'GST updated successfully',
-      data: result,
-    };
-  }
-
   // ── Tax Profiles ─────────────────────────────────────────────
 
   async createTaxProfile(domain: string, data: any) {
@@ -649,9 +472,22 @@ export class FinancesService {
     return { success: true, message: 'Tax profile created', data: newProfile };
   }
 
-  async getTaxProfiles(domain: string) {
+  async getTaxProfiles(
+    domain: string,
+    filters: {
+      search: string;
+      limit: number;
+      offset: number;
+      status: string | undefined;
+      date: string;
+      sortby: 'asc' | 'desc' | 'highest' | 'lowest';
+    },
+  ) {
     const companyId = await this.resolveCompanyId(domain);
+    const { limit, offset, date, status, search, sortby } = filters
     const records = await this.db.query.tax_profiles.findMany({
+      limit: limit,
+      offset: offset,
       where: eq(tax_profiles.company_id, companyId),
       orderBy: [desc(tax_profiles.created_at)],
     });
@@ -711,15 +547,30 @@ export class FinancesService {
     };
   }
 
-  async getTaxRates(domain: string) {
+  async getTaxRates(
+    domain: string,
+    filters: {
+      search: string;
+      limit: number;
+      offset: number;
+      status: string | undefined;
+      date: string;
+      sortby: "asc" | "desc";
+    },
+  ) {
     const companyId = await this.resolveCompanyId(domain);
+    const { limit, offset, date, status, search, sortby } = filters
     return this.db.query.tax_rates.findMany({
+      limit: limit,
+      offset: offset,
       where: eq(tax_rates.company_id, companyId),
-      orderBy: [desc(tax_rates.created_at)],
+      orderBy: sortby === 'desc' ? [desc(tax_rates.created_at)] : [asc(tax_rates.created_at)],
     });
   }
 
-  async getTaxRateOptions(domain: string) {
+  async getTaxRateOptions(
+    domain: string,
+  ) {
     const companyId = await this.resolveCompanyId(domain);
     return this.db.query.tax_rates.findMany({
       where: eq(tax_rates.company_id, companyId),
@@ -729,41 +580,65 @@ export class FinancesService {
 
   // ── Product Tax Mapping ──────────────────────────────────────
 
-  async getProductTaxMapping(domain: string) {
-    const companyId = await this.resolveCompanyId(domain);
+  async getProductTaxMapping(
+    domain: string,
+    filters?: {
+      search: string;
+      limit: number;
+      offset: number;
+      status: string | undefined;
+      date: string;
+      sortby: string;
+    },
+  ) {
+    try {
+      const companyId = await this.resolveCompanyId(domain);
 
-    const mappedData = await this.db
-      .select({
-        id: products.id,
-        product_name: products.name,
-        sku: sql<string>`MAX(${product_variants.sku})`,
-        tax_rate_name: tax_rates.tax_rate_name,
-        tax_value: tax_rates.tax_rate_value,
-        is_mapped: product_tax.id,
-        updated_at: product_tax.updated_at,
-      })
-      .from(products)
-      .leftJoin(product_variants, eq(products.id, product_variants.product_id))
-      .leftJoin(product_tax, eq(products.id, product_tax.product_id))
-      .leftJoin(tax_rates, eq(product_tax.tax_rate_id, tax_rates.id))
-      .where(eq(products.company_id, companyId))
-      .groupBy(
-        products.id,
-        products.name,
-        tax_rates.tax_rate_name,
-        tax_rates.tax_rate_value,
-        product_tax.id,
-        product_tax.updated_at,
-      );
+      const mappedData = await this.db
+        .select({
+          id: products.id,
+          product_name: products.name,
+          sku: sql<string>`MAX(${product_variants.sku})`,
+          tax_rate_name: tax_rates.tax_rate_name,
+          tax_value: tax_rates.tax_rate_value,
+          is_mapped: product_tax.id,
+          updated_at: product_tax.updated_at,
+        })
+        .from(products)
+        .leftJoin(product_variants, eq(products.id, product_variants.product_id))
+        .leftJoin(product_tax, eq(products.id, product_tax.product_id))
+        .leftJoin(tax_rates, eq(product_tax.tax_rate_id, tax_rates.id))
+        .where(eq(products.company_id, companyId))
+        .groupBy(
+          products.id,
+          products.name,
+          tax_rates.tax_rate_name,
+          tax_rates.tax_rate_value,
+          product_tax.id,
+          product_tax.updated_at,
+        ).catch((error) => {
+          console.log('Error in getProductTaxMapping from db:', error);
+          throw new InternalServerErrorException(
+            'Failed to get product tax mapping from db: ' + error.message, {
+            cause: error
+          }
+          )
+        })
 
-    return {
-      success: true,
-      data: mappedData.map((item) => ({
+      return mappedData.map((item) => ({
         ...item,
         sku: item.sku || 'No SKU assigned',
         is_mapped: !!item.is_mapped,
-      })),
-    };
+      }));
+    } catch (error) {
+      console.log('Error in getProductTaxMapping:', error);
+      throw new InternalServerErrorException(
+        'Failed to get product tax mapping', {
+        cause: error
+      }
+      )
+    }
+
   }
 
   async assignTaxToProduct(
@@ -825,12 +700,12 @@ export class FinancesService {
       date: string;
       sortBy: 'asc' | 'desc';
     } = {
-      limit: 10,
-      offset: 0,
-      search: '',
-      date: '',
-      sortBy: 'desc',
-    },
+        limit: 10,
+        offset: 0,
+        search: '',
+        date: '',
+        sortBy: 'desc',
+      },
   ) {
     const { search, date, sortBy } = filters;
     const companyId = await this.resolveCompanyId(domain);

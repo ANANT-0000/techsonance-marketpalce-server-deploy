@@ -7,6 +7,7 @@ import {
   Param,
   Delete,
   Headers,
+  Query,
 } from '@nestjs/common';
 import { CouponService } from './coupon.service';
 import { CreateCouponDto, UpdateCouponDto } from './dto/coupon.dto';
@@ -16,8 +17,23 @@ export class CouponController {
   constructor(private readonly couponService: CouponService) {}
 
   @Get()
-  findAll(@Headers('company-domain') domain: string) {
-    return this.couponService.findAll(domain);
+  findAll(
+    @Headers('company-domain') domain: string,
+    @Query('search') search?: string,
+    @Query('offset') offset?: number,
+    @Query('limit') limit?: number,
+    @Query('status') status?: string,
+    @Query('date') date?: string,
+    @Query('sortby') sortby?: 'asc' | 'desc',
+  ) {
+    return this.couponService.findAll(domain, {
+      search: search ?? '',
+      limit: Number(limit) || 10,
+      offset: Number(offset) || 0,
+      status,
+      date: date ?? '',
+      sortby: sortby ?? 'desc',
+    });
   }
   @Get(':id')
   findOne(@Param('id') id: string, @Headers('company-domain') domain: string) {

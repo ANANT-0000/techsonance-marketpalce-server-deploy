@@ -29,7 +29,7 @@ export class RefundsService {
     @Inject(DRIZZLE) private readonly db: DrizzleService,
     private readonly mailService: MailService,
     private readonly companyService: CompanyService,
-  ) {}
+  ) { }
 
   private async resolveCompanyId(domain: string): Promise<string> {
     console.log(
@@ -175,14 +175,14 @@ export class RefundsService {
         // (item-level refunds on the same order are fine to coexist)
         const orderLevelExists = existingOrderRefund
           ? await this.db
-              .select({
-                id: refunds.id,
-                order_items_id: refunds.order_items_id,
-              })
-              .from(refunds)
-              .where(eq(refunds.id, existingOrderRefund.id))
-              .limit(1)
-              .then(([r]) => r?.order_items_id === null)
+            .select({
+              id: refunds.id,
+              order_items_id: refunds.order_items_id,
+            })
+            .from(refunds)
+            .where(eq(refunds.id, existingOrderRefund.id))
+            .limit(1)
+            .then(([r]) => r?.order_items_id === null)
           : false;
 
         if (orderLevelExists) {
@@ -518,7 +518,17 @@ export class RefundsService {
     }
   }
 
-  async getCompanyRefunds(domain: string) {
+  async getCompanyRefunds(
+    domain: string,
+    filters?: {
+      search: string;
+      limit: number;
+      offset: number;
+      status: string | undefined;
+      date: string;
+      sortby: string;
+    },
+  ) {
     try {
       console.log('[RefundsService.getCompanyRefunds] Request received', {
         domain,
@@ -532,6 +542,8 @@ export class RefundsService {
       // 1. Fetch raw data
       const refundRecords = await this.db.query.refunds.findMany({
         where: eq(refunds.company_id, companyId),
+        limit: filters?.limit ?? 10,
+        offset: filters?.offset ?? 0,
         with: {
           order: {
             columns: {

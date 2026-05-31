@@ -6,6 +6,7 @@ import {
   Param,
   Patch,
   Post,
+  Query,
 } from '@nestjs/common';
 import { RolesService } from './roles.service';
 import { user_roles } from '../../drizzle/schema';
@@ -41,8 +42,14 @@ export class RolesController {
     return this.rolesService.updateRole(id, role);
   }
   @Get('get-role-permissions')
-  getRolePermissions() {
-    return this.rolesService.getRolePermissions();
+  getRolePermissions(
+    @Query('limit') limit?: number,
+    @Query('offset') offset?: number,
+  ) {
+    return this.rolesService.getRolePermissions({
+      limit: Number(limit) || 50,
+      offset: Number(offset) || 0,
+    });
   }
 
   @Post('add-permission-to-role')

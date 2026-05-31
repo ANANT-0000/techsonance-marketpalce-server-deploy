@@ -35,16 +35,23 @@ export class FinancesController {
     });
   }
   @Get('gst')
-  async getGstRegistrations(@Headers('company-domain') domain: string) {
-    return this.financesService.getGstRegistrations(domain);
-  }
-
-  @Post('gst')
-  async addGstRegistration(
+  async getGstRegistrations(
     @Headers('company-domain') domain: string,
-    @Body() payload: any,
+    @Query('search') search?: string,
+    @Query('offset') offset?: number,
+    @Query('limit') limit?: number,
+    @Query('status') status?: string,
+    @Query('date') date?: string,
+    @Query('sortby') sortby?: 'asc' | 'desc' | 'highest' | 'lowest',
   ) {
-    return this.financesService.addGstRegistration(domain, payload);
+    return this.financesService.getGstRegistrations(domain, {
+      search: search ?? '',
+      limit: Number(limit) || 10,
+      offset: Number(offset) || 0,
+      status,
+      date: date ?? '',
+      sortby: sortby ?? 'desc',
+    });
   }
   @Post('tax-profiles')
   async createTaxProfile(
@@ -98,22 +105,75 @@ export class FinancesController {
     );
   }
   @Get('tax-profiles')
-  async getTaxProfiles(@Headers('company-domain') domain: string) {
-    return this.financesService.getTaxProfiles(domain);
+  async getTaxProfiles(
+    @Headers('company-domain') domain: string,
+    @Query('search') search?: string,
+    @Query('offset') offset?: number,
+    @Query('limit') limit?: number,
+    @Query('status') status?: string,
+    @Query('date') date?: string,
+    @Query('sortby') sortby?: 'asc' | 'desc' | 'highest' | 'lowest',
+  ) {
+    return this.financesService.getTaxProfiles(domain, {
+      search: search ?? '',
+      limit: Number(limit) || 10,
+      offset: Number(offset) || 0,
+      status,
+      date: date ?? '',
+      sortby: sortby ?? 'desc',
+    });
   }
 
   @Get('tax-rates')
-  async getTaxRates(@Headers('company-domain') domain: string) {
-    return this.financesService.getTaxRates(domain);
+  async getTaxRates(
+    @Headers('company-domain') domain: string,
+    @Query('search') search?: string,
+    @Query('offset') offset?: number,
+    @Query('limit') limit?: number,
+    @Query('status') status?: string,
+    @Query('date') date?: string,
+    @Query('sortby') sortby?: 'asc' | 'desc',
+  ) {
+    return this.financesService.getTaxRates(domain, {
+      search: search ?? '',
+      limit: Number(limit) || 10,
+      offset: Number(offset) || 0,
+      status,
+      date: date ?? '',
+      sortby: sortby ?? 'desc',
+    });
   }
   @Get('tax-rate-options')
-  async getTaxRateOptions(@Headers('company-domain') domain: string) {
+  async getTaxRateOptions(
+    @Headers('company-domain') domain: string,
+    @Query('search') search?: string,
+    @Query('offset') offset?: number,
+    @Query('limit') limit?: number,
+    @Query('status') status?: string,
+    @Query('date') date?: string,
+    @Query('sortby') sortby?: 'asc' | 'desc' | 'highest' | 'lowest',
+  ) {
     return this.financesService.getTaxRateOptions(domain);
   }
 
   @Get('product-tax-mappings')
-  async getProductTaxMapping(@Headers('company-domain') domain: string) {
-    return this.financesService.getProductTaxMapping(domain);
+  async getProductTaxMapping(
+    @Headers('company-domain') domain: string,
+    @Query('search') search?: string,
+    @Query('offset') offset?: number,
+    @Query('limit') limit?: number,
+    @Query('status') status?: string,
+    @Query('date') date?: string,
+    @Query('sortby') sortby?: 'asc' | 'desc' | 'highest' | 'lowest',
+  ) {
+    return this.financesService.getProductTaxMapping(domain, {
+      search: search ?? '',
+      limit: Number(limit) || 10,
+      offset: Number(offset) || 0,
+      status,
+      date: date ?? '',
+      sortby: sortby ?? 'desc',
+    });
   }
 
   @Get('gst-invoices')
@@ -142,14 +202,7 @@ export class FinancesController {
     return this.financesService.getSingleGstRegistration(id, domain);
   }
 
-  @Patch('gst/:id')
-  async updateGst(
-    @Param('id') id: string,
-    @Headers('company-domain') domain: string,
-    @Body() payload: any,
-  ) {
-    return this.financesService.updateGstRegistration(id, domain, payload);
-  }
+
 
   @Patch('tax-profiles/:id')
   async updateTaxProfile(

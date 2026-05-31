@@ -120,12 +120,16 @@ export class RolesService {
       });
     }
   }
-  async getRolePermissions() {
+  async getRolePermissions(filters?: { limit: number; offset: number }) {
     try {
       console.log(
         '[RolesService.getRolePermissions] Querying role permissions',
       );
-      const allRolePermissions = await this.db.select().from(role_permissions);
+      const allRolePermissions = await this.db
+        .select()
+        .from(role_permissions)
+        .limit(filters?.limit ?? 10)
+        .offset(filters?.offset ?? 0);
       console.log(
         `[RolesService.getRolePermissions] Retrieved ${allRolePermissions.length} role_permission record(s)`,
       );

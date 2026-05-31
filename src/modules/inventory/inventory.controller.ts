@@ -9,6 +9,7 @@ import {
   Headers,
   HttpCode,
   HttpStatus,
+  Query,
 } from '@nestjs/common';
 import { InventoryService } from './inventory.service';
 import { CreateInventoryDto } from './dto/inventory.dto';
@@ -26,8 +27,23 @@ export class InventoryController {
   }
   @Get()
   @HttpCode(HttpStatus.OK)
-  findAll(@Headers('company-domain') domain: string) {
-    return this.inventoryService.findAll(domain);
+  findAll(
+    @Headers('company-domain') domain: string,
+    @Query('search') search?: string,
+    @Query('offset') offset?: number,
+    @Query('limit') limit?: number,
+    @Query('status') status?: string,
+    @Query('date') date?: string,
+    @Query('sortby') sortby?: 'asc' | 'desc',
+  ) {
+    return this.inventoryService.findAll(domain, {
+      search: search ?? '',
+      limit: Number(limit) || 10,
+      offset: Number(offset) || 0,
+      status,
+      date: date ?? '',
+      sortby: sortby ?? 'desc',
+    });
   }
 
   /**

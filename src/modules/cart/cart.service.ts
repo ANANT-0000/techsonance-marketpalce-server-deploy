@@ -24,7 +24,7 @@ export class CartService {
   constructor(
     @Inject(DRIZZLE) private readonly db: DrizzleService,
     private readonly companyService: CompanyService,
-  ) {}
+  ) { }
   private async resolveCompanyId(domain: string): Promise<string> {
     const filterDomain = domainExtractor(domain);
     return this.companyService.find(filterDomain);
@@ -165,7 +165,11 @@ export class CartService {
     }
   }
 
-  async findAll(customerId: string, domain: string) {
+  async findAll(
+    customerId: string,
+    domain: string,
+    filters: { limit: number, offset: number },
+  ) {
     try {
       console.log('[CartService.findAll] Request received', { customerId });
       const companyId = await this.resolveCompanyId(domain);
@@ -187,6 +191,10 @@ export class CartService {
       const cartItems = await this.db.query.cart_items
         .findMany({
           where: (cart_item) => eq(cart_item.cart_id, isUserCartExits.id),
+
+          limit: filters?.limit ?? 10,
+          offset: filters?.offset ?? 0,
+
           with: {
             productVariant: {
               columns: {

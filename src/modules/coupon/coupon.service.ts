@@ -468,7 +468,17 @@ export class CouponService {
     }
   }
 
-  async findAll(domain: string) {
+  async findAll(
+    domain: string,
+    filters?: {
+      search: string;
+      limit: number;
+      offset: number;
+      status: string | undefined;
+      date: string;
+      sortby: string;
+    },
+  ) {
     try {
       console.log(
         `[CouponService.findAll] Request received for domain: ${domain}`,
@@ -477,7 +487,7 @@ export class CouponService {
       const companyId = await this.resolveCompanyId(domain);
       console.log(`[CouponService.findAll] Company resolved: ${companyId}`);
       console.log('[CouponService.findAll] Querying coupons and promotions');
-      const results = await this.db
+      const query = this.db
         .select({
           id: coupons.id,
           code: coupons.code,
@@ -496,6 +506,12 @@ export class CouponService {
         .innerJoin(promotions, eq(promotions.coupon_id, coupons.id))
         .where(eq(coupons.company_id, companyId))
         .orderBy(desc(coupons.created_at));
+
+      if (filters) {
+        (query as any).limit(filters.limit).offset(filters.offset);
+      }
+
+      const results = await query;
 
       console.log(
         `[CouponService.findAll] Retrieved ${results.length} coupon(s)`,

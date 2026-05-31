@@ -83,8 +83,23 @@ export class ProductsController {
   @Get('active')
   // @UseGuards(JwtAuthGuard, RoleGuard)
   // @Roles(Role.ADMIN, Role.VENDOR)
-  async getActiveProducts(@Headers('company-domain') domain: string) {
-    return await this.productsService.getActiveProducts(domain);
+  async getActiveProducts(
+    @Headers('company-domain') domain: string,
+    @Query('search') search?: string,
+    @Query('offset') offset?: number,
+    @Query('limit') limit?: number,
+    @Query('status') status?: string,
+    @Query('date') date?: string,
+    @Query('sortby') sortby?: 'asc' | 'desc',
+  ) {
+    return await this.productsService.getActiveProducts(domain, {
+      search: search ?? '',
+      limit: Number(limit) || 10,
+      offset: Number(offset) || 0,
+      status,
+      date: date ?? '',
+      sortby: sortby ?? 'desc',
+    });
   }
 
   @Get('main-details/:id')

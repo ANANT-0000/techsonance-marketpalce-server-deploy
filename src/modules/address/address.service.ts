@@ -22,7 +22,10 @@ export class AddressService {
     const filterDomain = domainExtractor(domain);
     return this.companyService.find(filterDomain);
   }
-  async findAddressesByUserId(userId: string) {
+  async findAddressesByUserId(
+    userId: string,
+    filters?: { limit: number; offset: number },
+  ) {
     if (!userId) {
       console.log('[AddressService.findAddressesByUserId] User ID is missing');
       return new HttpException('User ID is required', HttpStatus.BAD_REQUEST);
@@ -33,7 +36,9 @@ export class AddressService {
       const addressRecords = await this.db
         .select()
         .from(address)
-        .where(eq(address.user_id, userId));
+        .where(eq(address.user_id, userId))
+        .limit(filters?.limit ?? 20)
+        .offset(filters?.offset ?? 0);
       console.log('[AddressService.findAddressesByUserId] Addresses found', { count: addressRecords.length });
       if (!addressRecords) {
         throw new HttpException(

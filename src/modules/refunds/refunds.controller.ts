@@ -8,6 +8,7 @@ import {
   Param,
   Patch,
   Post,
+  Query,
 } from '@nestjs/common';
 import { RefundsService } from './refunds.service';
 
@@ -55,7 +56,22 @@ export class RefundsController {
   // List all refunds for vendor dashboard
   @Get()
   @HttpCode(HttpStatus.OK)
-  async getCompanyRefunds(@Headers('company-domain') domain: string) {
-    return this.refundsService.getCompanyRefunds(domain);
+  async getCompanyRefunds(
+    @Headers('company-domain') domain: string,
+    @Query('search') search?: string,
+    @Query('offset') offset?: number,
+    @Query('limit') limit?: number,
+    @Query('status') status?: string,
+    @Query('date') date?: string,
+    @Query('sortby') sortby?: 'asc' | 'desc',
+  ) {
+    return this.refundsService.getCompanyRefunds(domain, {
+      search: search ?? '',
+      limit: Number(limit) || 10,
+      offset: Number(offset) || 0,
+      status,
+      date: date ?? '',
+      sortby: sortby ?? 'desc',
+    });
   }
 }

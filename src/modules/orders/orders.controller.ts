@@ -50,8 +50,23 @@ export class OrdersController {
   @Get('pending')
   // @UseGuards(JwtAuthGuard, RoleGuard)
   // @Roles(Role.ADMIN, Role.VENDOR)
-  async getPendingOrders(@Headers('company-domain') domain: string) {
-    return this.ordersService.getPendingOrders(domain);
+  async getPendingOrders(
+    @Headers('company-domain') domain: string,
+    @Query('search') search?: string,
+    @Query('offset') offset?: number,
+    @Query('limit') limit?: number,
+    @Query('status') status?: string,
+    @Query('date') date?: string,
+    @Query('sortby') sortby?: 'asc' | 'desc',
+  ) {
+    return this.ordersService.getPendingOrders(domain, {
+      search: search ?? '',
+      limit: Number(limit) || 10,
+      offset: Number(offset) || 0,
+      status,
+      date: date ?? '',
+      sortby: sortby ?? 'desc',
+    });
   }
 
   @Get(':orderId')

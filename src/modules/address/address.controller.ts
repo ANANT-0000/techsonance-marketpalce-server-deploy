@@ -9,6 +9,7 @@ import {
   Param,
   Patch,
   Post,
+  Query,
 } from '@nestjs/common';
 import { AddressService } from './address.service';
 import { CreateAddressDto } from './dto/createAddress.dto';
@@ -33,8 +34,15 @@ export class AddressController {
   }
   @Get('customer/:customerId')
   @HttpCode(HttpStatus.OK)
-  async getAddressesByCustomerId(@Param('customerId') customerId: string) {
-    return this.addressService.findAddressesByUserId(customerId);
+  async getAddressesByCustomerId(
+    @Param('customerId') customerId: string,
+    @Query('limit') limit?: number,
+    @Query('offset') offset?: number,
+  ) {
+    return this.addressService.findAddressesByUserId(customerId, {
+      limit: Number(limit) || 20,
+      offset: Number(offset) || 0,
+    });
   }
   @Get('customer/:customerId/addresses-exist')
   @HttpCode(HttpStatus.OK)

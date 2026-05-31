@@ -7,6 +7,7 @@ import {
   Param,
   Delete,
   Headers,
+  Query,
 } from '@nestjs/common';
 import { CartService } from './cart.service';
 import { CreateCartDto } from './dto/create-cart.dto';
@@ -35,8 +36,13 @@ export class CartController {
   findAll(
     @Param('customerId') customerId: string,
     @Headers('company-domain') domain: string,
+    @Query('limit') limit?: number,
+    @Query('offset') offset?: number,
   ) {
-    return this.cartService.findAll(customerId, domain);
+    return this.cartService.findAll(customerId, domain, {
+      limit: Number(limit) || 50,
+      offset: Number(offset) || 0,
+    });
   }
 
   @Get('variant/:id/:customerId')

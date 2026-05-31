@@ -9,6 +9,7 @@ import {
   Param,
   Patch,
   Post,
+  Query,
   UseGuards,
 } from '@nestjs/common';
 import { CategoryService } from './category.service';
@@ -33,8 +34,23 @@ export class CategoryController {
     return this.categoryService.createMany(createCategoryDtos, domain);
   }
   @Get()
-  findAll(@Headers('company-domain') domain: string) {
-    return this.categoryService.findAll(domain);
+  findAll(
+    @Headers('company-domain') domain: string,
+    @Query('search') search?: string,
+    @Query('offset') offset?: number,
+    @Query('limit') limit?: number,
+    @Query('status') status?: string,
+    @Query('date') date?: string,
+    @Query('sortby') sortby?: 'asc' | 'desc',
+  ) {
+    return this.categoryService.findAll(domain, {
+      search: search ?? '',
+      limit: Number(limit) || 10,
+      offset: Number(offset) || 0,
+      status,
+      date: date ?? '',
+      sortby: sortby ?? 'desc',
+    });
   }
   @Post()
   @HttpCode(HttpStatus.CREATED)

@@ -31,7 +31,17 @@ export class CategoryService {
     );
     return this.CompanyService.find(filterDomain);
   }
-  async findAll(domain: string) {
+  async findAll(
+    domain: string,
+    filters?: {
+      search: string;
+      limit: number;
+      offset: number;
+      status: string | undefined;
+      date: string;
+      sortby: string;
+    },
+  ) {
     console.log('[CategoryService.findAll] Request received', { domain });
     console.log('[CategoryService.findAll] Resolving company id');
     const companyId = await this.resolveCompanyId(domain);
@@ -42,6 +52,8 @@ export class CategoryService {
       .select()
       .from(categories)
       .where(eq(categories.company_id, companyId))
+      .limit(filters?.limit ?? 10)
+      .offset(filters?.offset ?? 0)
       .catch((error) => {
         console.error(
           `[CategoryService.findAll] Failed while fetching categories for companyId ${companyId}`,

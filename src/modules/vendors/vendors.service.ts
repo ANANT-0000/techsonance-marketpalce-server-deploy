@@ -27,7 +27,7 @@ import {
   vendor as vendorTable,
   company_document as vendor_documentTable,
 } from '../../drizzle/schema';
-import { and, asc, countDistinct, desc, eq, gte, lte, sql } from 'drizzle-orm';
+import { and, asc, countDistinct, desc, eq, gte, ilike, like, lte, SQL, sql } from 'drizzle-orm';
 import {
   AccessStatus,
   ProductStatus,
@@ -47,6 +47,7 @@ import { CompanyService } from '../company/company.service';
 import { domainExtractor } from '../../common/filters/domainExtractor.filter';
 import { randomBytes } from 'crypto';
 import { extractCloudinaryPublicId } from 'src/common/filters/extractCloudinaryPublicId.filter';
+import { SortBy } from '../products/dto/get-products-query.dto';
 
 const SALT_ROUNDS = 10;
 type UserType = typeof userTable.$inferSelect;
@@ -60,7 +61,7 @@ export class VendorsService {
     private readonly mailService: MailService,
     private readonly companyService: CompanyService,
     private readonly uploadToCloudService: UploadToCloudService,
-  ) {}
+  ) { }
   async vendorRegister(
     vendorData: CreateVendorDto,
     files: Express.Multer.File[],
@@ -434,84 +435,84 @@ export class VendorsService {
     try {
       const existingUser:
         | {
-            user: Partial<UserType>;
-            vendor: Partial<VendorType>;
-            role: Partial<UserRoleType>;
-          }
+          user: Partial<UserType>;
+          vendor: Partial<VendorType>;
+          role: Partial<UserRoleType>;
+        }
         | HttpException = await this.db.transaction(async (tx) => {
-        console.log(
-          '[VendorsService.vendorLogin] Starting database transaction for authentication',
-        );
-        if (!loginDto.email || !loginDto.password) {
-          throw new HttpException(
-            'Email and password are required',
-            HttpStatus.BAD_REQUEST,
+          console.log(
+            '[VendorsService.vendorLogin] Starting database transaction for authentication',
           );
-        }
-        console.log('[VendorsService.vendorLogin] Querying user by email');
-        const [userRecord]: Partial<UserType>[] = await tx
-          .select()
-          .from(userTable)
-          .where(eq(userTable.email, loginDto.email));
-        if (!userRecord || !userRecord.id || !userRecord.password_hash) {
-          throw new UnauthorizedException('User not found');
-        }
-        console.log('[VendorsService.vendorLogin] Validating password');
-        const isPasswordValid = await bcrypt.compare(
-          loginDto.password,
-          userRecord.password_hash,
-        );
-        if (!isPasswordValid) {
-          throw new UnauthorizedException('Invalid password');
-        }
-        console.log(
-          '[VendorsService.vendorLogin] Password validated, querying vendor record',
-        );
-        const [vendorRecord] = await tx
-          .select()
-          .from(vendorTable)
-          .where(eq(vendorTable.user_id, userRecord.id));
-        // uncommit in future
-        // const [userAndCompanyRecord] = await tx
-        //   .select()
-        //   .from(user_and_company)
-        //   .where(eq(user_and_company.user_id, userRecord.id));
-        // console.log('vendorRecord', vendorRecord);
-        if (!userRecord) {
-          throw new UnauthorizedException('User role not found');
-        }
-        // console.log('userAndCompanyRecord', userAndCompanyRecord)
-        //------------------------------------------------------
-        // uncommit in future
-        //------------------------------------------------------
-        // const [roleRecord] = await tx
-        //   .select({ role_name: user_rolesTable.role_name })
-        //   .from(user_rolesTable)
-        //   .where(eq(user_rolesTable.id, userAndCompanyRecord.role_id)).limit(1);
+          if (!loginDto.email || !loginDto.password) {
+            throw new HttpException(
+              'Email and password are required',
+              HttpStatus.BAD_REQUEST,
+            );
+          }
+          console.log('[VendorsService.vendorLogin] Querying user by email');
+          const [userRecord]: Partial<UserType>[] = await tx
+            .select()
+            .from(userTable)
+            .where(eq(userTable.email, loginDto.email));
+          if (!userRecord || !userRecord.id || !userRecord.password_hash) {
+            throw new UnauthorizedException('User not found');
+          }
+          console.log('[VendorsService.vendorLogin] Validating password');
+          const isPasswordValid = await bcrypt.compare(
+            loginDto.password,
+            userRecord.password_hash,
+          );
+          if (!isPasswordValid) {
+            throw new UnauthorizedException('Invalid password');
+          }
+          console.log(
+            '[VendorsService.vendorLogin] Password validated, querying vendor record',
+          );
+          const [vendorRecord] = await tx
+            .select()
+            .from(vendorTable)
+            .where(eq(vendorTable.user_id, userRecord.id));
+          // uncommit in future
+          // const [userAndCompanyRecord] = await tx
+          //   .select()
+          //   .from(user_and_company)
+          //   .where(eq(user_and_company.user_id, userRecord.id));
+          // console.log('vendorRecord', vendorRecord);
+          if (!userRecord) {
+            throw new UnauthorizedException('User role not found');
+          }
+          // console.log('userAndCompanyRecord', userAndCompanyRecord)
+          //------------------------------------------------------
+          // uncommit in future
+          //------------------------------------------------------
+          // const [roleRecord] = await tx
+          //   .select({ role_name: user_rolesTable.role_name })
+          //   .from(user_rolesTable)
+          //   .where(eq(user_rolesTable.id, userAndCompanyRecord.role_id)).limit(1);
 
-        //-----------------------------------------------------
-        // for bypassing the role check in future comment this and uncommit above
-        //-----------------------------------------------------
-        console.log('[VendorsService.vendorLogin] Fetching vendor role');
-        const [roleRecord] = await tx
-          .select({ role_name: user_rolesTable.role_name })
-          .from(user_rolesTable)
-          .where(eq(user_rolesTable.role_name, 'vendor'))
-          .limit(1);
-        if (!vendorRecord) throw new UnauthorizedException('Vendor not found');
-        console.log(
-          '[VendorsService.vendorLogin] Checking vendor approval status',
-        );
-        const isVendorApproved =
-          vendorRecord.vendor_status === UserStatus.ACTIVE;
-        // const isVendorApproved = vendorRecord.vendor_status === UserStatus.ACTIVE &&  userAndCompanyRecord.access_status === AccessStatus.ACTIVE;
-        if (!isVendorApproved)
-          throw new HttpException(
-            'Vendor application is still under review',
-            HttpStatus.UNAUTHORIZED,
+          //-----------------------------------------------------
+          // for bypassing the role check in future comment this and uncommit above
+          //-----------------------------------------------------
+          console.log('[VendorsService.vendorLogin] Fetching vendor role');
+          const [roleRecord] = await tx
+            .select({ role_name: user_rolesTable.role_name })
+            .from(user_rolesTable)
+            .where(eq(user_rolesTable.role_name, 'vendor'))
+            .limit(1);
+          if (!vendorRecord) throw new UnauthorizedException('Vendor not found');
+          console.log(
+            '[VendorsService.vendorLogin] Checking vendor approval status',
           );
-        return { user: userRecord, vendor: vendorRecord, role: roleRecord };
-      });
+          const isVendorApproved =
+            vendorRecord.vendor_status === UserStatus.ACTIVE;
+          // const isVendorApproved = vendorRecord.vendor_status === UserStatus.ACTIVE &&  userAndCompanyRecord.access_status === AccessStatus.ACTIVE;
+          if (!isVendorApproved)
+            throw new HttpException(
+              'Vendor application is still under review',
+              HttpStatus.UNAUTHORIZED,
+            );
+          return { user: userRecord, vendor: vendorRecord, role: roleRecord };
+        });
       if (existingUser instanceof HttpException) {
         throw existingUser;
       }
@@ -901,20 +902,38 @@ export class VendorsService {
       );
     }
   }
-  async vendorApplications() {
+  async vendorApplications(
+    filters: {
+      search: string;
+      limit: number;
+      offset: number;
+      status: UserStatus | undefined;
+      date: string;
+      sortby: 'asc' | 'desc';
+    },
+  ) {
     try {
       console.log(
         '[VendorsService.vendorApplications] Fetching all pending vendor applications',
       );
+      const whereConditions: SQL[] = []
+      if (filters.status) {
+        whereConditions.push(eq(vendor.vendor_status, filters.status))
+      }
+      if (filters.search) {
+        whereConditions.push(ilike(vendor.store_name, `%${filters.search}%`))
+      }
       const applications = await this.db.query.vendor
         .findMany({
-          // where: eq(vendor.vendor_status, UserStatus.PENDING),
+          limit: filters.limit ?? 10,
+          offset: filters.offset ?? 0,
+          where: and(...whereConditions),
           with: {
             company: true,
             user: true,
             documents: true,
           },
-          orderBy: (vendor, { desc }) => desc(vendor.created_at),
+          orderBy: filters.sortby == 'desc' ? desc(vendor.created_at) : asc(vendor.created_at),
         })
         .then((results) => {
           console.log(

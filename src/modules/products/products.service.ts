@@ -424,7 +424,17 @@ export class ProductsService {
       });
     }
   }
-  async getActiveProducts(domain: string) {
+  async getActiveProducts(
+    domain: string,
+    filters?: {
+      search: string;
+      limit: number;
+      offset: number;
+      status: string | undefined;
+      date: string;
+      sortby: string;
+    },
+  ) {
     console.log(`[ProductsService.getActiveProducts] Request received`);
     try {
       console.log(
@@ -440,6 +450,8 @@ export class ProductsService {
           id: true,
           created_at: true,
         },
+        limit: filters?.limit ?? 10,
+        offset: filters?.offset ?? 0,
         with: {
           variants: {
             where: eq(product_variants.status, ProductStatus.ACTIVE),

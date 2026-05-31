@@ -79,7 +79,7 @@ export class OrdersService {
     private readonly policyResolutionService: PolicyResolutionService,
     private readonly promotionService: PromotionsService,
     private readonly couponService: CouponService,
-  ) {}
+  ) { }
   private async resolveCompanyId(domain: string): Promise<string> {
     const filteredDomain = domainExtractor(domain);
     console.log(
@@ -355,7 +355,7 @@ export class OrdersService {
 
             console.log(
               `[createOrder] Snapshot created for item ${orderItemId} ` +
-                `via ${resolution.source}: ${resolution.reason}`,
+              `via ${resolution.source}: ${resolution.reason}`,
             );
           } catch (err) {
             // Don't let a snapshot failure abort the whole order
@@ -535,7 +535,16 @@ export class OrdersService {
     }
   }
 
-  async getAllOrders() {
+  async getAllOrders(
+    filters?: {
+      search: string;
+      limit: number;
+      offset: number;
+      status: string | undefined;
+      date: string;
+      sortby: string;
+    },
+  ) {
     console.log('[OrdersService.getAllOrders] Request received');
     try {
       console.log('[OrdersService.getAllOrders] Querying all orders');
@@ -1041,10 +1050,10 @@ export class OrdersService {
             eq(order_items.order_id, orders.id),
             Object.values(OrderStatus).includes(status as OrderStatus)
               ? and(
-                  // @ts-ignore
-                  eq(order_items.order_status, status),
-                  gt(order_items.quantity, 0),
-                )
+                // @ts-ignore
+                eq(order_items.order_status, status),
+                gt(order_items.quantity, 0),
+              )
               : undefined,
           ),
         )
@@ -1060,10 +1069,10 @@ export class OrdersService {
               eq(order_items.order_id, orders.id),
               Object.values(OrderStatus).includes(status as OrderStatus)
                 ? and(
-                    // @ts-ignore
-                    eq(order_items.order_status, status),
-                    gt(order_items.quantity, 0),
-                  )
+                  // @ts-ignore
+                  eq(order_items.order_status, status),
+                  gt(order_items.quantity, 0),
+                )
                 : undefined,
             ),
           )
@@ -1086,10 +1095,10 @@ export class OrdersService {
           items: {
             where: Object.values(OrderStatus).includes(status as OrderStatus)
               ? and(
-                  // @ts-ignore
-                  eq(order_items.order_status, status),
-                  gt(order_items.quantity, 0),
-                )
+                // @ts-ignore
+                eq(order_items.order_status, status),
+                gt(order_items.quantity, 0),
+              )
               : undefined,
             columns: { order_status: true, quantity: true, price: true },
             with: {
@@ -1258,20 +1267,20 @@ export class OrdersService {
             invoice: item.invoice ?? null,
             warehouse: warehouse
               ? {
-                  id: inventory?.warehouse_id ?? null,
-                  name: warehouse.warehouse_name,
-                  address: warehouse.address
-                    ? {
-                        address_line_1: warehouse.address.address_line_1,
-                        address_line_2:
-                          warehouse.address.address_line_2 ?? null,
-                        city: warehouse.address.city,
-                        state: warehouse.address.state,
-                        postal_code: warehouse.address.postal_code,
-                        country: warehouse.address.country,
-                      }
-                    : null,
-                }
+                id: inventory?.warehouse_id ?? null,
+                name: warehouse.warehouse_name,
+                address: warehouse.address
+                  ? {
+                    address_line_1: warehouse.address.address_line_1,
+                    address_line_2:
+                      warehouse.address.address_line_2 ?? null,
+                    city: warehouse.address.city,
+                    state: warehouse.address.state,
+                    postal_code: warehouse.address.postal_code,
+                    country: warehouse.address.country,
+                  }
+                  : null,
+              }
               : null,
             product_variant: {
               id: item.variant?.id ?? null,
@@ -1283,20 +1292,20 @@ export class OrdersService {
         }),
         shipping_address: row.address
           ? {
-              name: row.address.name,
-              address_line_1: row.address.address_line_1,
-              address_line_2: row.address.address_line_2 ?? null,
-              city: row.address.city,
-              state: row.address.state,
-              postal_code: row.address.postal_code,
-              country: row.address.country,
-            }
+            name: row.address.name,
+            address_line_1: row.address.address_line_1,
+            address_line_2: row.address.address_line_2 ?? null,
+            city: row.address.city,
+            state: row.address.state,
+            postal_code: row.address.postal_code,
+            country: row.address.country,
+          }
           : null,
         payment: row.payment
           ? {
-              amount: row.payment.amount,
-              payment_method: row.payment.payment_method,
-            }
+            amount: row.payment.amount,
+            payment_method: row.payment.payment_method,
+          }
           : null,
         shipping: { tracking_url: row.shipping?.tracking_url ?? null },
       };
@@ -1410,7 +1419,17 @@ export class OrdersService {
     }
   }
 
-  async getPendingOrders(domain: string) {
+  async getPendingOrders(
+    domain: string,
+    filters?: {
+      search: string;
+      limit: number;
+      offset: number;
+      status: string | undefined;
+      date: string;
+      sortby: string;
+    },
+  ) {
     console.log('[OrdersService.getPendingOrders] Request received', {
       domain,
     });
@@ -1423,12 +1442,20 @@ export class OrdersService {
       );
       const result = await this.db.query.orders.findMany({
         where: eq(orders.company_id, companyId),
+        limit: filters?.limit ?? 10,
+        offset: filters?.offset ?? 0,
         with: {
           items: {
-            where: or(
-              eq(order_items.order_status, OrderStatus.PENDING),
-              eq(order_items.order_status, OrderStatus.PROCESSING),
-            ),
+            where: filters?.status
+              ? or(
+                  filters?.status === OrderStatus.PENDING
+                    ? eq(order_items.order_status, OrderStatus.PENDING)
+                    : undefined,
+                  filters?.status === OrderStatus.PROCESSING
+                    ? eq(order_items.order_status, OrderStatus.PROCESSING)
+                    : undefined,
+                )
+              : undefined,
             columns: {
               id: true,
               order_id: true,
