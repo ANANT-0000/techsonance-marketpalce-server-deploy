@@ -8,6 +8,7 @@ import {
 } from '@nestjs/common';
 import { SubscriptionService } from './subscription.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
+import { SkipSubscription } from './subscription.guard';
 
 @Controller({ version: '1', path: 'subscription' })
 export class SubscriptionController {
@@ -15,6 +16,7 @@ export class SubscriptionController {
 
   // Public — used during vendor registration to show plan cards
   @Get('plans')
+  @SkipSubscription()
   getPlans() {
     return this.subscriptionService.getAvailablePlans();
   }
@@ -22,6 +24,7 @@ export class SubscriptionController {
   // Protected — vendor dashboard banner uses this
   @UseGuards(JwtAuthGuard)
   @Get('status')
+  @SkipSubscription()
   getStatus(@Headers('company-domain') domain: string) {
     return this.subscriptionService.getSubscriptionStatus(domain);
   }
@@ -29,6 +32,7 @@ export class SubscriptionController {
   // Protected — called when vendor chooses a paid plan
   @UseGuards(JwtAuthGuard)
   @Post('upgrade')
+  @SkipSubscription()
   upgrade(
     @Headers('company-domain') domain: string,
     @Body() body: { plan_id: string },
@@ -37,6 +41,7 @@ export class SubscriptionController {
   }
 
   @Post('start-trial')
+  @SkipSubscription()
   startTrial(@Headers('company-domain') domain: string) {
     console.log(
       `Received request to start trial for company domain: ${domain}`,

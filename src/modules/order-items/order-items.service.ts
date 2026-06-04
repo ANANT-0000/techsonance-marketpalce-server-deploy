@@ -1,3 +1,4 @@
+import { orderItemCancelledRelations } from './../../drizzle/schema/index';
 import {
   HttpException,
   HttpStatus,
@@ -24,8 +25,8 @@ import {
   product_images,
   refunds,
 } from '../../drizzle/schema/shop.schema';
-import { and, eq } from 'drizzle-orm';
-import { user } from '../../drizzle/schema/users.schema';
+import { and, asc, desc, eq, inArray, SQL } from 'drizzle-orm';
+import { address, user } from '../../drizzle/schema/users.schema';
 import { user_and_company, user_roles } from '../../drizzle/schema';
 import { domainExtractor } from '../../common/filters/domainExtractor.filter';
 
@@ -240,7 +241,132 @@ export class OrderItemsService {
       });
     }
   }
+  async getUserOrderItems(
+    userId: string,
+    domain: string,
+    filters?: {
+      offset: number;
+      limit: number;
+      status?: OrderStatus;
+      date?: string;
+      sortby: 'asc' | 'desc';
+    },
+  ) {
+    try {
+      console.log(
+        '[OrderItemsService.getUserOrderItems] Fetching order items for user',
+        {
+          userId,
+          domain,
+        },
+      );
+      const companyId = await this.resolveCompanyId(domain);
+      console.log(
+        '[OrderItemsService.getUserOrderItems] Company resolved for user order items',
+        {
+          companyId,
+          filters,
+        },
+      );
+      if (!userId) {
+        console.log(
+          '[OrderItemsService.getUserOrderItems] Stopping: User ID is missing',
+        );
+        throw new HttpException('User ID is required', HttpStatus.BAD_REQUEST);
+      }
+      const userOrders = await this.db
+        .select({ id: orders.id })
+        .from(orders)
+        .where(
+          and(eq(orders.user_id, userId), eq(orders.company_id, companyId)),
+        );
+      const whereCause: SQL[] = [];
+      if (
+        filters?.status &&
+        Object.values(OrderStatus).includes(filters.status)
+      ) {
+        whereCause.push(eq(order_items.order_status, filters.status));
+      }
+      const orderByCause =
+        filters?.sortby === 'asc'
+          ? asc(order_items.created_at)
+          : desc(order_items.created_at);
 
+      return await this.db.query.order_items
+        .findMany({
+          limit: filters?.limit ?? 2,
+          offset: filters?.offset ?? 0,
+          where: and(
+            inArray(
+              order_items.order_id,
+              userOrders.map((order) => order.id),
+            ),
+            ...whereCause,
+          ),
+          orderBy: orderByCause,
+          columns: {
+            order_status: true,
+            quantity: true,
+            price: true,
+          },
+          with: {
+            order: {
+              columns: { id: true, total_amount: true, created_at: true },
+              with: {
+                address: {
+                  columns: {
+                    name: true,
+                    address_line_1: true,
+                    address_line_2: true,
+                    city: true,
+                    state: true,
+                    postal_code: true,
+                    country: true,
+                  },
+                },
+                payment: {
+                  columns: {
+                    id: true,
+                    amount: true,
+                    payment_status: true,
+                    payment_method: true,
+                    transaction_ref: true,
+                  },
+                },
+              },
+            },
+            variant: {
+              columns: { id: true, variant_name: true, price: true },
+              with: {
+                images: {
+                  where: eq(product_images.is_primary, true),
+                  columns: { image_url: true },
+                },
+              },
+            },
+            return_request: { columns: { id: true, status: true } },
+          },
+        })
+        .catch((error) => {
+          console.error('Error fetching user orders:', error);
+          throw new InternalServerErrorException(
+            'Failed to retrieve user orders',
+            { cause: error },
+          );
+        });
+    } catch (error) {
+      console.error('Error fetching user order items:', error);
+      if (error instanceof HttpException) {
+        throw error;
+      }
+      throw new InternalServerErrorException(
+        'Failed to fetch user order items',
+        {
+          cause: error,
+        },
+      );
+    }
+  }
   // Implement other order item related methods like cancellation, returns, etc.
   async cancelOrder(
     orderItemId: string,

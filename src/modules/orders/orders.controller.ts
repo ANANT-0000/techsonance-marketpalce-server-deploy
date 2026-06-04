@@ -78,14 +78,14 @@ export class OrdersController {
   ) {
     return this.ordersService.getUserOrderDetails(orderId, domain);
   }
-  @Get('user/:userId')
+  @Get('order-count/:userId')
   // @UseGuards(JwtAuthGuard, RoleGuard)
   // @Roles(Role.CUSTOMER)
-  async getUserOrders(
+  async getOrdersCount(
     @Param('userId') userId: string,
     @Headers('company-domain') domain: string,
   ) {
-    return this.ordersService.getUserOrders(userId, domain);
+    return this.ordersService.getOrdersCount(userId, domain);
   }
   @Get(':orderid/details')
   // @UseGuards(JwtAuthGuard, RoleGuard)

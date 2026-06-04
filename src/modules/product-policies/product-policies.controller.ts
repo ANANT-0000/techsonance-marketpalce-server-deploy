@@ -128,4 +128,18 @@ export class ProductPoliciesController {
   ) {
     return this.productPoliciesService.getCoverageOverview(domain, policyId);
   }
+
+  // ==========================================
+  // WARRANTY PAYLOAD (CLIENT-SIDE PDF)
+  // ==========================================
+
+  /**
+   * Returns structured warranty payload(s) for all policy-bearing order items.
+   * The client uses this JSON to generate warranty PDFs locally (no Puppeteer).
+   * Route: GET /v1/product-policies/warranty-payload/:orderId
+   */
+  @Get('warranty-payload/:orderId')
+  getWarrantyPayload(@Param('orderId') orderId: string) {
+    return this.productPoliciesService.getWarrantyPayload(orderId);
+  }
 }

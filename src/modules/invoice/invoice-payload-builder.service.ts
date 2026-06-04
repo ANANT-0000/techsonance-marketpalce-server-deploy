@@ -42,7 +42,7 @@ import {
 } from './interfaces/invoice.interface';
 import { randomUUID } from 'crypto';
 import { fetchImageAsBuffer } from '../../utils/image-fetcher.util';
-import { COUNTRIES_COMPLIANCE, getStateByCode } from 'src/common/constants';
+import { COUNTRIES_COMPLIANCE, getStateByCode } from '../../common/constants';
 
 // ─── helpers ────────────────────────────────────────────────────
 
@@ -575,9 +575,9 @@ export class InvoicePayloadBuilderService {
     );
 
     const items: InvoiceLineItem[] = group.items.map((item) => {
-      const unitPrice = Number(item.price); // GST-INCLUSIVE price
+      const unitPriceInclusive = Number(item.price); // GST-INCLUSIVE price per unit
       const qty = item.quantity;
-      const lineTotal = unitPrice * qty;
+      const lineTotal = unitPriceInclusive * qty; // GST-inclusive line total
 
       const lineDiscountShare =
         totalNetAmount > 0
@@ -585,12 +585,17 @@ export class InvoicePayloadBuilderService {
           : 0;
       const lineDiscount = Math.round(lineDiscountShare);
 
-      // lineTotal is GST-inclusive, so extract tax first
-      const taxRate = gstData
-        ? (gstData.totalTax / totalNetAmount) * 100 // effective GST %
-        : 0;
+      // ── Tax rate: must use the GST-EXCLUSIVE base as denominator ──
+      // If inclusive total = T and tax = X, then exclusive base = T - X
+      // taxRate = X / (T - X) * 100  ← correct
+      // NOT:      X / T * 100         ← gives compressed (wrong) rate
+      const totalExclusiveBase = totalNetAmount - (gstData?.totalTax ?? 0);
+      const taxRate =
+        gstData && totalExclusiveBase > 0
+          ? (gstData.totalTax / totalExclusiveBase) * 100
+          : 0;
 
-      // Back-calculate: taxableAmount = inclusiveAmount / (1 + taxRate/100)
+      // Back-calculate GST-exclusive taxable amount from the inclusive line total
       const lineTaxableAmount =
         taxRate > 0
           ? Math.round((lineTotal / (1 + taxRate / 100)) * 100) / 100
@@ -599,7 +604,9 @@ export class InvoicePayloadBuilderService {
       const lineTaxAmount =
         Math.round((lineTotal - lineTaxableAmount) * 100) / 100;
 
-      const netAmount = Math.round(lineTaxableAmount - lineDiscount);
+      // Keep 2 decimal places so the taxable base doesn't lose fractional paise.
+      // Rounding to an integer here was the primary cause of grand-total drift.
+      const netAmount = Math.round((lineTaxableAmount - lineDiscount) * 100) / 100;
 
       runningSubTotal += netAmount;
 
@@ -607,17 +614,19 @@ export class InvoicePayloadBuilderService {
         name: item.variant?.product?.name ?? 'Unknown Product',
         sku: item.variant?.sku ?? undefined,
         quantity: qty,
-        unitPrice: Math.round((unitPrice / (1 + taxRate / 100)) * 100) / 100, // tax-exclusive unit price
+        // GST-exclusive unit price = inclusive price / (1 + rate/100)
+        unitPrice: Math.round((unitPriceInclusive / (1 + taxRate / 100)) * 100) / 100,
         discount: lineDiscount,
         netAmount,
         taxRate,
         taxType: isInterStateSupply ? 'IGST' : 'CGST+SGST',
         taxAmount: lineTaxAmount,
-        totalAmount: lineTotal - lineDiscount, // inclusive price minus discount — no double-add
+        totalAmount: lineTotal - lineDiscount, // inclusive price minus discount
       };
     });
 
-    // Recompute line tax amounts proportionally now we have final subTotal
+    // Recompute per-line tax amounts proportionally and lock taxRate to the
+    // correct slab rate (derived from the GST-exclusive base).
     if (gstData && runningSubTotal > 0) {
       let taxAssigned = 0;
       for (let i = 0; i < items.length; i++) {
@@ -633,15 +642,18 @@ export class InvoicePayloadBuilderService {
           taxAssigned += share;
         }
 
+        // ── Lock taxRate to actual slab rate using GST-exclusive base ──
         if (!isInterStateSupply && gstData.totalCgst > 0) {
-          const cgstRate = (gstData.totalCgst / runningSubTotal) * 100;
-          items[i].taxRate = Math.round(cgstRate * 2 * 100) / 100;
+          // CGST+SGST: combined rate = CGST% + SGST% = 2 × (totalCgst / exclusiveBase)
+          items[i].taxRate =
+            Math.round((gstData.totalCgst / runningSubTotal) * 2 * 100 * 100) / 100;
         } else if (isInterStateSupply && gstData.totalIgst > 0) {
+          // IGST: rate = totalIgst / exclusiveBase
           items[i].taxRate =
             Math.round((gstData.totalIgst / runningSubTotal) * 100 * 100) / 100;
         }
 
-        // ✅ totalAmount = taxable net + extracted tax (NOT adding fresh tax on top)
+        // totalAmount = taxable net + extracted tax
         items[i].totalAmount = items[i].netAmount + items[i].taxAmount;
       }
     }
@@ -651,18 +663,19 @@ export class InvoicePayloadBuilderService {
     const totalTax = gstData?.totalTax ?? 0;
 
     // ✅ grandTotal = taxable subtotal + extracted tax
-    //    This equals the original inclusive price sum — no inflation
-    const grandTotal = runningSubTotal + totalTax;
+    //    This must equal the original inclusive price sum — use Math.round, NOT
+    //    Math.floor, so fractional paise are rounded correctly instead of truncated.
+    const grandTotal = Math.round((runningSubTotal + totalTax) * 100) / 100;
 
     const totals: InvoiceTotals = {
-      subTotal: runningSubTotal + orderInfo.discountAmount, // pre-discount taxable base
+      subTotal: Math.round((runningSubTotal + orderInfo.discountAmount) * 100) / 100,
       totalDiscount: orderInfo.discountAmount,
-      netAmount: runningSubTotal, // post-discount taxable base
+      netAmount: Math.round(runningSubTotal * 100) / 100,
       totalCgst: gstData?.totalCgst ?? 0,
       totalSgst: gstData?.totalSgst ?? 0,
       totalIgst: gstData?.totalIgst ?? 0,
       totalTax,
-      grandTotal, // ✅ = original order value (tax already was inside prices)
+      grandTotal,
       currency,
       grandTotalInWords: numberToWords(grandTotal),
       reverseCharge: false,

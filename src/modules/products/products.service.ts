@@ -10,7 +10,6 @@ import { CreateProductDto } from './dto/createProduct.dto';
 import {
   categories,
   product_images,
-  product_reviews,
   product_variants,
   products,
 } from '../../drizzle/schema/shop.schema';
@@ -26,6 +25,7 @@ import {
   inArray,
   lte,
   or,
+  SQL,
   sql,
 } from 'drizzle-orm';
 
@@ -47,7 +47,7 @@ export class ProductsService {
     private uploadToCloudService: UploadToCloudService,
     private inventoryService: InventoryService,
     private readonly companyService: CompanyService,
-  ) {}
+  ) { }
   private async resolveCompanyId(domain: string): Promise<string> {
     console.log(
       `[ProductsService.resolveCompanyId] Resolving company for domain: ${domain}`,
@@ -61,13 +61,13 @@ export class ProductsService {
     );
     return this.companyService.find(filterDomain);
   }
-  async getAllProducts(domain: string, query: GetProductsQueryDto = {}) {
+  async getVendorProducts(domain: string, query: GetProductsQueryDto = {}) {
     console.log('[ProductsService.getAllProducts] Request received', query);
     try {
       const companyId = await this.resolveCompanyId(domain);
       const {
         offset = 0,
-        limit = 12,
+        limit = 10,
         search,
         category_id,
         min_price,
@@ -76,19 +76,21 @@ export class ProductsService {
       } = query;
 
       // ── Build WHERE conditions ──────────────────────────────────────────────
-      const conditions = [eq(products.company_id, companyId)];
+      const conditions: SQL[] = [eq(products.company_id, companyId)];
 
       if (search && search.trim()) {
-        const term = `%${search.trim()}%`;
-        conditions.push(
-          or(
-            ilike(products.name, term),
-            ilike(products.description, term),
-          ) as any,
+        const term: string = `%${search.trim()}%`;
+
+        const searchCondition = or(
+          ilike(products.name, term),
+          ilike(products.description, term),
         );
+        if (searchCondition) {
+          conditions.push(searchCondition);
+        }
       }
 
-      if (category_id) {
+      if (category_id && category_id.trim() !== '' && category_id !== 'null') {
         conditions.push(eq(products.category_id, category_id));
       }
 
@@ -100,84 +102,73 @@ export class ProductsService {
         conditions.push(lte(products.base_price, String(max_price)));
       }
 
-      const where = and(...conditions);
+      const whereCause = and(...conditions);
 
       // ── Sorting ─────────────────────────────────────────────────────────────
-      const orderBy = (() => {
-        switch (sort_by) {
-          case SortBy.PRICE_ASC:
-            return asc(sql`CAST(${products.base_price} AS NUMERIC)`);
-          case SortBy.PRICE_DESC:
-            return desc(sql`CAST(${products.base_price} AS NUMERIC)`);
-          case SortBy.NAME_ASC:
-            return asc(products.name);
-          case SortBy.DISCOUNT:
-            return desc(sql`CAST(${products.discount_percent} AS NUMERIC)`);
-          case SortBy.NEWEST:
-          default:
-            return desc(products.created_at);
-        }
-      })();
+      // const orderBy = (() => {
+      //   switch (sort_by) {
+      //     case SortBy.PRICE_ASC:
+      //       return asc(sql`CAST(${products.base_price} AS NUMERIC)`);
+      //     case SortBy.PRICE_DESC:
+      //       return desc(sql`CAST(${products.base_price} AS NUMERIC)`);
+      //     case SortBy.NAME_ASC:
+      //       return asc(products.name);
+      //     case SortBy.DISCOUNT:
+      //       return desc(sql`CAST(${products.discount_percent} AS NUMERIC)`);
+      //     case SortBy.NEWEST:
+      //     default:
+      //       return desc(products.created_at);
+      //   }
+      // })();
 
       // ── Total count (for pagination) ─────────────────────────────────────────
       const [{ total }] = await this.db
         .select({ total: count() })
         .from(products)
-        .where(where);
-
-      // ── Paginated IDs ────────────────────────────────────────────────────────
-      // Fetch IDs first (fast), then hydrate with relations
-      const productIds = await this.db
-        .select({ id: products.id })
-        .from(products)
-        .where(where)
-        .orderBy(orderBy)
-        .limit(limit)
-        .offset(offset);
-
-      if (productIds.length === 0) {
-        return {
-          data: [],
-          total: Number(total),
-          offset,
-          limit,
-        };
-      }
-
-      const ids = productIds.map((p) => p.id);
+        .where(eq(products.company_id, companyId))
+        .catch((error) => {
+          console.error('Error counting products:', error);
+          throw new InternalServerErrorException('Failed to count products', {
+            cause: error,
+          });
+        });
 
       // ── Hydrate with relations ───────────────────────────────────────────────
-      const productList = await this.db.query.products.findMany({
-        where: (p) => or(...ids.map((id) => eq(p.id, id))) as any,
-        with: {
-          category: true,
-          variants: {
-            columns: {
-              id: true,
-              variant_name: true,
-              price: true,
-              sku: true,
-              status: true,
-            },
-            with: {
-              images: {
-                limit: 1,
-                where: (images) => eq(images.is_primary, true),
+      const productList = await this.db.query.products
+        .findMany({
+          where: whereCause,
+          limit: limit,
+          offset: offset,
+          with: {
+            category: true,
+            variants: {
+              columns: {
+                id: true,
+                variant_name: true,
+                price: true,
+                sku: true,
+                status: true,
+                product_id: true,
               },
-              inventory: {
-                columns: { stock_quantity: true, warehouse_id: true },
+              with: {
+                images: {
+                  limit: 1,
+                  where: (images) => eq(images.is_primary, true),
+                },
+                inventory: {
+                  columns: { stock_quantity: true, warehouse_id: true },
+                },
               },
             },
           },
-        },
-      });
-
-      // Re-sort to match the ordered IDs from the paginated query
-      const idOrder = new Map(ids.map((id, i) => [id, i]));
-      productList.sort(
-        (a, b) => (idOrder.get(a.id) ?? 0) - (idOrder.get(b.id) ?? 0),
-      );
-
+        })
+        .catch((error) => {
+          console.error('Error fetching products:', error);
+          throw new InternalServerErrorException('Failed to fetch products', {
+            cause: error,
+          });
+        });
+      console.log('productList.length', productList.length);
       return {
         data: productList,
         total: Number(total),
@@ -186,6 +177,141 @@ export class ProductsService {
         totalPages: Math.ceil(Number(total) / limit),
       };
     } catch (error) {
+      console.error('Error in getAllProducts:', error);
+      if (
+        error instanceof HttpException ||
+        error instanceof InternalServerErrorException
+      ) {
+        throw error;
+      }
+      throw new InternalServerErrorException('Failed to fetch products', {
+        cause: error,
+      });
+    }
+  }
+  async getAllProducts(domain: string, query: GetProductsQueryDto = {}) {
+    console.log('[ProductsService.getAllProducts] Request received', query);
+    try {
+      const companyId = await this.resolveCompanyId(domain);
+      const {
+        offset = 0,
+        limit = 10,
+        search,
+        category_id,
+        min_price,
+        max_price,
+        sort_by = SortBy.NEWEST,
+      } = query;
+
+      // ── Build WHERE conditions ──────────────────────────────────────────────
+      const conditions: SQL[] = [eq(products.company_id, companyId)];
+
+      if (search && search.trim()) {
+        const term: string = `%${search.trim()}%`;
+
+        const searchCondition = or(
+          ilike(products.name, term),
+          ilike(products.description, term),
+        );
+        if (searchCondition) {
+          conditions.push(searchCondition);
+        }
+      }
+
+      if (category_id && category_id.trim() !== '' && category_id !== 'null') {
+        conditions.push(eq(products.category_id, category_id));
+      }
+
+      if (min_price !== undefined) {
+        conditions.push(gte(products.base_price, String(min_price)));
+      }
+
+      if (max_price !== undefined) {
+        conditions.push(lte(products.base_price, String(max_price)));
+      }
+
+      const whereCause = and(...conditions, eq(products.status, ProductStatus.ACTIVE));
+
+      // ── Sorting ─────────────────────────────────────────────────────────────
+      // const orderBy = (() => {
+      //   switch (sort_by) {
+      //     case SortBy.PRICE_ASC:
+      //       return asc(sql`CAST(${products.base_price} AS NUMERIC)`);
+      //     case SortBy.PRICE_DESC:
+      //       return desc(sql`CAST(${products.base_price} AS NUMERIC)`);
+      //     case SortBy.NAME_ASC:
+      //       return asc(products.name);
+      //     case SortBy.DISCOUNT:
+      //       return desc(sql`CAST(${products.discount_percent} AS NUMERIC)`);
+      //     case SortBy.NEWEST:
+      //     default:
+      //       return desc(products.created_at);
+      //   }
+      // })();
+
+      // ── Total count (for pagination) ─────────────────────────────────────────
+      const [{ total }] = await this.db
+        .select({ total: count() })
+        .from(products)
+        .where(eq(products.company_id, companyId))
+        .catch((error) => {
+          console.error('Error counting products:', error);
+          throw new InternalServerErrorException('Failed to count products', {
+            cause: error,
+          });
+        });
+
+      // ── Hydrate with relations ───────────────────────────────────────────────
+      const productList = await this.db.query.products
+        .findMany({
+          where: whereCause,
+          limit: limit,
+          offset: offset,
+          with: {
+            category: true,
+            variants: {
+              columns: {
+                id: true,
+                variant_name: true,
+                price: true,
+                sku: true,
+                status: true,
+                product_id: true,
+              },
+              with: {
+                images: {
+                  limit: 1,
+                  where: (images) => eq(images.is_primary, true),
+                },
+                inventory: {
+                  columns: { stock_quantity: true, warehouse_id: true },
+                },
+              },
+            },
+          },
+        })
+        .catch((error) => {
+          console.error('Error fetching products:', error);
+          throw new InternalServerErrorException('Failed to fetch products', {
+            cause: error,
+          });
+        });
+      console.log('productList.length', productList.length);
+      return {
+        data: productList,
+        total: Number(total),
+        offset,
+        limit,
+        totalPages: Math.ceil(Number(total) / limit),
+      };
+    } catch (error) {
+      console.error('Error in getAllProducts:', error);
+      if (
+        error instanceof HttpException ||
+        error instanceof InternalServerErrorException
+      ) {
+        throw error;
+      }
       throw new InternalServerErrorException('Failed to fetch products', {
         cause: error,
       });
@@ -572,7 +698,6 @@ export class ProductsService {
             price: productDto.price || productDto.base_price.toString(),
             attributes: productDto.attributes,
             status: productDto.status,
-
             product_id: createdProduct.id,
           })
           .returning({
@@ -634,7 +759,7 @@ export class ProductsService {
           .insert(product_tax)
           .values({
             product_id: createdProduct.id,
-            tax_rate_id: productDto.tax_rate_id,
+            tax_slab_id: productDto.tax_slab_id,
           })
           .catch((error) => {
             console.error('Error inserting product tax mapping:', error);

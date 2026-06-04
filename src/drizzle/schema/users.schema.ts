@@ -17,6 +17,10 @@ export const user = pg.pgTable(
     user_status: UserStatusEnum().default(UserStatus.PENDING),
     otp: pg.varchar('otp', { length: 6 }),
     otp_expires: pg.timestamp('otp_expires'),
+    password_change_required: pg
+      .boolean('password_change_required')
+      .notNull()
+      .default(false),
     created_at: pg.timestamp('created_at').notNull().defaultNow(),
     updated_at: pg
       .timestamp('updated_at')

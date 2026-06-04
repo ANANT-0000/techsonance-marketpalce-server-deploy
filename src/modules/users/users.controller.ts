@@ -9,8 +9,10 @@ import {
   Patch,
   Post,
   UseGuards,
+  Req,
 } from '@nestjs/common';
 import { UsersService } from './users.service';
+import { SkipSubscription } from '../subscription/subscription.guard';
 import { RoleGuard } from '../../guards/role.guard';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { Roles } from '../../common/decorators/roles.decorator';
@@ -19,7 +21,7 @@ import { UserStatus } from '../../drizzle/types/types';
 
 @Controller({ version: '1', path: 'users' })
 export class UsersController {
-  constructor(private readonly userService: UsersService) {}
+  constructor(private readonly userService: UsersService) { }
   @Get('/:id')
   @HttpCode(HttpStatus.OK)
   async getProfile(@Param('id') userId: string) {
@@ -82,5 +84,17 @@ export class UsersController {
       undefined,
       body.email,
     );
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Post('change-password/:user_id')
+  @SkipSubscription()
+  @HttpCode(HttpStatus.OK)
+  async changePassword(
+    @Param('user_id') userId: string,
+    @Body() body: { currentPassword: string, newPassword: string },
+    @Headers('company-domain') domain: string,
+  ) {
+    return this.userService.changePassword(userId, body.currentPassword, body.newPassword, domain);
   }
 }

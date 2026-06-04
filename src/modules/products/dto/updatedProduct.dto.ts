@@ -55,7 +55,7 @@ export class UpdateProductDto {
 
   @IsOptional()
   @IsString()
-  tax_profile?: string;
+  tax_slab_id?: string;
 
   @IsNumberString()
   base_price!: string;

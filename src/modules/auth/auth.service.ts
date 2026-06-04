@@ -425,4 +425,31 @@ export class AuthService {
       );
     }
   }
+  async verifyEmail(email: string) {
+    try {
+      const [isEmailExists] = await this.db
+        .select({ email: user.email })
+        .from(user)
+        .where(eq(user.email, email))
+        .limit(1);
+      if (isEmailExists) {
+        return {
+          exists: true,
+          message: 'Email  already exists ,Please use Different Email',
+        };
+      } else {
+        return {
+          exists: false,
+          message:
+            'Email verified successfully it does not exist in our records, you can use this email ',
+        };
+      }
+    } catch (error) {
+      console.error('Email verification error:', error);
+      throw new HttpException(
+        'Failed to verify email',
+        HttpStatus.INTERNAL_SERVER_ERROR,
+      );
+    }
+  }
 }

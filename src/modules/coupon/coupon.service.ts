@@ -140,160 +140,226 @@ export class CouponService {
       const companyId = await this.resolveCompanyId(domain);
       console.log(`[CouponService.create] Company resolved: ${companyId}`);
 
+      console.log(
+        `[CouponService.create] Validating user existence for userId: ${userId}`,
+      );
       const [isUserExist] = await this.db
         .select({ id: user.id })
         .from(user)
         .where(eq(user.id, userId))
-        .limit(1);
+        .limit(1)
+        .catch((err) => {
+          console.error(
+            '[CouponService.create] Error validating user existence:',
+            err,
+          );
+          throw new InternalServerErrorException('Failed to validate user', {
+            cause: err,
+          });
+        });
 
       if (!isUserExist?.id) {
         throw new HttpException('User not found.', HttpStatus.NOT_FOUND);
       }
+      console.log(
+        `[CouponService.create] User validated successfully: ${isUserExist.id}`,
+      );
 
       console.log(
         '[CouponService.create] Starting transaction for coupon creation',
       );
-      return await this.db.transaction(async (tx) => {
-        console.log('[CouponService.create] Transaction started');
-        // 1. Guard duplicate code
-        if (!dto.is_auto_applied && dto.code) {
-          console.log(
-            `[CouponService.create] Checking duplicate coupon code: ${dto.code.toUpperCase()}`,
-          );
-          const [existingCoupon] = await tx
-            .select({ id: coupons.id })
-            .from(coupons)
-            .where(
-              and(
-                eq(coupons.company_id, companyId),
-                eq(coupons.code, dto.code.toUpperCase()),
-              ),
-            )
+      return await this.db
+        .transaction(async (tx) => {
+          console.log('[CouponService.create] Transaction started');
+          // 1. Guard duplicate code
+          if (!dto.is_auto_applied && dto.code) {
+            console.log(
+              `[CouponService.create] Checking duplicate coupon code: ${dto.code.toUpperCase()}`,
+            );
+            const [existingCoupon] = await tx
+              .select({ id: coupons.id })
+              .from(coupons)
+              .where(
+                and(
+                  eq(coupons.company_id, companyId),
+                  eq(coupons.code, dto.code.toUpperCase()),
+                ),
+              )
+              .catch((err) => {
+                console.error(
+                  '[CouponService.create] Error checking existing coupon:',
+                  err,
+                );
+                throw new InternalServerErrorException(
+                  'Failed to validate coupon code uniqueness',
+                  { cause: err },
+                );
+              });
+
+            if (existingCoupon) {
+              console.log(
+                `[CouponService.create] Found duplicate coupon code id: ${existingCoupon.id}`,
+              );
+              throw new HttpException(
+                `Coupon code ${dto.code} already exists.`,
+                HttpStatus.BAD_REQUEST,
+              );
+            }
+          }
+
+          // 2. Insert base lookup coupon row
+          console.log('[CouponService.create] Inserting coupon row');
+          const [newCoupon] = await tx
+            .insert(coupons)
+            .values({
+              code: dto.code.toUpperCase(),
+              description: dto.description || null,
+              is_active: dto.is_active ?? true,
+              company_id: companyId,
+            })
+            .returning()
             .catch((err) => {
-              console.error('Error checking existing coupon:', err);
+              console.error('[CouponService.create] Error inserting coupon:', err);
               throw new InternalServerErrorException(
-                'Failed to validate coupon code uniqueness',
-                { cause: err },
+                'Failed to create coupon',
+                {
+                  cause: err,
+                },
               );
             });
 
-          if (existingCoupon) {
-            console.log(
-              `[CouponService.create] found duplicate coupon code id: ${existingCoupon.id}`,
-            );
-            throw new HttpException(
-              `Coupon code ${dto.code} already exists.`,
-              HttpStatus.BAD_REQUEST,
-            );
-          }
-        }
-
-        // 2. Insert base lookup coupon row
-        console.log('[CouponService.create] Inserting coupon row');
-        const [newCoupon] = await tx
-          .insert(coupons)
-          .values({
-            code: dto.code.toUpperCase(),
-            description: dto.description || null,
-            is_active: dto.is_active ?? true,
-            company_id: companyId,
-          })
-          .returning()
-          .catch((err) => {
-            console.error('Error inserting coupon:', err);
-            throw new InternalServerErrorException('Failed to create coupon', {
-              cause: err,
-            });
-          });
-
-        // 3. Build discount_config via Strategy Pattern
-        console.log(
-          '[CouponService.create] Building promotion discount config',
-        );
-        let discountConfig: Record<string, unknown> = {};
-        let promoType: PromotionType = PromotionType.FIXED_AMOUNT;
-
-        if (dto.discount_type === PromotionType.PERCENTAGE) {
-          promoType = PromotionType.PERCENTAGE;
-          discountConfig = {
-            value: Number(dto.discount_value),
-            cap: dto.max_discount_amount
-              ? Number(dto.max_discount_amount)
-              : null,
-          };
-        } else if (dto.discount_type === PromotionType.FREE_SHIPPING) {
-          promoType = PromotionType.FREE_SHIPPING;
-          discountConfig = { max_shipping_waived: Number(dto.discount_value) };
-        } else {
-          // FIXED_AMOUNT (and anything else that slips through)
-          discountConfig = { value: Number(dto.discount_value) };
-        }
-
-        // 4. Insert unified promotion
-        console.log('[CouponService.create] Inserting promotion row');
-        const [newPromotion] = await tx
-          .insert(promotions)
-          .values({
-            company_id: companyId,
-            created_by: userId,
-            name: `Coupon - ${dto.code.toUpperCase()}`,
-            description: dto.description || null,
-            promotion_type: promoType,
-            discount_config: discountConfig,
-            coupon_id: newCoupon.id,
-            is_auto_applied: dto.is_auto_applied ?? false,
-            status: dto.is_active
-              ? PromotionStatus.ACTIVE
-              : PromotionStatus.DRAFT,
-            valid_from: new Date(dto.valid_from),
-            valid_to: new Date(dto.valid_to),
-            max_uses_total: dto.max_uses || null,
-            max_uses_per_user: dto.max_uses_per_user ?? 1,
-          })
-          .returning()
-          .catch((err) => {
-            console.error('Error inserting promotion:', err);
-            throw new InternalServerErrorException(
-              'Failed to create promotion',
-              {
-                cause: err,
-              },
-            );
-          });
-
-        // 5. Insert all promotion rules from the DTO — fully typed, no `as any`
-        console.log('[CouponService.create] Inserting promotion rules');
-        //    Replaces the old single-rule `if (dto.min_order_amount)` block.
-        await this.insertRules(tx, newPromotion.id, dto.rules ?? []);
-
-        // 6. Attach product targets (if restricted to specific products)
-        if (
-          dto.applicable_product_ids &&
-          dto.applicable_product_ids.length > 0
-        ) {
+          // 3. Build discount_config via Strategy Pattern
           console.log(
-            `[CouponService.create] Attaching ${dto.applicable_product_ids.length} product target(s)`,
+            '[CouponService.create] Building promotion discount config',
           );
-          const targets = dto.applicable_product_ids.map((productId) => ({
-            promotion_id: newPromotion.id,
-            target_type: PromotionTargetType.PRODUCT as const,
-            target_id: productId,
-            exclude: false,
-          }));
-          await tx.insert(promotion_targets).values(targets);
-        }
+          let discountConfig: Record<string, unknown> = {};
+          let promoType: PromotionType = PromotionType.FIXED_AMOUNT;
 
-        console.log(
-          `[CouponService.create] Coupon creation completed for coupon id: ${newCoupon.id}`,
-        );
-        return { ...newCoupon, promotion_id: newPromotion.id };
-      });
+          if (dto.discount_type === PromotionType.PERCENTAGE) {
+            promoType = PromotionType.PERCENTAGE;
+            discountConfig = {
+              value: Number(dto.discount_value),
+              cap: dto.max_discount_amount
+                ? Number(dto.max_discount_amount)
+                : null,
+            };
+          } else if (dto.discount_type === PromotionType.FREE_SHIPPING) {
+            promoType = PromotionType.FREE_SHIPPING;
+            discountConfig = {
+              max_shipping_waived: Number(dto.discount_value),
+            };
+          } else {
+            // FIXED_AMOUNT (and anything else that slips through)
+            discountConfig = { value: Number(dto.discount_value) };
+          }
+
+          // 4. Insert unified promotion
+          console.log('[CouponService.create] Inserting promotion row');
+          const [newPromotion] = await tx
+            .insert(promotions)
+            .values({
+              company_id: companyId,
+              created_by: userId,
+              name: `Coupon - ${dto.code.toUpperCase()}`,
+              description: dto.description || null,
+              promotion_type: promoType,
+              discount_config: discountConfig,
+              coupon_id: newCoupon.id,
+              is_auto_applied: dto.is_auto_applied ?? false,
+              status: dto.is_active
+                ? PromotionStatus.ACTIVE
+                : PromotionStatus.DRAFT,
+              valid_from: new Date(dto.valid_from),
+              valid_to: new Date(dto.valid_to),
+              max_uses_total: dto.max_uses || null,
+              max_uses_per_user: dto.max_uses_per_user ?? 1,
+            })
+            .returning()
+            .catch((err) => {
+              console.error(
+                '[CouponService.create] Error inserting promotion:',
+                err,
+              );
+              throw new InternalServerErrorException(
+                'Failed to create promotion',
+                {
+                  cause: err,
+                },
+              );
+            });
+
+          // 5. Insert all promotion rules from the DTO — fully typed, no `as any`
+          console.log('[CouponService.create] Inserting promotion rules');
+          //    Replaces the old single-rule `if (dto.min_order_amount)` block.
+          await this.insertRules(tx, newPromotion.id, dto.rules ?? []).catch(
+            (err) => {
+              console.error(
+                '[CouponService.create] Error inserting promotion rules:',
+                err,
+              );
+              throw new InternalServerErrorException(
+                'Failed to insert promotion rules',
+                {
+                  cause: err,
+                },
+              );
+            },
+          );
+
+          // 6. Attach product targets (if restricted to specific products)
+          if (
+            dto.applicable_product_ids &&
+            dto.applicable_product_ids.length > 0
+          ) {
+            console.log(
+              `[CouponService.create] Attaching ${dto.applicable_product_ids.length} product target(s)`,
+            );
+            const targets = dto.applicable_product_ids.map((productId) => ({
+              promotion_id: newPromotion.id,
+              target_type: PromotionTargetType.PRODUCT as const,
+              target_id: productId,
+              exclude: false,
+            }));
+            await tx
+              .insert(promotion_targets)
+              .values(targets)
+              .catch((err) => {
+                console.error(
+                  '[CouponService.create] Error attaching promotion targets:',
+                  err,
+                );
+                throw new InternalServerErrorException(
+                  'Failed to attach promotion targets',
+                  {
+                    cause: err,
+                  },
+                );
+              });
+          }
+
+          console.log(
+            `[CouponService.create] Coupon creation completed for coupon id: ${newCoupon.id}`,
+          );
+          return { ...newCoupon, promotion_id: newPromotion.id };
+        })
+        .catch((err) => {
+          console.error('[CouponService.create] Error during transaction:', err);
+          throw new InternalServerErrorException(
+            'Failed to complete coupon creation transaction',
+            {
+              cause: err,
+            },
+          );
+        });
     } catch (error) {
       if (
         error instanceof HttpException ||
         error instanceof InternalServerErrorException
-      )
+      ) {
+        console.error('[CouponService.create] Handled error:', error);
         throw error;
+      }
+      console.error('[CouponService.create] Unexpected error:', error);
       throw new InternalServerErrorException('Failed to create coupon', {
         cause: error,
       });

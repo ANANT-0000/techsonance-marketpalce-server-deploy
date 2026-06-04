@@ -3,6 +3,7 @@ import {
   Controller,
   Get,
   Headers,
+  Param,
   Post,
   UseGuards,
 } from '@nestjs/common';
@@ -32,5 +33,14 @@ export class InvoiceController {
   @Roles(Role.ADMIN)
   listTemplates() {
     // return this.invoiceService.listAvailableTemplates();
+  }
+  @Get('payload/:orderId')
+  // @UseGuards(JwtAuthGuard, RoleGuard)
+  // @Roles(Role.ADMIN, Role.VENDOR, Role.CUSTOMER)
+  async getInvoicePayload(
+    @Param('orderId') orderId: string,
+    @Headers('company-domain') domain: string,
+  ) {
+    return this.invoiceService.getInvoicePayload(orderId, domain);
   }
 }

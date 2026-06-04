@@ -7,6 +7,8 @@ import { MailModule } from '../../common/services/mail/mail.module';
 import { UploadToCloudModule } from '../../utils/upload-to-cloud/upload-to-cloud.module';
 import { CompanyModule } from '../company/company.module';
 import { OrdersModule } from '../orders/orders.module';
+import { SubscriptionModule } from '../subscription/subscription.module';
+
 @Module({
   imports: [
     DrizzleModule,
@@ -15,6 +17,7 @@ import { OrdersModule } from '../orders/orders.module';
     UploadToCloudModule,
     forwardRef(() => OrdersModule),
     forwardRef(() => CompanyModule),
+    SubscriptionModule,
   ],
   controllers: [VendorsController],
   providers: [VendorsService],

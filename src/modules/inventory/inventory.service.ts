@@ -27,7 +27,7 @@ export class InventoryService {
   constructor(
     @Inject(DRIZZLE) private readonly db: DrizzleService,
     private readonly companyService: CompanyService,
-  ) { }
+  ) {}
 
   private async resolveCompanyId(domain: string): Promise<string> {
     const filteredDomain = domainExtractor(domain);
@@ -125,7 +125,10 @@ export class InventoryService {
           where: eq(inventory.company_id, companyId),
           limit: filters?.limit ?? 10,
           offset: filters?.offset ?? 0,
-          orderBy: filters?.sortby === 'desc' ? desc(inventory.created_at) : asc(inventory.created_at),
+          orderBy:
+            filters?.sortby === 'desc'
+              ? desc(inventory.created_at)
+              : asc(inventory.created_at),
           columns: {
             id: true,
             stock_quantity: true,
@@ -135,7 +138,7 @@ export class InventoryService {
           },
           with: {
             variant: {
-            with: {
+              with: {
                 product: {
                   columns: {
                     id: true,
@@ -635,18 +638,23 @@ export class InventoryService {
           variant_id: product_variants.id,
           variant_name: product_variants.variant_name,
           sku: product_variants.sku,
-          total_stock: sql<number>`CAST(SUM(${inventory.stock_quantity}) AS INTEGER)`,
+          currentStock: sql<number>`CAST(SUM(${inventory.stock_quantity}) AS INTEGER)`,
+          isOutOfStock: sql<boolean>`(SUM(${inventory.stock_quantity}) = 0)`,
+          severity: sql<string>`CASE WHEN SUM(${inventory.stock_quantity}) = 0 THEN 'out_of_stock' WHEN SUM(${inventory.stock_quantity}) <= ${threshold} THEN 'low_stock'  ELSE 'in_stock' END`,
+          warehouseName: warehouse.warehouse_name,
         })
         .from(inventory)
         .innerJoin(
           product_variants,
           eq(inventory.product_variant_id, product_variants.id),
         )
+        .innerJoin(warehouse, eq(inventory.warehouse_id, warehouse.id))
         .where(eq(inventory.company_id, companyId))
         .groupBy(
           product_variants.id,
           product_variants.variant_name,
           product_variants.sku,
+          warehouse.warehouse_name,
         )
         // Filter directly in SQL to only return items at or below the threshold
         .having(sql`SUM(${inventory.stock_quantity}) <= ${threshold}`);

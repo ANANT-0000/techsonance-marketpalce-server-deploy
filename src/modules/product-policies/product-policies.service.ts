@@ -27,12 +27,14 @@ import {
 } from '../../drizzle/schema/product_policy.schema';
 import { domainExtractor } from '../../common/filters/domainExtractor.filter';
 import { orders } from '../../drizzle/schema';
+import { PolicyPayloadBuilderService } from './policy-payload-builder.service';
 
 @Injectable()
 export class ProductPoliciesService {
   constructor(
     @Inject(DRIZZLE) private readonly db: DrizzleService,
     private readonly companyService: CompanyService,
+    private readonly policyPayloadBuilder: PolicyPayloadBuilderService,
   ) {}
 
   // ─── helpers ──────────────────────────────────────────────────────────────
@@ -917,6 +919,94 @@ export class ProductPoliciesService {
       throw new InternalServerErrorException('Failed to fetch warranty URL', {
         cause: error,
       });
+    }
+  }
+
+  // ==========================================================================
+  // WARRANTY PAYLOAD FOR CLIENT-SIDE PDF GENERATION
+  // ==========================================================================
+
+  /**
+   * Fetches the order items that have an associated policy snapshot and builds
+   * the full PolicyDocumentPayload for each one.
+   *
+   * The client uses these payloads to render warranty PDFs entirely in-browser
+   * (html2canvas + jsPDF) — no Puppeteer / server-side rendering needed.
+   */
+  async getWarrantyPayload(orderId: string) {
+    console.log(
+      `[ProductPoliciesService.getWarrantyPayload] Request received for order_id: ${orderId}`,
+    );
+
+    try {
+      // 1. Resolve all order items that have a policy snapshot for this order
+      console.log(
+        `[ProductPoliciesService.getWarrantyPayload] Querying order items with policy for order_id: ${orderId}`,
+      );
+      const orderData = await this.db.query.orders.findFirst({
+        where: eq(orders.id, orderId),
+        columns: { id: true },
+        with: {
+          items: {
+            columns: { id: true },
+            with: {
+              policy: {
+                columns: { order_item_id: true, document_generated: true },
+              },
+            },
+          },
+        },
+      });
+
+      if (!orderData) {
+        console.log(
+          `[ProductPoliciesService.getWarrantyPayload] No order found for order_id: ${orderId}`,
+        );
+        throw new NotFoundException(`Order with ID ${orderId} not found.`);
+      }
+
+      // 2. Filter to items that actually have a policy attached
+      const policyItems = orderData.items.filter((item) => !!item.policy);
+
+      if (policyItems.length === 0) {
+        console.log(
+          `[ProductPoliciesService.getWarrantyPayload] No policy items found for order_id: ${orderId}`,
+        );
+        return {
+          message: 'No warranty documents found for this order.',
+          data: [],
+        };
+      }
+
+      console.log(
+        `[ProductPoliciesService.getWarrantyPayload] Building payloads for ${policyItems.length} item(s)`,
+      );
+
+      // 3. Build the full payload for each item (reuses PolicyPayloadBuilderService)
+      const payloads = await Promise.all(
+        policyItems.map((item) =>
+          this.policyPayloadBuilder.buildPayload(item.id),
+        ),
+      );
+
+      console.log(
+        `[ProductPoliciesService.getWarrantyPayload] Successfully built ${payloads.length} payload(s) for order_id: ${orderId}`,
+      );
+
+      return {
+        message: 'Warranty payload(s) fetched successfully',
+        data: payloads,
+      };
+    } catch (error) {
+      if (error instanceof NotFoundException) throw error;
+      console.error(
+        `[ProductPoliciesService.getWarrantyPayload] Failed for order_id: ${orderId}`,
+        error,
+      );
+      throw new InternalServerErrorException(
+        'Failed to fetch warranty payload',
+        { cause: error },
+      );
     }
   }
 }

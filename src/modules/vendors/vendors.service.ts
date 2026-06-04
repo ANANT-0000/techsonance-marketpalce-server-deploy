@@ -18,6 +18,8 @@ import {
   orders,
   product_variants,
   products,
+  promotions,
+  promotion_usage,
   refunds,
   user as userTable,
   user_and_company,
@@ -27,7 +29,19 @@ import {
   vendor as vendorTable,
   company_document as vendor_documentTable,
 } from '../../drizzle/schema';
-import { and, asc, countDistinct, desc, eq, gte, ilike, like, lte, SQL, sql } from 'drizzle-orm';
+import {
+  and,
+  asc,
+  countDistinct,
+  desc,
+  eq,
+  gte,
+  ilike,
+  like,
+  lte,
+  SQL,
+  sql,
+} from 'drizzle-orm';
 import {
   AccessStatus,
   ProductStatus,
@@ -46,13 +60,14 @@ import { AddressType } from '../../common/Types/index.type';
 import { CompanyService } from '../company/company.service';
 import { domainExtractor } from '../../common/filters/domainExtractor.filter';
 import { randomBytes } from 'crypto';
-import { extractCloudinaryPublicId } from 'src/common/filters/extractCloudinaryPublicId.filter';
-import { SortBy } from '../products/dto/get-products-query.dto';
+import { extractCloudinaryPublicId } from '../../common/filters/extractCloudinaryPublicId.filter';
+import { SubscriptionService } from '../subscription/subscription.service';
 
 const SALT_ROUNDS = 10;
 type UserType = typeof userTable.$inferSelect;
 type VendorType = typeof vendorTable.$inferSelect;
 type UserRoleType = typeof user_rolesTable.$inferSelect;
+
 @Injectable()
 export class VendorsService {
   constructor(
@@ -61,7 +76,8 @@ export class VendorsService {
     private readonly mailService: MailService,
     private readonly companyService: CompanyService,
     private readonly uploadToCloudService: UploadToCloudService,
-  ) { }
+    private readonly subscriptionService: SubscriptionService,
+  ) {}
   async vendorRegister(
     vendorData: CreateVendorDto,
     files: Express.Multer.File[],
@@ -191,6 +207,7 @@ export class VendorsService {
             country_code: vendorData.country_code,
             phone_number: vendorData.phone_number,
             password_hash: hashedPassword,
+            password_change_required: true,
           })
           .returning({ id: userTable.id, email: userTable.email })
           .catch((error) => {
@@ -435,84 +452,84 @@ export class VendorsService {
     try {
       const existingUser:
         | {
-          user: Partial<UserType>;
-          vendor: Partial<VendorType>;
-          role: Partial<UserRoleType>;
-        }
+            user: Partial<UserType>;
+            vendor: Partial<VendorType>;
+            role: Partial<UserRoleType>;
+          }
         | HttpException = await this.db.transaction(async (tx) => {
-          console.log(
-            '[VendorsService.vendorLogin] Starting database transaction for authentication',
+        console.log(
+          '[VendorsService.vendorLogin] Starting database transaction for authentication',
+        );
+        if (!loginDto.email || !loginDto.password) {
+          throw new HttpException(
+            'Email and password are required',
+            HttpStatus.BAD_REQUEST,
           );
-          if (!loginDto.email || !loginDto.password) {
-            throw new HttpException(
-              'Email and password are required',
-              HttpStatus.BAD_REQUEST,
-            );
-          }
-          console.log('[VendorsService.vendorLogin] Querying user by email');
-          const [userRecord]: Partial<UserType>[] = await tx
-            .select()
-            .from(userTable)
-            .where(eq(userTable.email, loginDto.email));
-          if (!userRecord || !userRecord.id || !userRecord.password_hash) {
-            throw new UnauthorizedException('User not found');
-          }
-          console.log('[VendorsService.vendorLogin] Validating password');
-          const isPasswordValid = await bcrypt.compare(
-            loginDto.password,
-            userRecord.password_hash,
-          );
-          if (!isPasswordValid) {
-            throw new UnauthorizedException('Invalid password');
-          }
-          console.log(
-            '[VendorsService.vendorLogin] Password validated, querying vendor record',
-          );
-          const [vendorRecord] = await tx
-            .select()
-            .from(vendorTable)
-            .where(eq(vendorTable.user_id, userRecord.id));
-          // uncommit in future
-          // const [userAndCompanyRecord] = await tx
-          //   .select()
-          //   .from(user_and_company)
-          //   .where(eq(user_and_company.user_id, userRecord.id));
-          // console.log('vendorRecord', vendorRecord);
-          if (!userRecord) {
-            throw new UnauthorizedException('User role not found');
-          }
-          // console.log('userAndCompanyRecord', userAndCompanyRecord)
-          //------------------------------------------------------
-          // uncommit in future
-          //------------------------------------------------------
-          // const [roleRecord] = await tx
-          //   .select({ role_name: user_rolesTable.role_name })
-          //   .from(user_rolesTable)
-          //   .where(eq(user_rolesTable.id, userAndCompanyRecord.role_id)).limit(1);
+        }
+        console.log('[VendorsService.vendorLogin] Querying user by email');
+        const [userRecord]: Partial<UserType>[] = await tx
+          .select()
+          .from(userTable)
+          .where(eq(userTable.email, loginDto.email));
+        if (!userRecord || !userRecord.id || !userRecord.password_hash) {
+          throw new UnauthorizedException('User not found');
+        }
+        console.log('[VendorsService.vendorLogin] Validating password');
+        const isPasswordValid = await bcrypt.compare(
+          loginDto.password,
+          userRecord.password_hash,
+        );
+        if (!isPasswordValid) {
+          throw new UnauthorizedException('Invalid password');
+        }
+        console.log(
+          '[VendorsService.vendorLogin] Password validated, querying vendor record',
+        );
+        const [vendorRecord] = await tx
+          .select()
+          .from(vendorTable)
+          .where(eq(vendorTable.user_id, userRecord.id));
+        // uncommit in future
+        // const [userAndCompanyRecord] = await tx
+        //   .select()
+        //   .from(user_and_company)
+        //   .where(eq(user_and_company.user_id, userRecord.id));
+        // console.log('vendorRecord', vendorRecord);
+        if (!userRecord) {
+          throw new UnauthorizedException('User role not found');
+        }
+        // console.log('userAndCompanyRecord', userAndCompanyRecord)
+        //------------------------------------------------------
+        // uncommit in future
+        //------------------------------------------------------
+        // const [roleRecord] = await tx
+        //   .select({ role_name: user_rolesTable.role_name })
+        //   .from(user_rolesTable)
+        //   .where(eq(user_rolesTable.id, userAndCompanyRecord.role_id)).limit(1);
 
-          //-----------------------------------------------------
-          // for bypassing the role check in future comment this and uncommit above
-          //-----------------------------------------------------
-          console.log('[VendorsService.vendorLogin] Fetching vendor role');
-          const [roleRecord] = await tx
-            .select({ role_name: user_rolesTable.role_name })
-            .from(user_rolesTable)
-            .where(eq(user_rolesTable.role_name, 'vendor'))
-            .limit(1);
-          if (!vendorRecord) throw new UnauthorizedException('Vendor not found');
-          console.log(
-            '[VendorsService.vendorLogin] Checking vendor approval status',
+        //-----------------------------------------------------
+        // for bypassing the role check in future comment this and uncommit above
+        //-----------------------------------------------------
+        console.log('[VendorsService.vendorLogin] Fetching vendor role');
+        const [roleRecord] = await tx
+          .select({ role_name: user_rolesTable.role_name })
+          .from(user_rolesTable)
+          .where(eq(user_rolesTable.role_name, 'vendor'))
+          .limit(1);
+        if (!vendorRecord) throw new UnauthorizedException('Vendor not found');
+        console.log(
+          '[VendorsService.vendorLogin] Checking vendor approval status',
+        );
+        const isVendorApproved =
+          vendorRecord.vendor_status === UserStatus.ACTIVE;
+        // const isVendorApproved = vendorRecord.vendor_status === UserStatus.ACTIVE &&  userAndCompanyRecord.access_status === AccessStatus.ACTIVE;
+        if (!isVendorApproved)
+          throw new HttpException(
+            'Vendor application is still under review',
+            HttpStatus.UNAUTHORIZED,
           );
-          const isVendorApproved =
-            vendorRecord.vendor_status === UserStatus.ACTIVE;
-          // const isVendorApproved = vendorRecord.vendor_status === UserStatus.ACTIVE &&  userAndCompanyRecord.access_status === AccessStatus.ACTIVE;
-          if (!isVendorApproved)
-            throw new HttpException(
-              'Vendor application is still under review',
-              HttpStatus.UNAUTHORIZED,
-            );
-          return { user: userRecord, vendor: vendorRecord, role: roleRecord };
-        });
+        return { user: userRecord, vendor: vendorRecord, role: roleRecord };
+      });
       if (existingUser instanceof HttpException) {
         throw existingUser;
       }
@@ -527,7 +544,15 @@ export class VendorsService {
         sub: string | undefined;
         email: string | undefined;
         role: string | undefined;
-      } = { sub: user.id, email: user.email, role: role?.role_name };
+        company_id: string | undefined;
+        password_change_required: boolean | undefined;
+      } = {
+        sub: user.id,
+        email: user.email,
+        role: role?.role_name,
+        company_id: vendor.company_id ?? undefined,
+        password_change_required: user.password_change_required,
+      };
 
       console.log('[VendorsService.vendorLogin] Signing access token');
       const accessToken = await this.jwtService.signAsync(payload, {
@@ -553,6 +578,7 @@ export class VendorsService {
         category: vendor.category,
         vendor_status: vendor.vendor_status,
         joined_at: vendor.created_at,
+        password_change_required: user.password_change_required,
       };
       const response = {
         user: responseData,
@@ -666,6 +692,14 @@ export class VendorsService {
         .from(company)
         .where(eq(company.id, updatedUserAndCompany.company_id))
         .limit(1);
+
+      console.log(
+        `[VendorsService.approveVendor] Activating trial subscription for company: ${updatedUserAndCompany.company_id}`,
+      );
+      await this.subscriptionService.startTrial(
+        updatedUserAndCompany.company_id,
+      );
+
       console.log('[VendorsService.approveVendor] Sending approval email');
       await this.mailService.sendVendorApprovalEmail(
         isVendorExists.email,
@@ -902,26 +936,24 @@ export class VendorsService {
       );
     }
   }
-  async vendorApplications(
-    filters: {
-      search: string;
-      limit: number;
-      offset: number;
-      status: UserStatus | undefined;
-      date: string;
-      sortby: 'asc' | 'desc';
-    },
-  ) {
+  async vendorApplications(filters: {
+    search: string;
+    limit: number;
+    offset: number;
+    status: UserStatus | undefined;
+    date: string;
+    sortby: 'asc' | 'desc';
+  }) {
     try {
       console.log(
         '[VendorsService.vendorApplications] Fetching all pending vendor applications',
       );
-      const whereConditions: SQL[] = []
+      const whereConditions: SQL[] = [];
       if (filters.status) {
-        whereConditions.push(eq(vendor.vendor_status, filters.status))
+        whereConditions.push(eq(vendor.vendor_status, filters.status));
       }
       if (filters.search) {
-        whereConditions.push(ilike(vendor.store_name, `%${filters.search}%`))
+        whereConditions.push(ilike(vendor.store_name, `%${filters.search}%`));
       }
       const applications = await this.db.query.vendor
         .findMany({
@@ -933,7 +965,10 @@ export class VendorsService {
             user: true,
             documents: true,
           },
-          orderBy: filters.sortby == 'desc' ? desc(vendor.created_at) : asc(vendor.created_at),
+          orderBy:
+            filters.sortby == 'desc'
+              ? desc(vendor.created_at)
+              : asc(vendor.created_at),
         })
         .then((results) => {
           console.log(
@@ -1555,6 +1590,207 @@ export class VendorsService {
         {
           cause: error,
         },
+      );
+    }
+  }
+
+  // ─── PDF Analytics Export ────────────────────────────────────────────────────
+  // Returns a single, comprehensive payload for the frontend HTML+Chart.js PDF.
+  async getAnalyticsPdfData(domain: string, start?: string, end?: string) {
+    try {
+      console.log(
+        `[VendorsService.getAnalyticsPdfData] Fetching PDF analytics data for domain: ${domain}`,
+      );
+
+      const filteredDomain = domainExtractor(domain);
+      const companyId = await this.companyService.find(filteredDomain);
+
+      if (!companyId) {
+        throw new UnauthorizedException(
+          'Company not found for the provided domain',
+        );
+      }
+
+      const startDate = start
+        ? new Date(start)
+        : new Date(new Date().setDate(new Date().getDate() - 30));
+      const endDate = end ? new Date(end) : new Date();
+
+      const baseFilter = and(
+        eq(orders.company_id, companyId),
+        gte(orders.created_at, startDate),
+        lte(orders.created_at, endDate),
+      );
+
+      // ── 1. Summary (Gross Revenue, Net Earnings, Tax, Refunds) ──────────────
+      const [salesStats] = await this.db
+        .select({
+          grossRevenue: sql<number>`COALESCE(SUM(${orders.total_amount}), 0)::float`,
+          totalOrders: sql<number>`COUNT(DISTINCT ${orders.id})::int`,
+        })
+        .from(orders)
+        .where(baseFilter);
+
+      const [taxStats] = await this.db
+        .select({
+          taxCollected: sql<number>`COALESCE(SUM(${gst_invoices.total_tax}), 0)::float`,
+        })
+        .from(gst_invoices)
+        .innerJoin(orders, eq(gst_invoices.order_id, orders.id))
+        .where(baseFilter);
+
+      const [refundStats] = await this.db
+        .select({
+          refunds: sql<number>`COALESCE(SUM(${refunds.refund_amount}), 0)::float`,
+        })
+        .from(refunds)
+        .innerJoin(orders, eq(refunds.order_id, orders.id))
+        .where(baseFilter);
+
+      const platformFees = 0;
+      const netEarnings =
+        salesStats.grossRevenue -
+        taxStats.taxCollected -
+        refundStats.refunds -
+        platformFees;
+
+      // ── 2. Monthly Revenue + Order Count Trend ───────────────────────────────
+      const monthlyTrend = await this.db
+        .select({
+          month: sql<string>`TO_CHAR(${orders.created_at}, 'Mon YYYY')`,
+          sortDate: sql<string>`TO_CHAR(${orders.created_at}, 'YYYY-MM')`,
+          revenue: sql<number>`COALESCE(SUM(${orders.total_amount}), 0)::float`,
+          orderCount: sql<number>`COUNT(${orders.id})::int`,
+        })
+        .from(orders)
+        .where(baseFilter)
+        .groupBy(
+          sql`TO_CHAR(${orders.created_at}, 'Mon YYYY')`,
+          sql`TO_CHAR(${orders.created_at}, 'YYYY-MM')`,
+        )
+        .orderBy(sql`TO_CHAR(${orders.created_at}, 'YYYY-MM')`);
+
+      // ── 3. Top Selling Products (by units sold) ──────────────────────────────
+      const topProducts = await this.db
+        .select({
+          name: product_variants.variant_name,
+          sku: product_variants.sku,
+          unitsSold: sql<number>`COALESCE(SUM(${order_items.quantity}), 0)::int`,
+          revenue: sql<number>`COALESCE(SUM(${order_items.price} * ${order_items.quantity}), 0)::float`,
+        })
+        .from(order_items)
+        .innerJoin(orders, eq(order_items.order_id, orders.id))
+        .innerJoin(
+          product_variants,
+          eq(order_items.product_variant_id, product_variants.id),
+        )
+        .where(baseFilter)
+        .groupBy(product_variants.id, product_variants.variant_name, product_variants.sku)
+        .orderBy(desc(sql`SUM(${order_items.quantity})`))
+        .limit(8);
+
+      // ── 4. Category Revenue Breakdown ────────────────────────────────────────
+      const categoryBreakdown = await this.db
+        .select({
+          name: categories.name,
+          revenue: sql<number>`COALESCE(SUM(${order_items.price} * ${order_items.quantity}), 0)::float`,
+          unitsSold: sql<number>`COALESCE(SUM(${order_items.quantity}), 0)::int`,
+        })
+        .from(order_items)
+        .innerJoin(orders, eq(order_items.order_id, orders.id))
+        .innerJoin(
+          product_variants,
+          eq(order_items.product_variant_id, product_variants.id),
+        )
+        .innerJoin(products, eq(product_variants.product_id, products.id))
+        .innerJoin(categories, eq(products.category_id, categories.id))
+        .where(baseFilter)
+        .groupBy(categories.name)
+        .orderBy(desc(sql`SUM(${order_items.price} * ${order_items.quantity})`));
+
+      // ── 5. Order Status Distribution ─────────────────────────────────────────
+      const orderStatusBreakdown = await this.db
+        .select({
+          status: order_items.order_status,
+          count: sql<number>`COUNT(DISTINCT ${order_items.order_id})::int`,
+        })
+        .from(order_items)
+        .innerJoin(orders, eq(order_items.order_id, orders.id))
+        .where(baseFilter)
+        .groupBy(order_items.order_status);
+
+      // ── 6. Top Promotions by Discount Given ─────────────────────────────────
+      const topPromotions = await this.db
+        .select({
+          name: promotions.name,
+          promotionType: promotions.promotion_type,
+          timesUsed: sql<number>`COUNT(${promotion_usage.id})::int`,
+          totalDiscount: sql<number>`COALESCE(SUM(${promotion_usage.discount_amount}), 0)::float`,
+          status: promotions.status,
+        })
+        .from(promotion_usage)
+        .innerJoin(promotions, eq(promotion_usage.promotion_id, promotions.id))
+        .innerJoin(orders, eq(promotion_usage.order_id, orders.id))
+        .where(and(eq(promotions.company_id, companyId), baseFilter))
+        .groupBy(
+          promotions.id,
+          promotions.name,
+          promotions.promotion_type,
+          promotions.status,
+        )
+        .orderBy(desc(sql`SUM(${promotion_usage.discount_amount})`))
+        .limit(5);
+
+      // ── 7. Daily Revenue for the period (for sparkline / area chart) ─────────
+      const dailyRevenue = await this.db
+        .select({
+          date: sql<string>`TO_CHAR(${orders.created_at}, 'YYYY-MM-DD')`,
+          revenue: sql<number>`COALESCE(SUM(${orders.total_amount}), 0)::float`,
+          orderCount: sql<number>`COUNT(DISTINCT ${orders.id})::int`,
+        })
+        .from(orders)
+        .where(baseFilter)
+        .groupBy(sql`TO_CHAR(${orders.created_at}, 'YYYY-MM-DD')`)
+        .orderBy(sql`TO_CHAR(${orders.created_at}, 'YYYY-MM-DD')`);
+
+      console.log(
+        '[VendorsService.getAnalyticsPdfData] All PDF analytics data compiled successfully',
+      );
+
+      return {
+        meta: {
+          generatedAt: new Date().toISOString(),
+          startDate: startDate.toISOString(),
+          endDate: endDate.toISOString(),
+        },
+        summary: {
+          grossRevenue: salesStats.grossRevenue,
+          totalOrders: salesStats.totalOrders,
+          taxCollected: taxStats.taxCollected,
+          refunds: refundStats.refunds,
+          platformFees,
+          netEarnings,
+          avgOrderValue:
+            salesStats.totalOrders > 0
+              ? salesStats.grossRevenue / salesStats.totalOrders
+              : 0,
+        },
+        monthlyTrend,
+        dailyRevenue,
+        topProducts,
+        categoryBreakdown,
+        orderStatusBreakdown,
+        topPromotions,
+      };
+    } catch (error) {
+      if (error instanceof HttpException) throw error;
+      console.error(
+        '[VendorsService.getAnalyticsPdfData] Error:',
+        error,
+      );
+      throw new InternalServerErrorException(
+        'Failed to retrieve PDF analytics data',
+        { cause: error },
       );
     }
   }

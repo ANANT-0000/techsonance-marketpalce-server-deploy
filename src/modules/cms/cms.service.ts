@@ -1,0 +1,123 @@
+import { Injectable, Inject, InternalServerErrorException, HttpStatus } from '@nestjs/common';
+import { eq, and } from 'drizzle-orm';
+import { DRIZZLE, type DrizzleService } from '../../drizzle/drizzle.module';
+import { cms_pages } from '../../drizzle/schema';
+import { CompanyService } from '../company/company.service';
+import { domainExtractor } from '../../common/filters/domainExtractor.filter';
+import { CreateCmsDto } from './dto/create-cms.dto';
+
+@Injectable()
+export class CmsService {
+  constructor(
+    @Inject(DRIZZLE) private readonly db: DrizzleService,
+    private readonly companyService: CompanyService,
+  ) { }
+
+  private async resolveCompanyId(domain: string): Promise<string> {
+    console.log(`[CmsService.resolveCompanyId] Resolving company for domain: ${domain}`);
+    const filterDomain = domainExtractor(domain);
+    return this.companyService.find(filterDomain);
+  }
+
+  async getPage(domain: string, pageContentType: string, language = 'en') {
+    console.log(`[CmsService.getPage] Request received`, { domain, pageContentType, language });
+    const companyId = await this.resolveCompanyId(domain);
+    if (!companyId) {
+      throw new InternalServerErrorException(`Company not found for domain: ${domain}`);
+    }
+
+    // Try finding the page in the requested language
+    const [pages] = await this.db
+      .select()
+      .from(cms_pages)
+      .where(
+        and(
+          eq(cms_pages.company_id, companyId),
+          eq(cms_pages.page_content_type, pageContentType),
+          eq(cms_pages.language, language),
+        ),
+      );
+
+    if (pages) {
+      return pages;
+    }
+
+    // Fallback to English ('en') if language is not 'en'
+    if (language !== 'en') {
+      console.log(`[CmsService.getPage] Page not found for '${language}'. Falling back to English.`);
+      const [englishPages] = await this.db
+        .select()
+        .from(cms_pages)
+        .where(
+          and(
+            eq(cms_pages.company_id, companyId),
+            eq(cms_pages.page_content_type, pageContentType),
+            eq(cms_pages.language, 'en'),
+          ),
+        );
+      if (englishPages) {
+        return englishPages;
+      }
+    }
+
+    return null;
+  }
+
+  async upsertPage(domain: string, dto: CreateCmsDto) {
+    console.log(`[CmsService.upsertPage] Request received`, { domain, type: dto.page_content_type });
+    const companyId = await this.resolveCompanyId(domain);
+    if (!companyId) {
+      throw new InternalServerErrorException(`Company not found for domain: ${domain}`);
+    }
+
+    const language = dto.language || 'en';
+
+    // Check if page already exists for this language and page_content_type
+    const existing = await this.db
+      .select()
+      .from(cms_pages)
+      .where(
+        and(
+          eq(cms_pages.company_id, companyId),
+          eq(cms_pages.page_content_type, dto.page_content_type),
+          eq(cms_pages.language, language),
+        ),
+      );
+
+    try {
+      if (existing.length > 0) {
+        await this.db
+          .update(cms_pages)
+          .set({
+            title: dto.title,
+            content: dto.content,
+            seo_meta: dto.seo_meta || {},
+            updated_at: new Date(),
+          })
+          .where(eq(cms_pages.id, existing[0].id));
+
+        return {
+          message: 'CMS Page updated successfully',
+          status: HttpStatus.OK,
+        };
+      } else {
+        await this.db.insert(cms_pages).values({
+          title: dto.title,
+          content: dto.content,
+          page_content_type: dto.page_content_type,
+          seo_meta: dto.seo_meta || {},
+          language,
+          company_id: companyId,
+        });
+
+        return {
+          message: 'CMS Page created successfully',
+          status: HttpStatus.CREATED,
+        };
+      }
+    } catch (error) {
+      console.error(`[CmsService.upsertPage] Failed to upsert page`, error);
+      throw new InternalServerErrorException('Failed to save CMS page content', { cause: error });
+    }
+  }
+}

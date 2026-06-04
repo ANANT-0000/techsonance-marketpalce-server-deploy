@@ -11,14 +11,11 @@ import { OrdersModule } from './modules/orders/orders.module';
 import { VendorsModule } from './modules/vendors/vendors.module';
 import { TicketsModule } from './modules/tickets/tickets.module';
 import { ConfigModule } from '@nestjs/config';
-import { ThrottlerModule } from '@nestjs/throttler';
 import { AdminModule } from './modules/admin/admin.module';
 import { RolesModule } from './modules/roles/roles.module';
 import { MailModule } from './common/services/mail/mail.module';
 import { AddressModule } from './modules/address/address.module';
-
 import { CategoryModule } from './modules/category/category.module';
-
 import { CloudinaryModule } from './utils/cloudinary/cloudinary.module';
 import { ProductReviewModule } from './modules/product-review/product-review.module';
 import { PermissionsModule } from './modules/permissions/permissions.module';
@@ -36,20 +33,21 @@ import { RefundsModule } from './modules/refunds/refunds.module';
 import { OrderItemsModule } from './modules/order-items/order-items.module';
 import { ReturnsModule } from './modules/returns/returns.module';
 import { FinancesModule } from './modules/finances/finances.module';
-// import { PdfService } from './utils/pdf/pdf.service';
 import { InvoiceModule } from './modules/invoice/invoice.module';
-// import { PdfModule } from './utils/pdf/pdf.module';
 import { ProductPoliciesModule } from './modules/product-policies/product-policies.module';
 import { CompanyIdentityModule } from './modules/company-identity/company-identity.module';
 import { TemplateModule } from './modules/template/template.module';
 import { DrizzleHealthIndicator } from './drizzle/drizzle.health';
-import { HealthCheckService, TerminusModule } from '@nestjs/terminus';
-import { HealthCheckExecutor } from '@nestjs/terminus/dist/health-check/health-check-executor.service';
+import { TerminusModule } from '@nestjs/terminus';
 import { PromotionsModule } from './modules/promotions/promotions.module';
 import { BannersModule } from './modules/banners/banners.module';
 import { AudiencesModule } from './modules/audiences/audiences.module';
 import { ComplianceModule } from './modules/compliance/compliance.module';
 import { SubscriptionModule } from './modules/subscription/subscription.module';
+import { CmsModule } from './modules/cms/cms.module';
+import { APP_GUARD } from '@nestjs/core';
+import { SubscriptionGuard } from './modules/subscription/subscription.guard';
+
 @Module({
   imports: [
     DrizzleModule,
@@ -85,39 +83,26 @@ import { SubscriptionModule } from './modules/subscription/subscription.module';
     ReturnsModule,
     FinancesModule,
     InvoiceModule,
-    // PdfModule,
     ProductPoliciesModule,
     CompanyIdentityModule,
     TemplateModule,
-TerminusModule,
-PromotionsModule,
-BannersModule,
-AudiencesModule,
-ComplianceModule,
-SubscriptionModule,
-    // ThrottlerModule.forRoot([
-    //   {
-    //     name: "short",
-    //     ttl: 1000,
-    //     limit: 3,
-    //   },
-    //   {
-    //     name: "medium",
-    //     ttl: 10000,
-    //     limit: 20,
-    //   },
-    //   {
-    //     name: "long",
-    //     ttl: 60000,
-    //     limit: 100,
-    //   },
-    // ]),
+    TerminusModule,
+    PromotionsModule,
+    BannersModule,
+    AudiencesModule,
+    ComplianceModule,
+    SubscriptionModule,
+    CmsModule,
   ],
   controllers: [AppController, UsersController],
   providers: [
     AppService,
     UsersService,
     DrizzleHealthIndicator,
+    {
+      provide: APP_GUARD,
+      useClass: SubscriptionGuard,
+    },
   ],
 })
 export class AppModule {}

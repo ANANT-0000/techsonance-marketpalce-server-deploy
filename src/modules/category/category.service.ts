@@ -48,25 +48,55 @@ export class CategoryService {
     console.log(
       `[CategoryService.findAll] Querying categories for company_id: ${companyId}`,
     );
-    const allCategories = await this.db
-      .select()
-      .from(categories)
-      .where(eq(categories.company_id, companyId))
-      .limit(filters?.limit ?? 10)
-      .offset(filters?.offset ?? 0)
-      .catch((error) => {
-        console.error(
-          `[CategoryService.findAll] Failed while fetching categories for companyId ${companyId}`,
-          error,
-        );
-        throw new InternalServerErrorException('Failed to fetch categories', {
-          cause: error,
-        });
+    try {
+      const allCategories = await this.db.query.categories.findMany({
+        where: eq(categories.company_id, companyId),
+        limit: filters?.limit ?? 20,
+        offset: filters?.offset ?? 0,
+        with: {
+          products: {
+            limit: 1,
+            with: {
+              variants: {
+                limit: 1,
+                with: {
+                  images: {
+                    limit: 1,
+                    where: (img) => eq(img.is_primary, true),
+                  },
+                },
+              },
+            },
+          },
+        },
       });
-    console.log(
-      `[CategoryService.findAll] Retrieved ${allCategories.length} category record(s)`,
-    );
-    return allCategories;
+
+      console.log(
+        `[CategoryService.findAll] Retrieved ${allCategories.length} category record(s)`,
+      );
+
+      return allCategories.map((category: any) => {
+        const imageUrl = category.products?.[0]?.variants?.[0]?.images?.[0]?.image_url || null;
+        return {
+          id: category.id,
+          name: category.name,
+          description: category.description,
+          parent_id: category.parent_id,
+          company_id: category.company_id,
+          created_at: category.created_at,
+          updated_at: category.updated_at,
+          product_image: imageUrl,
+        };
+      });
+    } catch (error) {
+      console.error(
+        `[CategoryService.findAll] Failed while fetching categories for companyId ${companyId}`,
+        error,
+      );
+      throw new InternalServerErrorException('Failed to fetch categories', {
+        cause: error,
+      });
+    }
   }
 
   async create(createCategoryDto: CreateCategoryDto, domain: string) {

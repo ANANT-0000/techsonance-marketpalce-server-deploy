@@ -3,6 +3,7 @@ import {
   Injectable,
   InternalServerErrorException,
   Logger,
+  forwardRef,
 } from '@nestjs/common';
 import { and, asc, eq, gte, lt } from 'drizzle-orm';
 import { MailService } from '../../common/services/mail/mail.service';
@@ -13,6 +14,9 @@ import {
   vendor_subscriptions,
 } from '../../drizzle/schema/subscription.schema';
 import { SubscriptionStatus } from '../../drizzle/types/types';
+import { CompanyService } from '../company/company.service';
+import { domainExtractor } from '../../common/filters/domainExtractor.filter';
+
 export enum BannerUrgency {
   INFO = 'info',
   WARNING = 'warning',
@@ -64,6 +68,8 @@ export class SubscriptionService {
     @Inject(DRIZZLE)
     private db: DrizzleService,
     private mailService: MailService,
+    @Inject(forwardRef(() => CompanyService))
+    private readonly companyService: CompanyService,
   ) {}
   /** Returns the plan row whose plan_name = 'trial' */
   private async getTrialPlan() {
@@ -130,13 +136,39 @@ export class SubscriptionService {
     return BannerUrgency.INFO;
   }
 
+  private isUuid(val: string): boolean {
+    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    return uuidRegex.test(val);
+  }
+
+  private async resolveCompanyId(domainOrId: string): Promise<string> {
+    if (this.isUuid(domainOrId)) {
+      return domainOrId;
+    }
+    const filterDomain = domainExtractor(domainOrId);
+    return await this.companyService.find(filterDomain);
+  }
+
   // ── Public API ───────────────────────────────────────────────────────────
 
   /**
    * Called by VendorsService.approveVendor() immediately after approval.
    * Creates a trial subscription for the company.
    */
-  async startTrial(companyId: string): Promise<void> {
+  async startTrial(companyIdOrDomain: string): Promise<void> {
+    const companyId = await this.resolveCompanyId(companyIdOrDomain);
+
+    // Check if subscription already exists for this company
+    const existing = await this.db.query.vendor_subscriptions.findFirst({
+      where: eq(vendor_subscriptions.company_id, companyId),
+    });
+    if (existing) {
+      this.logger.log(
+        `Subscription already exists for company ${companyId}. Skipping trial creation.`,
+      );
+      return;
+    }
+
     const plan = await this.getTrialPlan();
     const now = new Date();
     const trialEnd = addDays(now, plan.trial_days ?? 14);
@@ -186,7 +218,10 @@ export class SubscriptionService {
    * Returns the full subscription status object for a company.
    * Used by the API endpoint and the SubscriptionGuard.
    */
-  async getSubscriptionStatus(companyId: string): Promise<Subscription | null> {
+  async getSubscriptionStatus(
+    companyIdOrDomain: string,
+  ): Promise<Subscription | null> {
+    const companyId = await this.resolveCompanyId(companyIdOrDomain);
     const sub = await this.db.query.vendor_subscriptions.findFirst({
       where: eq(vendor_subscriptions.company_id, companyId),
       with: { plan: true },
@@ -205,7 +240,16 @@ export class SubscriptionService {
     const inGracePeriod = sub.status === SubscriptionStatus.GRACE_PERIOD;
     const isActive = sub.status === SubscriptionStatus.ACTIVE;
 
-    const showBanner = isTrial && daysRemaining !== null && daysRemaining <= 10;
+    const showBanner =
+      (isTrial && daysRemaining !== null && daysRemaining <= 10) ||
+      inGracePeriod;
+
+    let bannerUrgency = BannerUrgency.INFO;
+    if (inGracePeriod) {
+      bannerUrgency = BannerUrgency.WARNING;
+    } else if (showBanner && daysRemaining !== null) {
+      bannerUrgency = this.getBannerUrgency(daysRemaining);
+    }
 
     return {
       id: sub.id,
@@ -221,10 +265,7 @@ export class SubscriptionService {
       is_active: isActive,
       in_grace_period: inGracePeriod,
       show_banner: showBanner,
-      banner_urgency:
-        showBanner && daysRemaining !== null
-          ? this.getBannerUrgency(daysRemaining)
-          : BannerUrgency.INFO,
+      banner_urgency: bannerUrgency,
     };
   }
 
@@ -243,7 +284,11 @@ export class SubscriptionService {
    * Upgrades (or downgrades) a company's subscription to a paid plan.
    * Clears trial fields and sets a 30-day billing period.
    */
-  async upgradePlan(companyId: string, newPlanId: string): Promise<void> {
+  async upgradePlan(
+    companyIdOrDomain: string,
+    newPlanId: string,
+  ): Promise<void> {
+    const companyId = await this.resolveCompanyId(companyIdOrDomain);
     const now = new Date();
     const periodEnd = addDays(now, 30);
 

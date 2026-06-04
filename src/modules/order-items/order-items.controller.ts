@@ -1,5 +1,14 @@
-import { Body, Controller, Get, Headers, Param, Patch } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Get,
+  Headers,
+  Param,
+  Patch,
+  Query,
+} from '@nestjs/common';
 import { OrderItemsService } from './order-items.service';
+import { OrderStatus } from 'src/drizzle/types/types';
 
 @Controller({ version: '1', path: 'order-items' })
 export class OrderItemsController {
@@ -8,6 +17,24 @@ export class OrderItemsController {
   test() {
     return 'Order items controller is working';
   }
+  @Get('user/:userId')
+  async getUserOrderItems(
+    @Param('userId') userId: string,
+    @Headers('company-domain') domain: string,
+    @Query('status') status?: OrderStatus,
+    @Query('date') date?: string,
+    @Query('limit') limit?: string,
+    @Query('sortby') sortby?: 'asc' | 'desc',
+    @Query('offset') offset?: string,
+  ) {
+    return this.orderItemsService.getUserOrderItems(userId, domain, {
+      offset: Number(offset) || 0,
+      limit: Number(limit) || 10,
+      status: status as OrderStatus,
+      date: date ?? '',
+      sortby: sortby ?? 'desc',
+    });
+  }
   @Get(':orderItemId')
   async getOrderItemDetails(
     @Param('orderItemId') orderItemId: string,
@@ -15,6 +42,7 @@ export class OrderItemsController {
   ) {
     return this.orderItemsService.getOrderItemDetails(orderItemId, domain);
   }
+
   // @Post(':orderItemId')
   // async updateOrderItemStatus() {
   //   // Implement logic to update order item status

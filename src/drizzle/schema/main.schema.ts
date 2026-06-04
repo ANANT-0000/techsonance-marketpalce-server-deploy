@@ -93,6 +93,7 @@ export const cms_pages = pg.pgTable('cms_pages', {
   content: pg.text('content').notNull(),
   page_content_type: pg.text('page_content_type').notNull(),
   seo_meta: pg.jsonb('seo_meta').notNull(),
+  language: pg.varchar('language', { length: 10 }).notNull().default('en'),
   created_at: pg.timestamp('created_at').notNull().defaultNow(),
   updated_at: pg
     .timestamp('updated_at')

@@ -79,7 +79,7 @@ export class OrdersService {
     private readonly policyResolutionService: PolicyResolutionService,
     private readonly promotionService: PromotionsService,
     private readonly couponService: CouponService,
-  ) { }
+  ) {}
   private async resolveCompanyId(domain: string): Promise<string> {
     const filteredDomain = domainExtractor(domain);
     console.log(
@@ -355,7 +355,7 @@ export class OrdersService {
 
             console.log(
               `[createOrder] Snapshot created for item ${orderItemId} ` +
-              `via ${resolution.source}: ${resolution.reason}`,
+                `via ${resolution.source}: ${resolution.reason}`,
             );
           } catch (err) {
             // Don't let a snapshot failure abort the whole order
@@ -535,16 +535,14 @@ export class OrdersService {
     }
   }
 
-  async getAllOrders(
-    filters?: {
-      search: string;
-      limit: number;
-      offset: number;
-      status: string | undefined;
-      date: string;
-      sortby: string;
-    },
-  ) {
+  async getAllOrders(filters?: {
+    search: string;
+    limit: number;
+    offset: number;
+    status: string | undefined;
+    date: string;
+    sortby: string;
+  }) {
     console.log('[OrdersService.getAllOrders] Request received');
     try {
       console.log('[OrdersService.getAllOrders] Querying all orders');
@@ -681,19 +679,19 @@ export class OrdersService {
           }
 
           // Fire-and-forget invoice generation
-          this.invoiceService
-            .createInvoice(orderId)
-            .then(() =>
-              console.log(
-                `[OrdersService] Invoice PDF generated for order ${orderId}`,
-              ),
-            )
-            .catch((err) =>
-              console.error(
-                `[OrdersService] Background PDF generation failed for order ${orderId}:`,
-                err,
-              ),
-            );
+          // this.invoiceService
+          //   .createInvoice(orderId)
+          //   .then(() =>
+          //     console.log(
+          //       `[OrdersService] Invoice PDF generated for order ${orderId}`,
+          //     ),
+          //   )
+          //   .catch((err) =>
+          //     console.error(
+          //       `[OrdersService] Background PDF generation failed for order ${orderId}:`,
+          //       err,
+          //     ),
+          //   );
 
           const itemIds = orderItemsRecord.map((item) => item.id);
           console.log(
@@ -722,21 +720,21 @@ export class OrdersService {
               const snapshot = itemPolicy.policy_snapshot as PolicySnapshot;
               console.log('Policy Snapshot:', snapshot);
 
-              if (snapshot?.generates_document) {
-                this.policyDocumentService
-                  .generatePolicyDocument(itemPolicy.order_item_id)
-                  .then(() =>
-                    console.log(
-                      `[OrdersService] Warranty PDF generated for item ${itemPolicy.order_item_id}`,
-                    ),
-                  )
-                  .catch((err) =>
-                    console.error(
-                      `[OrdersService] Failed to generate warranty for item ${itemPolicy.order_item_id}`,
-                      err,
-                    ),
-                  );
-              }
+              // if (snapshot?.generates_document) {
+              //   this.policyDocumentService
+              //     .generatePolicyDocument(itemPolicy.order_item_id)
+              //     .then(() =>
+              //       console.log(
+              //         `[OrdersService] Warranty PDF generated for item ${itemPolicy.order_item_id}`,
+              //       ),
+              //     )
+              //     .catch((err) =>
+              //       console.error(
+              //         `[OrdersService] Failed to generate warranty for item ${itemPolicy.order_item_id}`,
+              //         err,
+              //       ),
+              //     );
+              // }
             }
           }
 
@@ -831,93 +829,66 @@ export class OrdersService {
     }
   }
 
-  async getUserOrders(userId: string, domain: string) {
-    console.log('[OrdersService.getUserOrders] Request received', {
+  async getOrdersCount(userId: string, domain: string) {
+    console.log('[OrdersService.getOrdersCount] Request received', {
       userId,
       domain,
     });
     try {
       if (!userId) {
         console.log(
-          '[OrdersService.getUserOrders] Stopping: User ID is missing',
+          '[OrdersService.getOrdersCount] Stopping: User ID is missing',
         );
         throw new HttpException('User ID is required', HttpStatus.BAD_REQUEST);
       }
-      console.log('[OrdersService.getUserOrders] Resolving company id');
+      console.log('[OrdersService.getOrdersCount] Resolving company id');
       const companyId = await this.resolveCompanyId(domain);
 
-      console.log('[OrdersService.getUserOrders] Querying orders for user', {
+      console.log('[OrdersService.getOrdersCount] Querying orders for user', {
         userId,
         companyId,
       });
-      return await this.db.query.orders
-        .findMany({
-          orderBy: desc(orders.created_at),
-          where: and(
-            eq(orders.user_id, userId),
-            eq(orders.company_id, companyId),
-          ),
-          columns: {
-            id: true,
-            user_id: true,
-            total_amount: true,
-            created_at: true,
-          },
-          with: {
-            items: {
-              columns: {
-                order_status: true,
-                quantity: true,
-                price: true,
-              },
-              with: {
-                variant: {
-                  columns: { id: true, variant_name: true, price: true },
-                  with: {
-                    images: {
-                      where: eq(product_images.is_primary, true),
-                      columns: { image_url: true },
-                    },
-                  },
-                },
-                return_request: { columns: { id: true, status: true } },
-              },
-            },
-            address: {
-              columns: {
-                name: true,
-                address_line_1: true,
-                address_line_2: true,
-                city: true,
-                state: true,
-                postal_code: true,
-                country: true,
-              },
-            },
-            payment: {
-              columns: {
-                id: true,
-                amount: true,
-                payment_status: true,
-                payment_method: true,
-                transaction_ref: true,
-              },
-            },
-            shipping: { columns: { tracking_url: true } },
-          },
+      const [ordersCount] = await this.db
+        .select({
+          count: sql`count(distinct ${orders.id})`,
+          activeOrders: sql`array_agg(distinct ${orders.id} order by ${orders.created_at} desc) filter (where ${order_items.order_status} = '${OrderStatus.PROCESSING}')`,
         })
+        .from(orders)
+        .innerJoin(
+          order_items,
+          and(
+            eq(order_items.order_id, orders.id),
+            eq(order_items.order_status, OrderStatus.PROCESSING),
+            gt(order_items.quantity, 0),
+          ),
+        )
+        .where(
+          and(eq(orders.user_id, userId), eq(orders.company_id, companyId)),
+        )
         .catch((error) => {
           console.error('Error fetching user orders:', error);
           throw new InternalServerErrorException(
-            'Failed to retrieve user orders',
+            'Failed to retrieve user orders count',
             { cause: error },
           );
         });
+
+      console.log(
+        '[OrdersService.getOrdersCount] Orders count fetched successfully',
+        {
+          count: ordersCount?.count,
+          activeOrders: ordersCount?.activeOrders,
+        },
+      );
+      return ordersCount;
     } catch (error) {
       console.error('Error fetching user orders:', error);
-      throw new InternalServerErrorException('Failed to retrieve user orders', {
-        cause: error,
-      });
+      throw new InternalServerErrorException(
+        'Failed to retrieve user orders count',
+        {
+          cause: error,
+        },
+      );
     }
   }
 
@@ -970,7 +941,7 @@ export class OrdersService {
             },
             with: {
               variant: {
-                columns: { id: true, variant_name: true, price: true },
+                columns: { id: true, variant_name: true, price: true, product_id: true },
                 with: {
                   images: {
                     where: eq(product_images.is_primary, true),
@@ -1050,10 +1021,10 @@ export class OrdersService {
             eq(order_items.order_id, orders.id),
             Object.values(OrderStatus).includes(status as OrderStatus)
               ? and(
-                // @ts-ignore
-                eq(order_items.order_status, status),
-                gt(order_items.quantity, 0),
-              )
+                  // @ts-ignore
+                  eq(order_items.order_status, status),
+                  gt(order_items.quantity, 0),
+                )
               : undefined,
           ),
         )
@@ -1069,10 +1040,10 @@ export class OrdersService {
               eq(order_items.order_id, orders.id),
               Object.values(OrderStatus).includes(status as OrderStatus)
                 ? and(
-                  // @ts-ignore
-                  eq(order_items.order_status, status),
-                  gt(order_items.quantity, 0),
-                )
+                    // @ts-ignore
+                    eq(order_items.order_status, status),
+                    gt(order_items.quantity, 0),
+                  )
                 : undefined,
             ),
           )
@@ -1095,10 +1066,10 @@ export class OrdersService {
           items: {
             where: Object.values(OrderStatus).includes(status as OrderStatus)
               ? and(
-                // @ts-ignore
-                eq(order_items.order_status, status),
-                gt(order_items.quantity, 0),
-              )
+                  // @ts-ignore
+                  eq(order_items.order_status, status),
+                  gt(order_items.quantity, 0),
+                )
               : undefined,
             columns: { order_status: true, quantity: true, price: true },
             with: {
@@ -1267,20 +1238,20 @@ export class OrdersService {
             invoice: item.invoice ?? null,
             warehouse: warehouse
               ? {
-                id: inventory?.warehouse_id ?? null,
-                name: warehouse.warehouse_name,
-                address: warehouse.address
-                  ? {
-                    address_line_1: warehouse.address.address_line_1,
-                    address_line_2:
-                      warehouse.address.address_line_2 ?? null,
-                    city: warehouse.address.city,
-                    state: warehouse.address.state,
-                    postal_code: warehouse.address.postal_code,
-                    country: warehouse.address.country,
-                  }
-                  : null,
-              }
+                  id: inventory?.warehouse_id ?? null,
+                  name: warehouse.warehouse_name,
+                  address: warehouse.address
+                    ? {
+                        address_line_1: warehouse.address.address_line_1,
+                        address_line_2:
+                          warehouse.address.address_line_2 ?? null,
+                        city: warehouse.address.city,
+                        state: warehouse.address.state,
+                        postal_code: warehouse.address.postal_code,
+                        country: warehouse.address.country,
+                      }
+                    : null,
+                }
               : null,
             product_variant: {
               id: item.variant?.id ?? null,
@@ -1292,20 +1263,20 @@ export class OrdersService {
         }),
         shipping_address: row.address
           ? {
-            name: row.address.name,
-            address_line_1: row.address.address_line_1,
-            address_line_2: row.address.address_line_2 ?? null,
-            city: row.address.city,
-            state: row.address.state,
-            postal_code: row.address.postal_code,
-            country: row.address.country,
-          }
+              name: row.address.name,
+              address_line_1: row.address.address_line_1,
+              address_line_2: row.address.address_line_2 ?? null,
+              city: row.address.city,
+              state: row.address.state,
+              postal_code: row.address.postal_code,
+              country: row.address.country,
+            }
           : null,
         payment: row.payment
           ? {
-            amount: row.payment.amount,
-            payment_method: row.payment.payment_method,
-          }
+              amount: row.payment.amount,
+              payment_method: row.payment.payment_method,
+            }
           : null,
         shipping: { tracking_url: row.shipping?.tracking_url ?? null },
       };

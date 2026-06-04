@@ -31,7 +31,7 @@ export class CreateProductDto {
   warehouse_id!: string;
 
   @IsString()
-  tax_rate_id!: string;
+  tax_slab_id!: string;
 
   @IsString()
   name!: string;
@@ -50,10 +50,6 @@ export class CreateProductDto {
   @IsOptional()
   @IsEnum(ProductStatus)
   status?: ProductStatus;
-
-  @IsOptional()
-  @IsString()
-  tax_profile?: string;
 
   @IsNumberString()
   base_price!: string;

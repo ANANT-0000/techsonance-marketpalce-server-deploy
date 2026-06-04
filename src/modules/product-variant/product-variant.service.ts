@@ -30,7 +30,7 @@ export class ProductVariantService {
     private readonly uploadToCloudService: UploadToCloudService,
     private inventoryService: InventoryService,
     private readonly companyService: CompanyService,
-  ) {}
+  ) { }
 
   private async resolveCompanyId(domain: string): Promise<string> {
     console.log(
@@ -514,7 +514,7 @@ export class ProductVariantService {
           variantId: product_variants.id,
           productId: products.id,
           productName: products.name,
-          variantName: product_variants.variant_name,
+          attributes: product_variants.attributes,
           sku: product_variants.sku,
           status: product_variants.status,
           stock: inventory.stock_quantity,
@@ -545,10 +545,10 @@ export class ProductVariantService {
       );
     }
   }
-  async UpdateProductVariantStatus(status: ProductStatus, productId: string) {
+  async UpdateProductVariantStatus(status: ProductStatus, variantId: string) {
     console.log(
       '[ProductVariantService.UpdateProductVarintStatus] Request received',
-      { productId, status },
+      { variantId, status },
     );
     if (!status) {
       console.log(
@@ -564,11 +564,11 @@ export class ProductVariantService {
     );
 
     try {
-      const result = await this.db
+      const [result] = await this.db
         .update(product_variants)
         .set({ status })
-        .where(eq(product_variants.id, productId))
-        .returning()
+        .where(eq(product_variants.id, variantId))
+        .returning({ product_id: product_variants.product_id })
         .catch((err) => {
           console.error(
             '[ProductVariantService.UpdateProductVarintStatus] Error updating product variant status:',
@@ -581,10 +581,33 @@ export class ProductVariantService {
             },
           );
         });
+
+      if (!result || !result.product_id) {
+        throw new HttpException(
+          'Product variant not found',
+          HttpStatus.NOT_FOUND,
+        );
+      }
+      const productVariant = await this.db.select().from(product_variants).where(and(eq(product_variants.product_id, result.product_id), eq(product_variants.status, ProductStatus.ACTIVE)))
+      if (productVariant.length == 0) {
+        await this.db.update(products).set({ status: ProductStatus.INACTIVE }).where(eq(products.id, result.product_id)).catch((err) => {
+          console.error(
+            '[ProductVariantService.UpdateProductVarintStatus] Error updating product status:',
+            err,
+          );
+          throw new InternalServerErrorException(
+            'Failed to update product status',
+            {
+              cause: err,
+            },
+          );
+        })
+      }
       console.log(
         '[ProductVariantService.UpdateProductVarintStatus] Product variant status updated',
-        { resultLength: result.length },
+        { resultLength: result },
       );
+
       return {
         message: 'Product variant status updated successfully',
         status: HttpStatus.OK,

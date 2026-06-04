@@ -171,6 +171,12 @@ export class AuthController {
     return await this.authService.requestPasswordReset(body.email, domain);
   }
 
+  @Get('verify-mail')
+  @HttpCode(HttpStatus.OK)
+  async verifyMail(@Query('email') email: string) {
+    return await this.authService.verifyEmail(email);
+  }
+
   @Post('reset-password')
   @HttpCode(HttpStatus.OK)
   async resetPassword(

@@ -55,6 +55,13 @@ export class ProductsController {
     );
   }
 
+  @Get('vendor-products')
+  async getVendorProducts(
+    @Headers('company-domain') domain: string,
+    @Query() query: GetProductsQueryDto,
+  ) {
+    return await this.productsService.getVendorProducts(domain, query);
+  }
   @Get('all')
   async getAllProducts(
     @Headers('company-domain') domain: string,
@@ -63,10 +70,7 @@ export class ProductsController {
     return await this.productsService.getAllProducts(domain, query);
   }
 
-  /**
-   * GET /v1/products/suggestions?search=...
-   * Returns lightweight name+id list for autocomplete (P2)
-   */
+ 
   @Get('suggestions')
   async getProductSuggestions(
     @Headers('company-domain') domain: string,
@@ -120,7 +124,7 @@ export class ProductsController {
     @Param('id') id: string,
     @Body('product_data', ParseJsonPipe) product: any,
     @Headers('company-domain') domain: string,
-    @Body('imagesToDelete', ParseJsonPipe) imagesToDelete?: string[],
+    @Body('imagesToDelete') imagesToDelete?: string[],
     @UploadedFiles() files?: ProductFiles,
   ) {
     return await this.productsService.updateProduct(

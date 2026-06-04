@@ -61,24 +61,17 @@ export class FinancesController {
     return this.financesService.createTaxProfile(domain, payload);
   }
 
-  @Post('tax-rates')
-  async createTaxRate(
-    @Headers('company-domain') domain: string,
-    @Body() payload: any,
-  ) {
-    return this.financesService.createTaxRate(domain, payload);
-  }
   @Post('product-tax-mappings')
   async assignProductTax(
     @Headers('company-domain') domain: string,
-    @Body() payload: { product_id: string; tax_rate_id: string },
+    @Body() payload: { product_id: string; tax_slab_id: string },
   ) {
     return this.financesService.assignTaxToProduct(domain, payload);
   }
   @Post('product-tax-bulk-mappings')
   async bulkAssignProductTax(
     @Headers('company-domain') domain: string,
-    @Body() payload: { product_ids: string[]; tax_rate_id: string },
+    @Body() payload: { product_ids: string[]; tax_slab_id: string },
   ) {
     return this.financesService.bulkAssignProductTax(domain, payload);
   }
@@ -87,6 +80,7 @@ export class FinancesController {
     @Headers('company-domain') domain: string,
     @Body()
     payload: {
+      discountAmount?: number;
       customerAddressId: string;
       cartItems: {
         variantId: string;
@@ -98,7 +92,7 @@ export class FinancesController {
     return this.financesService.calculateOrderTaxes(
       payload.customerAddressId,
       payload.cartItems,
-      0, // baseTotal
+      payload.discountAmount,
       undefined,
       undefined,
       domain,
@@ -124,8 +118,8 @@ export class FinancesController {
     });
   }
 
-  @Get('tax-rates')
-  async getTaxRates(
+  @Get('tax-slabs')
+  async getTaxSlabs(
     @Headers('company-domain') domain: string,
     @Query('search') search?: string,
     @Query('offset') offset?: number,
@@ -134,7 +128,7 @@ export class FinancesController {
     @Query('date') date?: string,
     @Query('sortby') sortby?: 'asc' | 'desc',
   ) {
-    return this.financesService.getTaxRates(domain, {
+    return this.financesService.getTaxSlabs(domain, {
       search: search ?? '',
       limit: Number(limit) || 10,
       offset: Number(offset) || 0,
@@ -143,15 +137,15 @@ export class FinancesController {
       sortby: sortby ?? 'desc',
     });
   }
-  @Get('tax-rate-options')
+  @Get('tax-slab-options')
   async getTaxRateOptions(
     @Headers('company-domain') domain: string,
-    @Query('search') search?: string,
-    @Query('offset') offset?: number,
-    @Query('limit') limit?: number,
-    @Query('status') status?: string,
-    @Query('date') date?: string,
-    @Query('sortby') sortby?: 'asc' | 'desc' | 'highest' | 'lowest',
+    // @Query('search') search?: string,
+    // @Query('offset') offset?: number,
+    // @Query('limit') limit?: number,
+    // @Query('status') status?: string,
+    // @Query('date') date?: string,
+    // @Query('sortby') sortby?: 'asc' | 'desc' | 'highest' | 'lowest',
   ) {
     return this.financesService.getTaxRateOptions(domain);
   }
@@ -174,6 +168,15 @@ export class FinancesController {
       date: date ?? '',
       sortby: sortby ?? 'desc',
     });
+  }
+  // Add these routes — currently none of them exist
+
+  @Post('tax-slabs')
+  async createTaxSlab(
+    @Headers('company-domain') domain: string,
+    @Body() payload: any,
+  ) {
+    return this.financesService.createTaxSlab(domain, payload);
   }
 
   @Get('gst-invoices')
@@ -201,9 +204,22 @@ export class FinancesController {
   ) {
     return this.financesService.getSingleGstRegistration(id, domain);
   }
+  @Get('tax-slabs/:id')
+  async getSingleTaxSlab(
+    @Param('id') id: string,
+    @Headers('company-domain') domain: string,
+  ) {
+    return this.financesService.getSingleTaxSlab(id, domain);
+  }
 
-
-
+  @Patch('tax-slabs/:id')
+  async updateTaxSlab(
+    @Param('id') id: string,
+    @Headers('company-domain') domain: string,
+    @Body() payload: any,
+  ) {
+    return this.financesService.updateTaxSlab(id, domain, payload);
+  }
   @Patch('tax-profiles/:id')
   async updateTaxProfile(
     @Param('id') id: string,
@@ -211,5 +227,29 @@ export class FinancesController {
     @Body() payload: any,
   ) {
     return this.financesService.updateTaxProfile(id, domain, payload);
+  }
+  @Get('tax-profiles/:id')
+  async getSingleTaxProfile(
+    @Param('id') id: string,
+    @Headers('company-domain') domain: string,
+  ) {
+    return this.financesService.getSingleTaxProfile(id, domain);
+  }
+
+  @Get('tax-rates/:id')
+  async getSingleTaxRate(
+    @Param('id') id: string,
+    @Headers('company-domain') domain: string,
+  ) {
+    return this.financesService.getSingleTaxSlab(id, domain);
+  }
+
+  @Patch('tax-rates/:id')
+  async updateTaxRate(
+    @Param('id') id: string,
+    @Headers('company-domain') domain: string,
+    @Body() payload: any,
+  ) {
+    return this.financesService.updateTaxSlab(id, domain, payload);
   }
 }

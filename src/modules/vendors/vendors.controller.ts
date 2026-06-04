@@ -29,4 +29,14 @@ export class VendorsController {
   ) {
     return this.vendorsService.getAnalyticsData(domain, startDate, endDate);
   }
+
+  @Get('analytics/pdf-data')
+  @HttpCode(HttpStatus.OK)
+  getAnalyticsPdfData(
+    @Headers('company-domain') domain: string,
+    @Query('startDate') startDate?: string,
+    @Query('endDate') endDate?: string,
+  ) {
+    return this.vendorsService.getAnalyticsPdfData(domain, startDate, endDate);
+  }
 }

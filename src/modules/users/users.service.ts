@@ -14,7 +14,7 @@ import {
   user_roles,
 } from '../../drizzle/schema';
 import { AccessStatus, UserRole, UserStatus } from '../../drizzle/types/types';
-import { and, eq, InferSelectModel,} from 'drizzle-orm';
+import { and, eq, InferSelectModel, } from 'drizzle-orm';
 import { DRIZZLE, type DrizzleService } from '../../drizzle/drizzle.module';
 
 import bcrypt from 'bcryptjs';
@@ -25,7 +25,7 @@ import { UpdateUserDtoTs } from './dto/update-user.dto.ts.js';
 import { MailService } from '../../common/services/mail/mail.service';
 import { CompanyService } from '../company/company.service.js';
 import { randomInt } from 'crypto';
- 
+
 import { domainExtractor } from '../../common/filters/domainExtractor.filter.js';
 type UserRecord = InferSelectModel<typeof user>;
 type UserRoleRecord = InferSelectModel<typeof user_roles>;
@@ -36,7 +36,7 @@ export class UsersService {
     private readonly jwtService: JwtService,
     private readonly companyService: CompanyService,
     private readonly mailService: MailService,
-  ) {}
+  ) { }
 
   private async resolveCompanyId(domain: string): Promise<string> {
     const filteredDomain = domainExtractor(domain);
@@ -404,6 +404,8 @@ export class UsersService {
         sub: userRecord?.id,
         email: userRecord?.email,
         role: roleRecord.role_name,
+        company_id: userAndCompanyRecord.company_id,
+        password_change_required: userRecord.password_change_required,
       };
       const expiresIn = process.env.JWT_EXPIRES_IN
         ? parseInt(process.env.JWT_EXPIRES_IN, 10)
@@ -741,7 +743,7 @@ export class UsersService {
       }
       console.log(
         '[UsersService.confirmAccountAction] Validating OTP expiration',
-        { expires: userRecord.otp_expires , current: new Date() },
+        { expires: userRecord.otp_expires, current: new Date() },
       );
       if (new Date() > new Date(userRecord.otp_expires)) {
         await this.db
@@ -807,6 +809,64 @@ export class UsersService {
       };
     } catch (error) {
       throw new InternalServerErrorException('Failed to deactivate user', {
+        cause: error,
+      });
+    }
+  }
+
+  async changePassword(userId: string, currentPassword: string, newPassword: string, domain: string) {
+    console.log(`[UsersService.changePassword] Request to change password for user: ${userId}`);
+    try {
+      // 1. Verify current password
+      const [userRecord] = await this.db.select().from(user).where(eq(user.id, userId)).limit(1).catch((err) => {
+        console.error('[UsersService.changePassword] Error fetching user record:', err);
+        throw new InternalServerErrorException('Failed to fetch user record', {
+          cause: err,
+        });
+      });
+
+      if (!userRecord) {
+        throw new HttpException('User not found', HttpStatus.NOT_FOUND);
+      }
+
+      const isCurrentPasswordValid = await bcrypt.compare(currentPassword, userRecord.password_hash);
+
+      if (!isCurrentPasswordValid) {
+        throw new UnauthorizedException('Invalid current password');
+      }
+
+      // 2. Hash new password
+      const hashedPassword = await bcrypt.hash(newPassword, 10).catch((err) => {
+        console.error('[UsersService.changePassword] Error hashing password:', err);
+        throw new InternalServerErrorException('Failed to hash password', {
+          cause: err,
+        });
+      });
+
+      await this.db
+        .update(user)
+        .set({
+          password_hash: hashedPassword,
+          password_change_required: false,
+        })
+        .where(eq(user.id, userId))
+        .catch((err) => {
+          console.error('[UsersService.changePassword] Error updating password:', err);
+          throw new InternalServerErrorException('Failed to update password', {
+            cause: err,
+          });
+        });
+
+      return {
+        success: true,
+        message: 'Password updated successfully',
+      };
+    } catch (error) {
+      if (error instanceof HttpException || error instanceof UnauthorizedException || error instanceof InternalServerErrorException) {
+        throw error;
+      }
+      console.error('[UsersService.changePassword] Error changing password:', error);
+      throw new InternalServerErrorException('Failed to change password', {
         cause: error,
       });
     }

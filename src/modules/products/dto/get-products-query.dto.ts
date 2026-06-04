@@ -37,6 +37,10 @@ export class GetProductsQueryDto {
   @IsString()
   @Transform(({ value }: { value: string }) => value?.trim())
   search?: string;
+  @IsOptional()
+  @IsString()
+  @Transform(({ value }: { value: string }) => value?.trim())
+  status?: string;
 
   // --- Filters ---
   @IsOptional()
