@@ -1,12 +1,12 @@
 import { emailLayout } from './layout.template';
 
 export function orderReturnTemplate(
-  customerName: string,
-  orderId: string,
+    customerName: string,
+    orderId: string,
 ): string {
-  const returnUrl = `${process.env.FRONTEND_URL || 'https://techsonance.com'}/customerProfile/orders/${orderId}/return`;
+    const returnUrl = `${process.env.FRONTEND_URL || 'https://techsonance.com'}/customer/orders/${orderId}/return`;
 
-  const content = `
+    const content = `
             <table align="center" role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%" style="margin: 0 auto;">
                 <tr>
                     <td style="padding: 0 40px 10px 40px;" class="mobile-padding">
@@ -52,5 +52,5 @@ export function orderReturnTemplate(
                 </tr>
             </table>
     `;
-  return emailLayout(content, `Return Initiated: #${orderId}`);
+    return emailLayout(content, `Return Initiated: #${orderId}`);
 }

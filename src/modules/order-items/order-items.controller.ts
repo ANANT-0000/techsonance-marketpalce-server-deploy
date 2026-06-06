@@ -8,7 +8,7 @@ import {
   Query,
 } from '@nestjs/common';
 import { OrderItemsService } from './order-items.service';
-import { OrderStatus } from 'src/drizzle/types/types';
+import { OrderStatus } from '../../drizzle/types/types';
 
 @Controller({ version: '1', path: 'order-items' })
 export class OrderItemsController {

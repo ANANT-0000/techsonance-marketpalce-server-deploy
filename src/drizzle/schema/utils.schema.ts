@@ -1,7 +1,7 @@
 import * as pg from 'drizzle-orm/pg-core';
 import { company } from './main.schema';
 import { address, user, vendor } from './users.schema';
-import { product_variants } from './shop.schema';
+import { product_variants, orders } from './shop.schema';
 import { SupportTicketPriority, SupportTicketStatus } from '../types/types';
 export const support_tickets_status_enum = pg.pgEnum(
   'support_tickets_status_enum',
@@ -86,12 +86,20 @@ export const support_tickets = pg.pgTable('support_tickets', {
   description: pg.text('description').notNull(),
   status: support_tickets_status_enum().notNull(),
   priority: support_tickets_priority_enum().notNull(),
+  category: pg.text('category'),
+  attachment_url: pg.text('attachment_url'),
+  order_id: pg
+    .uuid('order_id')
+    .references(() => orders.id, { onDelete: 'set null' }),
   created_at: pg.timestamp('created_at').notNull().defaultNow(),
   updated_at: pg
     .timestamp('updated_at')
     .notNull()
     .defaultNow()
     .$onUpdate(() => new Date()),
+  user_id: pg
+    .uuid('user_id')
+    .references(() => user.id, { onDelete: 'cascade' }),
   company_id: pg
     .uuid('company_id')
     .references(() => company.id, { onDelete: 'cascade' }),
@@ -171,4 +179,111 @@ export const templates = pg.pgTable('templates', {
     .uuid('vendor_id')
     .references(() => vendor.id, { onDelete: 'cascade' }),
 });
+
+export const help_articles = pg.pgTable('help_articles', {
+  id: pg.uuid('id').primaryKey().defaultRandom(),
+  title: pg.text('title').notNull(),
+  slug: pg.text('slug').notNull(),
+  content: pg.text('content').notNull(),
+  category: pg.text('category').notNull(),
+  order_index: pg.integer('order_index').default(0),
+  is_published: pg.boolean('is_published').default(true).notNull(),
+  helpful_count: pg.integer('helpful_count').default(0).notNull(),
+  not_helpful_count: pg.integer('not_helpful_count').default(0).notNull(),
+  view_count: pg.integer('view_count').default(0).notNull(),
+  company_id: pg
+    .uuid('company_id')
+    .references(() => company.id, { onDelete: 'cascade' }),
+  created_at: pg.timestamp('created_at').notNull().defaultNow(),
+  updated_at: pg
+    .timestamp('updated_at')
+    .notNull()
+    .defaultNow()
+    .$onUpdate(() => new Date()),
+});
+
+export const customer_feedback = pg.pgTable('customer_feedback', {
+  id: pg.uuid('id').primaryKey().defaultRandom(),
+  user_id: pg
+    .uuid('user_id')
+    .references(() => user.id, { onDelete: 'cascade' }),
+  order_id: pg
+    .uuid('order_id')
+    .references(() => orders.id, { onDelete: 'set null' }),
+  ticket_id: pg
+    .uuid('ticket_id')
+    .references(() => support_tickets.id, { onDelete: 'set null' }),
+  type: pg.text('type').notNull(), // BUG, SUGGESTION, COMPLAINT, PRAISE
+  subject: pg.text('subject'),
+  message: pg.text('message').notNull(),
+  priority: pg.text('priority').default('MEDIUM').notNull(),
+  status: pg.text('status').default('NEW').notNull(),
+  company_id: pg
+    .uuid('company_id')
+    .references(() => company.id, { onDelete: 'cascade' }),
+  created_at: pg.timestamp('created_at').notNull().defaultNow(),
+  updated_at: pg
+    .timestamp('updated_at')
+    .notNull()
+    .defaultNow()
+    .$onUpdate(() => new Date()),
+});
+
+export const ticket_comments = pg.pgTable('ticket_comments', {
+  id: pg.uuid('id').primaryKey().defaultRandom(),
+  ticket_id: pg
+    .uuid('ticket_id')
+    .references(() => support_tickets.id, { onDelete: 'cascade' })
+    .notNull(),
+  user_id: pg
+    .uuid('user_id')
+    .references(() => user.id, { onDelete: 'cascade' }),
+  comment_text: pg.text('comment_text').notNull(),
+  is_internal: pg.boolean('is_internal').default(false).notNull(),
+  created_at: pg.timestamp('created_at').notNull().defaultNow(),
+});
+
+export const notification_settings = pg.pgTable('notification_settings', {
+  id: pg.uuid('id').primaryKey().defaultRandom(),
+  user_id: pg
+    .uuid('user_id')
+    .references(() => user.id, { onDelete: 'cascade' })
+    .unique()
+    .notNull(),
+  email_tickets: pg.boolean('email_tickets').default(true).notNull(),
+  email_orders: pg.boolean('email_orders').default(true).notNull(),
+  email_returns: pg.boolean('email_returns').default(true).notNull(),
+  email_newsletters: pg.boolean('email_newsletters').default(false).notNull(),
+  in_app_notifications: pg
+    .boolean('in_app_notifications')
+    .default(true)
+    .notNull(),
+  quiet_hours_start: pg.text('quiet_hours_start'), // Store as HH:MM format
+  quiet_hours_end: pg.text('quiet_hours_end'),
+  created_at: pg.timestamp('created_at').notNull().defaultNow(),
+  updated_at: pg
+    .timestamp('updated_at')
+    .notNull()
+    .defaultNow()
+    .$onUpdate(() => new Date()),
+});
+
+export const ticket_ratings = pg.pgTable('ticket_ratings', {
+  id: pg.uuid('id').primaryKey().defaultRandom(),
+  ticket_id: pg
+    .uuid('ticket_id')
+    .references(() => support_tickets.id, { onDelete: 'cascade' })
+    .unique()
+    .notNull(),
+  user_id: pg
+    .uuid('user_id')
+    .references(() => user.id, { onDelete: 'cascade' })
+    .notNull(),
+  satisfaction_rating: pg.integer('satisfaction_rating').notNull(), // 1-5
+  resolved: pg.boolean('resolved').default(true).notNull(),
+  resolution_comment: pg.text('resolution_comment'),
+  nps_score: pg.integer('nps_score'), // 0-10
+  created_at: pg.timestamp('created_at').notNull().defaultNow(),
+});
+
 // ================================================================

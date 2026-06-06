@@ -1,0 +1,130 @@
+import { Inject, Injectable, InternalServerErrorException, NotFoundException } from '@nestjs/common';
+import { and, eq, like, or } from 'drizzle-orm';
+import { DRIZZLE, type DrizzleService } from '../../drizzle/drizzle.module';
+import { help_articles } from '../../drizzle/schema';
+import { CompanyService } from '../company/company.service';
+import { domainExtractor } from '../../common/filters/domainExtractor.filter';
+
+@Injectable()
+export class HelpArticlesService {
+  constructor(
+    @Inject(DRIZZLE) private readonly db: DrizzleService,
+    private readonly companyService: CompanyService,
+  ) {}
+
+  private async resolveCompanyId(domain: string): Promise<string> {
+    const filterDomain = domainExtractor(domain);
+    return this.companyService.find(filterDomain);
+  }
+
+  async getArticles(domain: string, category?: string, search?: string) {
+    try {
+      const companyId = await this.resolveCompanyId(domain);
+      const conditions = [eq(help_articles.company_id, companyId), eq(help_articles.is_published, true)];
+
+      if (category) {
+        conditions.push(eq(help_articles.category, category));
+      }
+
+      let articlesList = await this.db.query.help_articles.findMany({
+        where: and(...conditions),
+        orderBy: (table, { asc }) => [asc(table.order_index), asc(table.created_at)],
+      });
+
+      if (search) {
+        const query = search.toLowerCase();
+        articlesList = articlesList.filter(
+          (art) =>
+            art.title.toLowerCase().includes(query) ||
+            art.content.toLowerCase().includes(query) ||
+            art.category.toLowerCase().includes(query),
+        );
+      }
+
+      return articlesList;
+    } catch (error) {
+      console.error('[HelpArticlesService.getArticles] Error fetching articles:', error);
+      throw new InternalServerErrorException('Failed to fetch help articles');
+    }
+  }
+
+  async getArticleById(id: string) {
+    try {
+      const article = await this.db.query.help_articles.findFirst({
+        where: eq(help_articles.id, id),
+      });
+
+      if (!article) {
+        throw new NotFoundException(`Help article with ID ${id} not found`);
+      }
+
+      // Increment view count asynchronously
+      this.db
+        .update(help_articles)
+        .set({ view_count: (article.view_count || 0) + 1 })
+        .where(eq(help_articles.id, id))
+        .catch((err) => console.error('[HelpArticlesService] Failed to increment view count:', err));
+
+      return article;
+    } catch (error) {
+      if (error instanceof NotFoundException) throw error;
+      console.error('[HelpArticlesService.getArticleById] Error:', error);
+      throw new InternalServerErrorException('Failed to fetch help article');
+    }
+  }
+
+  async createArticle(
+    domain: string,
+    articleData: { title: string; content: string; category: string; order_index?: number },
+  ) {
+    try {
+      const companyId = await this.resolveCompanyId(domain);
+      const slug = articleData.title.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '');
+
+      const [newArticle] = await this.db
+        .insert(help_articles)
+        .values({
+          title: articleData.title,
+          slug,
+          content: articleData.content,
+          category: articleData.category,
+          order_index: articleData.order_index || 0,
+          company_id: companyId,
+        })
+        .returning();
+
+      return newArticle;
+    } catch (error) {
+      console.error('[HelpArticlesService.createArticle] Error creating article:', error);
+      throw new InternalServerErrorException('Failed to create help article');
+    }
+  }
+
+  async voteArticle(id: string, isHelpful: boolean) {
+    try {
+      const article = await this.db.query.help_articles.findFirst({
+        where: eq(help_articles.id, id),
+      });
+
+      if (!article) {
+        throw new NotFoundException(`Help article with ID ${id} not found`);
+      }
+
+      const updateData = isHelpful
+        ? { helpful_count: (article.helpful_count || 0) + 1 }
+        : { not_helpful_count: (article.not_helpful_count || 0) + 1 };
+
+      const [updated] = await this.db
+        .update(help_articles)
+        .set(updateData)
+        .where(eq(help_articles.id, id))
+        .returning();
+
+      return updated;
+    } catch (error) {
+      if (error instanceof NotFoundException) throw error;
+      console.error('[HelpArticlesService.voteArticle] Error:', error);
+      throw new InternalServerErrorException('Failed to submit vote');
+    }
+  }
+}

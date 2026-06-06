@@ -33,6 +33,14 @@ export class CategoryController {
   ) {
     return this.categoryService.createMany(createCategoryDtos, domain);
   }
+  @Get('homepage')
+  getHomepageCategories(
+    @Headers('company-domain') domain: string,
+    @Query('limit') limit?: number,
+  ) {
+    return this.categoryService.getHomepageCategories(domain, Number(limit) || 8);
+  }
+
   @Get()
   findAll(
     @Headers('company-domain') domain: string,

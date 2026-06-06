@@ -45,6 +45,9 @@ import { AudiencesModule } from './modules/audiences/audiences.module';
 import { ComplianceModule } from './modules/compliance/compliance.module';
 import { SubscriptionModule } from './modules/subscription/subscription.module';
 import { CmsModule } from './modules/cms/cms.module';
+import { HelpArticlesModule } from './modules/help-articles/help-articles.module';
+import { FeedbackModule } from './modules/feedback/feedback.module';
+import { NotificationSettingsModule } from './modules/notification-settings/notification-settings.module';
 import { APP_GUARD } from '@nestjs/core';
 import { SubscriptionGuard } from './modules/subscription/subscription.guard';
 
@@ -93,6 +96,9 @@ import { SubscriptionGuard } from './modules/subscription/subscription.guard';
     ComplianceModule,
     SubscriptionModule,
     CmsModule,
+    HelpArticlesModule,
+    FeedbackModule,
+    NotificationSettingsModule,
   ],
   controllers: [AppController, UsersController],
   providers: [

@@ -5,7 +5,7 @@ import { v2 as cloudinary } from 'cloudinary';
 import streamifier from 'streamifier';
 @Injectable()
 export class UploadToCloudService {
-  constructor(private cloudinaryService: CloudinaryService) {}
+  constructor(private cloudinaryService: CloudinaryService) { }
   async uploadFile(
     file: Express.Multer.File,
   ): Promise<{ secure_url: string; type: string; resource_type: string }> {

@@ -218,7 +218,7 @@ export class CheckoutService {
         }
       }
       return {
-        success: true,
+        success: verificationResult.success,
         message: verificationResult.message,
         orderId: verificationResult.orderId,
       };

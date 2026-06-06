@@ -99,6 +99,45 @@ export class CategoryService {
     }
   }
 
+  async getHomepageCategories(domain: string, limit: number = 8) {
+    console.log('[CategoryService.getHomepageCategories] Request received');
+    const companyId = await this.resolveCompanyId(domain);
+    try {
+      const allCategories = await this.db.query.categories.findMany({
+        where: eq(categories.company_id, companyId),
+        limit: limit,
+        with: {
+          products: {
+            limit: 1,
+            with: {
+              variants: {
+                limit: 1,
+                with: {
+                  images: {
+                    limit: 1,
+                    where: (img) => eq(img.is_primary, true),
+                  },
+                },
+              },
+            },
+          },
+        },
+      });
+
+      return allCategories.map((category: any) => {
+        const imageUrl = category.products?.[0]?.variants?.[0]?.images?.[0]?.image_url || null;
+        return {
+          id: category.id,
+          name: category.name,
+          product_image: imageUrl,
+        };
+      });
+    } catch (error) {
+      console.error('[CategoryService.getHomepageCategories] Failed:', error);
+      throw new InternalServerErrorException('Failed to fetch homepage categories', { cause: error });
+    }
+  }
+
   async create(createCategoryDto: CreateCategoryDto, domain: string) {
     console.log('[CategoryService.create] Request received', {
       name: createCategoryDto.name,

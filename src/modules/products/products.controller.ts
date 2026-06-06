@@ -84,6 +84,14 @@ export class ProductsController {
     return await this.productsService.getAllProductOptions(domain);
   }
 
+  @Get('homepage')
+  async getHomepageProducts(
+    @Headers('company-domain') domain: string,
+    @Query('limit') limit?: number,
+  ) {
+    return await this.productsService.getHomepageProducts(domain, Number(limit) || 8);
+  }
+
   @Get('active')
   // @UseGuards(JwtAuthGuard, RoleGuard)
   // @Roles(Role.ADMIN, Role.VENDOR)

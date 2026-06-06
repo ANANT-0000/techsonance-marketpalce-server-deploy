@@ -80,11 +80,24 @@ export class ProductsService {
 
       if (search && search.trim()) {
         const term: string = `%${search.trim()}%`;
+        const matchingVariants = await this.db
+          .select({ product_id: product_variants.product_id })
+          .from(product_variants)
+          .where(ilike(product_variants.sku, term));
+        const matchingProductIds = matchingVariants
+          .map((v) => v.product_id)
+          .filter((id): id is string => !!id);
 
-        const searchCondition = or(
+        const searchConditions = [
           ilike(products.name, term),
           ilike(products.description, term),
-        );
+        ];
+
+        if (matchingProductIds.length > 0) {
+          searchConditions.push(inArray(products.id, matchingProductIds));
+        }
+
+        const searchCondition = or(...searchConditions);
         if (searchCondition) {
           conditions.push(searchCondition);
         }
@@ -208,15 +221,28 @@ export class ProductsService {
 
       if (search && search.trim()) {
         const term: string = `%${search.trim()}%`;
+        const matchingVariants = await this.db
+          .select({ product_id: product_variants.product_id })
+          .from(product_variants)
+          .where(ilike(product_variants.sku, term));
+        const matchingProductIds = matchingVariants
+          .map((v) => v.product_id)
+          .filter((id): id is string => !!id);
 
-        const searchCondition = or(
+        const searchConditions = [
           ilike(products.name, term),
           ilike(products.description, term),
-        );
+        ];
+
+        if (matchingProductIds.length > 0) {
+          searchConditions.push(inArray(products.id, matchingProductIds));
+        }
+
+        const searchCondition = or(...searchConditions);
         if (searchCondition) {
           conditions.push(searchCondition);
         }
-      }
+          }
 
       if (category_id && category_id.trim() !== '' && category_id !== 'null') {
         conditions.push(eq(products.category_id, category_id));
@@ -325,15 +351,18 @@ export class ProductsService {
       const suggestions = await this.db
         .select({ id: products.id, name: products.name })
         .from(products)
+        .leftJoin(product_variants, eq(products.id, product_variants.product_id))
         .where(
           and(
             eq(products.company_id, companyId),
             or(
               ilike(products.name, term),
               ilike(products.description, term),
+              ilike(product_variants.sku, term),
             ) as any,
           ),
         )
+        .groupBy(products.id, products.name)
         .limit(8)
         .orderBy(asc(products.name));
       return { data: suggestions };
@@ -418,15 +447,40 @@ export class ProductsService {
         `[ProductsService.getProductById] Resolving company id for domain: ${domain}`,
       );
       const companyId = await this.resolveCompanyId(domain);
+
+      const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(productId);
+      let condition: SQL[];
+
+      if (isUuid) {
+        condition = [eq(products.id, productId)];
+      } else {
+        // Try matching by SKU first
+        const variantRecords = await this.db
+          .select({ product_id: product_variants.product_id })
+          .from(product_variants)
+          .where(eq(product_variants.sku, productId))
+          .limit(1);
+
+        if (variantRecords.length > 0 && variantRecords[0].product_id) {
+          condition = [eq(products.id, variantRecords[0].product_id)];
+        } else {
+          // If not found by SKU, try matching by name or URL-decoded name
+          const nameCondition = or(
+            eq(products.name, productId),
+            ilike(products.name, productId),
+            eq(products.name, decodeURIComponent(productId)),
+            ilike(products.name, decodeURIComponent(productId))
+          );
+          condition = nameCondition ? [nameCondition] : [];
+        }
+      }
+
       console.log(
-        `[ProductsService.getProductById] Querying product by id: ${productId} and company_id: ${companyId}`,
+        `[ProductsService.getProductById] Querying product and company_id: ${companyId}`,
       );
       const productRecord = await this.db.query.products
         .findFirst({
-          where: and(
-            eq(products.id, productId),
-            eq(products.company_id, companyId),
-          ),
+          where: and(eq(products.company_id, companyId), ...condition),
           with: {
             variants: {
               where: eq(product_variants.status, ProductStatus.ACTIVE),
@@ -443,7 +497,7 @@ export class ProductsService {
           },
         })
         .catch((error) => {
-          console.error('Error fetching product by ID:', error);
+          console.error('Error fetching product by ID/SKU/Name:', error);
           throw new InternalServerErrorException('Failed to fetch product', {
             cause: error,
           });
@@ -458,6 +512,7 @@ export class ProductsService {
       );
       return productRecord;
     } catch (error) {
+      if (error instanceof HttpException) throw error;
       throw new InternalServerErrorException('Failed to fetch product', {
         cause: error,
       });
@@ -598,6 +653,38 @@ export class ProductsService {
           cause: error,
         },
       );
+    }
+  }
+
+  async getHomepageProducts(domain: string, limit: number = 8) {
+    console.log(`[ProductsService.getHomepageProducts] Request received`);
+    try {
+      const companyId = await this.resolveCompanyId(domain);
+      const productList = await this.db.query.products.findMany({
+        where: and(eq(products.company_id, companyId), eq(products.status, ProductStatus.ACTIVE)),
+        limit,
+        orderBy: (products, { desc }) => [desc(products.created_at)],
+        with: {
+          category: {
+            columns: { name: true }
+          },
+          variants: {
+            limit: 1,
+            columns: { id: true },
+            with: {
+              images: {
+                limit: 1,
+                where: (images) => eq(images.is_primary, true),
+                columns: { image_url: true }
+              }
+            }
+          }
+        }
+      });
+      return productList;
+    } catch (error) {
+      console.log("error", error)
+      throw new InternalServerErrorException('Failed to fetch homepage products', { cause: error });
     }
   }
   async createProduct(

@@ -37,7 +37,7 @@ export class OrderItemsService {
     private readonly companyService: CompanyService,
     private readonly inventoryService: InventoryService,
     private readonly mailService: MailService,
-  ) {}
+  ) { }
 
   private async resolveCompanyId(domain: string): Promise<string> {
     const filteredDomain = domainExtractor(domain);
@@ -280,6 +280,10 @@ export class OrderItemsService {
         .where(
           and(eq(orders.user_id, userId), eq(orders.company_id, companyId)),
         );
+      if (!userOrders.length) {
+        return [];
+      }
+
       const whereCause: SQL[] = [];
       if (
         filters?.status &&
@@ -294,7 +298,7 @@ export class OrderItemsService {
 
       return await this.db.query.order_items
         .findMany({
-          limit: filters?.limit ?? 2,
+          limit: filters?.limit ?? 10,
           offset: filters?.offset ?? 0,
           where: and(
             inArray(

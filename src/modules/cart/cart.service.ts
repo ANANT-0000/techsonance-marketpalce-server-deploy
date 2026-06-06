@@ -125,7 +125,7 @@ export class CartService {
             .values({
               cart_id: createCart.id,
               product_variant_id: createCartDto.productVariantId,
-              quantity: 1,
+              quantity: createCartDto.quantity,
             })
             .returning()
             .catch((error) => {

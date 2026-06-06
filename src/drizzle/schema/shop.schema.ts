@@ -459,6 +459,9 @@ export const return_requests = pg.pgTable(
     store_owner_note: pg.text('store_owner_note'),
     evidence_images: pg.jsonb('evidence_images'),
     tracking_id: pg.text('tracking_id'),
+    return_label_url: pg.text('return_label_url'),
+    outbound_tracking_number: pg.text('outbound_tracking_number'),
+    return_tracking_number: pg.text('return_tracking_number'),
     created_at: pg.timestamp('created_at').notNull().defaultNow(),
     updated_at: pg
       .timestamp('updated_at')

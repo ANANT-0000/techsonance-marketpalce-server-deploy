@@ -29,6 +29,7 @@ import { RefundsService } from '../refunds/refunds.service';
 import { InventoryService } from '../inventory/inventory.service';
 import { MailService } from '../../common/services/mail/mail.service';
 import { domainExtractor } from '../../common/filters/domainExtractor.filter';
+import { extractCloudinaryPublicId } from 'src/common/filters/extractCloudinaryPublicId.filter';
 
 // ── Valid transitions per return type ──────────────────────────────────────
 // Prevents arbitrary status jumps (e.g. PENDING → QC_PASSED directly)
@@ -78,7 +79,7 @@ export class ReturnsService {
     private readonly inventoryService: InventoryService,
     private readonly companyService: CompanyService,
     private readonly mailService: MailService,
-  ) {}
+  ) { }
 
   private async resolveCompanyId(domain: string): Promise<string> {
     console.log(
@@ -101,6 +102,7 @@ export class ReturnsService {
     files: { evidence_images?: Express.Multer.File[] },
     domain: string,
   ) {
+    const failedUploads: { url: string, resource_type: string }[] = [];
     try {
       console.log('[ReturnsService.createReturnRequest] Request received', {
         userId,
@@ -183,6 +185,7 @@ export class ReturnsService {
         const uploaded = await this.uploadToCloudService.uploadEvidenceFiles(
           files.evidence_images,
         );
+        failedUploads.push(...uploaded.map(res => ({ url: res.secure_url, resource_type: res.resource_type })))
         finalResults.push(...uploaded.map((res) => ({ url: res.secure_url })));
       }
       console.log(
@@ -247,6 +250,14 @@ export class ReturnsService {
       ) {
         throw error;
       }
+      if (failedUploads.length > 0) {
+        for (const file of failedUploads) {
+          const publicId = extractCloudinaryPublicId(file.url);
+          if (publicId) {
+            await this.uploadToCloudService.deleteFile(publicId, file.resource_type);
+          }
+        }
+      }
       throw new InternalServerErrorException(
         'Failed to create return request',
         { cause: error },
@@ -273,7 +284,24 @@ export class ReturnsService {
             eq(return_requests.user_id, userId),
             eq(return_requests.company_id, companyId),
           ),
-          orderBy: (returns, { desc }) => [desc(returns.created_at)],
+          with: {
+            orderItem: {
+              with: {
+                variant: {
+                  columns: {
+                    variant_name: true,
+                    price: true,
+                  },
+                  with: {
+                    images: {
+                      where: eq(product_images.is_primary, true),
+                    },
+                  },
+                },
+              },
+            },
+          },
+          orderBy: (table, { desc }) => [desc(table.created_at)],
         })
         .catch((error) => {
           console.error(
@@ -533,7 +561,7 @@ export class ReturnsService {
       if (!allowedNext.includes(newStatus)) {
         throw new BadRequestException(
           `Invalid status transition for ${returnType}: ${currentStatus} → ${newStatus}. ` +
-            `Allowed next statuses: [${allowedNext.join(', ') || 'none'}]`,
+          `Allowed next statuses: [${allowedNext.join(', ') || 'none'}]`,
         );
       }
 
@@ -897,7 +925,7 @@ export class ReturnsService {
           ) {
             throw new BadRequestException(
               `Cannot approve replacement: insufficient stock. ` +
-                `Available: ${inventoryRecord?.stock_quantity ?? 0}, Required: ${orderItem.quantity}`,
+              `Available: ${inventoryRecord?.stock_quantity ?? 0}, Required: ${orderItem.quantity}`,
             );
           }
 

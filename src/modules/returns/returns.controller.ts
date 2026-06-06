@@ -14,7 +14,7 @@ import {
 } from '@nestjs/common';
 import { ReturnsService } from './returns.service';
 import { CreateReturnDto } from './dto/create-return.dto';
-import { UpdateReturnDto } from './dto/update-return.dto';
+ 
 import { ParseJsonPipe } from '../../common/pipes/parseJsonPipe';
 import { UploadToCloud } from '../../common/decorators/upload.decorator';
 
@@ -31,7 +31,6 @@ export class ReturnsController {
     @UploadedFiles() files: { evidence_images?: Express.Multer.File[] },
     @Headers('company-domain') domain: string,
   ) {
-    console.log('dto', dto, 'files', files);
     return this.returnsService.createReturnRequest(userId, dto, files, domain);
   }
 

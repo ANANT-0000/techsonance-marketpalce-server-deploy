@@ -46,6 +46,12 @@ import {
   templates,
   company_document,
   warehouse,
+  support_tickets,
+  help_articles,
+  customer_feedback,
+  ticket_comments,
+  notification_settings,
+  ticket_ratings,
 } from './utils.schema';
 import {
   company_branding,
@@ -68,6 +74,7 @@ import {
   subscription_plans,
   vendor_subscriptions,
 } from './subscription.schema';
+import { gst_invoices } from './finance.schema';
 
 export const companyRelations = relations(company, ({ one, many }) => ({
   roles: many(user_roles),
@@ -328,6 +335,10 @@ export const ordersRelations = relations(orders, ({ one, many }) => ({
   invoice: one(invoices, {
     fields: [orders.id],
     references: [invoices.order_id],
+  }),
+  gstInvoice: one(gst_invoices, {
+    fields: [orders.id],
+    references: [gst_invoices.order_id],
   }),
   promotionUsage: many(promotion_usage),
   promotionAnalyticsEvents: many(promotion_analytics_events),
@@ -616,3 +627,79 @@ export const templateRelations = relations(templates, ({ one }) => ({
     references: [vendor.id],
   }),
 }));
+
+export const supportTicketsRelations = relations(support_tickets, ({ one, many }) => ({
+  user: one(user, {
+    fields: [support_tickets.user_id],
+    references: [user.id],
+  }),
+  company: one(company, {
+    fields: [support_tickets.company_id],
+    references: [company.id],
+  }),
+  order: one(orders, {
+    fields: [support_tickets.order_id],
+    references: [orders.id],
+  }),
+  comments: many(ticket_comments),
+  rating: one(ticket_ratings, {
+    fields: [support_tickets.id],
+    references: [ticket_ratings.ticket_id],
+  }),
+}));
+
+export const ticketCommentsRelations = relations(ticket_comments, ({ one }) => ({
+  ticket: one(support_tickets, {
+    fields: [ticket_comments.ticket_id],
+    references: [support_tickets.id],
+  }),
+  user: one(user, {
+    fields: [ticket_comments.user_id],
+    references: [user.id],
+  }),
+}));
+
+export const ticketRatingsRelations = relations(ticket_ratings, ({ one }) => ({
+  ticket: one(support_tickets, {
+    fields: [ticket_ratings.ticket_id],
+    references: [support_tickets.id],
+  }),
+  user: one(user, {
+    fields: [ticket_ratings.user_id],
+    references: [user.id],
+  }),
+}));
+
+export const customerFeedbackRelations = relations(customer_feedback, ({ one }) => ({
+  user: one(user, {
+    fields: [customer_feedback.user_id],
+    references: [user.id],
+  }),
+  order: one(orders, {
+    fields: [customer_feedback.order_id],
+    references: [orders.id],
+  }),
+  ticket: one(support_tickets, {
+    fields: [customer_feedback.ticket_id],
+    references: [support_tickets.id],
+  }),
+  company: one(company, {
+    fields: [customer_feedback.company_id],
+    references: [company.id],
+  }),
+}));
+
+export const helpArticlesRelations = relations(help_articles, ({ one }) => ({
+  company: one(company, {
+    fields: [help_articles.company_id],
+    references: [company.id],
+  }),
+}));
+
+export const notificationSettingsRelations = relations(notification_settings, ({ one }) => ({
+  user: one(user, {
+    fields: [notification_settings.user_id],
+    references: [user.id],
+  }),
+}));
+

@@ -1,18 +1,18 @@
 import { emailLayout } from './layout.template';
 
 export function orderPlacedTemplate(
-  customerName: string,
-  orderId: string,
-  totalAmount: number,
-  currency: string = 'USD',
+    customerName: string,
+    orderId: string,
+    totalAmount: number,
+    currency: string = 'USD',
 ): string {
-  const formattedAmount = new Intl.NumberFormat('en-US', {
-    style: 'currency',
-    currency,
-  }).format(totalAmount);
-  const orderUrl = `${process.env.FRONTEND_URL || 'https://techsonance.com'}/customerProfile/orders/${orderId}`;
+    const formattedAmount = new Intl.NumberFormat('en-US', {
+        style: 'currency',
+        currency,
+    }).format(totalAmount);
+    const orderUrl = `${process.env.FRONTEND_URL || 'https://techsonance.com'}/customer/orders/${orderId}`;
 
-  const content = `
+    const content = `
             <table align="center" role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%" style="margin: 0 auto;">
                 <tr>
                     <td style="padding: 0 40px 10px 40px;" class="mobile-padding">
@@ -63,5 +63,5 @@ export function orderPlacedTemplate(
                 </tr>
             </table>
     `;
-  return emailLayout(content, `Order Confirmed: #${orderId}`);
+    return emailLayout(content, `Order Confirmed: #${orderId}`);
 }
