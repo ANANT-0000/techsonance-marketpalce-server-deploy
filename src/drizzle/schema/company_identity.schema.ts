@@ -151,7 +151,7 @@ export const company_compliance = pg.pgTable(
       .notNull()
       .defaultNow()
       .$onUpdate(() => new Date()),
-    verified_by: pg.uuid('user_id').references(() => user.id),
+    verified_by: pg.uuid('verified_by').references(() => user.id),
   },
   (table) => [
     // One value per field_key per country per company — no duplicates

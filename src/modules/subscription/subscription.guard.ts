@@ -63,7 +63,12 @@ export class SubscriptionGuard implements CanActivate {
     if (user?.role !== 'vendor') return true;
 
     const companyId: string | undefined = user?.company_id;
-    if (!companyId) return true; // no company context = public route
+    if (!companyId) {
+      throw new HttpException(
+        'Company context is missing. Please sign in again.',
+        HttpStatus.UNAUTHORIZED,
+      );
+    }
 
     const status =
       await this.subscriptionService.getSubscriptionStatus(companyId);

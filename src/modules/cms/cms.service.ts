@@ -1,10 +1,54 @@
-import { Injectable, Inject, InternalServerErrorException, HttpStatus } from '@nestjs/common';
+import { Injectable, Inject, InternalServerErrorException, HttpStatus, NotFoundException, BadRequestException } from '@nestjs/common';
 import { eq, and } from 'drizzle-orm';
 import { DRIZZLE, type DrizzleService } from '../../drizzle/drizzle.module';
 import { cms_pages } from '../../drizzle/schema';
 import { CompanyService } from '../company/company.service';
 import { domainExtractor } from '../../common/filters/domainExtractor.filter';
 import { CreateCmsDto } from './dto/create-cms.dto';
+
+function isValidHexColor(color: any): boolean {
+  if (typeof color !== 'string') return false;
+  return /^#([A-Fa-f0-9]{3,4}|[A-Fa-f0-9]{6}|[A-Fa-f0-9]{8})$/.test(color);
+}
+
+function validateCmsContent(pageType: string, contentStr: string) {
+  let content: any;
+  try {
+    content = typeof contentStr === 'string' ? JSON.parse(contentStr) : contentStr;
+  } catch (err) {
+    throw new BadRequestException('CMS content must be valid JSON');
+  }
+
+  if (typeof content !== 'object' || content === null) {
+    throw new BadRequestException('CMS content must be a JSON object');
+  }
+
+  if (pageType === 'theme') {
+    const requiredColors = [
+      'primary_color',
+      'secondary_color',
+      'background_color',
+      'text_color',
+      'navbar_bg',
+      'navbar_fg',
+      'footer_bg',
+      'footer_fg'
+    ];
+    for (const key of requiredColors) {
+      if (content[key] !== undefined && content[key] !== null && !isValidHexColor(content[key])) {
+        throw new BadRequestException(`${key} must be a valid hex color code (e.g. #2563eb)`);
+      }
+    }
+  } else if (pageType === 'navbar') {
+    if (content.links && !Array.isArray(content.links)) {
+      throw new BadRequestException('Navbar links must be an array');
+    }
+  } else if (pageType === 'footer') {
+    if (content.content && !Array.isArray(content.content)) {
+      throw new BadRequestException('Footer sections must be an array');
+    }
+  }
+}
 
 @Injectable()
 export class CmsService {
@@ -60,11 +104,14 @@ export class CmsService {
       }
     }
 
-    return null;
+    throw new NotFoundException(`CMS page for ${pageContentType} not found`);
   }
 
   async upsertPage(domain: string, dto: CreateCmsDto) {
     console.log(`[CmsService.upsertPage] Request received`, { domain, type: dto.page_content_type });
+    
+    // Validate CMS content schema first
+    validateCmsContent(dto.page_content_type, dto.content);
     const companyId = await this.resolveCompanyId(domain);
     if (!companyId) {
       throw new InternalServerErrorException(`Company not found for domain: ${domain}`);

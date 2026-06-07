@@ -13,6 +13,7 @@ import {
   orders,
   promotion_analytics_events,
   promotions,
+  promotion_usage,
 } from '../../drizzle/schema';
 import { CompanyService } from '../company/company.service';
 import { domainExtractor } from '../../common/filters/domainExtractor.filter';
@@ -171,8 +172,9 @@ export class BannersService {
             cause: err,
           });
         });
-      if (!isExisting.id)
-        throw new HttpException('Banner not exist', HttpStatus.BAD_REQUEST);
+      if (!isExisting || !isExisting.id)
+        throw new NotFoundException('Banner does not exist');
+      return isExisting;
     } catch (error) {
       if (error instanceof HttpException) throw error;
       throw new InternalServerErrorException('Failed to fetch banner', {
@@ -275,11 +277,8 @@ export class BannersService {
       .select({
         eventType: promotion_analytics_events.event_type,
         count: sql<number>`cast(count(*) as integer)`,
-        // If it's a conversion, sum the total order amount
-        revenue: sql<number>`coalesce(sum(${orders.total_amount}), 0)`,
       })
       .from(promotion_analytics_events)
-      .leftJoin(orders, eq(promotion_analytics_events.order_id, orders.id))
       .where(
         and(
           eq(promotion_analytics_events.promotion_id, banner.promotion_id),
@@ -288,24 +287,35 @@ export class BannersService {
       )
       .groupBy(promotion_analytics_events.event_type);
 
+    // Step B2: Get revenue from promotion_usage (sum of discount_amount)
+    const [revenueData] = await this.db
+      .select({
+        totalRevenue: sql<number>`coalesce(sum(${promotion_usage.discount_amount}), 0)`,
+      })
+      .from(promotion_usage)
+      .where(
+        and(
+          eq(promotion_usage.promotion_id, banner.promotion_id),
+          eq(promotion_usage.company_id, companyId),
+        ),
+      );
+
     // Step C: Map Database Results to KPIs
     eventStats.forEach((stat) => {
-      // Ensure the string cases match your `PromoEventType` Enum in Drizzle
+      // Ensure the string cases match your `PromoEventType` Enum in Drizzle (which are lowercase)
       const type: PromoEventType =
-        stat.eventType.toUpperCase() as PromoEventType;
+        stat.eventType.toLowerCase() as PromoEventType;
 
       if (type === PromoEventType.VIEWED) {
         analytics.views = Number(stat.count);
       } else if (type === PromoEventType.CLICKED) {
         analytics.clicks = Number(stat.count);
-      } else if (
-        type === PromoEventType.APPLIED ||
-        type === PromoEventType.REDEEMED
-      ) {
+      } else if (type === PromoEventType.REDEEMED) {
         analytics.conversions = Number(stat.count);
-        analytics.revenue_generated = Number(stat.revenue);
       }
     });
+
+    analytics.revenue_generated = Number(revenueData?.totalRevenue ?? 0);
 
     // Step D: Calculate Funnel Math (CTR and CVR)
     if (analytics.views > 0) {

@@ -461,7 +461,8 @@ export class InventoryService {
               eq(inventory.company_id, companyId),
             ),
           )
-          .limit(1);
+          .limit(1)
+          .for('update');
         if (!idv) {
           throw new HttpException(
             `Inventory not found for variant ${line.variantId}`,

@@ -11,6 +11,7 @@ import {
   segment_members,
   user,
   orders,
+  user_and_company,
 } from '../../drizzle/schema';
 import { CompanyService } from '../company/company.service';
 import { domainExtractor } from '../../common/filters/domainExtractor.filter';
@@ -208,14 +209,16 @@ export class AudiencesService {
       .where(eq(orders.company_id, companyId))
       .groupBy(orders.user_id);
 
-    // Also fetch registered_days_ago for each user
+    // Also fetch registered_days_ago for each user in this company
     const userRegistrations = await this.db
       .select({
         id: user.id,
         registered_days_ago: sql<number>`
           EXTRACT(DAY FROM NOW() - ${user.created_at})::int`,
       })
-      .from(user);
+      .from(user)
+      .innerJoin(user_and_company, eq(user_and_company.user_id, user.id))
+      .where(eq(user_and_company.company_id, companyId));
 
     const regMap = new Map(
       userRegistrations.map((r) => [r.id, r.registered_days_ago]),

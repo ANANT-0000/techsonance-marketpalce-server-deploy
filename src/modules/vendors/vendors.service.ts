@@ -123,6 +123,27 @@ export class VendorsService {
         '[VendorsService.vendorRegister] All documents uploaded successfully',
       );
       console.log(
+        '[VendorsService.vendorRegister] Checking email and company domain uniqueness',
+      );
+      const companyDomainToCheck = formatCompanyDomain(vendorData.company_domain);
+      const [existingEmail] = await this.db
+        .select({ id: userTable.id })
+        .from(userTable)
+        .where(eq(userTable.email, vendorData.email))
+        .limit(1);
+      if (existingEmail) {
+        throw new HttpException('Email already in use. Please use a different email or login.', HttpStatus.CONFLICT);
+      }
+      const [existingDomain] = await this.db
+        .select({ id: companyTable.id })
+        .from(companyTable)
+        .where(eq(companyTable.company_domain, companyDomainToCheck))
+        .limit(1);
+      if (existingDomain) {
+        throw new HttpException('Company domain already registered. Please choose a different domain.', HttpStatus.CONFLICT);
+      }
+
+      console.log(
         '[VendorsService.vendorRegister] Starting database transaction for vendor registration',
       );
       const result = await this.db.transaction(async (tx) => {

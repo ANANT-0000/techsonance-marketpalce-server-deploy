@@ -1,7 +1,7 @@
 import * as pg from 'drizzle-orm/pg-core';
 import { company } from './main.schema';
 import { orders, products } from './shop.schema';
-import { relations } from 'drizzle-orm';
+import { relations, sql } from 'drizzle-orm';
 
 export const tax_profiles = pg.pgTable('tax_profiles', {
   id: pg.uuid('id').primaryKey().defaultRandom(),
@@ -44,7 +44,7 @@ export const tax_slabs = pg.pgTable('tax_slabs', {
   description: pg.text('description'), // optional
   is_exempt: pg.boolean('is_exempt').notNull().default(false),
   effective_from: pg.date('effective_from').notNull(),
-  effective_to: pg.date('effective_to').notNull().default('2099-12-31'),
+  effective_to: pg.date('effective_to').notNull().default(sql`'2099-12-31'`),
   created_at: pg.timestamp('created_at').notNull().defaultNow(),
   updated_at: pg
     .timestamp('updated_at')
@@ -91,7 +91,7 @@ export const gst_invoices = pg.pgTable('gst_invoices', {
     .notNull()
     .defaultNow()
     .$onUpdate(() => new Date()),
-  order_id: pg.uuid('order_id').references(() => orders.id),
+  order_id: pg.uuid('order_id').references(() => orders.id).unique(),
   company_id: pg.uuid('company_id').references(() => company.id),
 });
 

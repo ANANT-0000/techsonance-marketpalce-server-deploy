@@ -162,6 +162,9 @@ export const orders = pg.pgTable(
     company_id: pg
       .uuid('company_id')
       .references(() => company.id, { onDelete: 'cascade' }),
+    order_status: order_status_enum('order_status')
+      .notNull()
+      .default(OrderStatus.PENDING),
   },
   (table) => [
     pg.index('idx_orders_user_id').on(table.user_id),

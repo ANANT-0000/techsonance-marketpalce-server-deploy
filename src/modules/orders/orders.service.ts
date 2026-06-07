@@ -38,6 +38,7 @@ import {
   promotion_rules,
   user,
   promotion_analytics_events,
+  company_document_config,
 } from '../../drizzle/schema';
 import {
   DiscountConfig,
@@ -261,11 +262,42 @@ export class OrdersService {
           grandTotalAfter: grandTotal,
         });
         // 5. Create GST Invoice record
-        console.log('[OrdersService.createOrder] Creating GST invoice record');
+        console.log('[OrdersService.createOrder] Incrementing invoice sequence counter atomically');
+        const [updatedConfig] = await tx
+          .update(company_document_config)
+          .set({
+            invoice_sequence_counter: sql`${company_document_config.invoice_sequence_counter} + 1`,
+          })
+          .where(eq(company_document_config.company_id, companyId))
+          .returning({
+            counter: company_document_config.invoice_sequence_counter,
+            prefix: company_document_config.invoice_number_prefix,
+            format: company_document_config.invoice_number_format,
+          });
+
+        let invoiceNumber: string;
+        if (updatedConfig) {
+          const counter = updatedConfig.counter;
+          const prefix = updatedConfig.prefix ?? 'INV';
+          const format = updatedConfig.format ?? '{PREFIX}-{YYYY}-{SEQ8}';
+          const year = new Date().getFullYear();
+          const seq6 = String(counter).padStart(6, '0');
+          const seq8 = String(counter).padStart(8, '0');
+          
+          invoiceNumber = format
+            .replace('{PREFIX}', prefix)
+            .replace('{YYYY}', String(year))
+            .replace('{SEQ6}', seq6)
+            .replace('{SEQ8}', seq8);
+        } else {
+          invoiceNumber = `INV-${Date.now()}`;
+        }
+
+        console.log(`[OrdersService.createOrder] Creating GST invoice record with number: ${invoiceNumber}`);
         await tx.insert(gst_invoices).values({
           company_id: companyId,
           order_id: newOrder.id,
-          invoice_number: `INV-${Date.now()}`,
+          invoice_number: invoiceNumber,
           invoice_date: new Date().toISOString().split('T')[0],
           cgst_amount: String(taxData.totalCgst),
           sgst_amount: String(taxData.totalSgst),
@@ -639,6 +671,17 @@ export class OrdersService {
             );
           }
 
+          await tx
+            .update(orders)
+            .set({ order_status: OrderStatus.PROCESSING })
+            .where(eq(orders.id, orderId))
+            .catch((error) => {
+              throw new InternalServerErrorException(
+                'Failed to update order status',
+                { cause: error },
+              );
+            });
+
           console.log(
             `[OrdersService.completeOrderVerification] Order items marked processing (${orderItemsRecord.length} items) for order ${orderId}`,
           );
@@ -789,6 +832,17 @@ export class OrdersService {
               ),
             );
           }
+
+          await tx
+            .update(orders)
+            .set({ order_status: OrderStatus.CANCELLED })
+            .where(eq(orders.id, orderId))
+            .catch((error) => {
+              throw new InternalServerErrorException(
+                'Failed to update order status',
+                { cause: error },
+              );
+            });
 
           console.log(
             `[OrdersService.completeOrderVerification] Marking payment as failed for order ${existingOrder.id}`,
@@ -1375,6 +1429,17 @@ export class OrdersService {
           ),
         );
       }
+
+      await this.db
+        .update(orders)
+        .set({ order_status: newStatus.toLowerCase() as OrderStatus })
+        .where(eq(orders.id, orderId))
+        .catch((error) => {
+          throw new InternalServerErrorException(
+            'Failed to update order status',
+            { cause: error },
+          );
+        });
 
       console.log(
         '[OrdersService.setOrderStatus] Order status updated successfully',

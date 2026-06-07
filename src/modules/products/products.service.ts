@@ -23,6 +23,7 @@ import {
   gte,
   ilike,
   inArray,
+  like,
   lte,
   or,
   SQL,
@@ -242,7 +243,7 @@ export class ProductsService {
         if (searchCondition) {
           conditions.push(searchCondition);
         }
-          }
+      }
 
       if (category_id && category_id.trim() !== '' && category_id !== 'null') {
         conditions.push(eq(products.category_id, category_id));
