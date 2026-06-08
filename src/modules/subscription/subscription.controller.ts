@@ -5,6 +5,8 @@ import {
   Body,
   UseGuards,
   Headers,
+  HttpCode,
+  HttpStatus,
 } from '@nestjs/common';
 import { SubscriptionService } from './subscription.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
@@ -12,7 +14,7 @@ import { SkipSubscription } from './subscription.guard';
 
 @Controller({ version: '1', path: 'subscription' })
 export class SubscriptionController {
-  constructor(private readonly subscriptionService: SubscriptionService) {}
+  constructor(private readonly subscriptionService: SubscriptionService) { }
 
   // Public — used during vendor registration to show plan cards
   @Get('plans')
@@ -24,6 +26,7 @@ export class SubscriptionController {
   // Protected — vendor dashboard banner uses this
   @UseGuards(JwtAuthGuard)
   @Get('status')
+  @HttpCode(HttpStatus.OK)
   @SkipSubscription()
   getStatus(@Headers('company-domain') domain: string) {
     return this.subscriptionService.getSubscriptionStatus(domain);
@@ -32,6 +35,7 @@ export class SubscriptionController {
   // Protected — called when vendor chooses a paid plan
   @UseGuards(JwtAuthGuard)
   @Post('upgrade')
+  @HttpCode(HttpStatus.OK)
   @SkipSubscription()
   upgrade(
     @Headers('company-domain') domain: string,

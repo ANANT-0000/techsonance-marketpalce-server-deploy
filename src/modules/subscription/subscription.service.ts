@@ -70,7 +70,7 @@ export class SubscriptionService {
     private mailService: MailService,
     @Inject(forwardRef(() => CompanyService))
     private readonly companyService: CompanyService,
-  ) {}
+  ) { }
   /** Returns the plan row whose plan_name = 'trial' */
   private async getTrialPlan() {
     const plan = await this.db.query.subscription_plans
@@ -221,10 +221,22 @@ export class SubscriptionService {
   async getSubscriptionStatus(
     companyIdOrDomain: string,
   ): Promise<Subscription | null> {
+
     const companyId = await this.resolveCompanyId(companyIdOrDomain);
     const sub = await this.db.query.vendor_subscriptions.findFirst({
       where: eq(vendor_subscriptions.company_id, companyId),
       with: { plan: true },
+    }).catch((err) => {
+      this.logger.error(
+        `Failed to fetch subscription status for company ${companyId}`,
+        err,
+      );
+      throw new InternalServerErrorException(
+        'Failed to fetch subscription status',
+        {
+          cause: err,
+        },
+      );
     });
 
     if (!sub) return null;
@@ -248,7 +260,7 @@ export class SubscriptionService {
     if (inGracePeriod) {
       bannerUrgency = BannerUrgency.WARNING;
     } else if (showBanner && daysRemaining !== null) {
-      bannerUrgency = this.getBannerUrgency(daysRemaining);
+      bannerUrgency = this.getBannerUrgency(daysRemaining)
     }
 
     return {

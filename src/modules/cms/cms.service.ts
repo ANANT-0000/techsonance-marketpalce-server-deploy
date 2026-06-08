@@ -5,6 +5,7 @@ import { cms_pages } from '../../drizzle/schema';
 import { CompanyService } from '../company/company.service';
 import { domainExtractor } from '../../common/filters/domainExtractor.filter';
 import { CreateCmsDto } from './dto/create-cms.dto';
+import { UploadToCloudService } from '../../utils/upload-to-cloud/upload-to-cloud.service';
 
 function isValidHexColor(color: any): boolean {
   if (typeof color !== 'string') return false;
@@ -55,6 +56,7 @@ export class CmsService {
   constructor(
     @Inject(DRIZZLE) private readonly db: DrizzleService,
     private readonly companyService: CompanyService,
+    private readonly uploadService: UploadToCloudService,
   ) { }
 
   private async resolveCompanyId(domain: string): Promise<string> {
@@ -109,7 +111,7 @@ export class CmsService {
 
   async upsertPage(domain: string, dto: CreateCmsDto) {
     console.log(`[CmsService.upsertPage] Request received`, { domain, type: dto.page_content_type });
-    
+
     // Validate CMS content schema first
     validateCmsContent(dto.page_content_type, dto.content);
     const companyId = await this.resolveCompanyId(domain);
@@ -166,5 +168,29 @@ export class CmsService {
       console.error(`[CmsService.upsertPage] Failed to upsert page`, error);
       throw new InternalServerErrorException('Failed to save CMS page content', { cause: error });
     }
+  }
+  async uploadCmsImage(file: Express.Multer.File) {
+    if (!file) {
+      throw new BadRequestException('No image file provided.');
+    }
+    const allowedMimeTypes = ['image/jpeg', 'image/png', 'image/webp', 'image/gif'];
+    if (!allowedMimeTypes.includes(file.mimetype)) {
+      throw new BadRequestException('Invalid file format. Only JPG, PNG, WEBP, and GIF are allowed.');
+    }
+    if (file.size > 5 * 1024 * 1024) {
+      throw new BadRequestException('File size exceeds 5MB limit.');
+    }
+    const result = await this.uploadService.uploadFile(file).catch((error) => {
+      console.error(`[CmsService.uploadCmsImage] Failed to upload image`, error);
+      throw new InternalServerErrorException('Failed to upload image', { cause: error });
+    });
+    if (!result || !result.secure_url) {
+      throw new InternalServerErrorException('Failed to upload image', { cause: 'No secure URL returned' });
+    }
+    return {
+      message: 'Image uploaded successfully',
+      status: HttpStatus.OK,
+      secure_url: result.secure_url,
+    };
   }
 }
