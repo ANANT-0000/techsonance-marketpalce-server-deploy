@@ -142,6 +142,10 @@ export class PolicyPayloadBuilderService {
       branding: {
         companyName: companyInfo?.company_name || 'Company',
         logoUrl: branding?.logo_url,
+        primaryColor: branding?.primary_color || undefined,
+        secondaryColor: branding?.secondary_color || undefined,
+        accentColor: branding?.accent_color || undefined,
+        fontFamily: branding?.font_family || undefined,
       },
     };
   }

@@ -11,6 +11,7 @@ import {
   Param,
   HttpCode,
   HttpStatus,
+  UseGuards,
 } from '@nestjs/common';
 import { UploadToCloud } from '../../common/decorators/upload.decorator';
 import { ProductsService } from './products.service';
@@ -34,6 +35,8 @@ export class ProductsController {
   constructor(private productsService: ProductsService) {}
 
   @Post(':vendor_id')
+  @UseGuards(JwtAuthGuard, RoleGuard)
+  @Roles(Role.ADMIN, Role.VENDOR)
   @UploadToCloud([
     { name: 'product', maxCount: 1 },
     { name: 'product_spec', maxCount: 20 },
@@ -93,8 +96,8 @@ export class ProductsController {
   }
 
   @Get('active')
-  // @UseGuards(JwtAuthGuard, RoleGuard)
-  // @Roles(Role.ADMIN, Role.VENDOR)
+  @UseGuards(JwtAuthGuard, RoleGuard)
+  @Roles(Role.ADMIN, Role.VENDOR)
   async getActiveProducts(
     @Headers('company-domain') domain: string,
     @Query('search') search?: string,
@@ -124,6 +127,8 @@ export class ProductsController {
   }
 
   @Patch(':id')
+  @UseGuards(JwtAuthGuard, RoleGuard)
+  @Roles(Role.ADMIN, Role.VENDOR)
   @UploadToCloud([
     { name: 'product', maxCount: 1 },
     { name: 'product_spec', maxCount: 20 },
@@ -145,6 +150,8 @@ export class ProductsController {
   }
 
   @Patch('update-product-category/:id')
+  @UseGuards(JwtAuthGuard, RoleGuard)
+  @Roles(Role.ADMIN, Role.VENDOR)
   async updateProductCategory(
     @Param('id') id: string,
     @Body('category_id') categoryId: string,
@@ -170,21 +177,29 @@ export class ProductsController {
   }
 
   @Delete('delete-selected')
+  @UseGuards(JwtAuthGuard, RoleGuard)
+  @Roles(Role.ADMIN, Role.VENDOR)
   async deleteSelectedProduct(@Body('ids') ids: string[]) {
     return await this.productsService.deleteSelectedProducts(ids);
   }
 
   @Delete('delete-selected-variants')
+  @UseGuards(JwtAuthGuard, RoleGuard)
+  @Roles(Role.ADMIN, Role.VENDOR)
   async deleteSelectedProductVariants(@Body('ids') ids: string[]) {
     return await this.productsService.deleteSelectedProductVariants(ids);
   }
 
   @Delete(':id')
+  @UseGuards(JwtAuthGuard, RoleGuard)
+  @Roles(Role.ADMIN, Role.VENDOR)
   async deleteProduct(@Param('id') id: string) {
     return await this.productsService.deleteProduct(id);
   }
 
   @Delete('delete-variant/:id')
+  @UseGuards(JwtAuthGuard, RoleGuard)
+  @Roles(Role.ADMIN, Role.VENDOR)
   async deleteProductVariant(@Param('id') id: string) {
     return await this.productsService.deleteProductVariant(id);
   }

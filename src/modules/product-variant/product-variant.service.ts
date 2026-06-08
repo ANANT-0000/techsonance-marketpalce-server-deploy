@@ -244,6 +244,7 @@ export class ProductVariantService {
           price: product_variants.price,
           status: product_variants.status,
           images: product_images.image_url,
+          product_id: product_variants.product_id,
         })
         .from(product_variants)
         .innerJoin(
@@ -405,14 +406,16 @@ export class ProductVariantService {
             .update(product_variants)
             .set(updateData)
             .where(eq(product_variants.id, id));
-
-          if (imagesToDelete && imagesToDelete.length > 0) {
+          const parsedImagesToDelete = typeof imagesToDelete === 'string'
+            ? JSON.parse(imagesToDelete)
+            : imagesToDelete;
+          if (parsedImagesToDelete && parsedImagesToDelete.length > 0) {
             await tx
               .delete(product_images)
               .where(
                 and(
                   eq(product_images.variant_id, id),
-                  inArray(product_images.id, imagesToDelete),
+                  inArray(product_images.id, parsedImagesToDelete),
                 ),
               );
           }

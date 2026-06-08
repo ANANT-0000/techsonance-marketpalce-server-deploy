@@ -1,4 +1,3 @@
-// ../../modules/product-review/product-review.controller.ts
 import {
   Controller,
   Get,
@@ -9,19 +8,20 @@ import {
   Delete,
   Headers,
   UseInterceptors,
+  UseGuards,
 } from '@nestjs/common';
 import { ProductReviewService } from './product-review.service';
 import { CreateProductReviewDto } from './dto/create-product-review.dto';
 import { UpdateProductReviewDto } from './dto/update-product-review.dto';
 import { ParseJsonPipe } from '../../common/pipes/parseJsonPipe';
 import { AnyFilesInterceptor } from '@nestjs/platform-express';
-// import { JwtAuthGuard } from '../../guards/jwt-auth.guard'; // Import your authentication guard here
+import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 
 @Controller({ version: '1', path: 'product-review' })
 export class ProductReviewController {
   constructor(private readonly productReviewService: ProductReviewService) {}
 
-  // @UseGuards(JwtAuthGuard) // Protect this endpoint so only logged in customers can review
+  @UseGuards(JwtAuthGuard) // Protect this endpoint so only logged in customers can review
   @Post(':userId')
   @UseInterceptors(AnyFilesInterceptor())
   create(
@@ -59,7 +59,7 @@ export class ProductReviewController {
     return this.productReviewService.findExistingReview(id, variantId);
   }
 
-  // @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard)
   @Patch(':userId/:id')
   update(
     @Param('id') id: string,
@@ -69,7 +69,7 @@ export class ProductReviewController {
     return this.productReviewService.update(id, userId, updateProductReviewDto);
   }
 
-  // @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard)
   @Delete(':userId/:id')
   remove(@Param('id') id: string, @Param('userId') userId: string) {
     return this.productReviewService.remove(id, userId);

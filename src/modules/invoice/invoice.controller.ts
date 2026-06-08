@@ -35,8 +35,8 @@ export class InvoiceController {
     // return this.invoiceService.listAvailableTemplates();
   }
   @Get('payload/:orderId')
-  // @UseGuards(JwtAuthGuard, RoleGuard)
-  // @Roles(Role.ADMIN, Role.VENDOR, Role.CUSTOMER)
+  @UseGuards(JwtAuthGuard, RoleGuard)
+  @Roles(Role.ADMIN, Role.VENDOR, Role.CUSTOMER)
   async getInvoicePayload(
     @Param('orderId') orderId: string,
     @Headers('company-domain') domain: string,

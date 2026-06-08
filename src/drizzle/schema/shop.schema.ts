@@ -14,7 +14,6 @@ import {
 } from '../types/types';
 import { AnyPgColumn } from 'drizzle-orm/pg-core';
 import { unique } from 'drizzle-orm/pg-core';
-import { pgEnum } from 'drizzle-orm/pg-core';
 
 export const categories = pg.pgTable('categories', {
   id: pg.uuid('id').primaryKey().defaultRandom(),
@@ -41,7 +40,6 @@ export const coupons = pg.pgTable('coupons', {
   description: pg.text('description'),
   is_active: pg.boolean('is_active').notNull().default(true),
   created_at: pg.timestamp('created_at').notNull().defaultNow(),
-  
 });
 
 export const carts = pg.pgTable('carts', {

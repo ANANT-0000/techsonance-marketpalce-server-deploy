@@ -13,17 +13,17 @@ export class RoleGuard implements CanActivate {
   canActivate(context: ExecutionContext): boolean {
     console.log('[RoleGuard.canActivate] Request received');
     // 1. Check for the public route bypass
-    const skipAuthGuard = this.reflector.get<boolean>(
+    const skipAuthGuard = this.reflector.getAllAndOverride<boolean>(
       'skipAuthGuard',
-      context.getHandler(),
+      [context.getHandler(), context.getClass()],
     );
     console.log('[RoleGuard.canActivate] skipAuthGuard:', skipAuthGuard);
     if (skipAuthGuard) return true;
 
     // 2. Get the required roles for this route
-    const requiredRoles = this.reflector.get<string[]>(
+    const requiredRoles = this.reflector.getAllAndOverride<string[]>(
       'roles',
-      context.getHandler(),
+      [context.getHandler(), context.getClass()],
     );
     console.log('[RoleGuard.canActivate] requiredRoles:', requiredRoles);
     if (!requiredRoles) return true; // If no specific roles required, let them in

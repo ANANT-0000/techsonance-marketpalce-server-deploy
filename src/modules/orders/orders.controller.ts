@@ -23,6 +23,7 @@ import type { Response } from 'express';
   version: '1',
   path: 'orders',
 })
+@UseGuards(JwtAuthGuard, RoleGuard)
 export class OrdersController {
   constructor(
     private readonly ordersService: OrdersService,
@@ -30,8 +31,7 @@ export class OrdersController {
   ) {}
 
   @Get()
-  // @UseGuards(JwtAuthGuard, RoleGuard)
-  // @Roles(Role.ADMIN, Role.VENDOR)
+  @Roles(Role.ADMIN, Role.VENDOR)
   async getOrdersList(
     @Headers('company-domain') domain: string,
     @Query('offset') offset?: string,
@@ -48,8 +48,7 @@ export class OrdersController {
   }
 
   @Get('pending')
-  // @UseGuards(JwtAuthGuard, RoleGuard)
-  // @Roles(Role.ADMIN, Role.VENDOR)
+  @Roles(Role.ADMIN, Role.VENDOR)
   async getPendingOrders(
     @Headers('company-domain') domain: string,
     @Query('search') search?: string,
@@ -70,8 +69,7 @@ export class OrdersController {
   }
 
   @Get(':orderId')
-  // @UseGuards(JwtAuthGuard, RoleGuard)
-  // @Roles(Role.CUSTOMER)
+  @Roles(Role.CUSTOMER, Role.ADMIN, Role.VENDOR)
   async getUserOrderDetails(
     @Param('orderId') orderId: string,
     @Headers('company-domain') domain: string,
@@ -79,8 +77,7 @@ export class OrdersController {
     return this.ordersService.getUserOrderDetails(orderId, domain);
   }
   @Get('order-count/:userId')
-  // @UseGuards(JwtAuthGuard, RoleGuard)
-  // @Roles(Role.CUSTOMER)
+  @Roles(Role.CUSTOMER, Role.ADMIN, Role.VENDOR)
   async getOrdersCount(
     @Param('userId') userId: string,
     @Headers('company-domain') domain: string,
@@ -88,8 +85,7 @@ export class OrdersController {
     return this.ordersService.getOrdersCount(userId, domain);
   }
   @Get(':orderid/details')
-  // @UseGuards(JwtAuthGuard, RoleGuard)
-  // @Roles(Role.ADMIN, Role.VENDOR)
+  @Roles(Role.ADMIN, Role.VENDOR)
   async getOrderDetails(
     @Param('orderid') orderId: string,
     @Headers('company-domain') domain: string,
@@ -97,8 +93,7 @@ export class OrdersController {
     return this.ordersService.getOrderDetails(orderId, domain);
   }
   @Patch(':orderid/status')
-  // @UseGuards(JwtAuthGuard, RoleGuard)
-  // @Roles(Role.ADMIN, Role.VENDOR)
+  @Roles(Role.ADMIN, Role.VENDOR)
   async setOrderStatus(
     @Param('orderid') orderId: string,
     @Body('status') newStatus: OrderStatus,
@@ -114,6 +109,7 @@ export class OrdersController {
     return this.productPoliciesService.getWarrantyUrl(orderId);
   }
   @Get('analytics/revenue')
+  @Roles(Role.ADMIN, Role.VENDOR)
   async getSalesAnalytics(
     @Headers('company-domain') domain: string,
     @Query('days') days?: string,
@@ -125,16 +121,19 @@ export class OrdersController {
   }
   @Get('analytics/top-products')
   @HttpCode(HttpStatus.OK)
+  @Roles(Role.ADMIN, Role.VENDOR)
   async getTopProducts(@Headers('company-domain') domain: string) {
     return this.ordersService.getTopSellingProducts(domain, 5);
   }
   @Get('analytics/conversion')
   @HttpCode(HttpStatus.OK)
+  @Roles(Role.ADMIN, Role.VENDOR)
   getConversionRate(@Headers('company-domain') domain: string) {
     return this.ordersService.getConversionMetrics(domain);
   }
 
   @Get('analytics/export')
+  @Roles(Role.ADMIN, Role.VENDOR)
   async exportAnalytics(
     @Headers('company-domain') domain: string,
     @Res() res: Response,

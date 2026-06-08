@@ -30,6 +30,10 @@ export interface PolicyDocumentPayload {
   branding: {
     companyName: string;
     logoUrl?: string;
+    primaryColor?: string;
+    secondaryColor?: string;
+    accentColor?: string;
+    fontFamily?: string;
   };
 }
 

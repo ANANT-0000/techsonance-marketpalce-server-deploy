@@ -174,6 +174,7 @@ export class InvoiceService {
   async getInvoicePayload(orderId: string, domain: string) {
     const orderData =
       await this.payloadBuilder.fetchOrderWithRelations(orderId);
+      console.log("order data ",orderData);
     const companyId = orderData.company_id;
 
     const [context, gstData, paymentInfo] = await Promise.all([

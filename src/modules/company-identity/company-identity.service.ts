@@ -138,6 +138,18 @@ export class CompanyIdentityService {
         logo_dark_url: uploadedUrls.logo_dark_url ?? dto.logo_dark_url ?? null,
         watermark_url: uploadedUrls.watermark_url ?? dto.watermark_url ?? null,
         favicon_url: uploadedUrls.favicon_url ?? dto.favicon_url ?? null,
+        background_color: dto.background_color ?? '#f8fafc',
+        text_color: dto.text_color ?? '#0f172a',
+        navbar_bg: dto.navbar_bg ?? '#ffffff',
+        navbar_fg: dto.navbar_fg ?? '#0f172a',
+        footer_bg: dto.footer_bg ?? '#0f172a',
+        footer_fg: dto.footer_fg ?? '#ffffff',
+        navbar_position: dto.navbar_position ?? 'sticky',
+        logo_alignment: dto.logo_alignment ?? 'left',
+        footer_style: dto.footer_style ?? 'detailed',
+        border_radius: dto.border_radius ?? 'md',
+        card_style: dto.card_style ?? 'standard',
+        homepage_layout: dto.homepage_layout ?? ['hero', 'categories', 'products', 'promo', 'new_arrivals', 'newsletter'],
       };
       console.log('[CompanyIdentityService.upsertBranding] Branding payload prepared');
       // Check if record exists → upsert

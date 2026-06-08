@@ -1269,10 +1269,7 @@ export class ProductsService {
       console.log(
         `[ProductsService.deleteSelectedProducts] Deleting selected products`,
       );
-      const deletePromises = productIds.map((id) =>
-        this.db.delete(products).where(eq(products.id, id)),
-      );
-      await Promise.all(deletePromises);
+      await this.db.delete(products).where(inArray(products.id, productIds));
       return {
         message: 'Selected products deleted successfully',
         status: HttpStatus.OK,
@@ -1338,10 +1335,7 @@ export class ProductsService {
       console.log(
         `[ProductsService.deleteSelectedProductVariants] Deleting selected product variants`,
       );
-      const deletePromises = variantIds.map((id) =>
-        this.db.delete(product_variants).where(eq(product_variants.id, id)),
-      );
-      await Promise.all(deletePromises);
+      await this.db.delete(product_variants).where(inArray(product_variants.id, variantIds));
       return {
         message: 'Product variant deleted successfully',
         status: HttpStatus.OK,

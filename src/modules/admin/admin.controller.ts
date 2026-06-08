@@ -26,8 +26,8 @@ import { CompanyService } from '../company/company.service';
   version: '1',
   path: 'admin',
 })
-// @UseGuards(JwtAuthGuard, RoleGuard)
-// @Roles(Role.ADMIN)
+@UseGuards(JwtAuthGuard, RoleGuard)
+@Roles(Role.ADMIN)
 export class AdminController {
   constructor(
     private readonly adminService: AdminService,

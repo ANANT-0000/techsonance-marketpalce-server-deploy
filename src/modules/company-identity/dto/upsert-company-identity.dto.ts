@@ -11,6 +11,7 @@ import {
   IsISO4217CurrencyCode,
   MinLength,
   MaxLength,
+  IsArray,
 } from 'class-validator';
 import { Transform } from 'class-transformer';
 
@@ -37,22 +38,95 @@ export class UpsertBrandingDto {
   @Trim()
   @MaxLength(100)
   font_family!: string;
+
   @IsOptional()
   @IsString()
   @Trim()
   logo_url?: string;
+
   @IsOptional()
   @IsString()
   @Trim()
   logo_dark_url?: string;
+
   @IsOptional()
   @IsString()
   @Trim()
   watermark_url?: string;
+
   @IsOptional()
   @IsString()
   @Trim()
   favicon_url?: string;
+
+  @IsOptional()
+  @IsHexColor()
+  @Trim()
+  background_color?: string;
+
+  @IsOptional()
+  @IsHexColor()
+  @Trim()
+  text_color?: string;
+
+  @IsOptional()
+  @IsHexColor()
+  @Trim()
+  navbar_bg?: string;
+
+  @IsOptional()
+  @IsHexColor()
+  @Trim()
+  navbar_fg?: string;
+
+  @IsOptional()
+  @IsHexColor()
+  @Trim()
+  footer_bg?: string;
+
+  @IsOptional()
+  @IsHexColor()
+  @Trim()
+  footer_fg?: string;
+
+  @IsOptional()
+  @IsString()
+  @Trim()
+  navbar_position?: string;
+
+  @IsOptional()
+  @IsString()
+  @Trim()
+  logo_alignment?: string;
+
+  @IsOptional()
+  @IsString()
+  @Trim()
+  footer_style?: string;
+
+  @IsOptional()
+  @IsString()
+  @Trim()
+  border_radius?: string;
+
+  @IsOptional()
+  @IsString()
+  @Trim()
+  card_style?: string;
+
+  @IsOptional()
+  @IsArray()
+  @Transform(({ value }) => {
+    if (typeof value === 'string') {
+      try {
+        return JSON.parse(value);
+      } catch {
+        return value.split(',').map((s) => s.trim());
+      }
+    }
+    return value;
+  })
+  homepage_layout?: string[];
 }
 
 export class UpsertLegalProfileDto {

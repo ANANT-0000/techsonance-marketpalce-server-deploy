@@ -7,7 +7,9 @@ export * from './promotions.schema';
 export * from './product_policy.schema';
 export * from './company_identity.schema';
 export * from './subscription.schema';
+export * from './vendor_storefront.schema';
 import { address, user, vendor } from './users.schema';
+import { vendor_storefront_sections } from './vendor_storefront.schema';
 import {
   cart_items,
   carts,
@@ -204,6 +206,7 @@ export const vendorRelations = relations(vendor, ({ one, many }) => ({
     references: [user.id],
   }),
   documents: many(company_document),
+  storefrontSections: many(vendor_storefront_sections),
 }));
 export const documentRelations = relations(company_document, ({ one }) => ({
   company: one(company, {
@@ -702,4 +705,14 @@ export const notificationSettingsRelations = relations(notification_settings, ({
     references: [user.id],
   }),
 }));
+
+export const vendorStorefrontSectionsRelations = relations(
+  vendor_storefront_sections,
+  ({ one }) => ({
+    vendor: one(vendor, {
+      fields: [vendor_storefront_sections.vendor_id],
+      references: [vendor.id],
+    }),
+  }),
+);
 

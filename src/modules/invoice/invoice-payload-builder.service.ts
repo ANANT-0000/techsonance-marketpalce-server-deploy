@@ -208,7 +208,7 @@ export class InvoicePayloadBuilderService {
         with: {
           customer: true,
           address: true,
-          promotionUsage: true,
+          promotionUsage: true, 
           promotionAnalyticsEvents: {
             columns: {
               promotion_id: true,
@@ -406,8 +406,8 @@ export class InvoicePayloadBuilderService {
       [order.customer.first_name, order.customer.last_name]
         .filter(Boolean)
         .join(' ') || 'Customer';
-    const discountAmount = order.promotionUsage
-      ? Number(order.promotionUsage.discount_amount ?? 0)
+    const discountAmount = Array.isArray(order.promotionUsage)
+      ? order.promotionUsage.reduce((sum, usage) => sum + Number(usage.discount_amount ?? 0), 0)
       : 0;
 
     console.log(
