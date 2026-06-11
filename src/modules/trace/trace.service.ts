@@ -26,7 +26,24 @@ export class TraceService implements OnModuleInit {
         return;
       }
 
+      if (!wrapper.metatype || typeof wrapper.metatype !== 'function') {
+        return;
+      }
+
+      if (
+        instance.constructor === Object ||
+        instance.constructor === Array ||
+        instance instanceof Map ||
+        instance instanceof Set ||
+        instance instanceof Date
+      ) {
+        return;
+      }
+
       const prototype = Object.getPrototypeOf(instance);
+      if (!prototype) {
+        return;
+      }
 
       const methods = Object.getOwnPropertyNames(prototype).filter((method) => {
         if (method === 'constructor') return false;
@@ -37,25 +54,56 @@ export class TraceService implements OnModuleInit {
       methods.forEach((methodName) => {
         const originalMethod = instance[methodName];
 
-        instance[methodName] = async (...args: any[]) => {
+        instance[methodName] = (...args: any[]) => {
           const start = Date.now();
 
-          this.logger.log(`[${instance.constructor.name}.${methodName}] START`);
+          this.logger.log(
+            `\n\n[${instance.constructor.name}.${methodName}] START`,
+          );
 
           try {
-            const result = await originalMethod.apply(instance, args);
+            const result = originalMethod.apply(instance, args);
+
+            if (result instanceof Promise) {
+              return result
+                .then((val) => {
+                  this.logger.log(
+                    `[${instance.constructor.name}.${methodName}] SUCCESS (${Date.now() - start}ms)`,
+                  );
+                  return val;
+                })
+                .catch((error) => {
+                  this.logger.error(
+                    `[${instance.constructor.name}.${methodName}] ERROR (${Date.now() - start}ms)`,
+                    error?.stack || String(error),
+                  );
+                  const cause = error?.cause || error?.options?.cause;
+                  if (cause) {
+                    this.logger.error(
+                      `[${instance.constructor.name}.${methodName}] CAUSE:`,
+                      cause?.stack || String(cause),
+                    );
+                  }
+                  throw error;
+                });
+            }
 
             this.logger.log(
               `[${instance.constructor.name}.${methodName}] SUCCESS (${Date.now() - start}ms)`,
             );
-
             return result;
-          } catch (error) {
+          } catch (error: any) {
             this.logger.error(
               `[${instance.constructor.name}.${methodName}] ERROR (${Date.now() - start}ms)`,
-              error.stack,
+              error?.stack || String(error),
             );
-
+            const cause = error?.cause || error?.options?.cause;
+            if (cause) {
+              this.logger.error(
+                `[${instance.constructor.name}.${methodName}] CAUSE:`,
+                cause?.stack || String(cause),
+              );
+            }
             throw error;
           }
         };

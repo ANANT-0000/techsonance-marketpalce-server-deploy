@@ -387,71 +387,111 @@ export class VendorsService {
             vendor: Partial<VendorType>;
             role: Partial<UserRoleType>;
           }
-        | HttpException = await this.db.transaction(async (tx) => {
-        if (!loginDto.email || !loginDto.password) {
-          throw new HttpException(
-            VendorsErrorKeyEnum.EMAIL_AND_PASSWORD_ARE_REQUIRED,
-            HttpStatus.BAD_REQUEST,
+        | HttpException = await this.db
+        .transaction(async (tx) => {
+          if (!loginDto.email || !loginDto.password) {
+            throw new HttpException(
+              VendorsErrorKeyEnum.EMAIL_AND_PASSWORD_ARE_REQUIRED,
+              HttpStatus.BAD_REQUEST,
+            );
+          }
+          const [userRecord]: Partial<UserType>[] = await tx
+            .select()
+            .from(userTable)
+            .where(eq(userTable.email, loginDto.email))
+            .catch((error) => {
+              throw new InternalServerErrorException(
+                VendorsErrorKeyEnum.USER_NOT_FOUND,
+                {
+                  cause: error,
+                },
+              );
+            });
+          if (!userRecord || !userRecord.id || !userRecord.password_hash) {
+            throw new UnauthorizedException(VendorsErrorKeyEnum.USER_NOT_FOUND);
+          }
+          const isPasswordValid = await bcrypt.compare(
+            loginDto.password,
+            userRecord.password_hash,
           );
-        }
-        const [userRecord]: Partial<UserType>[] = await tx
-          .select()
-          .from(userTable)
-          .where(eq(userTable.email, loginDto.email));
-        if (!userRecord || !userRecord.id || !userRecord.password_hash) {
-          throw new UnauthorizedException(VendorsErrorKeyEnum.USER_NOT_FOUND);
-        }
-        const isPasswordValid = await bcrypt.compare(
-          loginDto.password,
-          userRecord.password_hash,
-        );
-        if (!isPasswordValid) {
-          throw new UnauthorizedException(VendorsErrorKeyEnum.INVALID_PASSWORD);
-        }
-        const [vendorRecord] = await tx
-          .select()
-          .from(vendorTable)
-          .where(eq(vendorTable.user_id, userRecord.id));
-        // uncommit in future
-        // const [userAndCompanyRecord] = await tx
-        //   .select()
-        //   .from(user_and_company)
-        //   .where(eq(user_and_company.user_id, userRecord.id));
-        // ('vendorRecord', vendorRecord);
-        if (!userRecord) {
-          throw new UnauthorizedException(
-            VendorsErrorKeyEnum.USER_ROLE_NOT_FOUND,
-          );
-        }
-        // ('userAndCompanyRecord', userAndCompanyRecord)
-        //------------------------------------------------------
-        // uncommit in future
-        //------------------------------------------------------
-        // const [roleRecord] = await tx
-        //   .select({ role_name: user_rolesTable.role_name })
-        //   .from(user_rolesTable)
-        //   .where(eq(user_rolesTable.id, userAndCompanyRecord.role_id)).limit(1);
+          if (!isPasswordValid) {
+            throw new UnauthorizedException(
+              VendorsErrorKeyEnum.INVALID_PASSWORD,
+            );
+          }
+          const [vendorRecord] = await tx
+            .select()
+            .from(vendorTable)
+            .where(eq(vendorTable.user_id, userRecord.id))
+            .catch((error) => {
+              throw new InternalServerErrorException(
+                VendorsErrorKeyEnum.VENDOR_NOT_FOUND,
+                {
+                  cause: error,
+                },
+              );
+            });
+          // uncomment in future
+          // const [userAndCompanyRecord] = await tx
+          //   .select()
+          //   .from(user_and_company)
+          //   .where(eq(user_and_company.user_id, userRecord.id));
+          // ('vendorRecord', vendorRecord);
+          if (!userRecord) {
+            throw new UnauthorizedException(
+              VendorsErrorKeyEnum.USER_ROLE_NOT_FOUND,
+            );
+          }
+          // ('userAndCompanyRecord', userAndCompanyRecord)
+          //------------------------------------------------------
+          // uncomment in future
+          //------------------------------------------------------
+          // const [roleRecord] = await tx
+          //   .select({ role_name: user_rolesTable.role_name })
+          //   .from(user_rolesTable)
+          //   .where(eq(user_rolesTable.id, userAndCompanyRecord.role_id)).limit(1);
 
-        //-----------------------------------------------------
-        // for bypassing the role check in future comment this and uncommit above
-        //-----------------------------------------------------
-        const [roleRecord] = await tx
-          .select({ role_name: user_rolesTable.role_name })
-          .from(user_rolesTable)
-          .where(eq(user_rolesTable.role_name, 'vendor'))
-          .limit(1);
-        if (!vendorRecord)
-          throw new UnauthorizedException(VendorsErrorKeyEnum.VENDOR_NOT_FOUND);
-        const isVendorApproved =
-          vendorRecord.vendor_status === UserStatus.ACTIVE;
-        // const isVendorApproved = vendorRecord.vendor_status === UserStatus.ACTIVE &&  userAndCompanyRecord.access_status === AccessStatus.ACTIVE;
-        if (!isVendorApproved)
-          throw new HttpException(
-            VendorsErrorKeyEnum.VENDOR_APPLICATION_IS_STILL_UNDER_REVIEW,
-            HttpStatus.UNAUTHORIZED,
+          //-----------------------------------------------------
+          // for bypassing the role check in future comment this and uncomment above
+          //-----------------------------------------------------
+          const [roleRecord] = await tx
+            .select({ role_name: user_rolesTable.role_name })
+            .from(user_rolesTable)
+            .where(eq(user_rolesTable.role_name, UserRole.VENDOR))
+            .limit(1)
+            .catch((error) => {
+              throw new InternalServerErrorException(
+                VendorsErrorKeyEnum.USER_ROLE_NOT_FOUND,
+                {
+                  cause: error,
+                },
+              );
+            });
+          if (!vendorRecord)
+            throw new UnauthorizedException(
+              VendorsErrorKeyEnum.VENDOR_NOT_FOUND,
+            );
+          const isVendorApproved =
+            vendorRecord.vendor_status === UserStatus.ACTIVE;
+          // const isVendorApproved = vendorRecord.vendor_status === UserStatus.ACTIVE &&  userAndCompanyRecord.access_status === AccessStatus.ACTIVE;
+          if (!isVendorApproved)
+            throw new HttpException(
+              VendorsErrorKeyEnum.VENDOR_APPLICATION_IS_STILL_UNDER_REVIEW,
+              HttpStatus.UNAUTHORIZED,
+            );
+          return { user: userRecord, vendor: vendorRecord, role: roleRecord };
+        })
+        .catch((error) => {
+          if (error instanceof HttpException) {
+            throw error;
+          }
+          throw new InternalServerErrorException(
+            VendorsErrorKeyEnum.FAILED_TO_LOGIN_VENDOR,
+            {
+              cause: error,
+            },
           );
-        return { user: userRecord, vendor: vendorRecord, role: roleRecord };
-      });
+        });
       if (existingUser instanceof HttpException) {
         throw existingUser;
       }

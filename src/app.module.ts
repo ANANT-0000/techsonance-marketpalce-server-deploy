@@ -59,12 +59,12 @@ export enum RATTELIMIT {
 }
 @Module({
   imports: [
+    AuthModule,
     ThrottlerModule.forRoot([
       { name: RATTELIMIT.SHORT, ttl: 1000, limit: 10 },
       { name: RATTELIMIT.MEDIUM, ttl: 60_000, limit: 100 },
     ]),
     DrizzleModule,
-    AuthModule,
     UsersModule,
     ProductsModule,
     OrdersModule,
@@ -116,8 +116,8 @@ export enum RATTELIMIT {
     AppService,
     UsersService,
     DrizzleHealthIndicator,
-    { provide: APP_GUARD, useClass: ThrottlerGuard },
     { provide: APP_GUARD, useClass: JwtAuthGuard },
+    { provide: APP_GUARD, useClass: ThrottlerGuard },
     { provide: APP_GUARD, useClass: SubscriptionGuard },
   ],
 })

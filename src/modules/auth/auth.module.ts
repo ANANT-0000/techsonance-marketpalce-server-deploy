@@ -13,6 +13,7 @@ import { MailModule } from '../../common/services/mail/mail.module';
 import { CompanyModule } from '../company/company.module';
 import { GoogleStrategy } from './google.strategy';
 import { AdminModule } from '../admin/admin.module';
+import { JwtAuthGuard } from './jwt-auth.guard';
 
 @Module({
   imports: [
@@ -37,11 +38,12 @@ import { AdminModule } from '../admin/admin.module';
     AuthService,
     JwtStrategy,
     GoogleStrategy,
+    JwtAuthGuard,
     // {
     //   provide: APP_GUARD,
     //   useClass: RoleGuard,
     // },
   ],
-  exports: [AuthService, JwtModule],
+  exports: [AuthService, JwtModule, JwtAuthGuard],
 })
 export class AuthModule {}

@@ -25,6 +25,7 @@ import { AuthGuard } from '@nestjs/passport';
 import { GoogleOAuthGuard } from './google-oauth.guard';
 import { AdminService } from '../admin/admin.service';
 import { Throttle } from '@nestjs/throttler';
+import { Public } from 'src/common/decorators/public.decorator';
 
 @Controller({ version: '1', path: 'auth' })
 export class AuthController {
@@ -39,6 +40,7 @@ export class AuthController {
   test() {
     return 'Auth controller is working';
   }
+  @Public()
   @Throttle({ short: { limit: 5, ttl: 60_000 } })
   @Post('login')
   @HttpCode(HttpStatus.OK)
@@ -51,6 +53,7 @@ export class AuthController {
    * Step 1: Initiate Google OAuth flow
    * The frontend redirects here with the domain parameter
    */
+  @Public()
   @Throttle({ short: { limit: 5, ttl: 60_000 } })
   @Get('google')
   @SetMetadata('skipAuthGuard', true)
@@ -67,6 +70,7 @@ export class AuthController {
    * Step 2: Google OAuth callback
    * Google redirects here after user authenticates
    */
+  @Public()
   @Get('google/callback')
   @HttpCode(HttpStatus.OK)
   @SetMetadata('skipAuthGuard', true)
@@ -119,7 +123,7 @@ export class AuthController {
       );
     }
   }
-
+  @Public()
   @Throttle({ short: { limit: 5, ttl: 60_000 } })
   @Post('register-vendor')
   @UploadToCloud([{ name: 'documents', maxCount: 20 }])
@@ -131,12 +135,14 @@ export class AuthController {
     const vendor = await this.vendorService.vendorRegister(body, files);
     return vendor;
   }
+  @Public()
   @Throttle({ short: { limit: 5, ttl: 60_000 } })
   @Post('login-vendor')
   @HttpCode(HttpStatus.OK)
   async loginVendor(@Body() loginDto: LoginDto) {
     return await this.vendorService.vendorLogin(loginDto);
   }
+  @Public()
   @Throttle({ short: { limit: 5, ttl: 60_000 } })
   @Post('register-user')
   @HttpCode(HttpStatus.CREATED)
@@ -147,6 +153,7 @@ export class AuthController {
     const result = await this.userService.register(createUser, domain);
     return result;
   }
+  @Public()
   @Throttle({ short: { limit: 5, ttl: 60_000 } })
   @Post('login-user')
   @HttpCode(HttpStatus.OK)
@@ -156,12 +163,13 @@ export class AuthController {
   ) {
     return await this.userService.login(loginDto, domain);
   }
-
+  @Public()
   @Post('logout')
   @HttpCode(HttpStatus.OK)
   logout(@Res({ passthrough: true }) res: express.Response) {
     return this.authService.logout(res);
   }
+  @Public()
   @Throttle({ short: { limit: 5, ttl: 60_000 } })
   @Post('request-password-reset')
   @HttpCode(HttpStatus.OK)
@@ -171,13 +179,15 @@ export class AuthController {
   ) {
     return await this.authService.requestPasswordReset(body.email, domain);
   }
+
+  @Public()
   @Throttle({ short: { limit: 5, ttl: 60_000 } })
   @Get('verify-mail')
   @HttpCode(HttpStatus.OK)
   async verifyMail(@Query('email') email: string) {
     return await this.authService.verifyEmail(email);
   }
-
+  @Public()
   @Throttle({ short: { limit: 5, ttl: 60_000 } })
   @Post('reset-password')
   @HttpCode(HttpStatus.OK)
