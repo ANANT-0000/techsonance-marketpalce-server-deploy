@@ -15,20 +15,12 @@ import {
   PolicyDocumentPayload,
   PolicySnapshot,
 } from './interfaces/policy-document.interface';
-
 @Injectable()
 export class PolicyPayloadBuilderService {
   constructor(@Inject(DRIZZLE) private readonly db: DrizzleService) {}
-
   async buildPayload(orderItemId: string): Promise<PolicyDocumentPayload> {
-    console.log(
-      `[PolicyPayloadBuilderService.buildPayload] Request received for orderItemId: ${orderItemId}`,
-    );
-    // 1. Fetch the order item policy snapshot and related data
-    console.log(
-      '[PolicyPayloadBuilderService.buildPayload] Querying order item policy snapshot',
-    );
-    const itemPolicy = await this.db.query.order_item_policy.findFirst({
+        // 1. Fetch the order item policy snapshot and related data
+        const itemPolicy = await this.db.query.order_item_policy.findFirst({
       where: eq(order_item_policy.order_item_id, orderItemId),
       with: {
         orderItem: {
@@ -50,11 +42,7 @@ export class PolicyPayloadBuilderService {
         `No policy found for order item ${orderItemId}`,
       );
     }
-
-    console.log(
-      '[PolicyPayloadBuilderService.buildPayload] Policy snapshot loaded',
-    );
-
+    
     const { orderItem, policy_snapshot } = itemPolicy;
     const snapshot = policy_snapshot as PolicySnapshot;
     const orderData = orderItem.order;
@@ -70,17 +58,13 @@ export class PolicyPayloadBuilderService {
         `Variant data not found for order item ${orderItemId}`,
       );
     }
-
     // 2. Fetch Company Branding (Assuming company_id exists on order)
     if (!orderData || !orderData.company_id) {
       throw new NotFoundException(
         `Order ${orderData?.id} is not associated with any company.`,
       );
     }
-    console.log(
-      `[PolicyPayloadBuilderService.buildPayload] Querying branding and company data for companyId: ${orderData.company_id}`,
-    );
-    const [branding] = await this.db
+        const [branding] = await this.db
       .select()
       .from(company_branding)
       .where(eq(company_branding.company_id, orderData.company_id))
@@ -92,7 +76,6 @@ export class PolicyPayloadBuilderService {
           },
         );
       });
-
     const [companyInfo] = await this.db
       .select()
       .from(company)
@@ -105,12 +88,8 @@ export class PolicyPayloadBuilderService {
           },
         );
       });
-
     // 3. Construct and return the Payload
-    console.log(
-      `[PolicyPayloadBuilderService.buildPayload] Payload assembled for orderItemId: ${orderItemId}`,
-    );
-    return {
+        return {
       meta: {
         documentId: itemPolicy.id,
         issueDate: new Date(),

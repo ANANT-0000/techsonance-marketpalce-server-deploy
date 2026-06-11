@@ -24,6 +24,7 @@ import { ParseJsonPipe } from '../../common/pipes/parseJsonPipe';
 import { AuthGuard } from '@nestjs/passport';
 import { GoogleOAuthGuard } from './google-oauth.guard';
 import { AdminService } from '../admin/admin.service';
+import { Throttle } from '@nestjs/throttler';
 
 @Controller({ version: '1', path: 'auth' })
 export class AuthController {
@@ -38,18 +39,19 @@ export class AuthController {
   test() {
     return 'Auth controller is working';
   }
+  @Throttle({ short: { limit: 5, ttl: 60_000 } })
   @Post('login')
   @HttpCode(HttpStatus.OK)
   async adminLogin(
     @Body() body: { email: string; password: string },
   ): Promise<Record<string, unknown>> {
-    console.log(body.email, body.password);
     return await this.adminService.adminLogin(body.email, body.password);
   }
   /**
    * Step 1: Initiate Google OAuth flow
    * The frontend redirects here with the domain parameter
    */
+  @Throttle({ short: { limit: 5, ttl: 60_000 } })
   @Get('google')
   @SetMetadata('skipAuthGuard', true)
   @UseGuards(GoogleOAuthGuard)
@@ -106,8 +108,6 @@ export class AuthController {
         );
       }
     } catch (error) {
-      console.error('Google OAuth callback error:', error);
-
       // Redirect to error page on failure
       const errorDomain: string = req.query.state as string;
       const frontendUrl: string = errorDomain.startsWith('http')
@@ -120,6 +120,7 @@ export class AuthController {
     }
   }
 
+  @Throttle({ short: { limit: 5, ttl: 60_000 } })
   @Post('register-vendor')
   @UploadToCloud([{ name: 'documents', maxCount: 20 }])
   @HttpCode(HttpStatus.CREATED)
@@ -130,13 +131,13 @@ export class AuthController {
     const vendor = await this.vendorService.vendorRegister(body, files);
     return vendor;
   }
-
+  @Throttle({ short: { limit: 5, ttl: 60_000 } })
   @Post('login-vendor')
   @HttpCode(HttpStatus.OK)
   async loginVendor(@Body() loginDto: LoginDto) {
     return await this.vendorService.vendorLogin(loginDto);
   }
-
+  @Throttle({ short: { limit: 5, ttl: 60_000 } })
   @Post('register-user')
   @HttpCode(HttpStatus.CREATED)
   async signUpUser(
@@ -146,7 +147,7 @@ export class AuthController {
     const result = await this.userService.register(createUser, domain);
     return result;
   }
-
+  @Throttle({ short: { limit: 5, ttl: 60_000 } })
   @Post('login-user')
   @HttpCode(HttpStatus.OK)
   async loginUser(
@@ -161,7 +162,7 @@ export class AuthController {
   logout(@Res({ passthrough: true }) res: express.Response) {
     return this.authService.logout(res);
   }
-
+  @Throttle({ short: { limit: 5, ttl: 60_000 } })
   @Post('request-password-reset')
   @HttpCode(HttpStatus.OK)
   async requestPasswordReset(
@@ -170,13 +171,14 @@ export class AuthController {
   ) {
     return await this.authService.requestPasswordReset(body.email, domain);
   }
-
+  @Throttle({ short: { limit: 5, ttl: 60_000 } })
   @Get('verify-mail')
   @HttpCode(HttpStatus.OK)
   async verifyMail(@Query('email') email: string) {
     return await this.authService.verifyEmail(email);
   }
 
+  @Throttle({ short: { limit: 5, ttl: 60_000 } })
   @Post('reset-password')
   @HttpCode(HttpStatus.OK)
   async resetPassword(

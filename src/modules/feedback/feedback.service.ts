@@ -4,6 +4,7 @@ import { DRIZZLE, type DrizzleService } from '../../drizzle/drizzle.module';
 import { customer_feedback } from '../../drizzle/schema';
 import { CompanyService } from '../company/company.service';
 import { domainExtractor } from '../../common/filters/domainExtractor.filter';
+import { FeedbackErrorKeyEnum } from './constants/feedback.enums';
 
 @Injectable()
 export class FeedbackService {
@@ -47,8 +48,7 @@ export class FeedbackService {
 
       return newFeedback;
     } catch (error) {
-      console.error('[FeedbackService.createFeedback] Error:', error);
-      throw new InternalServerErrorException('Failed to submit feedback');
+      throw new InternalServerErrorException(FeedbackErrorKeyEnum.FAILED_TO_SUBMIT_FEEDBACK);
     }
   }
 
@@ -60,8 +60,7 @@ export class FeedbackService {
         orderBy: (table, { desc }) => [desc(table.created_at)],
       });
     } catch (error) {
-      console.error('[FeedbackService.getFeedbackList] Error:', error);
-      throw new InternalServerErrorException('Failed to fetch feedback list');
+      throw new InternalServerErrorException(FeedbackErrorKeyEnum.FAILED_TO_FETCH_FEEDBACK_LIST);
     }
   }
 }

@@ -28,6 +28,7 @@ import {
 import { domainExtractor } from '../../common/filters/domainExtractor.filter';
 import { orders } from '../../drizzle/schema';
 import { PolicyPayloadBuilderService } from './policy-payload-builder.service';
+import { ProductPoliciesErrorKeyEnum } from './constants/product-policies.enums';
 
 @Injectable()
 export class ProductPoliciesService {
@@ -40,16 +41,7 @@ export class ProductPoliciesService {
   // ─── helpers ──────────────────────────────────────────────────────────────
 
   private async resolveCompanyId(domain: string): Promise<string> {
-    console.log(
-      `[ProductPoliciesService.resolveCompanyId] Resolving company for domain: ${domain}`,
-    );
     const filterDomain = domainExtractor(domain);
-    console.log(
-      `[ProductPoliciesService.resolveCompanyId] Extracted filter domain: ${filterDomain}`,
-    );
-    console.log(
-      `[ProductPoliciesService.resolveCompanyId] Querying CompanyService.find(...)`,
-    );
     return this.companyService.find(filterDomain);
   }
 
@@ -58,29 +50,15 @@ export class ProductPoliciesService {
   // ==========================================================================
 
   async create(createDto: CreateProductPolicyDto, domain?: string) {
-    console.log('[ProductPoliciesService.create] Request received');
-    console.log('[ProductPoliciesService.create] Incoming payload:', createDto);
     if (!domain) {
-      console.log(
-        '[ProductPoliciesService.create] Stopping: domain header is missing',
-      );
       throw new BadRequestException(
-        'A product policy must belong to either a vendor or a company.',
+        ProductPoliciesErrorKeyEnum.A_PRODUCT_POLICY_MUST_BELONG_TO_EITHER_A_VENDOR_OR_A_COMPANY,
       );
     }
 
-    console.log(
-      `[ProductPoliciesService.create] Resolving company id for domain: ${domain}`,
-    );
     const companyId = await this.resolveCompanyId(domain);
-    console.log(
-      `[ProductPoliciesService.create] Company resolved: ${companyId ?? 'null'}`,
-    );
 
     try {
-      console.log(
-        '[ProductPoliciesService.create] Inserting product policy into database',
-      );
       const [newPolicy] = await this.db
         .insert(product_policies)
         .values({
@@ -91,10 +69,6 @@ export class ProductPoliciesService {
         })
         .returning();
 
-      console.log(
-        '[ProductPoliciesService.create] Insert completed successfully',
-        newPolicy,
-      );
 
       return {
         message: 'Product policy created successfully',
@@ -102,78 +76,44 @@ export class ProductPoliciesService {
         data: newPolicy,
       };
     } catch (error) {
-      console.error(
-        '[ProductPoliciesService.create] Failed while inserting product policy',
-        error,
-      );
       throw new InternalServerErrorException(
-        'Database error while creating product policy',
+        ProductPoliciesErrorKeyEnum.DATABASE_ERROR_WHILE_CREATING_PRODUCT_POLICY,
         { cause: error },
       );
     }
   }
 
   async findAll(domain: string) {
-    console.log('[ProductPoliciesService.findAll] Request received');
     if (!domain) {
-      console.log(
-        '[ProductPoliciesService.findAll] Stopping: domain header is missing',
-      );
-      throw new BadRequestException('Domain header is required.');
+      throw new BadRequestException(ProductPoliciesErrorKeyEnum.DOMAIN_HEADER_IS_REQUIRED);
     }
-    console.log(
-      `[ProductPoliciesService.findAll] Resolving company id for domain: ${domain}`,
-    );
     const companyId = await this.resolveCompanyId(domain);
 
     try {
-      console.log(
-        `[ProductPoliciesService.findAll] Querying product policies for company_id: ${companyId}`,
-      );
       return await this.db
         .select()
         .from(product_policies)
         .where(eq(product_policies.company_id, companyId))
         .catch((error) => {
-          console.error(
-            '[ProductPoliciesService.findAll] Failed while fetching product policies',
-            error,
-          );
-          throw new InternalServerErrorException('Failed to fetch policies', {
+          throw new InternalServerErrorException(ProductPoliciesErrorKeyEnum.FAILED_TO_FETCH_POLICIES, {
             cause: error,
           });
         });
     } catch (error) {
-      console.error(
-        '[ProductPoliciesService.findAll] Failed while fetching product policies',
-        error,
-      );
-      throw new InternalServerErrorException('Failed to fetch policies', {
+      throw new InternalServerErrorException(ProductPoliciesErrorKeyEnum.FAILED_TO_FETCH_POLICIES, {
         cause: error,
       });
     }
   }
 
   async findOne(id: string, domain?: string) {
-    console.log(
-      `[ProductPoliciesService.findOne] Request received for policy id: ${id}`,
-    );
     if (!domain) {
-      console.log(
-        '[ProductPoliciesService.findOne] Stopping: domain header is missing',
-      );
-      throw new BadRequestException('Domain header is required.');
+      throw new BadRequestException(ProductPoliciesErrorKeyEnum.DOMAIN_HEADER_IS_REQUIRED);
     }
 
-    console.log(
-      `[ProductPoliciesService.findOne] Resolving company id for domain: ${domain}`,
-    );
     const companyId = await this.resolveCompanyId(domain);
 
     try {
-      console.log(
-        `[ProductPoliciesService.findOne] Querying policy by id: ${id} and company_id: ${companyId}`,
-      );
       const [policy] = await this.db
         .select()
         .from(product_policies)
@@ -185,56 +125,30 @@ export class ProductPoliciesService {
         );
 
       if (!policy) {
-        console.log(
-          `[ProductPoliciesService.findOne] No policy found for id: ${id} and company_id: ${companyId}`,
-        );
         throw new NotFoundException(
           `Policy with ID ${id} not found or you don't have access to it.`,
         );
       }
 
-      console.log(
-        `[ProductPoliciesService.findOne] Policy found for id: ${id}`,
-      );
       return policy;
     } catch (error) {
       if (error instanceof NotFoundException) throw error;
-      console.error(
-        '[ProductPoliciesService.findOne] Failed while fetching product policy',
-        error,
-      );
       throw new InternalServerErrorException(
-        'Database error while fetching product policy',
+        ProductPoliciesErrorKeyEnum.DATABASE_ERROR_WHILE_FETCHING_PRODUCT_POLICY,
         { cause: error },
       );
     }
   }
 
   async update(id: string, updateDto: UpdateProductPolicyDto, domain: string) {
-    console.log(
-      `[ProductPoliciesService.update] Request received for policy id: ${id}`,
-    );
-    console.log('[ProductPoliciesService.update] Update payload:', updateDto);
     if (!domain) {
-      console.log(
-        '[ProductPoliciesService.update] Stopping: domain header is missing',
-      );
-      throw new BadRequestException('Domain header is required.');
+      throw new BadRequestException(ProductPoliciesErrorKeyEnum.DOMAIN_HEADER_IS_REQUIRED);
     }
-    console.log(
-      `[ProductPoliciesService.update] Resolving company id for domain: ${domain}`,
-    );
     const companyId = await this.resolveCompanyId(domain);
 
-    console.log(
-      `[ProductPoliciesService.update] Verifying policy exists before update: ${id}`,
-    );
     await this.findOne(id, domain);
 
     try {
-      console.log(
-        `[ProductPoliciesService.update] Updating policy id: ${id} for company_id: ${companyId}`,
-      );
       const [updatedPolicy] = await this.db
         .update(product_policies)
         .set({ ...updateDto })
@@ -246,10 +160,6 @@ export class ProductPoliciesService {
         )
         .returning();
 
-      console.log(
-        '[ProductPoliciesService.update] Update completed successfully',
-        updatedPolicy,
-      );
 
       return {
         message: 'Product policy updated successfully',
@@ -262,40 +172,21 @@ export class ProductPoliciesService {
         error instanceof BadRequestException
       )
         throw error;
-      console.error(
-        '[ProductPoliciesService.update] Failed while updating product policy',
-        error,
-      );
       throw new InternalServerErrorException(
-        'Failed to update product policy',
+        ProductPoliciesErrorKeyEnum.FAILED_TO_UPDATE_PRODUCT_POLICY,
         { cause: error },
       );
     }
   }
 
   async delete(id: string, domain: string) {
-    console.log(
-      `[ProductPoliciesService.delete] Request received for policy id: ${id}`,
-    );
     if (!domain) {
-      console.log(
-        '[ProductPoliciesService.delete] Stopping: domain header is missing',
-      );
-      throw new BadRequestException('Domain header is required.');
+      throw new BadRequestException(ProductPoliciesErrorKeyEnum.DOMAIN_HEADER_IS_REQUIRED);
     }
 
-    console.log(
-      `[ProductPoliciesService.delete] Resolving company id for domain: ${domain}`,
-    );
     const companyId = await this.resolveCompanyId(domain);
-    console.log(
-      `[ProductPoliciesService.delete] Verifying policy exists before delete: ${id}`,
-    );
     await this.findOne(id, domain);
     try {
-      console.log(
-        `[ProductPoliciesService.delete] Deleting policy id: ${id} for company_id: ${companyId}`,
-      );
       await this.db
         .delete(product_policies)
         .where(
@@ -305,9 +196,6 @@ export class ProductPoliciesService {
           ),
         );
 
-      console.log(
-        `[ProductPoliciesService.delete] Delete completed successfully for policy id: ${id}`,
-      );
 
       return {
         message: 'Product policy deleted successfully',
@@ -319,12 +207,8 @@ export class ProductPoliciesService {
         error instanceof BadRequestException
       )
         throw error;
-      console.error(
-        '[ProductPoliciesService.delete] Failed while deleting product policy',
-        error,
-      );
       throw new InternalServerErrorException(
-        'Failed to delete product policy',
+        ProductPoliciesErrorKeyEnum.FAILED_TO_DELETE_PRODUCT_POLICY,
         { cause: error },
       );
     }
@@ -335,26 +219,13 @@ export class ProductPoliciesService {
   // ==========================================================================
 
   async assignCategoryPolicy(dto: AssignCategoryPolicyDto, domain: string) {
-    console.log(
-      '[ProductPoliciesService.assignCategoryPolicy] Request received',
-    );
-    console.log('[ProductPoliciesService.assignCategoryPolicy] Payload:', dto);
-    if (!domain) throw new BadRequestException('Domain is required.');
+    if (!domain) throw new BadRequestException(ProductPoliciesErrorKeyEnum.DOMAIN_IS_REQUIRED);
     if (!dto.category_id || !dto.policy_id) {
-      console.log(
-        '[ProductPoliciesService.assignCategoryPolicy] Stopping: category_id or policy_id is missing',
-      );
-      throw new BadRequestException('Category ID and Policy ID are required.');
+      throw new BadRequestException(ProductPoliciesErrorKeyEnum.CATEGORY_ID_AND_POLICY_ID_ARE_REQUIRED);
     }
-    console.log(
-      `[ProductPoliciesService.assignCategoryPolicy] Verifying policy exists: ${dto.policy_id}`,
-    );
     await this.findOne(dto.policy_id, domain);
 
     try {
-      console.log(
-        `[ProductPoliciesService.assignCategoryPolicy] Checking existing assignment for category_id: ${dto.category_id} and policy_id: ${dto.policy_id}`,
-      );
       const existingAssignment = await this.db
         .select()
         .from(category_policy)
@@ -366,17 +237,11 @@ export class ProductPoliciesService {
         );
 
       if (existingAssignment.length > 0) {
-        console.log(
-          '[ProductPoliciesService.assignCategoryPolicy] Stopping: assignment already exists',
-        );
         throw new BadRequestException(
-          'This policy is already assigned to this category.',
+          ProductPoliciesErrorKeyEnum.THIS_POLICY_IS_ALREADY_ASSIGNED_TO_THIS_CATEGORY,
         );
       }
 
-      console.log(
-        '[ProductPoliciesService.assignCategoryPolicy] Inserting category policy assignment',
-      );
       const [assignment] = await this.db
         .insert(category_policy)
         .values({
@@ -386,10 +251,6 @@ export class ProductPoliciesService {
         })
         .returning();
 
-      console.log(
-        '[ProductPoliciesService.assignCategoryPolicy] Assignment created successfully',
-        assignment,
-      );
 
       return {
         message: 'Policy successfully assigned to category',
@@ -399,61 +260,38 @@ export class ProductPoliciesService {
     } catch (error) {
       if (error instanceof BadRequestException) throw error;
       throw new InternalServerErrorException(
-        'Failed to assign category policy',
+        ProductPoliciesErrorKeyEnum.FAILED_TO_ASSIGN_CATEGORY_POLICY,
         { cause: error },
       );
     }
   }
 
   async getCategoryPolicies(categoryId: string) {
-    console.log(
-      `[ProductPoliciesService.getCategoryPolicies] Request received for category_id: ${categoryId}`,
-    );
     try {
-      console.log(
-        `[ProductPoliciesService.getCategoryPolicies] Querying category_policy rows for category_id: ${categoryId}`,
-      );
       return await this.db
         .select()
         .from(category_policy)
         .where(eq(category_policy.category_id, categoryId));
     } catch (error) {
-      console.error(
-        '[ProductPoliciesService.getCategoryPolicies] Failed while fetching category policies',
-        error,
-      );
       throw new InternalServerErrorException(
-        'Failed to fetch category policies',
+        ProductPoliciesErrorKeyEnum.FAILED_TO_FETCH_CATEGORY_POLICIES,
         { cause: error },
       );
     }
   }
 
   async removeCategoryPolicy(assignmentId: string) {
-    console.log(
-      `[ProductPoliciesService.removeCategoryPolicy] Request received for assignment id: ${assignmentId}`,
-    );
     try {
-      console.log(
-        `[ProductPoliciesService.removeCategoryPolicy] Deleting assignment id: ${assignmentId}`,
-      );
       await this.db
         .delete(category_policy)
         .where(eq(category_policy.id, assignmentId));
-      console.log(
-        `[ProductPoliciesService.removeCategoryPolicy] Delete completed successfully for assignment id: ${assignmentId}`,
-      );
       return {
         message: 'Category policy unassigned successfully',
         status: HttpStatus.OK,
       };
     } catch (error) {
-      console.error(
-        '[ProductPoliciesService.removeCategoryPolicy] Failed while removing category policy',
-        error,
-      );
       throw new InternalServerErrorException(
-        'Failed to remove category policy',
+        ProductPoliciesErrorKeyEnum.FAILED_TO_REMOVE_CATEGORY_POLICY,
         { cause: error },
       );
     }
@@ -467,24 +305,11 @@ export class ProductPoliciesService {
     dto: AssignProductPolicyOverrideDto,
     domain: string,
   ) {
-    console.log(
-      '[ProductPoliciesService.assignProductPolicyOverride] Request received',
-    );
-    console.log(
-      '[ProductPoliciesService.assignProductPolicyOverride] Payload:',
-      dto,
-    );
-    if (!domain) throw new BadRequestException('Domain is required.');
+    if (!domain) throw new BadRequestException(ProductPoliciesErrorKeyEnum.DOMAIN_IS_REQUIRED);
 
-    console.log(
-      `[ProductPoliciesService.assignProductPolicyOverride] Verifying policy exists: ${dto.policy_id}`,
-    );
     await this.findOne(dto.policy_id, domain);
 
     try {
-      console.log(
-        `[ProductPoliciesService.assignProductPolicyOverride] Checking existing override for product_id: ${dto.product_id} and policy_id: ${dto.policy_id}`,
-      );
       const existingOverride = await this.db
         .select()
         .from(product_policy_override)
@@ -496,17 +321,11 @@ export class ProductPoliciesService {
         );
 
       if (existingOverride.length > 0) {
-        console.log(
-          '[ProductPoliciesService.assignProductPolicyOverride] Stopping: override already exists',
-        );
         throw new BadRequestException(
-          'This policy override is already applied to this product.',
+          ProductPoliciesErrorKeyEnum.THIS_POLICY_OVERRIDE_IS_ALREADY_APPLIED_TO_THIS_PRODUCT,
         );
       }
 
-      console.log(
-        '[ProductPoliciesService.assignProductPolicyOverride] Inserting product policy override',
-      );
       const [override] = await this.db
         .insert(product_policy_override)
         .values({
@@ -516,10 +335,6 @@ export class ProductPoliciesService {
         })
         .returning();
 
-      console.log(
-        '[ProductPoliciesService.assignProductPolicyOverride] Override created successfully',
-        override,
-      );
 
       return {
         message: 'Product policy override applied successfully',
@@ -529,71 +344,44 @@ export class ProductPoliciesService {
     } catch (error) {
       if (error instanceof BadRequestException) throw error;
       throw new InternalServerErrorException(
-        'Failed to apply product policy override',
+        ProductPoliciesErrorKeyEnum.FAILED_TO_APPLY_PRODUCT_POLICY_OVERRIDE,
         { cause: error },
       );
     }
   }
 
   async getProductPolicyOverrides(productId: string) {
-    console.log(
-      `[ProductPoliciesService.getProductPolicyOverrides] Request received for product_id: ${productId}`,
-    );
     try {
-      console.log(
-        `[ProductPoliciesService.getProductPolicyOverrides] Querying overrides for product_id: ${productId}`,
-      );
       return await this.db
         .select()
         .from(product_policy_override)
         .where(eq(product_policy_override.product_id, productId))
         .catch((error) => {
-          console.error(
-            '[ProductPoliciesService.getProductPolicyOverrides] Failed while fetching product policy overrides',
-            error,
-          );
           throw new InternalServerErrorException(
-            'Failed to fetch product policy overrides',
+            ProductPoliciesErrorKeyEnum.FAILED_TO_FETCH_PRODUCT_POLICY_OVERRIDES,
             { cause: error },
           );
         });
     } catch (error) {
-      console.error(
-        '[ProductPoliciesService.getProductPolicyOverrides] Failed while fetching product policy overrides',
-        error,
-      );
       throw new InternalServerErrorException(
-        'Failed to fetch product policy overrides',
+        ProductPoliciesErrorKeyEnum.FAILED_TO_FETCH_PRODUCT_POLICY_OVERRIDES,
         { cause: error },
       );
     }
   }
 
   async removeProductPolicyOverride(overrideId: string) {
-    console.log(
-      `[ProductPoliciesService.removeProductPolicyOverride] Request received for override id: ${overrideId}`,
-    );
     try {
-      console.log(
-        `[ProductPoliciesService.removeProductPolicyOverride] Deleting override id: ${overrideId}`,
-      );
       await this.db
         .delete(product_policy_override)
         .where(eq(product_policy_override.id, overrideId));
-      console.log(
-        `[ProductPoliciesService.removeProductPolicyOverride] Delete completed successfully for override id: ${overrideId}`,
-      );
       return {
         message: 'Product override removed successfully',
         status: HttpStatus.OK,
       };
     } catch (error) {
-      console.error(
-        '[ProductPoliciesService.removeProductPolicyOverride] Failed while removing product policy override',
-        error,
-      );
       throw new InternalServerErrorException(
-        'Failed to remove product policy override',
+        ProductPoliciesErrorKeyEnum.FAILED_TO_REMOVE_PRODUCT_POLICY_OVERRIDE,
         { cause: error },
       );
     }
@@ -609,70 +397,38 @@ export class ProductPoliciesService {
     tx?: DrizzleService,
   ) {
     const db = tx ?? this.db;
-    console.log(
-      '[ProductPoliciesService.createOrderItemPolicySnapshot] Request received',
-    );
-    console.log(
-      '[ProductPoliciesService.createOrderItemPolicySnapshot] Payload:',
-      dto,
-    );
-    console.log(
-      `[ProductPoliciesService.createOrderItemPolicySnapshot] Verifying policy exists: ${dto.policy_id}`,
-    );
     const policy = await this.findOne(dto.policy_id, domain);
 
-    console.log(
-      `[ProductPoliciesService.createOrderItemPolicySnapshot] Calculating snapshot dates starting from: ${dto.policy_start_date}`,
-    );
     const startDate = new Date(dto.policy_start_date);
     let calculatedEndDate: Date | null = null;
 
     if (policy.duration_value && policy.duration_unit) {
-      console.log(
-        `[ProductPoliciesService.createOrderItemPolicySnapshot] Policy duration detected: ${policy.duration_value} ${policy.duration_unit}`,
-      );
       calculatedEndDate = new Date(startDate);
 
       switch (policy.duration_unit) {
         case 'days':
-          console.log(
-            '[ProductPoliciesService.createOrderItemPolicySnapshot] Calculating end date in days',
-          );
           calculatedEndDate.setDate(
             startDate.getDate() + policy.duration_value,
           );
           break;
         case 'months':
-          console.log(
-            '[ProductPoliciesService.createOrderItemPolicySnapshot] Calculating end date in months',
-          );
           calculatedEndDate.setMonth(
             startDate.getMonth() + policy.duration_value,
           );
           break;
         case 'years':
-          console.log(
-            '[ProductPoliciesService.createOrderItemPolicySnapshot] Calculating end date in years',
-          );
           calculatedEndDate.setFullYear(
             startDate.getFullYear() + policy.duration_value,
           );
           break;
         case 'lifetime':
         default:
-          console.log(
-            '[ProductPoliciesService.createOrderItemPolicySnapshot] No end date will be stored for lifetime policy',
-          );
           calculatedEndDate = null;
           break;
       }
     }
 
     try {
-      console.log(
-        '[ProductPoliciesService.createOrderItemPolicySnapshot] Inserting order item policy snapshot',
-        dto,
-      );
       const [snapshot] = await db
         .insert(order_item_policy)
         .values({
@@ -688,76 +444,47 @@ export class ProductPoliciesService {
         })
         .returning()
         .catch((error) => {
-          console.error(
-            '[ProductPoliciesService.createOrderItemPolicySnapshot] Failed while inserting order item policy snapshot',
-            error,
-          );
           throw new InternalServerErrorException(
-            'Failed to create order item policy snapshot',
+            ProductPoliciesErrorKeyEnum.FAILED_TO_CREATE_ORDER_ITEM_POLICY_SNAPSHOT,
             { cause: error },
           );
         });
 
-      console.log(
-        '[ProductPoliciesService.createOrderItemPolicySnapshot] Snapshot created successfully',
-        snapshot,
-      );
 
       return snapshot;
     } catch (error) {
-      console.error(
-        '[ProductPoliciesService.createOrderItemPolicySnapshot] Failed while creating order item policy snapshot',
-        error,
-      );
       throw new InternalServerErrorException(
-        'Failed to create order item policy snapshot',
+        ProductPoliciesErrorKeyEnum.FAILED_TO_CREATE_ORDER_ITEM_POLICY_SNAPSHOT,
         { cause: error },
       );
     }
   }
 
   async getOrderItemPolicy(orderItemId: string) {
-    console.log(
-      `[ProductPoliciesService.getOrderItemPolicy] Request received for order_item_id: ${orderItemId}`,
-    );
     try {
-      console.log(
-        `[ProductPoliciesService.getOrderItemPolicy] Querying order_item_policy for order_item_id: ${orderItemId}`,
-      );
       const [policySnapshot] = await this.db
         .select()
         .from(order_item_policy)
         .where(eq(order_item_policy.order_item_id, orderItemId));
 
       if (!policySnapshot) {
-        console.log(
-          `[ProductPoliciesService.getOrderItemPolicy] No snapshot found for order_item_id: ${orderItemId}`,
-        );
         throw new NotFoundException(
           `No policy found for order item ${orderItemId}`,
         );
       }
 
-      console.log(
-        `[ProductPoliciesService.getOrderItemPolicy] Snapshot fetched successfully for order_item_id: ${orderItemId}`,
-        policySnapshot,
-      );
       return policySnapshot;
     } catch (error) {
-      console.error(
-        '[ProductPoliciesService.getOrderItemPolicy] Failed while fetching order item policy',
-        error,
-      );
       if (error instanceof NotFoundException) throw error;
       throw new InternalServerErrorException(
-        'Failed to fetch order item policy',
+        ProductPoliciesErrorKeyEnum.FAILED_TO_FETCH_ORDER_ITEM_POLICY,
         { cause: error },
       );
     }
   }
 
   async getCoverageOverview(domain: string, policyId?: string | null) {
-    if (!domain) throw new BadRequestException('A domain is required.');
+    if (!domain) throw new BadRequestException(ProductPoliciesErrorKeyEnum.A_DOMAIN_IS_REQUIRED);
     const companyId = await this.resolveCompanyId(domain);
     const whereCause = [eq(product_policies.company_id, companyId)];
     if (policyId) {
@@ -805,12 +532,8 @@ export class ProductPoliciesService {
           },
         })
         .catch((error) => {
-          console.error(
-            '[ProductPoliciesService.getCoverageOverview] Failed while fetching coverage overview',
-            error,
-          );
           throw new InternalServerErrorException(
-            'Failed to fetch coverage overview',
+            ProductPoliciesErrorKeyEnum.FAILED_TO_FETCH_COVERAGE_OVERVIEW,
             { cause: error },
           );
         });
@@ -851,24 +574,16 @@ export class ProductPoliciesService {
           inherited_products: inheritedProducts,
         };
       });
-      console.log(
-        '[ProductPoliciesService.getCoverageOverview] Coverage data fetched:',
-        coverageData,
-      );
       return coverageData;
     } catch (error) {
-      console.error('Error fetching coverage overview:', error);
       throw new InternalServerErrorException(
-        'Failed to fetch coverage overview',
+        ProductPoliciesErrorKeyEnum.FAILED_TO_FETCH_COVERAGE_OVERVIEW,
         { cause: error },
       );
     }
   }
 
   async getWarrantyUrl(orderId: string) {
-    console.log(
-      `[ProductPoliciesService.getWarrantyUrl] Request received for order_id: ${orderId}`,
-    );
 
     try {
       const warrantyUrls = await this.db.query.orders
@@ -890,21 +605,14 @@ export class ProductPoliciesService {
           },
         })
         .catch((error) => {
-          console.error(
-            '[ProductPoliciesService.getWarrantyUrl] Failed while fetching warranty URL',
-            error,
-          );
           throw new InternalServerErrorException(
-            'Failed to fetch warranty URL',
+            ProductPoliciesErrorKeyEnum.FAILED_TO_FETCH_WARRANTY_URL,
             {
               cause: error,
             },
           );
         });
       if (!warrantyUrls || warrantyUrls.length === 0) {
-        console.log(
-          `[ProductPoliciesService.getWarrantyUrl] No order found for order_id: ${orderId}`,
-        );
         throw new NotFoundException(`Order with ID ${orderId} not found.`);
       }
       const extractedUrls = warrantyUrls.flatMap(
@@ -912,11 +620,9 @@ export class ProductPoliciesService {
           order.items.map((item) => item.policy?.document_url).filter(Boolean), // Removes any undefined/null values if a policy is missing
       );
 
-      console.log(extractedUrls);
       return extractedUrls;
     } catch (error) {
-      console.error('Error fetching warranty URL:', error);
-      throw new InternalServerErrorException('Failed to fetch warranty URL', {
+      throw new InternalServerErrorException(ProductPoliciesErrorKeyEnum.FAILED_TO_FETCH_WARRANTY_URL, {
         cause: error,
       });
     }
@@ -934,15 +640,9 @@ export class ProductPoliciesService {
    * (html2canvas + jsPDF) — no Puppeteer / server-side rendering needed.
    */
   async getWarrantyPayload(orderId: string) {
-    console.log(
-      `[ProductPoliciesService.getWarrantyPayload] Request received for order_id: ${orderId}`,
-    );
 
     try {
       // 1. Resolve all order items that have a policy snapshot for this order
-      console.log(
-        `[ProductPoliciesService.getWarrantyPayload] Querying order items with policy for order_id: ${orderId}`,
-      );
       const orderData = await this.db.query.orders.findFirst({
         where: eq(orders.id, orderId),
         columns: { id: true },
@@ -959,9 +659,6 @@ export class ProductPoliciesService {
       });
 
       if (!orderData) {
-        console.log(
-          `[ProductPoliciesService.getWarrantyPayload] No order found for order_id: ${orderId}`,
-        );
         throw new NotFoundException(`Order with ID ${orderId} not found.`);
       }
 
@@ -969,18 +666,12 @@ export class ProductPoliciesService {
       const policyItems = orderData.items.filter((item) => !!item.policy);
 
       if (policyItems.length === 0) {
-        console.log(
-          `[ProductPoliciesService.getWarrantyPayload] No policy items found for order_id: ${orderId}`,
-        );
         return {
           message: 'No warranty documents found for this order.',
           data: [],
         };
       }
 
-      console.log(
-        `[ProductPoliciesService.getWarrantyPayload] Building payloads for ${policyItems.length} item(s)`,
-      );
 
       // 3. Build the full payload for each item (reuses PolicyPayloadBuilderService)
       const payloads = await Promise.all(
@@ -989,9 +680,6 @@ export class ProductPoliciesService {
         ),
       );
 
-      console.log(
-        `[ProductPoliciesService.getWarrantyPayload] Successfully built ${payloads.length} payload(s) for order_id: ${orderId}`,
-      );
 
       return {
         message: 'Warranty payload(s) fetched successfully',
@@ -999,12 +687,8 @@ export class ProductPoliciesService {
       };
     } catch (error) {
       if (error instanceof NotFoundException) throw error;
-      console.error(
-        `[ProductPoliciesService.getWarrantyPayload] Failed for order_id: ${orderId}`,
-        error,
-      );
       throw new InternalServerErrorException(
-        'Failed to fetch warranty payload',
+        ProductPoliciesErrorKeyEnum.FAILED_TO_FETCH_WARRANTY_PAYLOAD,
         { cause: error },
       );
     }

@@ -39,14 +39,8 @@ export class PolicyResolutionService {
     tx?: DrizzleService,
   ): Promise<PolicyResolutionResult> {
     const db = tx ?? this.db;
-    console.log(
-      `[PolicyResolutionService.resolveForVariant] Resolving policy for variant: ${productVariantId}`,
-    );
 
     // ── Step 1: get product_id from variant ──────────────────────────
-    console.log(
-      '[PolicyResolutionService.resolveForVariant] Querying product_variant for linked product',
-    );
     const [variant] = await db
       .select({ product_id: product_variants.product_id })
       .from(product_variants)
@@ -56,16 +50,12 @@ export class PolicyResolutionService {
     if (!variant?.product_id) {
       const reason = `Variant ${productVariantId} has no linked product — cannot resolve policy.`;
       this.logger.warn(`[resolveForVariant] ${reason}`);
-      console.log(`[PolicyResolutionService.resolveForVariant] ${reason}`);
       return { policy_id: null, source: 'none', reason };
     }
 
     const productId = variant.product_id;
 
     // ── Step 2: product-level override (highest priority) ────────────
-    console.log(
-      `[PolicyResolutionService.resolveForVariant] Querying product override for product: ${productId}`,
-    );
     const [override] = await db
       .select({
         policy_id: product_policy_override.policy_id,
@@ -89,7 +79,6 @@ export class PolicyResolutionService {
       if (policy?.is_active) {
         const reason = `Product override found for product ${productId} → policy ${override.policy_id}`;
         this.logger.log(`[resolveForVariant] ${reason}`);
-        console.log(`[PolicyResolutionService.resolveForVariant] ${reason}`);
         return {
           policy_id: override.policy_id,
           source: 'product_override',
@@ -104,9 +93,6 @@ export class PolicyResolutionService {
     }
 
     // ── Step 3: category-level policy (fallback) ─────────────────────
-    console.log(
-      `[PolicyResolutionService.resolveForVariant] Querying category policy for product: ${productId}`,
-    );
     const [product] = await db
       .select({ category_id: products.category_id })
       .from(products)
@@ -116,7 +102,6 @@ export class PolicyResolutionService {
     if (!product?.category_id) {
       const reason = `Product ${productId} has no category_id — cannot fall back to category policy.`;
       this.logger.warn(`[resolveForVariant] ${reason}`);
-      console.log(`[PolicyResolutionService.resolveForVariant] ${reason}`);
       return { policy_id: null, source: 'none', reason };
     }
 
@@ -135,7 +120,6 @@ export class PolicyResolutionService {
     if (catPolicy?.policy_id) {
       const reason = `Category policy found for category ${product.category_id} → policy ${catPolicy.policy_id}`;
       this.logger.log(`[resolveForVariant] ${reason}`);
-      console.log(`[PolicyResolutionService.resolveForVariant] ${reason}`);
       return {
         policy_id: catPolicy.policy_id,
         source: 'category_policy',
@@ -149,7 +133,6 @@ export class PolicyResolutionService {
       `category: ${product.category_id}). ` +
       `Add a category_policy for that category OR a product_policy_override for this product.`;
     this.logger.warn(`[resolveForVariant] ${reason}`);
-    console.log(`[PolicyResolutionService.resolveForVariant] ${reason}`);
     return { policy_id: null, source: 'none', reason };
   }
 
@@ -161,9 +144,6 @@ export class PolicyResolutionService {
     items: Array<{ orderItemId: string; productVariantId: string }>,
     tx?: DrizzleService,
   ): Promise<Map<string, PolicyResolutionResult & { orderItemId: string }>> {
-    console.log(
-      `[PolicyResolutionService.resolveForVariants] Resolving policies for ${items.length} item(s)`,
-    );
     const results = new Map<
       string,
       PolicyResolutionResult & { orderItemId: string }
@@ -180,7 +160,6 @@ export class PolicyResolutionService {
       });
     }
 
-    console.log('[PolicyResolutionService.resolveForVariants] Resolution completed');
     return results;
   }
 }

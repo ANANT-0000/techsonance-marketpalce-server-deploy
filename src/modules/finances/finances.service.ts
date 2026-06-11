@@ -41,6 +41,7 @@ import { COUNTRIES_COMPLIANCE, getStateByCode } from '../../common/constants';
 import { PaymentStatus } from '../../drizzle/types/types';
 import { multiplyRoundDivide } from '../promotions/promotion-calculator';
 import { CreateTaxSlabDto } from './dto/create-tax-slab.dto';
+import { FinancesErrorKeyEnum } from './constants/finances.enums';
 
 // ─── helpers ────────────────────────────────────────────────────
 export interface LineBreakdown {
@@ -154,14 +155,7 @@ export class FinancesService {
     const { search, offset, status, limit, date, sortby } = filters;
 
     try {
-      console.log('[FinancesService.getVendorEarnings] Request received');
-      console.log(
-        `[FinancesService.getVendorEarnings] Resolving company for domain: ${domain}`,
-      );
       const companyId = await this.resolveCompanyId(domain);
-      console.log(
-        `[FinancesService.getVendorEarnings] Company resolved: ${companyId}`,
-      );
 
       const whereConditions = [eq(orders.company_id, companyId)];
 
@@ -218,9 +212,6 @@ export class FinancesService {
           orderByClause = [asc(orders.total_amount)];
           break;
       }
-      console.log(
-        '[FinancesService.getVendorEarnings] Fetching total orders count',
-      );
       const [totalOrders] = await this.db
         .select({
           total: count(orders.id),
@@ -228,18 +219,11 @@ export class FinancesService {
         .from(orders)
         .where(eq(orders.company_id, companyId))
         .catch((err) => {
-          console.error(
-            '[FinancesService.getVendorEarnings] Error fetching total orders count:',
-            err,
-          );
           throw new InternalServerErrorException(
-            'Failed to fetch total orders count',
+            FinancesErrorKeyEnum.FAILED_TO_FETCH_TOTAL_ORDERS_COUNT,
             { cause: err },
           );
         });
-      console.log(
-        `[FinancesService.getVendorEarnings] Fetching order records with limit: ${limit}, offset: ${offset}`,
-      );
       const orderRecords = await this.db.query.orders
         .findMany({
           where: and(...whereConditions),
@@ -257,20 +241,13 @@ export class FinancesService {
           },
         })
         .catch((error) => {
-          console.error(
-            '[FinancesService.getVendorEarnings] Error fetching orders for earnings:',
-            error,
-          );
           throw new InternalServerErrorException(
-            'Failed to fetch orders for earnings',
+            FinancesErrorKeyEnum.FAILED_TO_FETCH_ORDERS_FOR_EARNINGS,
             {
               cause: error,
             },
           );
         });
-      console.log(
-        `[FinancesService.getVendorEarnings] Retrieved ${orderRecords.length} order records`,
-      );
 
       const earnings = orderRecords.map((order) => {
         const grossAmount = Number(order.total_amount || 0);
@@ -306,33 +283,19 @@ export class FinancesService {
         .filter((e) => e.status === PaymentStatus.PENDING)
         .reduce((sum, e) => sum + Number(e.net_earning), 0);
 
-      console.log(
-        `[FinancesService.getVendorEarnings] Earnings summary: cleared=${totalCleared.toFixed(2)}, pending=${totalPending.toFixed(2)}`,
-      );
       const result = {
         total_transactions: totalOrders.total,
         total_cleared_earnings: totalCleared.toFixed(2),
         total_pending_earnings: totalPending.toFixed(2),
         earnings,
       };
-      console.log(
-        '[FinancesService.getVendorEarnings] Request completed successfully',
-      );
       return result;
     } catch (error) {
       if (error instanceof HttpException) {
-        console.error(
-          '[FinancesService.getVendorEarnings] HTTP Exception:',
-          error,
-        );
         throw error;
       }
-      console.error(
-        '[FinancesService.getVendorEarnings] Unexpected error:',
-        error,
-      );
       throw new InternalServerErrorException(
-        'Error occurred while fetching company earnings',
+        FinancesErrorKeyEnum.ERROR_OCCURRED_WHILE_FETCHING_COMPANY_EARNINGS,
         { cause: error },
       );
     }
@@ -340,37 +303,21 @@ export class FinancesService {
 
   async getVendorFinancial(vendorId: string) {
     try {
-      console.log(
-        `[FinancesService.getVendorFinancial] Request received for vendorId: ${vendorId}`,
-      );
       const vendorRecord = await this.db.query.vendor
         .findFirst({
           where: eq(vendor.id, vendorId),
           columns: { company_id: true },
         })
         .catch((err) => {
-          console.error(
-            '[FinancesService.getVendorFinancial] Error fetching vendor record:',
-            err,
-          );
           throw new InternalServerErrorException(
-            'Failed to fetch vendor record',
+            FinancesErrorKeyEnum.FAILED_TO_FETCH_VENDOR_RECORD,
             { cause: err },
           );
         });
       if (!vendorRecord?.company_id) {
-        console.warn(
-          `[FinancesService.getVendorFinancial] Vendor or company not found for vendorId: ${vendorId}`,
-        );
-        throw new NotFoundException('Vendor or associated company not found');
+        throw new NotFoundException(FinancesErrorKeyEnum.VENDOR_OR_ASSOCIATED_COMPANY_NOT_FOUND);
       }
-      console.log(
-        `[FinancesService.getVendorFinancial] Vendor company resolved: ${vendorRecord.company_id}`,
-      );
 
-      console.log(
-        '[FinancesService.getVendorFinancial] Fetching vendor order records',
-      );
       const orderRecords = await this.db.query.orders
         .findMany({
           where: eq(orders.company_id, vendorRecord.company_id),
@@ -386,18 +333,11 @@ export class FinancesService {
           orderBy: [desc(orders.created_at)],
         })
         .catch((err) => {
-          console.error(
-            '[FinancesService.getVendorFinancial] Error fetching order records:',
-            err,
-          );
           throw new InternalServerErrorException(
-            'Failed to fetch vendor order records',
+            FinancesErrorKeyEnum.FAILED_TO_FETCH_VENDOR_ORDER_RECORDS,
             { cause: err },
           );
         });
-      console.log(
-        `[FinancesService.getVendorFinancial] Retrieved ${orderRecords.length} order records`,
-      );
 
       const earnings = orderRecords.map((order) => {
         const grossAmount = Number(order.total_amount || 0);
@@ -432,9 +372,6 @@ export class FinancesService {
         .filter((e) => e.status === PaymentStatus.PENDING)
         .reduce((sum, e) => sum + Number(e.net_earning), 0);
 
-      console.log(
-        `[FinancesService.getVendorFinancial] Financial summary: cleared=${totalCleared.toFixed(2)}, pending=${totalPending.toFixed(2)}`,
-      );
       const result = {
         success: true,
         message: 'Financial ledger retrieved successfully',
@@ -445,21 +382,13 @@ export class FinancesService {
           earnings,
         },
       };
-      console.log(
-        '[FinancesService.getVendorFinancial] Request completed successfully',
-      );
       return result;
     } catch (error) {
       if (error instanceof NotFoundException) {
-        console.error('[FinancesService.getVendorFinancial] Not found:', error);
         throw error;
       }
-      console.error(
-        '[FinancesService.getVendorFinancial] Unexpected error:',
-        error,
-      );
       throw new InternalServerErrorException(
-        'Error occurred while fetching vendor financial ledger',
+        FinancesErrorKeyEnum.ERROR_OCCURRED_WHILE_FETCHING_VENDOR_FINANCIAL_LEDGER,
         { cause: error },
       );
     }
@@ -477,17 +406,8 @@ export class FinancesService {
     },
   ) {
     try {
-      console.log(
-        `[FinancesService.getGstRegistrations] Request received for domain: ${domain}`,
-      );
       const companyId = await this.resolveCompanyId(domain);
-      console.log(
-        `[FinancesService.getGstRegistrations] Company resolved: ${companyId}`,
-      );
 
-      console.log(
-        '[FinancesService.getGstRegistrations] Fetching GST registrations from compliance',
-      );
       const rows = await this.db
         .select()
         .from(company_compliance)
@@ -500,38 +420,20 @@ export class FinancesService {
         )
         .orderBy(desc(company_compliance.created_at))
         .catch((err) => {
-          console.error(
-            '[FinancesService.getGstRegistrations] Error fetching GST registrations:',
-            err,
-          );
           throw new InternalServerErrorException(
-            'Failed to fetch GST registrations',
+            FinancesErrorKeyEnum.FAILED_TO_FETCH_GST_REGISTRATIONS,
             { cause: err },
           );
         });
 
-      console.log(
-        `[FinancesService.getGstRegistrations] Retrieved ${rows.length} compliance rows`,
-      );
       const registrations = groupComplianceAsGstRegistrations(rows);
-      console.log(
-        `[FinancesService.getGstRegistrations] Mapped to ${registrations.length} GST registrations`,
-      );
       return { success: true, data: registrations };
     } catch (error) {
       if (error instanceof HttpException) {
-        console.error(
-          '[FinancesService.getGstRegistrations] HTTP Exception:',
-          error,
-        );
         throw error;
       }
-      console.error(
-        '[FinancesService.getGstRegistrations] Unexpected error:',
-        error,
-      );
       throw new InternalServerErrorException(
-        'Failed to fetch GST registrations',
+        FinancesErrorKeyEnum.FAILED_TO_FETCH_GST_REGISTRATIONS,
         { cause: error },
       );
     }
@@ -557,18 +459,9 @@ export class FinancesService {
    */
   async getSingleGstRegistration(id: string, domain: string) {
     try {
-      console.log(
-        `[FinancesService.getSingleGstRegistration] Request received for id: ${id}, domain: ${domain}`,
-      );
       const companyId = await this.resolveCompanyId(domain);
-      console.log(
-        `[FinancesService.getSingleGstRegistration] Company resolved: ${companyId}`,
-      );
 
       // Fetch the anchor row (gst_number row) by its id
-      console.log(
-        '[FinancesService.getSingleGstRegistration] Fetching anchor GST registration row',
-      );
       const [anchorRow] = await this.db
         .select()
         .from(company_compliance)
@@ -581,30 +474,17 @@ export class FinancesService {
         )
         .limit(1)
         .catch((err) => {
-          console.error(
-            '[FinancesService.getSingleGstRegistration] Error fetching anchor row:',
-            err,
-          );
           throw new InternalServerErrorException(
-            'Failed to fetch GST registration',
+            FinancesErrorKeyEnum.FAILED_TO_FETCH_GST_REGISTRATION,
             { cause: err },
           );
         });
 
       if (!anchorRow) {
-        console.warn(
-          `[FinancesService.getSingleGstRegistration] Anchor row not found for id: ${id}`,
-        );
         return { success: false, data: null };
       }
-      console.log(
-        `[FinancesService.getSingleGstRegistration] Anchor row found: ${anchorRow.id}`,
-      );
 
       // Fetch all companion rows for this registration (same valid_until)
-      console.log(
-        '[FinancesService.getSingleGstRegistration] Fetching companion compliance rows',
-      );
       const allRows = await this.db
         .select()
         .from(company_compliance)
@@ -616,38 +496,20 @@ export class FinancesService {
           ),
         )
         .catch((err) => {
-          console.error(
-            '[FinancesService.getSingleGstRegistration] Error fetching companion rows:',
-            err,
-          );
           throw new InternalServerErrorException(
-            'Failed to fetch GST registration details',
+            FinancesErrorKeyEnum.FAILED_TO_FETCH_GST_REGISTRATION_DETAILS,
             { cause: err },
           );
         });
 
-      console.log(
-        `[FinancesService.getSingleGstRegistration] Retrieved ${allRows.length} compliance rows`,
-      );
       const [registration] = groupComplianceAsGstRegistrations(allRows);
-      console.log(
-        '[FinancesService.getSingleGstRegistration] Registration mapped successfully',
-      );
       return { success: true, data: registration ?? null };
     } catch (error) {
       if (error instanceof HttpException) {
-        console.error(
-          '[FinancesService.getSingleGstRegistration] HTTP Exception:',
-          error,
-        );
         throw error;
       }
-      console.error(
-        '[FinancesService.getSingleGstRegistration] Unexpected error:',
-        error,
-      );
       throw new InternalServerErrorException(
-        'Failed to fetch single GST registration',
+        FinancesErrorKeyEnum.FAILED_TO_FETCH_SINGLE_GST_REGISTRATION,
         { cause: error },
       );
     }
@@ -663,18 +525,8 @@ export class FinancesService {
 
   async createTaxProfile(domain: string, data: any) {
     try {
-      console.log('[FinancesService.createTaxProfile] Request received');
-      console.log(
-        `[FinancesService.createTaxProfile] Resolving company for domain: ${domain}`,
-      );
       const companyId = await this.resolveCompanyId(domain);
-      console.log(
-        `[FinancesService.createTaxProfile] Company resolved: ${companyId}`,
-      );
 
-      console.log(
-        `[FinancesService.createTaxProfile] Creating tax profile with type: ${data.profile_type}`,
-      );
 
       const [newProfile] = await this.db
         .insert(tax_profiles)
@@ -685,33 +537,18 @@ export class FinancesService {
         })
         .returning()
         .catch((err) => {
-          console.error(
-            '[FinancesService.createTaxProfile] Error inserting tax profile:',
-            err,
-          );
           throw new InternalServerErrorException(
-            'Failed to create tax profile',
+            FinancesErrorKeyEnum.FAILED_TO_CREATE_TAX_PROFILE,
             { cause: err },
           );
         });
 
-      console.log(
-        `[FinancesService.createTaxProfile] Tax profile created: ${newProfile?.id}`,
-      );
       return newProfile;
     } catch (error) {
       if (error instanceof HttpException) {
-        console.error(
-          '[FinancesService.createTaxProfile] HTTP Exception:',
-          error,
-        );
         throw error;
       }
-      console.error(
-        '[FinancesService.createTaxProfile] Unexpected error:',
-        error,
-      );
-      throw new InternalServerErrorException('Failed to create tax profile', {
+      throw new InternalServerErrorException(FinancesErrorKeyEnum.FAILED_TO_CREATE_TAX_PROFILE, {
         cause: error,
       });
     }
@@ -729,19 +566,9 @@ export class FinancesService {
     },
   ) {
     try {
-      console.log('[FinancesService.getTaxProfiles] Request received');
-      console.log(
-        `[FinancesService.getTaxProfiles] Resolving company for domain: ${domain}`,
-      );
       const companyId = await this.resolveCompanyId(domain);
-      console.log(
-        `[FinancesService.getTaxProfiles] Company resolved: ${companyId}`,
-      );
 
       const { limit, offset, date, status, search, sortby } = filters;
-      console.log(
-        `[FinancesService.getTaxProfiles] Fetching tax profiles with limit: ${limit}, offset: ${offset}`,
-      );
       const records = await this.db.query.tax_profiles
         .findMany({
           limit: limit,
@@ -750,33 +577,18 @@ export class FinancesService {
           orderBy: [desc(tax_profiles.created_at)],
         })
         .catch((err) => {
-          console.error(
-            '[FinancesService.getTaxProfiles] Error fetching tax profiles:',
-            err,
-          );
           throw new InternalServerErrorException(
-            'Failed to fetch tax profiles',
+            FinancesErrorKeyEnum.FAILED_TO_FETCH_TAX_PROFILES,
             { cause: err },
           );
         });
 
-      console.log(
-        `[FinancesService.getTaxProfiles] Retrieved ${records.length} tax profiles`,
-      );
       return records;
     } catch (error) {
       if (error instanceof HttpException) {
-        console.error(
-          '[FinancesService.getTaxProfiles] HTTP Exception:',
-          error,
-        );
         throw error;
       }
-      console.error(
-        '[FinancesService.getTaxProfiles] Unexpected error:',
-        error,
-      );
-      throw new InternalServerErrorException('Failed to fetch tax profiles', {
+      throw new InternalServerErrorException(FinancesErrorKeyEnum.FAILED_TO_FETCH_TAX_PROFILES, {
         cause: error,
       });
     }
@@ -784,20 +596,8 @@ export class FinancesService {
 
   async updateTaxProfile(id: string, domain: string, data: any) {
     try {
-      console.log(
-        `[FinancesService.updateTaxProfile] Request received for id: ${id}`,
-      );
-      console.log(
-        `[FinancesService.updateTaxProfile] Resolving company for domain: ${domain}`,
-      );
       const companyId = await this.resolveCompanyId(domain);
-      console.log(
-        `[FinancesService.updateTaxProfile] Company resolved: ${companyId}`,
-      );
 
-      console.log(
-        `[FinancesService.updateTaxProfile] Updating tax profile with profile_type: ${data.profile_type}`,
-      );
       const [updated] = await this.db
         .update(tax_profiles)
         .set({
@@ -809,40 +609,22 @@ export class FinancesService {
         )
         .returning()
         .catch((err) => {
-          console.error(
-            '[FinancesService.updateTaxProfile] Error updating tax profile:',
-            err,
-          );
           throw new InternalServerErrorException(
-            'Failed to update tax profile',
+            FinancesErrorKeyEnum.FAILED_TO_UPDATE_TAX_PROFILE,
             { cause: err },
           );
         });
 
       if (!updated) {
-        console.warn(
-          `[FinancesService.updateTaxProfile] Tax profile not found for id: ${id}`,
-        );
-        throw new NotFoundException('Tax profile not found');
+        throw new NotFoundException(FinancesErrorKeyEnum.TAX_PROFILE_NOT_FOUND);
       }
 
-      console.log(
-        `[FinancesService.updateTaxProfile] Tax profile updated: ${updated?.id}`,
-      );
       return updated;
     } catch (error) {
       if (error instanceof HttpException) {
-        console.error(
-          '[FinancesService.updateTaxProfile] HTTP Exception:',
-          error,
-        );
         throw error;
       }
-      console.error(
-        '[FinancesService.updateTaxProfile] Unexpected error:',
-        error,
-      );
-      throw new InternalServerErrorException('Failed to update tax profile', {
+      throw new InternalServerErrorException(FinancesErrorKeyEnum.FAILED_TO_UPDATE_TAX_PROFILE, {
         cause: error,
       });
     }
@@ -858,7 +640,7 @@ export class FinancesService {
         eq(tax_profiles.company_id, companyId),
       ),
     });
-    if (!record) throw new NotFoundException('Tax profile not found');
+    if (!record) throw new NotFoundException(FinancesErrorKeyEnum.TAX_PROFILE_NOT_FOUND);
     return { success: true, data: record };
   }
 
@@ -878,8 +660,7 @@ export class FinancesService {
       })
       .returning()
       .catch((err) => {
-        console.error('[createTaxSlab] Failed to insert tax_type:', err);
-        throw new InternalServerErrorException('Failed to create tax type', {
+        throw new InternalServerErrorException(FinancesErrorKeyEnum.FAILED_TO_CREATE_TAX_TYPE, {
           cause: err,
         });
       });
@@ -901,8 +682,7 @@ export class FinancesService {
       })
       .returning()
       .catch((err) => {
-        console.error('[createTaxSlab] Failed to insert tax_slab:', err);
-        throw new InternalServerErrorException('Failed to create tax slab', {
+        throw new InternalServerErrorException(FinancesErrorKeyEnum.FAILED_TO_CREATE_TAX_SLAB, {
           cause: err,
         });
       });
@@ -976,7 +756,7 @@ export class FinancesService {
       .where(and(eq(tax_slabs.id, id), eq(tax_slabs.company_id, companyId)))
       .limit(1);
 
-    if (!record) throw new NotFoundException('Tax slab not found');
+    if (!record) throw new NotFoundException(FinancesErrorKeyEnum.TAX_SLAB_NOT_FOUND);
     return { success: true, data: record };
   }
 
@@ -991,7 +771,7 @@ export class FinancesService {
       .where(and(eq(tax_slabs.id, id), eq(tax_slabs.company_id, companyId)))
       .limit(1);
 
-    if (!existing) throw new NotFoundException('Tax slab not found');
+    if (!existing) throw new NotFoundException(FinancesErrorKeyEnum.TAX_SLAB_NOT_FOUND);
 
     // Update tax_type (semantic fields) if provided
     if (
@@ -1008,7 +788,7 @@ export class FinancesService {
         })
         .where(eq(tax_types.id, existing.tax_type_id))
         .catch((err) => {
-          throw new InternalServerErrorException('Failed to update tax type', {
+          throw new InternalServerErrorException(FinancesErrorKeyEnum.FAILED_TO_UPDATE_TAX_TYPE, {
             cause: err,
           });
         });
@@ -1035,7 +815,7 @@ export class FinancesService {
       .where(and(eq(tax_slabs.id, id), eq(tax_slabs.company_id, companyId)))
       .returning()
       .catch((err) => {
-        throw new InternalServerErrorException('Failed to update tax slab', {
+        throw new InternalServerErrorException(FinancesErrorKeyEnum.FAILED_TO_UPDATE_TAX_SLAB, {
           cause: err,
         });
       });
@@ -1045,52 +825,27 @@ export class FinancesService {
 
   async getTaxRateOptions(domain: string) {
     try {
-      console.log('[FinancesService.getTaxRateOptions] Request received');
-      console.log(
-        `[FinancesService.getTaxRateOptions] Resolving company for domain: ${domain}`,
-      );
       const companyId = await this.resolveCompanyId(domain);
-      console.log(
-        `[FinancesService.getTaxRateOptions] Company resolved: ${companyId}`,
-      );
 
-      console.log(
-        '[FinancesService.getTaxRateOptions] Fetching tax rate options',
-      );
       const options = await this.db.query.tax_slabs
         .findMany({
           where: eq(tax_slabs.company_id, companyId),
           columns: { id: true, slab_name: true },
         })
         .catch((err) => {
-          console.error(
-            '[FinancesService.getTaxRateOptions] Error fetching tax rate options:',
-            err,
-          );
           throw new InternalServerErrorException(
-            'Failed to fetch tax rate options',
+            FinancesErrorKeyEnum.FAILED_TO_FETCH_TAX_RATE_OPTIONS,
             { cause: err },
           );
         });
 
-      console.log(
-        `[FinancesService.getTaxRateOptions] Retrieved ${options.length} tax rate options`,
-      );
       return options;
     } catch (error) {
       if (error instanceof HttpException) {
-        console.error(
-          '[FinancesService.getTaxRateOptions] HTTP Exception:',
-          error,
-        );
         throw error;
       }
-      console.error(
-        '[FinancesService.getTaxRateOptions] Unexpected error:',
-        error,
-      );
       throw new InternalServerErrorException(
-        'Failed to fetch tax rate options',
+        FinancesErrorKeyEnum.FAILED_TO_FETCH_TAX_RATE_OPTIONS,
         { cause: error },
       );
     }
@@ -1110,18 +865,8 @@ export class FinancesService {
     },
   ) {
     try {
-      console.log('[FinancesService.getProductTaxMapping] Request received');
-      console.log(
-        `[FinancesService.getProductTaxMapping] Resolving company for domain: ${domain}`,
-      );
       const companyId = await this.resolveCompanyId(domain);
-      console.log(
-        `[FinancesService.getProductTaxMapping] Company resolved: ${companyId}`,
-      );
 
-      console.log(
-        '[FinancesService.getProductTaxMapping] Fetching product tax mappings',
-      );
       const mappedData = await this.db
         .select({
           id: products.id,
@@ -1149,24 +894,13 @@ export class FinancesService {
           product_tax.updated_at,
         )
         .catch((error) => {
-          console.error(
-            '[FinancesService.getProductTaxMapping] Error fetching product tax mappings:',
-            error,
-          );
           throw new InternalServerErrorException(
-            'Failed to get product tax mapping',
+            FinancesErrorKeyEnum.FAILED_TO_GET_PRODUCT_TAX_MAPPING,
             {
               cause: error,
             },
           );
         });
-      console.log(
-        `[FinancesService.getProductTaxMapping] Retrieved  product tax mappings`,
-        mappedData,
-      );
-      console.log(
-        `[FinancesService.getProductTaxMapping] Retrieved ${mappedData.length} product tax mappings`,
-      );
       return mappedData.map((item) => ({
         ...item,
         sku: item.sku || 'No SKU assigned',
@@ -1174,18 +908,10 @@ export class FinancesService {
       }));
     } catch (error) {
       if (error instanceof HttpException) {
-        console.error(
-          '[FinancesService.getProductTaxMapping] HTTP Exception:',
-          error,
-        );
         throw error;
       }
-      console.error(
-        '[FinancesService.getProductTaxMapping] Unexpected error:',
-        error,
-      );
       throw new InternalServerErrorException(
-        'Failed to get product tax mapping',
+        FinancesErrorKeyEnum.FAILED_TO_GET_PRODUCT_TAX_MAPPING,
         {
           cause: error,
         },
@@ -1198,61 +924,34 @@ export class FinancesService {
     data: { product_id: string; tax_slab_id: string },
   ) {
     try {
-      console.log('[FinancesService.assignTaxToProduct] Request received');
-      console.log(
-        `[FinancesService.assignTaxToProduct] Resolving company for domain: ${domain}`,
-      );
       await this.resolveCompanyId(domain);
-      console.log(
-        `[FinancesService.assignTaxToProduct] Assigning tax to product: ${data.product_id}`,
-      );
 
-      console.log(
-        `[FinancesService.assignTaxToProduct] Checking existing mapping for slab: ${data.tax_slab_id}`,
-      );
       const existingMapping = await this.db.query.product_tax
         .findFirst({
           where: eq(product_tax.product_id, data.product_id),
         })
         .catch((err) => {
-          console.error(
-            '[FinancesService.assignTaxToProduct] Error checking existing mapping:',
-            err,
-          );
           throw new InternalServerErrorException(
-            'Failed to check product tax mapping',
+            FinancesErrorKeyEnum.FAILED_TO_CHECK_PRODUCT_TAX_MAPPING,
             { cause: err },
           );
         });
 
       if (existingMapping) {
-        console.log(
-          `[FinancesService.assignTaxToProduct] Updating existing mapping: ${existingMapping.id}`,
-        );
         const updated = await this.db
           .update(product_tax)
           .set({ tax_slab_id: data.tax_slab_id })
           .where(eq(product_tax.id, existingMapping.id))
           .returning()
           .catch((err) => {
-            console.error(
-              '[FinancesService.assignTaxToProduct] Error updating tax mapping:',
-              err,
-            );
             throw new InternalServerErrorException(
-              'Failed to update product tax mapping',
+              FinancesErrorKeyEnum.FAILED_TO_UPDATE_PRODUCT_TAX_MAPPING,
               { cause: err },
             );
           });
-        console.log(
-          '[FinancesService.assignTaxToProduct] Tax mapping updated successfully',
-        );
         return updated;
       }
 
-      console.log(
-        `[FinancesService.assignTaxToProduct] Creating new mapping for product: ${data.product_id}`,
-      );
       const inserted = await this.db
         .insert(product_tax)
         .values({
@@ -1261,34 +960,19 @@ export class FinancesService {
         })
         .returning()
         .catch((err) => {
-          console.error(
-            '[FinancesService.assignTaxToProduct] Error inserting tax mapping:',
-            err,
-          );
           throw new InternalServerErrorException(
-            'Failed to assign tax to product',
+            FinancesErrorKeyEnum.FAILED_TO_ASSIGN_TAX_TO_PRODUCT,
             { cause: err },
           );
         });
 
-      console.log(
-        '[FinancesService.assignTaxToProduct] Tax mapping created successfully',
-      );
       return inserted;
     } catch (error) {
       if (error instanceof HttpException) {
-        console.error(
-          '[FinancesService.assignTaxToProduct] HTTP Exception:',
-          error,
-        );
         throw error;
       }
-      console.error(
-        '[FinancesService.assignTaxToProduct] Unexpected error:',
-        error,
-      );
       throw new InternalServerErrorException(
-        'Failed to assign tax to product',
+        FinancesErrorKeyEnum.FAILED_TO_ASSIGN_TAX_TO_PRODUCT,
         {
           cause: error,
         },
@@ -1301,22 +985,12 @@ export class FinancesService {
     data: { product_ids: string[]; tax_slab_id: string },
   ) {
     try {
-      console.log('[FinancesService.bulkAssignProductTax] Request received');
-      console.log(
-        `[FinancesService.bulkAssignProductTax] Resolving company for domain: ${domain}`,
-      );
       await this.resolveCompanyId(domain);
 
       if (!data.product_ids.length) {
-        console.warn(
-          '[FinancesService.bulkAssignProductTax] No product IDs provided',
-        );
         return { success: false, message: 'No product IDs provided' };
       }
 
-      console.log(
-        `[FinancesService.bulkAssignProductTax] Assigning tax to ${data.product_ids.length} products`,
-      );
       const results = await this.db
         .insert(product_tax)
         .values(
@@ -1331,34 +1005,19 @@ export class FinancesService {
         })
         .returning()
         .catch((err) => {
-          console.error(
-            '[FinancesService.bulkAssignProductTax] Error bulk assigning tax:',
-            err,
-          );
           throw new InternalServerErrorException(
-            'Failed to bulk assign product tax',
+            FinancesErrorKeyEnum.FAILED_TO_BULK_ASSIGN_PRODUCT_TAX,
             { cause: err },
           );
         });
 
-      console.log(
-        `[FinancesService.bulkAssignProductTax] Successfully assigned tax to ${results.length} products`,
-      );
       return results;
     } catch (error) {
       if (error instanceof HttpException) {
-        console.error(
-          '[FinancesService.bulkAssignProductTax] HTTP Exception:',
-          error,
-        );
         throw error;
       }
-      console.error(
-        '[FinancesService.bulkAssignProductTax] Unexpected error:',
-        error,
-      );
       throw new InternalServerErrorException(
-        'Failed to bulk assign product tax',
+        FinancesErrorKeyEnum.FAILED_TO_BULK_ASSIGN_PRODUCT_TAX,
         { cause: error },
       );
     }
@@ -1384,28 +1043,11 @@ export class FinancesService {
   ) {
     try {
       const { search, date, sortBy } = filters;
-      console.log('[FinancesService.getGstInvoices] Request received');
-      console.log(
-        `[FinancesService.getGstInvoices] Resolving company for domain: ${domain}`,
-      );
       const companyId = await this.resolveCompanyId(domain);
-      console.log(
-        `[FinancesService.getGstInvoices] Company resolved: ${companyId}`,
-      );
-      console.log('[FinancesService.getGstInvoices] Applied filters:', {
-        search,
-        date,
-        sortBy,
-        limit: filters.limit,
-        offset: filters.offset,
-      });
 
       const conditions = [eq(gst_invoices.company_id, companyId)];
 
       if (search?.trim()) {
-        console.log(
-          `[FinancesService.getGstInvoices] Applying search filter: ${search.trim()}`,
-        );
         conditions.push(
           ilike(gst_invoices.invoice_number, `%${search.trim()}%`),
         );
@@ -1413,9 +1055,6 @@ export class FinancesService {
 
       if (date) {
         const parsedDate = new Date(date);
-        console.log(
-          `[FinancesService.getGstInvoices] Parsed date for filtering: ${parsedDate}`,
-        );
         if (!Number.isNaN(parsedDate.getTime())) {
           // conditions.push(
           //   eq(gst_invoices.invoice_date, parsedDate.toISOString().slice(0, 10)),
@@ -1423,14 +1062,10 @@ export class FinancesService {
         }
       }
 
-      console.log(
-        '[FinancesService.getGstInvoices] Fetching total invoice count',
-      );
       const [totalInvoices] = await this.db
         .select({ count: count(gst_invoices.id) })
         .from(gst_invoices)
         .where(eq(gst_invoices.company_id, companyId));
-      console.log('Total GST invoices matching filters:', totalInvoices.count);
       const records = await this.db.query.gst_invoices
         .findMany({
           where: and(...conditions),
@@ -1444,28 +1079,18 @@ export class FinancesService {
         })
         .catch((error) => {
           throw new InternalServerErrorException(
-            'Error fetching GST invoices: ' + error,
+            FinancesErrorKeyEnum.ERROR_FETCHING_GST_INVOICES + error,
           );
         });
-      console.log(`Retrieved ${records.length} GST invoices from DB`);
-      console.log('Sample record:', records);
       return {
         invoices: records,
         total: totalInvoices.count,
       };
     } catch (error) {
       if (error instanceof HttpException) {
-        console.error(
-          '[FinancesService.getGstInvoices] HTTP Exception:',
-          error,
-        );
         throw error;
       }
-      console.error(
-        '[FinancesService.getGstInvoices] Unexpected error:',
-        error,
-      );
-      throw new InternalServerErrorException('Failed to fetch GST invoices', {
+      throw new InternalServerErrorException(FinancesErrorKeyEnum.FAILED_TO_FETCH_GST_INVOICES, {
         cause: error,
       });
     }
@@ -1487,13 +1112,6 @@ export class FinancesService {
     domain?: string,
   ) {
     try {
-      console.log('[FinancesService.calculateOrderTaxes] Request received');
-      console.log(
-        `[FinancesService.calculateOrderTaxes] Calculating taxes for ${cartItems.length} cart items`,
-      );
-      console.log(
-        `[FinancesService.calculateOrderTaxes] Customer address: ${customerAddressId}, discount: ${discountAmount}`,
-      );
       const companyId = domain
         ? await this.resolveCompanyId(domain)
         : company_id;
@@ -1501,59 +1119,39 @@ export class FinancesService {
 
       if (!companyId) {
         throw new HttpException(
-          'Company ID is required for tax calculation',
+          FinancesErrorKeyEnum.COMPANY_ID_IS_REQUIRED_FOR_TAX_CALCULATION,
           HttpStatus.BAD_REQUEST,
         );
       }
 
       // 1. Customer state
-      console.log(
-        `[FinancesService.calculateOrderTaxes] Fetching customer address for ID: ${customerAddressId}`,
-      );
       const [customerAddr] = await tx
         .select({ state: address.state })
         .from(address)
         .where(eq(address.id, customerAddressId))
         .limit(1)
         .catch((err) => {
-          console.error(
-            `[FinancesService.calculateOrderTaxes] Error fetching customer address:`,
-            err,
-          );
           throw new HttpException(
-            'Error fetching customer address',
+            FinancesErrorKeyEnum.ERROR_FETCHING_CUSTOMER_ADDRESS,
             HttpStatus.INTERNAL_SERVER_ERROR,
           );
         });
 
       if (!customerAddr?.state) {
-        console.error(
-          `[FinancesService.calculateOrderTaxes] Invalid customer address or missing state for ID: ${customerAddressId}`,
-        );
         throw new HttpException(
-          'Invalid customer address or missing state',
+          FinancesErrorKeyEnum.INVALID_CUSTOMER_ADDRESS_OR_MISSING_STATE,
           HttpStatus.BAD_REQUEST,
         );
       }
       const customerState = customerAddr.state.trim().toLowerCase();
-      console.log(
-        `[FinancesService.calculateOrderTaxes] Customer state resolved: ${customerState}`,
-      );
 
-      console.log(
-        '[FinancesService.calculateOrderTaxes] Fetching company compliance details',
-      );
       const [countryCompliance] = await tx
         .select()
         .from(company_compliance)
         .where(eq(company_compliance.company_id, companyId))
         .catch((error) => {
-          console.error(
-            '[FinancesService.calculateOrderTaxes] Error fetching company compliance:',
-            error,
-          );
           throw new HttpException(
-            'Error fetching company compliance',
+            FinancesErrorKeyEnum.ERROR_FETCHING_COMPANY_COMPLIANCE,
             HttpStatus.INTERNAL_SERVER_ERROR,
           );
         });
@@ -1562,37 +1160,22 @@ export class FinancesService {
         (c) => c.country_code === countryCompliance.country_code,
       )?.fields;
       if (!fields) {
-        console.error(
-          `[FinancesService.calculateOrderTaxes] Country compliance config not found for country: ${countryCompliance.country_code}`,
-        );
         throw new HttpException(
-          'Country compliance config not found.',
+          FinancesErrorKeyEnum.COUNTRY_COMPLIANCE_CONFIG_NOT_FOUND,
           HttpStatus.BAD_REQUEST,
         );
       }
-      console.log(
-        `[FinancesService.calculateOrderTaxes] Country compliance found: ${countryCompliance.country_code}`,
-      );
 
       const gstField = fields.find(
         (f) => f.is_primary_tax_id || f.value === 'gstin',
       );
       if (!gstField?.value) {
-        console.error(
-          '[FinancesService.calculateOrderTaxes] GST field config missing',
-        );
         throw new HttpException(
-          'GST field config missing.',
+          FinancesErrorKeyEnum.GST_FIELD_CONFIG_MISSING,
           HttpStatus.BAD_REQUEST,
         );
       }
-      console.log(
-        `[FinancesService.calculateOrderTaxes] GST field identified: ${gstField.value}`,
-      );
 
-      console.log(
-        '[FinancesService.calculateOrderTaxes] Fetching vendor GST registration',
-      );
       const [gstNumberRow] = await tx
         .select()
         .from(company_compliance)
@@ -1604,51 +1187,32 @@ export class FinancesService {
           ),
         )
         .catch((error) => {
-          console.error(
-            '[FinancesService.calculateOrderTaxes] Error fetching vendor GST number:',
-            error,
-          );
           throw new HttpException(
-            'Error fetching vendor GST number',
+            FinancesErrorKeyEnum.ERROR_FETCHING_VENDOR_GST_NUMBER,
             HttpStatus.INTERNAL_SERVER_ERROR,
           );
         });
 
       if (!gstNumberRow?.field_value) {
-        console.error(
-          '[FinancesService.calculateOrderTaxes] Vendor GST number is missing',
-        );
         throw new HttpException(
-          'Vendor GST number is missing.',
+          FinancesErrorKeyEnum.VENDOR_GST_NUMBER_IS_MISSING,
           HttpStatus.BAD_REQUEST,
         );
       }
-      console.log(
-        `[FinancesService.calculateOrderTaxes] Vendor GST: ${gstNumberRow.field_value}`,
-      );
 
       const stateCode = gstNumberRow.field_value.slice(0, 2);
       if (!stateCode) {
-        console.error(
-          '[FinancesService.calculateOrderTaxes] Vendor GST state code is missing',
-        );
         throw new HttpException(
-          'Vendor GST state code is missing.',
+          FinancesErrorKeyEnum.VENDOR_GST_STATE_CODE_IS_MISSING,
           HttpStatus.BAD_REQUEST,
         );
       }
       const vendorState = getStateByCode(stateCode)?.state.trim().toLowerCase();
       const isIntraState = customerState === vendorState;
-      console.log(
-        `[FinancesService.calculateOrderTaxes] Vendor state: ${vendorState}, intra-state: ${isIntraState}`,
-      );
       // 2. Pre-compute base total once (used for proportional discount splitting)
       const baseTotal = cartItems.reduce(
         (sum, item) => sum + Number(item.price) * item.quantity,
         0,
-      );
-      console.log(
-        `[FinancesService.calculateOrderTaxes] Base total calculated: ${baseTotal}`,
       );
 
       // 3. Per-line breakdown — this is the single source of truth for all
@@ -1662,13 +1226,7 @@ export class FinancesService {
       const appliedTaxTypeIds = new Set<string>();
       const lineBreakdown: LineBreakdown[] = [];
 
-      console.log(
-        `[FinancesService.calculateOrderTaxes] Starting line-by-line tax breakdown for ${cartItems.length} items`,
-      );
       for (const item of cartItems) {
-        console.log(
-          `[FinancesService.calculateOrderTaxes] Processing variant: ${item.variantId}, qty: ${item.quantity}, price: ${item.price}`,
-        );
         const originalUnitPrice = Number(item.price);
         const originalTotal = originalUnitPrice * item.quantity;
 
@@ -1684,18 +1242,11 @@ export class FinancesService {
             : 0;
 
         // Resolve tax rate for this variant
-        console.log(
-          `[FinancesService.calculateOrderTaxes] Fetching product variant: ${item.variantId}`,
-        );
         const [variantRecord] = await tx
           .select({ product_id: product_variants.product_id })
           .from(product_variants)
           .where(eq(product_variants.id, item.variantId))
           .catch((err) => {
-            console.error(
-              `[FinancesService.calculateOrderTaxes] Error fetching variant ${item.variantId}:`,
-              err,
-            );
             throw new HttpException(
               `Error fetching product variant: ${item.variantId}`,
               HttpStatus.INTERNAL_SERVER_ERROR,
@@ -1703,18 +1254,12 @@ export class FinancesService {
           });
 
         if (!variantRecord?.product_id) {
-          console.error(
-            `[FinancesService.calculateOrderTaxes] Product variant not found: ${item.variantId}`,
-          );
           throw new HttpException(
             `Product variant not found for ID: ${item.variantId}`,
             HttpStatus.BAD_REQUEST,
           );
         }
 
-        console.log(
-          `[FinancesService.calculateOrderTaxes] Fetching tax mapping for product: ${variantRecord.product_id}`,
-        );
         const [productTaxMapping] = await tx
           .select({
             totalRate: tax_slabs.total_rate,
@@ -1726,12 +1271,8 @@ export class FinancesService {
           .where(eq(product_tax.product_id, variantRecord.product_id))
           .limit(1)
           .catch((error) => {
-            console.error(
-              `[FinancesService.calculateOrderTaxes] Error fetching tax mapping for product ${variantRecord.product_id}:`,
-              error,
-            );
             throw new HttpException(
-              'Error fetching tax mapping for product',
+              FinancesErrorKeyEnum.ERROR_FETCHING_TAX_MAPPING_FOR_PRODUCT,
               HttpStatus.INTERNAL_SERVER_ERROR,
             );
           });
@@ -1741,9 +1282,6 @@ export class FinancesService {
           : 0;
         const taxTypeId = productTaxMapping?.taxTypeId ?? null;
         if (taxTypeId) appliedTaxTypeIds.add(taxTypeId);
-        console.log(
-          `[FinancesService.calculateOrderTaxes] Variant tax rate: ${taxPercentage}%, type: ${taxTypeId}`,
-        );
 
         // Tax extraction from tax-inclusive discounted total
         // Formula: taxAmount = discountedTotal - discountedTotal / (1 + rate/100)
@@ -1755,9 +1293,6 @@ export class FinancesService {
         const sgst = isIntraState ? taxAmount / 2 : 0;
         const igst = !isIntraState ? taxAmount : 0;
 
-        console.log(
-          `[FinancesService.calculateOrderTaxes] Line tax calculated: CGST=${cgst.toFixed(2)}, SGST=${sgst.toFixed(2)}, IGST=${igst.toFixed(2)}`,
-        );
 
         totalCgst += cgst;
         totalSgst += sgst;
@@ -1782,9 +1317,6 @@ export class FinancesService {
         });
       }
 
-      console.log(
-        `[FinancesService.calculateOrderTaxes] Tax breakdown complete: CGST=${totalCgst.toFixed(2)}, SGST=${totalSgst.toFixed(2)}, IGST=${totalIgst.toFixed(2)}, total=${totalTax.toFixed(2)}`,
-      );
       const result = {
         subTotal: Number(netSubTotal.toFixed(2)),
         totalCgst: Number(totalCgst.toFixed(2)),
@@ -1798,24 +1330,13 @@ export class FinancesService {
         appliedTaxTypeIds: Array.from(appliedTaxTypeIds),
         lineBreakdown,
       };
-      console.log(
-        '[FinancesService.calculateOrderTaxes] Tax calculation completed successfully',
-      );
       return result;
     } catch (error) {
       if (error instanceof HttpException) {
-        console.error(
-          '[FinancesService.calculateOrderTaxes] HTTP Exception:',
-          error,
-        );
         throw error;
       }
-      console.error(
-        '[FinancesService.calculateOrderTaxes] Unexpected error:',
-        error,
-      );
       throw new InternalServerErrorException(
-        'Failed to calculate order taxes',
+        FinancesErrorKeyEnum.FAILED_TO_CALCULATE_ORDER_TAXES,
         { cause: error },
       );
     }

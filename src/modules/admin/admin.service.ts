@@ -21,6 +21,7 @@ import {
 import { type DrizzleDB } from '../../drizzle/types/drizzle';
 import { OrderStatus, UserRole } from '../../drizzle/types/types';
 import { ConfigService } from '@nestjs/config';
+import { AdminErrorKeyEnum } from './constants/admin.enums';
 @Injectable()
 export class AdminService {
   constructor(
@@ -35,18 +36,16 @@ export class AdminService {
   ): Promise<Record<string, unknown>> {
     if (!email || !password) {
       throw new HttpException(
-        'Email and password are required',
+        AdminErrorKeyEnum.EMAIL_AND_PASSWORD_ARE_REQUIRED,
         HttpStatus.BAD_REQUEST,
       );
     }
-    console.log('email', email, password);
     try {
       const [adminRole] = await this.db
         .select()
         .from(user_roles)
         .where(eq(user_roles.role_name, UserRole.ADMIN))
         .limit(1);
-      console.log('admin role', adminRole);
       const [existingUser] = await this.db
 
         .select()
@@ -55,12 +54,10 @@ export class AdminService {
         .limit(1);
       if (!existingUser) {
         throw new HttpException(
-          'Admin user not found',
+          AdminErrorKeyEnum.ADMIN_USER_NOT_FOUND,
           HttpStatus.UNAUTHORIZED,
         );
       }
-
-      console.log('existing user', existingUser);
 
       //--------------------------------------
       // for bypass Admin login ,uncommit in production
@@ -81,14 +78,11 @@ export class AdminService {
       // }
 
       //--------------------------------------
-      console.log('checking password');
       const isPasswordValid: boolean =
         password === this.configService.get('ADMIN_PASSWORD');
       if (!isPasswordValid) {
-        console.log('Invalid password');
-        throw new HttpException('Invalid password', HttpStatus.UNAUTHORIZED);
+        throw new HttpException(AdminErrorKeyEnum.INVALID_PASSWORD, HttpStatus.UNAUTHORIZED);
       }
-      console.log('password is valid');
       const payload: {
         sub: string;
         email: string;
@@ -107,13 +101,10 @@ export class AdminService {
         expiresIn: '7d',
         secret: process.env.JWT_REFRESH_SECRET || 'defaultRefreshTokenSecret',
       });
-      console.log('access token', accessToken);
-      console.log('refresh token', refreshToken);
       const filteredUser = {
         ...existingUser,
         password_hash: undefined,
       };
-      console.log('admin login response', filteredUser);
       return {
         user: filteredUser,
         role: UserRole.ADMIN,
@@ -121,7 +112,7 @@ export class AdminService {
         refresh_token: refreshToken,
       };
     } catch (error) {
-      throw new InternalServerErrorException('Failed to login admin', {
+      throw new InternalServerErrorException(AdminErrorKeyEnum.FAILED_TO_LOGIN, {
         cause: error,
       });
     }
@@ -153,7 +144,7 @@ export class AdminService {
 
       return topVendors;
     } catch (error) {
-      throw new InternalServerErrorException('Failed to fetch top vendors', {
+      throw new InternalServerErrorException(AdminErrorKeyEnum.FAILED_TO_FETCH_TOP_VENDORS, {
         cause: error,
       });
     }

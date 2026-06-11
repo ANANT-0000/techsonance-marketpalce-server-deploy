@@ -30,6 +30,7 @@ import {
   promotions,
 } from '../../drizzle/schema/promotions.schema';
 import { PromoEventType, PromotionStatus } from '../../drizzle/types/types';
+import { CheckoutErrorKeyEnum } from './constants/checkout.enums';
 
 @Injectable()
 export class CheckoutService {
@@ -41,16 +42,7 @@ export class CheckoutService {
   ) {}
 
   private async resolveCompanyId(domain: string): Promise<string> {
-    console.log(
-      `[CheckoutService.resolveCompanyId] Resolving company for domain: ${domain}`,
-    );
     const filteredDomain = domainExtractor(domain);
-    console.log(
-      `[CheckoutService.resolveCompanyId] Extracted filter domain: ${filteredDomain}`,
-    );
-    console.log(
-      '[CheckoutService.resolveCompanyId] Querying CompanyService.find(...)',
-    );
     return this.companyService.find(filteredDomain);
   }
   async initiateCheckout(
@@ -60,45 +52,35 @@ export class CheckoutService {
   ) {
     const { addressId, paymentMethod, cartId, productVariantId } =
       initiateCheckoutDto;
-    console.log('[CheckoutService.initiateCheckout] Request received', {
-      initiateCheckoutDto,
-    });
     if (!cartId && !productVariantId) {
       throw new HttpException(
-        'Either cartId or productVariantId must be provided',
+        CheckoutErrorKeyEnum.EITHER_CARTID_OR_PRODUCTVARIANTID_MUST_BE_PROVIDED,
         HttpStatus.BAD_REQUEST,
       );
     }
-    console.log('[CheckoutService.initiateCheckout] Resolving company id');
     if (!domain) {
       throw new HttpException(
-        'Company domain must be provided in headers',
+        CheckoutErrorKeyEnum.COMPANY_DOMAIN_MUST_BE_PROVIDED_IN_HEADERS,
         HttpStatus.BAD_REQUEST,
       );
     }
     const companyId = await this.resolveCompanyId(domain);
-    console.log(
-      `[CheckoutService.initiateCheckout] Company ID resolved: ${companyId}`,
-    );
 
-    console.log('[CheckoutService.initiateCheckout] Querying customer address');
     const addressRecord = await this.db
       .select()
       .from(address)
       .where(eq(address.user_id, userId))
       .limit(1)
       .catch((error) => {
-        console.error('Error fetching address:', error);
         throw new HttpException(
-          'Failed to fetch address for checkout',
+          CheckoutErrorKeyEnum.FAILED_TO_FETCH_ADDRESS_FOR_CHECKOUT,
           HttpStatus.INTERNAL_SERVER_ERROR,
           { cause: error },
         );
       });
     if (!addressRecord) {
-      throw new HttpException('Address not found', HttpStatus.NOT_FOUND);
+      throw new HttpException(CheckoutErrorKeyEnum.ADDRESS_NOT_FOUND, HttpStatus.NOT_FOUND);
     }
-    console.log('[CheckoutService.initiateCheckout] Resolving order lines');
     const orderLines = await this._resolveOrderLines(
       userId,
       cartId,
@@ -107,13 +89,10 @@ export class CheckoutService {
     );
     if (!orderLines || orderLines.length === 0) {
       throw new HttpException(
-        'No valid order lines found for checkout',
+        CheckoutErrorKeyEnum.NO_VALID_ORDER_LINES_FOUND_FOR_CHECKOUT,
         HttpStatus.BAD_REQUEST,
       );
     }
-    console.log(
-      '[CheckoutService.initiateCheckout] Creating order through OrdersService',
-    );
     return await this.ordersService.createOrder({
       userId,
       companyId,
@@ -133,20 +112,10 @@ export class CheckoutService {
       cartId,
       productVariantId,
     } = dto;
-    console.log('[CheckoutService.verifyCheckout] Request received', {
-      discountApplied,
-      promotionId,
-      orderId,
-      isSuccess,
-      cartId,
-      productVariantId,
-      domain,
-    });
 
-    console.log('[CheckoutService.verifyCheckout] Resolving company id');
     const companyId = await this.resolveCompanyId(domain);
     if (!companyId) {
-      throw new HttpException('Company not found', HttpStatus.NOT_FOUND);
+      throw new HttpException(CheckoutErrorKeyEnum.COMPANY_NOT_FOUND, HttpStatus.NOT_FOUND);
     }
 
     const [existingOrder] = await this.db
@@ -155,10 +124,9 @@ export class CheckoutService {
       .where(and(eq(orders.id, orderId), eq(orders.company_id, companyId)))
       .limit(1);
     if (!existingOrder.user_id) {
-      throw new HttpException('user not found', HttpStatus.BAD_REQUEST);
+      throw new HttpException(CheckoutErrorKeyEnum.USER_NOT_FOUND, HttpStatus.BAD_REQUEST);
     }
     try {
-      console.log('[CheckoutService.verifyCheckout] Querying customer record');
       const [customerRecord] = await this.db
         .select({
           email: user.email,
@@ -174,7 +142,7 @@ export class CheckoutService {
           !customerRecord.last_name &&
           !customerRecord.email)
       ) {
-        throw new HttpException('customer not found', HttpStatus.NOT_FOUND);
+        throw new HttpException(CheckoutErrorKeyEnum.CUSTOMER_NOT_FOUND, HttpStatus.NOT_FOUND);
       }
       const customerDetails = {
         email: customerRecord.email,
@@ -190,30 +158,19 @@ export class CheckoutService {
           companyId,
         );
       if (verificationResult.success) {
-        console.log('[CheckoutService.verifyCheckout] Verification successful');
         if (productVariantId) {
-          console.log(
-            '\n\n\n\n\n[CheckoutService.verifyCheckout] Clearing single product variant checkout record after successful checkout',
-          );
           await verificationResult.tx
             .delete(cart_items)
             .where(eq(cart_items.product_variant_id, productVariantId))
             .catch((error) => {
-              console.error(
-                'Error clearing single product variant checkout record:',
-                error,
-              );
               throw new HttpException(
-                'Failed to clear single product variant checkout record after successful checkout',
+                CheckoutErrorKeyEnum.FAILED_TO_CLEAR_SINGLE_PRODUCT_VARIANT_CHECKOUT_RECORD_AFTER_SUCCESSFUL_CHECKOUT,
                 HttpStatus.INTERNAL_SERVER_ERROR,
                 { cause: error },
               );
             });
         }
         if (cartId) {
-          console.log(
-            '[CheckoutService.verifyCheckout] Clearing cart after checkout',
-          );
           await this._clearCart(verificationResult.tx, cartId, orderId);
         }
       }
@@ -223,17 +180,13 @@ export class CheckoutService {
         orderId: verificationResult.orderId,
       };
     } catch (error) {
-      console.log(
-        '[CheckoutService.verifyCheckout] Error occurred while verifying checkout:',
-        error,
-      );
       if (
         error instanceof HttpException ||
         error instanceof InternalServerErrorException
       ) {
         throw error; // Re-throw known HTTP exceptions
       }
-      throw new InternalServerErrorException('Failed to verify checkout', {
+      throw new InternalServerErrorException(CheckoutErrorKeyEnum.FAILED_TO_VERIFY_CHECKOUT, {
         cause: error,
       });
     }
@@ -248,9 +201,6 @@ export class CheckoutService {
     { variantId: string; price: number; quantity: number }[] | undefined
   > {
     if (productVariantId) {
-      console.log(
-        '[CheckoutService._resolveOrderLines] Resolving single product variant checkout line',
-      );
       const [variant] = await this.db
         .select({
           id: product_variants.id,
@@ -261,7 +211,7 @@ export class CheckoutService {
         .limit(1);
       if (!variant) {
         throw new HttpException(
-          'Product variant not found',
+          CheckoutErrorKeyEnum.PRODUCT_VARIANT_NOT_FOUND,
           HttpStatus.NOT_FOUND,
         );
       }
@@ -274,16 +224,13 @@ export class CheckoutService {
       ];
     }
     if (cartId) {
-      console.log(
-        '[CheckoutService._resolveOrderLines] Resolving cart checkout lines',
-      );
       const [cartRecord] = await this.db
         .select({ id: carts.id })
         .from(carts)
         .where(eq(carts.id, cartId))
         .limit(1);
       if (!cartRecord) {
-        throw new HttpException('Cart not found', HttpStatus.NOT_FOUND);
+        throw new HttpException(CheckoutErrorKeyEnum.CART_NOT_FOUND, HttpStatus.NOT_FOUND);
       }
       const cartItems = await this.db
         .select({
@@ -306,20 +253,12 @@ export class CheckoutService {
   }
 
   private async _clearCart(tx: DrizzleService, cartId: string, userId: string) {
-    console.log(
-      '[CheckoutService._clearCart] Clearing cart after successful checkout',
-      {
-        cartId,
-        userId,
-      },
-    );
     await tx
       .delete(carts)
       .where(and(eq(carts.id, cartId), eq(carts.user_id, userId)))
       .catch((error) => {
-        console.error('Error clearing cart:', error);
         throw new HttpException(
-          'Failed to clear cart after successful checkout',
+          CheckoutErrorKeyEnum.FAILED_TO_CLEAR_CART_AFTER_SUCCESSFUL_CHECKOUT,
           HttpStatus.INTERNAL_SERVER_ERROR,
           { cause: error },
         );
@@ -328,13 +267,11 @@ export class CheckoutService {
       .delete(cart_items)
       .where(eq(cart_items.cart_id, cartId))
       .catch((error) => {
-        console.error('Error clearing cart items:', error);
         throw new HttpException(
-          'Failed to clear cart items after successful checkout',
+          CheckoutErrorKeyEnum.FAILED_TO_CLEAR_CART_ITEMS_AFTER_SUCCESSFUL_CHECKOUT,
           HttpStatus.INTERNAL_SERVER_ERROR,
           { cause: error },
         );
       });
-    console.log('[CheckoutService._clearCart] Cart cleared successfully');
   }
 }

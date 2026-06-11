@@ -6,10 +6,7 @@ import {
   Param,
   Patch,
   Post,
-  Query,
-  Req,
   UseGuards,
-  Delete,
 } from '@nestjs/common';
 import { CompanyService } from './company.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
@@ -17,6 +14,8 @@ import { RoleGuard } from '../../guards/role.guard';
 import { Role } from '../../enums/role.enum';
 import { Roles } from '../../common/decorators/roles.decorator';
 import { VendorsService } from '../vendors/vendors.service';
+import { COMPANY_CONTROLLER_MESSAGES } from './constants/company.constants';
+import { CreateAddressDto } from '../address/dto/createAddress.dto';
 
 @Controller({ version: '1', path: 'company' })
 export class CompanyController {
@@ -26,7 +25,7 @@ export class CompanyController {
   ) {}
   @Get()
   test() {
-    return 'Company controller is working';
+    return COMPANY_CONTROLLER_MESSAGES.HEALTH_CHECK;
   }
   @Get('profile')
   // @UseGuards(JwtAuthGuard)
@@ -46,7 +45,7 @@ export class CompanyController {
   @Roles(Role.VENDOR, Role.ADMIN)
   async addCompanyAddress(
     @Headers('company-domain') domain: string,
-    @Body() payload: any,
+    @Body() payload: CreateAddressDto,
   ) {
     return this.vendorService.createRegistrationAddress(domain, payload);
   }

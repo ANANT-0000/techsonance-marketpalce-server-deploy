@@ -65,6 +65,7 @@ import {
 } from '../promotions/promotion-calculator';
 import { CouponService } from '../coupon/coupon.service';
 import { PromotionsService } from '../promotions/promotions.service';
+import { OrdersErrorKeyEnum } from './constants/orders.enums';
 
 @Injectable()
 export class OrdersService {
@@ -83,22 +84,9 @@ export class OrdersService {
   ) { }
   private async resolveCompanyId(domain: string): Promise<string> {
     const filteredDomain = domainExtractor(domain);
-    console.log(
-      `[OrdersService.resolveCompanyId] Resolving company for domain: ${domain}`,
-    );
-    console.log(
-      `[OrdersService.resolveCompanyId] Extracted filter domain: ${filteredDomain}`,
-    );
-    console.log(
-      `[OrdersService.resolveCompanyId] Querying CompanyService.find(...)`,
-    );
     const companyId = await this.companyService.find(filteredDomain);
-    console.log(
-      `[OrdersService.resolveCompanyId] Company resolved: ${companyId}`,
-    );
     return companyId;
   }
-
   async createOrder({
     userId,
     companyId,
@@ -115,16 +103,6 @@ export class OrdersService {
     promotion_id?: string;
   }) {
     try {
-      console.log(
-        '[OrdersService.createOrder] Starting order creation request',
-        {
-          userId,
-          companyId,
-          addressId,
-          itemCount: orderLines.length,
-          paymentMethod,
-        },
-      );
       const totalAmount = orderLines.reduce(
         (acc, line) => acc + line.price * line.quantity,
         0,
@@ -132,12 +110,7 @@ export class OrdersService {
       if (totalAmount <= 0) {
         throw new Error('Total amount must be greater than zero');
       }
-
       const orderResult = await this.db.transaction(async (tx) => {
-        console.log('[OrdersService.createOrder] Transaction started');
-        console.log(
-          '[OrdersService.createOrder] Deducting stock for order lines',
-        );
         await this.inventoryService.deductStockForOrder(
           orderLines.map((l) => ({
             variantId: l.variantId,
@@ -146,13 +119,10 @@ export class OrdersService {
           companyId,
           tx as DrizzleService,
         );
-        console.log('[OrdersService.createOrder] Stock deduction complete');
-
         // STEP 2: Apply promotion discount on base total BEFORE tax
         let discountAmount = 0;
         let discountResult: DiscountResult | null = null;
         let appliedPromotion: typeof promotions.$inferSelect | null = null;
-
         if (promotion_id) {
           const [promotion] = await tx
             .select()
@@ -170,14 +140,12 @@ export class OrdersService {
               ),
             )
             .limit(1);
-
           if (!promotion) {
             throw new HttpException(
-              'Promotion is not active or has expired',
+              OrdersErrorKeyEnum.PROMOTION_IS_NOT_ACTIVE_OR_HAS_EXPIRED,
               HttpStatus.BAD_REQUEST,
             );
           }
-
           // --- NEW: Validate per-user usage via promotion_usage records ---
           const [existingUsage] = await tx
             .select({ id: promotion_usage.id })
@@ -189,10 +157,9 @@ export class OrdersService {
               ),
             )
             .limit(1);
-
           if (existingUsage) {
             throw new HttpException(
-              'You have already used this promotion',
+              OrdersErrorKeyEnum.YOU_HAVE_ALREADY_USED_THIS_PROMOTION,
               HttpStatus.BAD_REQUEST,
             );
           }
@@ -206,25 +173,15 @@ export class OrdersService {
               unit_price: l.price,
             })),
           };
-          console.log(
-            '[OrdersService.createOrder] Promotion details:',
-            promotion,
-          );
           discountResult = calculatePromotionDiscount(
             promotion.promotion_type,
             promotion.discount_config as DiscountConfig,
             cartCtx,
           );
-          console.log(
-            '[OrdersService.createOrder] Promotion discount calculated',
-            { discountResult },
-          );
           discountAmount = discountResult.discountAmount;
           appliedPromotion = promotion;
         }
-
         // STEP 3: Calculate tax on the DISCOUNTED base total
-
         const taxData = await this.financesService.calculateOrderTaxes(
           addressId,
           orderLines,
@@ -232,12 +189,7 @@ export class OrdersService {
           tx as DrizzleService,
           companyId,
         );
-        console.log('[OrdersService.createOrder] Tax calculation complete', {
-          taxData,
-        });
-
         const grandTotal = taxData.grandTotal;
-
         // ── 3. Create the main Order (uses grandTotal after discount) ─────────────────
         const [newOrder] = await tx
           .insert(orders)
@@ -249,20 +201,11 @@ export class OrdersService {
           })
           .returning({ id: orders.id })
           .catch((error) => {
-            console.error('Error inserting order:', error);
-            throw new InternalServerErrorException('Failed to create order', {
+            throw new InternalServerErrorException(OrdersErrorKeyEnum.FAILED_TO_CREATE_ORDER, {
               cause: error,
             });
           });
-
-        console.log('\n\n\n[OrdersService.createOrder] Order row created', {
-          orderId: newOrder.id,
-          grandTotalBeforeDiscount: taxData.grandTotal,
-          discountAmount,
-          grandTotalAfter: grandTotal,
-        });
         // 5. Create GST Invoice record
-        console.log('[OrdersService.createOrder] Incrementing invoice sequence counter atomically');
         const [updatedConfig] = await tx
           .update(company_document_config)
           .set({
@@ -274,7 +217,6 @@ export class OrdersService {
             prefix: company_document_config.invoice_number_prefix,
             format: company_document_config.invoice_number_format,
           });
-
         let invoiceNumber: string;
         if (updatedConfig) {
           const counter = updatedConfig.counter;
@@ -283,7 +225,6 @@ export class OrdersService {
           const year = new Date().getFullYear();
           const seq6 = String(counter).padStart(6, '0');
           const seq8 = String(counter).padStart(8, '0');
-          
           invoiceNumber = format
             .replace('{PREFIX}', prefix)
             .replace('{YYYY}', String(year))
@@ -292,8 +233,6 @@ export class OrdersService {
         } else {
           invoiceNumber = `INV-${Date.now()}`;
         }
-
-        console.log(`[OrdersService.createOrder] Creating GST invoice record with number: ${invoiceNumber}`);
         await tx.insert(gst_invoices).values({
           company_id: companyId,
           order_id: newOrder.id,
@@ -305,14 +244,11 @@ export class OrdersService {
           total_tax: String(taxData.totalTax),
           gst_amount: String(taxData.totalTax),
         });
-
         const lineBreakdownByVariant = new Map(
           taxData.lineBreakdown.map((l) => [l.variantId, l]),
         );
-
         const orderItemsData = orderLines.map((line) => {
           const breakdown = lineBreakdownByVariant.get(line.variantId);
-
           // Defensive fallback: if somehow a variant has no breakdown entry, use
           // the original price (should never happen since both arrays come from the
           // same orderLines input, but guards against future refactors).
@@ -328,22 +264,17 @@ export class OrdersService {
             company_id: companyId,
           };
         });
-        console.log('[OrdersService.createOrder] Inserting order items', {
-          itemCount: orderItemsData.length,
-        });
         await tx
           .insert(order_items)
           .values(orderItemsData)
           .catch((error) => {
-            console.error('Error inserting order items:', error);
             throw new InternalServerErrorException(
-              'Failed to create order items',
+              OrdersErrorKeyEnum.FAILED_TO_CREATE_ORDER_ITEMS,
               {
                 cause: error,
               },
             );
           });
-
         const insertedItems = await tx
           .select({
             id: order_items.id,
@@ -351,10 +282,6 @@ export class OrdersService {
           })
           .from(order_items)
           .where(eq(order_items.order_id, newOrder.id));
-
-        console.log('[OrdersService.createOrder] Order items inserted', {
-          insertedItemIds: insertedItems.map((item) => item.id),
-        });
         const resolutions =
           await this.policyResolutionService.resolveForVariants(
             insertedItems.map((item) => ({
@@ -364,16 +291,11 @@ export class OrdersService {
             tx as DrizzleService,
           );
 
-        console.log('[OrdersService.createOrder] Policy resolution complete', {
-          resolutionCount: resolutions.size,
-        });
-
         for (const [orderItemId, resolution] of resolutions.entries()) {
           if (!resolution.policy_id) {
             // Already logged by PolicyResolutionService — no snapshot needed
             continue;
           }
-
           try {
             await this.productPoliciesService.createOrderItemPolicySnapshot(
               {
@@ -384,22 +306,11 @@ export class OrdersService {
               companyId,
               tx as DrizzleService,
             );
-
-            console.log(
-              `[createOrder] Snapshot created for item ${orderItemId} ` +
-              `via ${resolution.source}: ${resolution.reason}`,
-            );
           } catch (err) {
             // Don't let a snapshot failure abort the whole order
-            console.error(
-              `[createOrder] Snapshot failed for item ${orderItemId}:`,
-              err,
-            );
           }
         }
-
         // 8. Create payment record (PENDING — confirmed later via verifyCheckout)
-        console.log('[OrdersService.createOrder] Creating payment record');
         // ── 8. Payment record ─────────────────────────────────────────────────────────
         await tx
           .insert(payments)
@@ -412,15 +323,13 @@ export class OrdersService {
             transaction_ref: `txn_${newOrder.id}_${Date.now()}`,
           })
           .catch((error) => {
-            console.error('Error inserting payment record:', error);
             throw new InternalServerErrorException(
-              'Failed to create payment record',
+              OrdersErrorKeyEnum.FAILED_TO_CREATE_PAYMENT_RECORD,
               {
                 cause: error,
               },
             );
           });
-
         // ── 9. Record promotion usage (after order + payment rows exist) ──────────────
         if (appliedPromotion && discountAmount > 0) {
           // Atomic increment with concurrency guard
@@ -439,15 +348,13 @@ export class OrdersService {
               ),
             )
             .returning();
-
           if (!updatedPromo) {
             // Race condition — another request consumed the last slot between our check and now
             throw new HttpException(
-              'Promotion is no longer available — please retry without it',
+              OrdersErrorKeyEnum.PROMOTION_IS_NO_LONGER_AVAILABLE_PLEASE_RETRY_WITHOUT_IT,
               HttpStatus.CONFLICT,
             );
           }
-
           // Auto-expire if limit now reached
           if (
             updatedPromo.max_uses_total !== null &&
@@ -458,7 +365,6 @@ export class OrdersService {
               .set({ status: PromotionStatus.EXPIRED, expired_at: new Date() })
               .where(eq(promotions.id, appliedPromotion.id));
           }
-
           // Usage record
           await tx.insert(promotion_usage).values({
             promotion_id: appliedPromotion.id,
@@ -480,7 +386,6 @@ export class OrdersService {
               applied_discount_detail: discountResult,
             },
           });
-
           // Analytics event
           await tx.insert(promotion_analytics_events).values({
             promotion_id: appliedPromotion.id,
@@ -496,7 +401,6 @@ export class OrdersService {
             },
           });
         }
-
         return {
           orderId: newOrder.id,
           totalAmount: String(grandTotal),
@@ -505,7 +409,6 @@ export class OrdersService {
           itemCount: orderLines.length,
         };
       });
-
       return orderResult;
     } catch (error) {
       if (
@@ -514,59 +417,38 @@ export class OrdersService {
       ) {
         throw error;
       }
-      throw new InternalServerErrorException('Failed to create order', {
+      throw new InternalServerErrorException(OrdersErrorKeyEnum.FAILED_TO_CREATE_ORDER, {
         cause: error,
       });
     }
   }
-
   // ── All other methods unchanged below this line ──────────────────
-
   async getOrderById(orderId: string, domain?: string) {
-    console.log('[OrdersService.getOrderById] Request received', {
-      orderId,
-      domain,
-    });
     try {
       if (!orderId || !domain) {
-        console.log(
-          '[OrdersService.getOrderById] Stopping: orderId or domain is missing',
-        );
         throw new HttpException(
-          'Order ID and Domain are required',
+          OrdersErrorKeyEnum.ORDER_ID_AND_DOMAIN_ARE_REQUIRED,
           HttpStatus.BAD_REQUEST,
         );
       }
-      console.log('[OrdersService.getOrderById] Resolving company id');
       const companyId = await this.resolveCompanyId(domain);
-
-      console.log('[OrdersService.getOrderById] Querying order by id', {
-        orderId,
-        companyId,
-      });
       const [orderResult] = await this.db.query.orders.findMany({
         where: and(eq(orders.id, orderId), eq(orders.company_id, companyId)),
         with: { items: true },
       });
-
       if (!orderResult || !orderResult.items) {
-        console.log('[OrdersService.getOrderById] Stopping: Order not found');
         throw new HttpException(
-          'Order not found with the provided ID',
+          OrdersErrorKeyEnum.ORDER_NOT_FOUND_WITH_THE_PROVIDED_ID,
           HttpStatus.NOT_FOUND,
         );
       }
-
-      console.log('[OrdersService.getOrderById] Order found successfully');
       return orderResult;
     } catch (error) {
-      console.error('Error fetching order:', error);
-      throw new InternalServerErrorException('Failed to fetch order', {
+      throw new InternalServerErrorException(OrdersErrorKeyEnum.FAILED_TO_FETCH_ORDER, {
         cause: error,
       });
     }
   }
-
   async getAllOrders(filters?: {
     search: string;
     limit: number;
@@ -575,24 +457,17 @@ export class OrdersService {
     date: string;
     sortby: string;
   }) {
-    console.log('[OrdersService.getAllOrders] Request received');
     try {
-      console.log('[OrdersService.getAllOrders] Querying all orders');
       const allOrders = await this.db.query.orders.findMany({
         columns: { id: true, created_at: true },
       });
-      console.log('[OrdersService.getAllOrders] Orders fetched successfully', {
-        count: allOrders.length,
-      });
       return allOrders;
     } catch (error) {
-      console.error('Error fetching orders:', error);
-      throw new InternalServerErrorException('Failed to fetch orders', {
+      throw new InternalServerErrorException(OrdersErrorKeyEnum.FAILED_TO_FETCH_ORDERS, {
         cause: error,
       });
     }
   }
-
   async completeOrderVerification(
     customerDetails: { email: string; first_name: string; last_name: string },
     existingOrder: {
@@ -614,20 +489,15 @@ export class OrdersService {
     message: string;
   }> {
     if (!orderId) {
-      throw new HttpException('Order ID is required', HttpStatus.BAD_REQUEST);
+      throw new HttpException(OrdersErrorKeyEnum.ORDER_ID_IS_REQUIRED, HttpStatus.BAD_REQUEST);
     }
     if (!companyId) {
-      throw new HttpException('Company ID is required', HttpStatus.BAD_REQUEST);
+      throw new HttpException(OrdersErrorKeyEnum.COMPANY_ID_IS_REQUIRED, HttpStatus.BAD_REQUEST);
     }
-
     try {
-      console.log(
-        `[OrdersService.completeOrderVerification] Starting payment verification for order ${orderId} (company ${companyId}, success=${isSuccess})`,
-      );
       if (!existingOrder || !existingOrder.user_id) {
-        throw new HttpException('Order not found', HttpStatus.NOT_FOUND);
+        throw new HttpException(OrdersErrorKeyEnum.ORDER_NOT_FOUND, HttpStatus.NOT_FOUND);
       }
-
       const orderLines = await this.db
         .select({
           variantId: order_items.product_variant_id,
@@ -635,20 +505,12 @@ export class OrdersService {
         })
         .from(order_items)
         .where(eq(order_items.order_id, orderId));
-
       return this.db.transaction(async (tx) => {
-        console.log(
-          '[OrdersService.completeOrderVerification] Verification transaction started',
-        );
         if (isSuccess) {
-          console.log(
-            `[OrdersService.completeOrderVerification] Payment succeeded, updating order items for order ${orderId}`,
-          );
           const orderItemsRecord = await tx
             .select()
             .from(order_items)
             .where(eq(order_items.order_id, orderId));
-
           if (orderItemsRecord.length > 0) {
             await Promise.all(
               orderItemsRecord.map((item) =>
@@ -663,36 +525,27 @@ export class OrdersService {
                   )
                   .catch((error) => {
                     throw new InternalServerErrorException(
-                      'Failed to update order status',
+                      OrdersErrorKeyEnum.FAILED_TO_UPDATE_ORDER_STATUS,
                       { cause: error },
                     );
                   }),
               ),
             );
           }
-
           await tx
             .update(orders)
             .set({ order_status: OrderStatus.PROCESSING })
             .where(eq(orders.id, orderId))
             .catch((error) => {
               throw new InternalServerErrorException(
-                'Failed to update order status',
+                OrdersErrorKeyEnum.FAILED_TO_UPDATE_ORDER_STATUS,
                 { cause: error },
               );
             });
 
-          console.log(
-            `[OrdersService.completeOrderVerification] Order items marked processing (${orderItemsRecord.length} items) for order ${orderId}`,
-          );
-
           if (!orderItemsRecord[0]?.order_id) {
-            throw new HttpException('Order not found', HttpStatus.NOT_FOUND);
+            throw new HttpException(OrdersErrorKeyEnum.ORDER_NOT_FOUND, HttpStatus.NOT_FOUND);
           }
-
-          console.log(
-            `[OrdersService.completeOrderVerification] Marking payment completed for order ${orderItemsRecord[0].order_id}`,
-          );
           await tx
             .update(payments)
             .set({ payment_status: PaymentStatus.COMPLETED })
@@ -700,15 +553,11 @@ export class OrdersService {
             .returning()
             .catch((error) => {
               throw new InternalServerErrorException(
-                'Failed to update payment status',
+                OrdersErrorKeyEnum.FAILED_TO_UPDATE_PAYMENT_STATUS,
                 { cause: error },
               );
             });
-
           if (customerDetails.email) {
-            console.log(
-              `[OrdersService.completeOrderVerification] Sending order placed email to ${customerDetails.email} for order ${orderId}`,
-            );
             await this.mailService
               .sendOrderPlacedEmail(
                 customerDetails.email,
@@ -717,73 +566,45 @@ export class OrdersService {
                 Number(existingOrder.total_amount),
               )
               .catch((error) => {
-                console.error('Error sending order placed email:', error);
               });
           }
-
           // Fire-and-forget invoice generation
           // this.invoiceService
           //   .createInvoice(orderId)
           //   .then(() =>
-          //     console.log(
-          //       `[OrdersService] Invoice PDF generated for order ${orderId}`,
-          //     ),
+          //     ,
           //   )
           //   .catch((err) =>
-          //     console.error(
-          //       `[OrdersService] Background PDF generation failed for order ${orderId}:`,
-          //       err,
-          //     ),
+          //     ,
           //   );
-
           const itemIds = orderItemsRecord.map((item) => item.id);
-          console.log(
-            `[OrdersService.completeOrderVerification] Checking policy snapshots for order items: ${itemIds.join(', ')}`,
-          );
-
           if (itemIds.length > 0) {
             const orderItemsWithPolicies = await tx
               .select()
               .from(order_item_policy)
               .where(inArray(order_item_policy.order_item_id, itemIds))
               .catch((error) => {
-                console.error('Error fetching order item policies:', error);
                 throw new InternalServerErrorException(
-                  'Failed to fetch order item policies',
+                  OrdersErrorKeyEnum.FAILED_TO_FETCH_ORDER_ITEM_POLICIES,
                   { cause: error },
                 );
               });
 
-            console.log(
-              `[OrdersService.completeOrderVerification] Policy snapshot records loaded: ${orderItemsWithPolicies.length}`,
-            );
-
             // Fire-and-forget warranty PDF generation per item
             for (const itemPolicy of orderItemsWithPolicies) {
               const snapshot = itemPolicy.policy_snapshot as PolicySnapshot;
-              console.log('Policy Snapshot:', snapshot);
-
               // if (snapshot?.generates_document) {
               //   this.policyDocumentService
               //     .generatePolicyDocument(itemPolicy.order_item_id)
               //     .then(() =>
-              //       console.log(
-              //         `[OrdersService] Warranty PDF generated for item ${itemPolicy.order_item_id}`,
-              //       ),
+              //       ,
               //     )
               //     .catch((err) =>
-              //       console.error(
-              //         `[OrdersService] Failed to generate warranty for item ${itemPolicy.order_item_id}`,
-              //         err,
-              //       ),
+              //       ,
               //     );
               // }
             }
           }
-
-          console.log(
-            `[OrdersService.completeOrderVerification] Verification completed successfully for order ${orderId}`,
-          );
           return {
             tx: tx as DrizzleService,
             success: true,
@@ -791,9 +612,6 @@ export class OrdersService {
             message: 'Order placed successfully',
           };
         } else {
-          console.log(
-            `[OrdersService.completeOrderVerification] Payment failed, rolling back stock for order ${orderId}`,
-          );
           await this.inventoryService.rollbackStockForOrder(
             orderLines.map((l) => ({
               variantId: l.variantId ?? '',
@@ -802,16 +620,11 @@ export class OrdersService {
             companyId,
             tx as DrizzleService,
           );
-
           const orderItemsRecord = await tx
             .select({ id: order_items.id })
             .from(order_items)
             .where(eq(order_items.order_id, orderId));
-
           if (orderItemsRecord.length > 0) {
-            console.log(
-              `[OrdersService.completeOrderVerification] Marking ${orderItemsRecord.length} order items cancelled after failed payment`,
-            );
             await Promise.all(
               orderItemsRecord.map((item) =>
                 tx
@@ -825,42 +638,33 @@ export class OrdersService {
                   )
                   .catch((error) => {
                     throw new InternalServerErrorException(
-                      'Failed to update order status',
+                      OrdersErrorKeyEnum.FAILED_TO_UPDATE_ORDER_STATUS,
                       { cause: error },
                     );
                   }),
               ),
             );
           }
-
           await tx
             .update(orders)
             .set({ order_status: OrderStatus.CANCELLED })
             .where(eq(orders.id, orderId))
             .catch((error) => {
               throw new InternalServerErrorException(
-                'Failed to update order status',
+                OrdersErrorKeyEnum.FAILED_TO_UPDATE_ORDER_STATUS,
                 { cause: error },
               );
             });
-
-          console.log(
-            `[OrdersService.completeOrderVerification] Marking payment as failed for order ${existingOrder.id}`,
-          );
           await tx
             .update(payments)
             .set({ payment_status: PaymentStatus.FAILED })
             .where(eq(payments.order_id, existingOrder.id))
             .catch((error) => {
               throw new InternalServerErrorException(
-                'Failed to update payment status',
+                OrdersErrorKeyEnum.FAILED_TO_UPDATE_PAYMENT_STATUS,
                 { cause: error },
               );
             });
-
-          console.log(
-            `[OrdersService.completeOrderVerification] Verification completed with failure branch for order ${existingOrder.id}`,
-          );
           return {
             tx: tx as DrizzleService,
             success: false,
@@ -877,31 +681,17 @@ export class OrdersService {
         throw error;
       }
       throw new InternalServerErrorException(
-        'Failed to complete order verification',
+        OrdersErrorKeyEnum.FAILED_TO_COMPLETE_ORDER_VERIFICATION,
         { cause: error },
       );
     }
   }
-
   async getOrdersCount(userId: string, domain: string) {
-    console.log('[OrdersService.getOrdersCount] Request received', {
-      userId,
-      domain,
-    });
     try {
       if (!userId) {
-        console.log(
-          '[OrdersService.getOrdersCount] Stopping: User ID is missing',
-        );
-        throw new HttpException('User ID is required', HttpStatus.BAD_REQUEST);
+        throw new HttpException(OrdersErrorKeyEnum.USER_ID_IS_REQUIRED, HttpStatus.BAD_REQUEST);
       }
-      console.log('[OrdersService.getOrdersCount] Resolving company id');
       const companyId = await this.resolveCompanyId(domain);
-
-      console.log('[OrdersService.getOrdersCount] Querying orders for user', {
-        userId,
-        companyId,
-      });
       const [ordersCount] = await this.db
         .select({
           count: sql`count(distinct ${orders.id})`,
@@ -920,32 +710,21 @@ export class OrdersService {
           and(eq(orders.user_id, userId), eq(orders.company_id, companyId)),
         )
         .catch((error) => {
-          console.error('Error fetching user orders:', error);
           throw new InternalServerErrorException(
-            'Failed to retrieve user orders count',
+            OrdersErrorKeyEnum.FAILED_TO_RETRIEVE_USER_ORDERS_COUNT,
             { cause: error },
           );
         });
-
-      console.log(
-        '[OrdersService.getOrdersCount] Orders count fetched successfully',
-        {
-          count: ordersCount?.count,
-          activeOrders: ordersCount?.activeOrders,
-        },
-      );
       return ordersCount;
     } catch (error) {
-      console.error('Error fetching user orders:', error);
       throw new InternalServerErrorException(
-        'Failed to retrieve user orders count',
+        OrdersErrorKeyEnum.FAILED_TO_RETRIEVE_USER_ORDERS_COUNT,
         {
           cause: error,
         },
       );
     }
   }
-
   async getUserOrderDetails(
     orderId: string,
     domain: string,
@@ -953,30 +732,14 @@ export class OrdersService {
     limit: number = 10,
     status?: OrderStatus,
   ) {
-    console.log('[OrdersService.getUserOrderDetails] Request received', {
-      orderId,
-      domain,
-      offset,
-      limit,
-      status,
-    });
     try {
       if (!orderId || !domain) {
-        console.log(
-          '[OrdersService.getUserOrderDetails] Stopping: orderId or domain is missing',
-        );
         throw new HttpException(
-          'Order ID and domain are required',
+          OrdersErrorKeyEnum.ORDER_ID_AND_DOMAIN_ARE_REQUIRED,
           HttpStatus.BAD_REQUEST,
         );
       }
-      console.log('[OrdersService.getUserOrderDetails] Resolving company id');
       const companyId = await this.resolveCompanyId(domain);
-
-      console.log(
-        '[OrdersService.getUserOrderDetails] Querying order details',
-        { orderId, companyId },
-      );
       const orderDetails = await this.db.query.orders.findFirst({
         where: and(eq(orders.id, orderId), eq(orders.company_id, companyId)),
         columns: {
@@ -1029,29 +792,19 @@ export class OrdersService {
           payment: true,
           shipping: { columns: { tracking_url: true } },
           gstInvoice: true
-
         },
       });
-
       if (!orderDetails) {
-        console.log(
-          '[OrdersService.getUserOrderDetails] Stopping: Order not found',
-        );
-        throw new HttpException('Order not found', HttpStatus.NOT_FOUND);
+        throw new HttpException(OrdersErrorKeyEnum.ORDER_NOT_FOUND, HttpStatus.NOT_FOUND);
       }
-      console.log(
-        '[OrdersService.getUserOrderDetails] Order details found successfully',
-      );
       return orderDetails;
     } catch (error) {
-      console.error('Error fetching order details:', error);
       throw new InternalServerErrorException(
-        'Failed to retrieve order details',
+        OrdersErrorKeyEnum.FAILED_TO_RETRIEVE_ORDER_DETAILS,
         { cause: error },
       );
     }
   }
-
   async getOrdersList(
     domain: string,
     offset: number = 0,
@@ -1059,13 +812,7 @@ export class OrdersService {
     status?: OrderStatus,
   ) {
     try {
-      console.log(
-        `[OrdersService.getOrdersList] Request received for domain: ${domain}, offset: ${offset}, limit: ${limit}, status: ${status}`,
-      );
       const companyId = await this.resolveCompanyId(domain);
-      console.log(
-        `[OrdersService.getOrdersList] Company resolved: ${companyId}`,
-      );
       const totalOrders = await this.db
         .selectDistinct({ id: orders.id })
         .from(orders)
@@ -1083,7 +830,6 @@ export class OrdersService {
           ),
         )
         .where(eq(orders.company_id, companyId));
-
       const validOrderIds = (
         await this.db
           .selectDistinct({ id: orders.id, created_at: orders.created_at })
@@ -1106,9 +852,7 @@ export class OrdersService {
           .limit(limit)
           .offset(offset)
       ).map((o) => o.id);
-
       if (validOrderIds.length === 0) return [];
-
       const ordersList = await this.db.query.orders.findMany({
         where: and(
           eq(orders.company_id, companyId),
@@ -1147,35 +891,21 @@ export class OrdersService {
       });
       return { orders: ordersList, totalCount: totalOrders.length };
     } catch (error) {
-      console.error('Error fetching orders list:', error);
       if (error instanceof HttpException) throw error;
-      throw new InternalServerErrorException('Failed to retrieve orders list', {
+      throw new InternalServerErrorException(OrdersErrorKeyEnum.FAILED_TO_RETRIEVE_ORDERS_LIST, {
         cause: error,
       });
     }
   }
-
   async getOrderDetails(orderId: string, domain: string) {
-    console.log('[OrdersService.getOrderDetails] Request received', {
-      orderId,
-      domain,
-    });
     try {
       if (!orderId || !domain) {
-        console.log(
-          '[OrdersService.getOrderDetails] Stopping: Order ID or domain missing',
-        );
         throw new HttpException(
-          'Order ID and domain are required',
+          OrdersErrorKeyEnum.ORDER_ID_AND_DOMAIN_ARE_REQUIRED,
           HttpStatus.BAD_REQUEST,
         );
       }
-      console.log('[OrdersService.getOrderDetails] Resolving company id');
       const companyId = await this.resolveCompanyId(domain);
-      console.log(
-        '[OrdersService.getOrderDetails] Querying order details from DB',
-        { orderId, companyId },
-      );
       const row = await this.db.query.orders.findFirst({
         where: and(eq(orders.id, orderId), eq(orders.company_id, companyId)),
         columns: { id: true, total_amount: true, created_at: true },
@@ -1248,22 +978,13 @@ export class OrdersService {
           invoice: true,
         },
       });
-
       if (!row) {
-        console.log(
-          '[OrdersService.getOrderDetails] Stopping: Order not found',
-        );
-        throw new HttpException('Order not found', HttpStatus.NOT_FOUND);
+        throw new HttpException(OrdersErrorKeyEnum.ORDER_NOT_FOUND, HttpStatus.NOT_FOUND);
       }
-
       const warehouseIds = new Set(
         row.items.map((i) => i?.variant?.inventory?.warehouse_id ?? null),
       );
       const isSingleWarehouse = warehouseIds.size <= 1;
-
-      console.log(
-        '[OrdersService.getOrderDetails] Order details found successfully',
-      );
       return {
         id: row.id,
         total_amount: row.total_amount,
@@ -1335,79 +1056,50 @@ export class OrdersService {
         shipping: { tracking_url: row.shipping?.tracking_url ?? null },
       };
     } catch (error) {
-      console.error('Error fetching order details:', error);
       if (error instanceof HttpException) throw error;
       throw new InternalServerErrorException(
-        'Failed to retrieve order details',
+        OrdersErrorKeyEnum.FAILED_TO_RETRIEVE_ORDER_DETAILS,
         { cause: error },
       );
     }
   }
-
   async setOrderStatus(
     orderId: string,
     newStatus: OrderStatus,
     domain: string,
   ) {
-    console.log('[OrdersService.setOrderStatus] Request received', {
-      orderId,
-      newStatus,
-      domain,
-    });
     const filteredDomain = domainExtractor(domain);
-    console.log(
-      '[OrdersService.setOrderStatus] Resolving company for domain:',
-      filteredDomain,
-    );
     const companyId = await this.companyService.find(filteredDomain);
     if (!companyId) {
-      console.log('[OrdersService.setOrderStatus] Stopping: Company not found');
       throw new HttpException(
         `Company not found ${domain}`,
         HttpStatus.NOT_FOUND,
       );
     }
-
     try {
-      console.log(
-        '[OrdersService.setOrderStatus] Querying existing order from DB',
-        { orderId, companyId },
-      );
       const [existingOrder] = await this.db
         .select({ id: orders.id })
         .from(orders)
         .where(and(eq(orders.id, orderId), eq(orders.company_id, companyId)))
         .limit(1);
-
       if (!existingOrder) {
-        console.log('[OrdersService.setOrderStatus] Stopping: Order not found');
-        throw new HttpException('Order not found', HttpStatus.NOT_FOUND);
+        throw new HttpException(OrdersErrorKeyEnum.ORDER_NOT_FOUND, HttpStatus.NOT_FOUND);
       }
-
       if (
         !Object.values(OrderStatus).includes(
           newStatus.toLowerCase() as OrderStatus,
         )
       ) {
-        console.log(
-          '[OrdersService.setOrderStatus] Stopping: Invalid status',
-          newStatus,
-        );
         throw new HttpException(
-          'Invalid order status value',
+          OrdersErrorKeyEnum.INVALID_ORDER_STATUS_VALUE,
           HttpStatus.BAD_REQUEST,
         );
       }
-
-      console.log(
-        '[OrdersService.setOrderStatus] Querying order items to update',
-      );
       const orderItemsRecord = await this.db
         .select({ id: order_items.id })
         .from(order_items)
         .where(eq(order_items.order_id, orderId))
         .limit(1);
-
       if (orderItemsRecord) {
         await Promise.all(
           orderItemsRecord.map((item) =>
@@ -1422,39 +1114,31 @@ export class OrdersService {
               )
               .catch((error) => {
                 throw new InternalServerErrorException(
-                  'Failed to update order status',
+                  OrdersErrorKeyEnum.FAILED_TO_UPDATE_ORDER_STATUS,
                   { cause: error },
                 );
               }),
           ),
         );
       }
-
       await this.db
         .update(orders)
         .set({ order_status: newStatus.toLowerCase() as OrderStatus })
         .where(eq(orders.id, orderId))
         .catch((error) => {
           throw new InternalServerErrorException(
-            'Failed to update order status',
+            OrdersErrorKeyEnum.FAILED_TO_UPDATE_ORDER_STATUS,
             { cause: error },
           );
         });
-
-      console.log(
-        '[OrdersService.setOrderStatus] Order status updated successfully',
-        { orderId },
-      );
       return orderId;
     } catch (error) {
-      console.error('Error updating order status:', error);
       if (error instanceof HttpException) throw error;
-      throw new InternalServerErrorException('Failed to update order status', {
+      throw new InternalServerErrorException(OrdersErrorKeyEnum.FAILED_TO_UPDATE_ORDER_STATUS, {
         cause: error,
       });
     }
   }
-
   async getPendingOrders(
     domain: string,
     filters?: {
@@ -1466,16 +1150,8 @@ export class OrdersService {
       sortby: string;
     },
   ) {
-    console.log('[OrdersService.getPendingOrders] Request received', {
-      domain,
-    });
     try {
-      console.log('[OrdersService.getPendingOrders] Resolving company id');
       const companyId = await this.resolveCompanyId(domain);
-      console.log(
-        '[OrdersService.getPendingOrders] Querying pending orders from DB',
-        { companyId },
-      );
       const result = await this.db.query.orders.findMany({
         where: eq(orders.company_id, companyId),
         limit: filters?.limit ?? 10,
@@ -1502,28 +1178,19 @@ export class OrdersService {
           },
         },
       });
-      console.log(
-        '[OrdersService.getPendingOrders] Pending orders retrieved successfully',
-      );
       return result.map((order) => order.items).flat();
     } catch (error) {
-      console.error('Error fetching pending orders:', error);
-      throw new InternalServerErrorException('Failed to fetch pending orders', {
+      throw new InternalServerErrorException(OrdersErrorKeyEnum.FAILED_TO_FETCH_PENDING_ORDERS, {
         cause: error,
       });
     }
   }
   async getSalesAnalytics(domain: string, days: number = 30) {
-    console.log(
-      `[OrdersService.getSalesAnalytics] Fetching analytics for last ${days} days`,
-    );
     try {
       const companyId = await this.resolveCompanyId(domain);
-
       // Calculate the date cutoff
       const cutoffDate = new Date();
       cutoffDate.setDate(cutoffDate.getDate() - days);
-
       const analytics = await this.db
         .select({
           // Format date as YYYY-MM-DD for the chart X-Axis
@@ -1543,32 +1210,25 @@ export class OrdersService {
         )
         .groupBy(sql`TO_CHAR(${order_items.created_at}, 'YYYY-MM-DD')`)
         .orderBy(sql`TO_CHAR(${order_items.created_at}, 'YYYY-MM-DD') ASC`);
-
       // Calculate total revenue for the summary card
       const totalRevenue = analytics.reduce(
         (acc, curr) => acc + (curr.revenue || 0),
         0,
       );
-
       return {
         chartData: analytics,
         totalRevenue,
       };
     } catch (error) {
       throw new InternalServerErrorException(
-        'Failed to fetch sales analytics',
+        OrdersErrorKeyEnum.FAILED_TO_FETCH_SALES_ANALYTICS,
         { cause: error },
       );
     }
   }
-
   async getTopSellingProducts(domain: string, limit: number = 5) {
-    console.log(
-      `[OrdersService.getTopSellingProducts] Fetching top ${limit} products`,
-    );
     try {
       const companyId = await this.resolveCompanyId(domain);
-
       const topProducts = await this.db
         .select({
           variant_id: product_variants.id,
@@ -1598,22 +1258,17 @@ export class OrdersService {
         )
         .orderBy(sql`SUM(${order_items.quantity}) DESC`)
         .limit(limit);
-
       return topProducts;
     } catch (error) {
       throw new InternalServerErrorException(
-        'Failed to fetch top selling products',
+        OrdersErrorKeyEnum.FAILED_TO_FETCH_TOP_SELLING_PRODUCTS,
         { cause: error },
       );
     }
   }
   async getConversionMetrics(domain: string) {
-    console.log(
-      `[OrdersService.getConversionMetrics] Fetching metrics for: ${domain}`,
-    );
     try {
       const companyId = await this.resolveCompanyId(domain);
-
       // ==========================================
       // 1. OVERALL STORE CONVERSION
       // ==========================================
@@ -1622,14 +1277,11 @@ export class OrdersService {
         .from(carts)
         .where(eq(carts.company_id, companyId))
         .catch((error) => {
-          console.error('Error fetching cart data:', error);
           throw new InternalServerErrorException(
-            'Failed to calculate conversion metrics',
+            OrdersErrorKeyEnum.FAILED_TO_CALCULATE_CONVERSION_METRICS,
             { cause: error },
           );
         });
-      console.log('cartData', cartData);
-
       const [orderData] = await this.db
         .select({
           count: sql<number>`CAST(COUNT(${order_items.id}) AS INTEGER)`,
@@ -1652,13 +1304,11 @@ export class OrdersService {
           ),
         )
         .catch((error) => {
-          console.error('Error fetching order data:', error);
           throw new InternalServerErrorException(
-            'Failed to calculate conversion metrics',
+            OrdersErrorKeyEnum.FAILED_TO_CALCULATE_CONVERSION_METRICS,
             { cause: error },
           );
         });
-      console.log('orderData', orderData);
       const totalCarts = cartData?.count || 0;
       const totalOrders = orderData?.count || 0;
       const overallConversionRate =
@@ -1667,11 +1317,9 @@ export class OrdersService {
         totalCarts > 0
           ? (((totalCarts - totalOrders) / totalCarts) * 100).toFixed(2)
           : 0;
-
       // ==========================================
       // 2. PRODUCT/VARIANT LEVEL CONVERSION
       // ==========================================
-
       // A. Count how many times each variant was added to a cart
       const variantCartStats = await this.db
         .select({
@@ -1683,13 +1331,11 @@ export class OrdersService {
         .where(eq(carts.company_id, companyId))
         .groupBy(cart_items.product_variant_id)
         .catch((error) => {
-          console.error('Error fetching cart stats:', error);
           throw new InternalServerErrorException(
-            'Failed to calculate conversion metrics',
+            OrdersErrorKeyEnum.FAILED_TO_CALCULATE_CONVERSION_METRICS,
             { cause: error },
           );
         });
-
       // B. Count how many times each variant was successfully ordered
       const variantOrderStats = await this.db
         .select({
@@ -1710,18 +1356,15 @@ export class OrdersService {
         )
         .groupBy(order_items.product_variant_id)
         .catch((error) => {
-          console.error('Error fetching order stats:', error);
           throw new InternalServerErrorException(
-            'Failed to calculate conversion metrics',
+            OrdersErrorKeyEnum.FAILED_TO_CALCULATE_CONVERSION_METRICS,
             { cause: error },
           );
         });
-
       // C. Get Variant Details for the UI (Name, SKU)
       const variantIds = variantCartStats
         .map((v) => v.variant_id)
         .filter(Boolean) as string[];
-
       let productDetails: any[] = [];
       if (variantIds.length > 0) {
         productDetails = await this.db
@@ -1733,14 +1376,12 @@ export class OrdersService {
           .from(product_variants)
           .where(inArray(product_variants.id, variantIds))
           .catch((error) => {
-            console.error('Error fetching product details:', error);
             throw new InternalServerErrorException(
-              'Failed to calculate conversion metrics',
+              OrdersErrorKeyEnum.FAILED_TO_CALCULATE_CONVERSION_METRICS,
               { cause: error },
             );
           });
       }
-      console.log('productDetails', productDetails);
       // D. Merge the data together
       const productConversions = productDetails.map((details) => {
         // BUG FIX: Local variables `cartData` and `orderData` shadow the outer-scope
@@ -1752,14 +1393,12 @@ export class OrdersService {
         const variantOrder = variantOrderStats.find(
           (v) => v.variant_id === details.id,
         );
-
         const cartAdditions = variantCart?.cart_additions || 0;
         const orderCompletions = variantOrder?.order_completions || 0;
         const conversionRate =
           cartAdditions > 0
             ? ((orderCompletions / cartAdditions) * 100).toFixed(2)
             : 0;
-
         return {
           variantId: details.id,
           variantName: details.name,
@@ -1769,10 +1408,8 @@ export class OrdersService {
           conversionRate: Number(conversionRate),
         };
       });
-      console.log('productConversions', productConversions);
       // Sort by most cart additions descending
       productConversions.sort((a, b) => b.cartAdditions - a.cartAdditions);
-
       return {
         overall: {
           totalCarts,
@@ -1784,19 +1421,14 @@ export class OrdersService {
       };
     } catch (error) {
       throw new InternalServerErrorException(
-        'Failed to calculate conversion metrics',
+        OrdersErrorKeyEnum.FAILED_TO_CALCULATE_CONVERSION_METRICS,
         { cause: error },
       );
     }
   }
-
   async exportVendorAnalytics(domain: string): Promise<string> {
-    console.log(
-      `[OrdersService.exportVendorAnalytics] Generating CSV for: ${domain}`,
-    );
     try {
       const companyId = await this.resolveCompanyId(domain);
-
       // 1. Get Cart Additions per variant
       const variantCartStats = await this.db
         .select({
@@ -1808,13 +1440,11 @@ export class OrdersService {
         .where(eq(carts.company_id, companyId))
         .groupBy(cart_items.product_variant_id)
         .catch((error) => {
-          console.error('Error fetching cart stats:', error);
           throw new InternalServerErrorException(
-            'Failed to export analytics CSV',
+            OrdersErrorKeyEnum.FAILED_TO_EXPORT_ANALYTICS_CSV,
             { cause: error },
           );
         });
-
       // 2. Get Orders & Revenue per variant
       const variantOrderStats = await this.db
         .select({
@@ -1835,13 +1465,11 @@ export class OrdersService {
         )
         .groupBy(order_items.product_variant_id)
         .catch((error) => {
-          console.error('Error fetching order stats:', error);
           throw new InternalServerErrorException(
-            'Failed to export analytics CSV',
+            OrdersErrorKeyEnum.FAILED_TO_EXPORT_ANALYTICS_CSV,
             { cause: error },
           );
         });
-
       // 3. Get Variant Details
       // BUG FIX: The deduplication logic using `self.indexOf(value)` compares object
       // references, not string values — for UUIDs (strings) this is fine, but the
@@ -1855,7 +1483,6 @@ export class OrdersService {
           ].filter((id): id is string => !!id),
         ),
       );
-
       let productDetails: any[] = [];
       if (allVariantIds.length > 0) {
         productDetails = await this.db
@@ -1867,18 +1494,15 @@ export class OrdersService {
           .from(product_variants)
           .where(inArray(product_variants.id, allVariantIds))
           .catch((error) => {
-            console.error('Error fetching product details:', error);
             throw new InternalServerErrorException(
-              'Failed to export analytics CSV',
+              OrdersErrorKeyEnum.FAILED_TO_EXPORT_ANALYTICS_CSV,
               { cause: error },
             );
           });
       }
-
       // 4. Build CSV Headers
       let csvString =
         'Variant Name,SKU,Cart Additions,Units Sold,Revenue (INR),Conversion Rate (%)\n';
-
       // 5. Populate CSV Rows
       productDetails.forEach((details) => {
         const cartData = variantCartStats.find(
@@ -1887,11 +1511,9 @@ export class OrdersService {
         const orderData = variantOrderStats.find(
           (v) => v.variant_id === details.id,
         );
-
         const cartAdditions = cartData?.cart_additions || 0;
         const unitsSold = orderData?.units_sold || 0;
         const revenue = orderData?.revenue || 0;
-
         // BUG FIX: Conversion rate uses `unitsSold / cartAdditions` but `unitsSold`
         // is SUM of quantity (units), while `cartAdditions` is COUNT of cart_item rows.
         // A single cart_item row can have quantity > 1, making this ratio potentially > 100%.
@@ -1904,22 +1526,18 @@ export class OrdersService {
           cartAdditions > 0
             ? ((unitsSold / cartAdditions) * 100).toFixed(2)
             : '0.00';
-
         // BUG FIX: `details.name` could be null/undefined if variant_name is null in DB,
         // causing `.replace()` to throw. Added null-safe fallback.
         const safeName = `"${(details.name ?? '').replace(/"/g, '""')}"`;
-
         // BUG FIX: `revenue` comes from a CAST(...AS FLOAT) sql expression which Drizzle
         // returns as a string from pg driver (numeric/decimal columns always return strings).
         // Wrap in Number() to ensure numeric formatting in CSV, not a raw string.
         csvString += `${safeName},${details.sku},${cartAdditions},${unitsSold},${Number(revenue).toFixed(2)},${conversionRate}\n`;
       });
-
       return csvString;
     } catch (error) {
       if (error instanceof InternalServerErrorException) throw error;
-
-      throw new InternalServerErrorException('Failed to export analytics CSV', {
+      throw new InternalServerErrorException(OrdersErrorKeyEnum.FAILED_TO_EXPORT_ANALYTICS_CSV, {
         cause: error,
       });
     }

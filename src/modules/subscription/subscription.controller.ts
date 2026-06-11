@@ -10,7 +10,7 @@ import {
 } from '@nestjs/common';
 import { SubscriptionService } from './subscription.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
-import { SkipSubscription } from './subscription.guard';
+import { SkipSubscription } from '../../common/decorators/skip-subscription.decorator';
 
 @Controller({ version: '1', path: 'subscription' })
 export class SubscriptionController {
@@ -47,9 +47,6 @@ export class SubscriptionController {
   @Post('start-trial')
   @SkipSubscription()
   startTrial(@Headers('company-domain') domain: string) {
-    console.log(
-      `Received request to start trial for company domain: ${domain}`,
-    );
     return this.subscriptionService.startTrial(domain);
   }
 }

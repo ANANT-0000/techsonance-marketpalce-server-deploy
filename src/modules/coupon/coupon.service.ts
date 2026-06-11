@@ -30,63 +30,44 @@ import {
   PromotionTargetType,
   PromotionType,
 } from '../../drizzle/types/types';
-
 @Injectable()
 export class CouponService {
   constructor(
     @Inject(DRIZZLE) private readonly db: DrizzleService,
     private readonly companyService: CompanyService,
   ) {}
-
   private async resolveCompanyId(domain: string): Promise<string> {
-    console.log(
-      `[CouponService.resolveCompanyId] Resolving company for domain: ${domain}`,
-    );
-    const filteredDomain = domainExtractor(domain);
-    console.log(
-      `[CouponService.resolveCompanyId] Extracted filtered domain: ${filteredDomain}`,
-    );
-    console.log(
-      '[CouponService.resolveCompanyId] Querying CompanyService.find(...)',
-    );
-    return this.companyService.find(filteredDomain);
+        const filteredDomain = domainExtractor(domain);
+            return this.companyService.find(filteredDomain);
   }
-
   // ─── RULE CONFIG BUILDER ────────────────────────────────────────
   // Maps a PromotionRuleDto to the exact jsonb shape the schema expects.
   // Replaces every `'min_cart_value' as any` cast in the old code.
   private buildRuleConfig(rule: PromotionRuleDto): Record<string, unknown> {
     const cfg = rule.rule_config;
-
     switch (rule.rule_type) {
       case PromotionRuleType.MIN_CART_VALUE:
         return { amount: Number(cfg.amount) };
-
       case PromotionRuleType.MIN_QTY:
         return { qty: Number(cfg.qty) };
-
       case PromotionRuleType.CUSTOMER_SEGMENT:
         if (typeof cfg.segment_id !== 'string' || !cfg.segment_id)
           throw new BadRequestException(
             'customer_segment rule requires segment_id',
           );
         return { segment_id: cfg.segment_id };
-
       case PromotionRuleType.FIRST_ORDER_ONLY:
         return {}; // no config fields needed
-
       case PromotionRuleType.PRODUCT_IN_CART:
         if (typeof cfg.product_id !== 'string' || !cfg.product_id)
           throw new BadRequestException(
             'product_in_cart rule requires product_id',
           );
         return { product_id: cfg.product_id };
-
       case PromotionRuleType.NEW_CUSTOMER:
         return {
           registered_within_days: Number(cfg.registered_within_days ?? 30),
         };
-
       case PromotionRuleType.DATE_RANGE: {
         const days = cfg.days_of_week;
         if (!Array.isArray(days) || days.some((d) => d < 0 || d > 6)) {
@@ -96,15 +77,12 @@ export class CouponService {
         }
         return { days_of_week: days.map(Number) };
       }
-
       case PromotionRuleType.MAX_USES_PER_USER:
         return { max: Number(cfg.max) };
-
       default:
         throw new BadRequestException('Unknown rule_type');
     }
   }
-
   // ─── INSERT RULES HELPER ────────────────────────────────────────
   private async insertRules(
     tx: DrizzleService,
@@ -112,71 +90,38 @@ export class CouponService {
     rules: PromotionRuleDto[],
   ) {
     if (!rules || rules.length === 0) return;
-
     const rows = rules.map((rule) => ({
       promotion_id: promotionId,
       rule_type: rule.rule_type, // typed PromotionRuleType enum — no `as any`
       rule_config: this.buildRuleConfig(rule),
       negate: rule.negate ?? false,
     }));
-
     await tx.insert(promotion_rules).values(rows);
   }
-
   // ─────────────────────────────────────────────────────────────────
   // CREATE
   // ─────────────────────────────────────────────────────────────────
   async create(dto: CreateCouponDto, domain: string, userId: string) {
     try {
-      console.log('[CouponService.create] Request received');
-      console.log('[CouponService.create] Incoming coupon payload', {
-        code: dto.code,
-        discountType: dto.discount_type,
-        isAutoApplied: dto.is_auto_applied,
-      });
-      console.log(
-        `[CouponService.create] Resolving company for domain: ${domain}`,
-      );
-      const companyId = await this.resolveCompanyId(domain);
-      console.log(`[CouponService.create] Company resolved: ${companyId}`);
-
-      console.log(
-        `[CouponService.create] Validating user existence for userId: ${userId}`,
-      );
-      const [isUserExist] = await this.db
+                        const companyId = await this.resolveCompanyId(domain);
+            const [isUserExist] = await this.db
         .select({ id: user.id })
         .from(user)
         .where(eq(user.id, userId))
         .limit(1)
         .catch((err) => {
-          console.error(
-            '[CouponService.create] Error validating user existence:',
-            err,
-          );
-          throw new InternalServerErrorException('Failed to validate user', {
+                    throw new InternalServerErrorException('Failed to validate user', {
             cause: err,
           });
         });
-
       if (!isUserExist?.id) {
         throw new HttpException('User not found.', HttpStatus.NOT_FOUND);
       }
-      console.log(
-        `[CouponService.create] User validated successfully: ${isUserExist.id}`,
-      );
-
-      console.log(
-        '[CouponService.create] Starting transaction for coupon creation',
-      );
-      return await this.db
+            return await this.db
         .transaction(async (tx) => {
-          console.log('[CouponService.create] Transaction started');
-          // 1. Guard duplicate code
+                    // 1. Guard duplicate code
           if (!dto.is_auto_applied && dto.code) {
-            console.log(
-              `[CouponService.create] Checking duplicate coupon code: ${dto.code.toUpperCase()}`,
-            );
-            const [existingCoupon] = await tx
+                        const [existingCoupon] = await tx
               .select({ id: coupons.id })
               .from(coupons)
               .where(
@@ -186,30 +131,20 @@ export class CouponService {
                 ),
               )
               .catch((err) => {
-                console.error(
-                  '[CouponService.create] Error checking existing coupon:',
-                  err,
-                );
-                throw new InternalServerErrorException(
+                                throw new InternalServerErrorException(
                   'Failed to validate coupon code uniqueness',
                   { cause: err },
                 );
               });
-
             if (existingCoupon) {
-              console.log(
-                `[CouponService.create] Found duplicate coupon code id: ${existingCoupon.id}`,
-              );
-              throw new HttpException(
+                            throw new HttpException(
                 `Coupon code ${dto.code} already exists.`,
                 HttpStatus.BAD_REQUEST,
               );
             }
           }
-
           // 2. Insert base lookup coupon row
-          console.log('[CouponService.create] Inserting coupon row');
-          const [newCoupon] = await tx
+                    const [newCoupon] = await tx
             .insert(coupons)
             .values({
               code: dto.code.toUpperCase(),
@@ -219,22 +154,16 @@ export class CouponService {
             })
             .returning()
             .catch((err) => {
-              console.error('[CouponService.create] Error inserting coupon:', err);
-              throw new InternalServerErrorException(
+                            throw new InternalServerErrorException(
                 'Failed to create coupon',
                 {
                   cause: err,
                 },
               );
             });
-
           // 3. Build discount_config via Strategy Pattern
-          console.log(
-            '[CouponService.create] Building promotion discount config',
-          );
-          let discountConfig: Record<string, unknown> = {};
+                    let discountConfig: Record<string, unknown> = {};
           let promoType: PromotionType = PromotionType.FIXED_AMOUNT;
-
           if (dto.discount_type === PromotionType.PERCENTAGE) {
             promoType = PromotionType.PERCENTAGE;
             discountConfig = {
@@ -252,10 +181,8 @@ export class CouponService {
             // FIXED_AMOUNT (and anything else that slips through)
             discountConfig = { value: Number(dto.discount_value) };
           }
-
           // 4. Insert unified promotion
-          console.log('[CouponService.create] Inserting promotion row');
-          const [newPromotion] = await tx
+                    const [newPromotion] = await tx
             .insert(promotions)
             .values({
               company_id: companyId,
@@ -276,28 +203,18 @@ export class CouponService {
             })
             .returning()
             .catch((err) => {
-              console.error(
-                '[CouponService.create] Error inserting promotion:',
-                err,
-              );
-              throw new InternalServerErrorException(
+                            throw new InternalServerErrorException(
                 'Failed to create promotion',
                 {
                   cause: err,
                 },
               );
             });
-
           // 5. Insert all promotion rules from the DTO — fully typed, no `as any`
-          console.log('[CouponService.create] Inserting promotion rules');
-          //    Replaces the old single-rule `if (dto.min_order_amount)` block.
+                    //    Replaces the old single-rule `if (dto.min_order_amount)` block.
           await this.insertRules(tx, newPromotion.id, dto.rules ?? []).catch(
             (err) => {
-              console.error(
-                '[CouponService.create] Error inserting promotion rules:',
-                err,
-              );
-              throw new InternalServerErrorException(
+                            throw new InternalServerErrorException(
                 'Failed to insert promotion rules',
                 {
                   cause: err,
@@ -305,16 +222,12 @@ export class CouponService {
               );
             },
           );
-
           // 6. Attach product targets (if restricted to specific products)
           if (
             dto.applicable_product_ids &&
             dto.applicable_product_ids.length > 0
           ) {
-            console.log(
-              `[CouponService.create] Attaching ${dto.applicable_product_ids.length} product target(s)`,
-            );
-            const targets = dto.applicable_product_ids.map((productId) => ({
+                        const targets = dto.applicable_product_ids.map((productId) => ({
               promotion_id: newPromotion.id,
               target_type: PromotionTargetType.PRODUCT as const,
               target_id: productId,
@@ -324,11 +237,7 @@ export class CouponService {
               .insert(promotion_targets)
               .values(targets)
               .catch((err) => {
-                console.error(
-                  '[CouponService.create] Error attaching promotion targets:',
-                  err,
-                );
-                throw new InternalServerErrorException(
+                                throw new InternalServerErrorException(
                   'Failed to attach promotion targets',
                   {
                     cause: err,
@@ -336,15 +245,10 @@ export class CouponService {
                 );
               });
           }
-
-          console.log(
-            `[CouponService.create] Coupon creation completed for coupon id: ${newCoupon.id}`,
-          );
-          return { ...newCoupon, promotion_id: newPromotion.id };
+                    return { ...newCoupon, promotion_id: newPromotion.id };
         })
         .catch((err) => {
-          console.error('[CouponService.create] Error during transaction:', err);
-          throw new InternalServerErrorException(
+                    throw new InternalServerErrorException(
             'Failed to complete coupon creation transaction',
             {
               cause: err,
@@ -356,69 +260,45 @@ export class CouponService {
         error instanceof HttpException ||
         error instanceof InternalServerErrorException
       ) {
-        console.error('[CouponService.create] Handled error:', error);
-        throw error;
+                throw error;
       }
-      console.error('[CouponService.create] Unexpected error:', error);
-      throw new InternalServerErrorException('Failed to create coupon', {
+            throw new InternalServerErrorException('Failed to create coupon', {
         cause: error,
       });
     }
   }
-
   // ─────────────────────────────────────────────────────────────────
   // UPDATE
   // ─────────────────────────────────────────────────────────────────
   async update(id: string, dto: UpdateCouponDto, domain: string) {
     try {
-      console.log(
-        `[CouponService.update] Request received for coupon id: ${id}`,
-      );
-      console.log(
-        `[CouponService.update] Resolving company for domain: ${domain}`,
-      );
-      const companyId = await this.resolveCompanyId(domain);
-      console.log(`[CouponService.update] Company resolved: ${companyId}`);
-
+                  const companyId = await this.resolveCompanyId(domain);
       const [existingCoupon] = await this.db
         .select()
         .from(coupons)
         .where(eq(coupons.id, id))
         .limit(1);
-
       if (!existingCoupon) throw new NotFoundException('Coupon not found');
-
       // Update base coupon row
-      console.log('[CouponService.update] Updating base coupon row');
-      await this.db
+            await this.db
         .update(coupons)
         .set({ is_active: dto.is_active })
         .where(and(eq(coupons.id, id), eq(coupons.company_id, companyId)));
-
       // Build promotion update payload
       const promoUpdates: Record<string, unknown> = {};
-
       if (dto.is_active !== undefined) {
-        console.log(
-          `[CouponService.update] Setting promotion status from is_active=${dto.is_active}`,
-        );
-        promoUpdates.status = dto.is_active
+                promoUpdates.status = dto.is_active
           ? PromotionStatus.ACTIVE
           : PromotionStatus.DRAFT;
       }
       if (dto.valid_from) promoUpdates.valid_from = new Date(dto.valid_from);
       if (dto.valid_to) promoUpdates.valid_to = new Date(dto.valid_to);
       if (dto.max_uses) promoUpdates.max_uses_total = dto.max_uses;
-
       if (dto.discount_value || dto.max_discount_amount) {
-        console.log(
-          '[CouponService.update] Refreshing promotion discount config',
-        );
-        const [currentPromo] = await this.db
+                const [currentPromo] = await this.db
           .select()
           .from(promotions)
           .where(eq(promotions.coupon_id, id));
-
         const newConfig = {
           ...(currentPromo.discount_config as Record<string, unknown>),
         };
@@ -427,42 +307,28 @@ export class CouponService {
           newConfig.cap = Number(dto.max_discount_amount);
         promoUpdates.discount_config = newConfig;
       }
-
       if (Object.keys(promoUpdates).length > 0) {
-        console.log('[CouponService.update] Applying promotion updates');
-        await this.db
+                await this.db
           .update(promotions)
           .set(promoUpdates)
           .where(eq(promotions.coupon_id, id));
       }
-
       // Rules update — when provided, REPLACE all existing rules for this promotion.
       // Fetch the linked promotion_id first, then delete-and-reinsert atomically.
       if (dto.rules !== undefined) {
-        console.log('[CouponService.update] Replacing promotion rules');
-        const [linkedPromo] = await this.db
+                const [linkedPromo] = await this.db
           .select({ id: promotions.id })
           .from(promotions)
           .where(eq(promotions.coupon_id, id))
           .limit(1);
-
         if (linkedPromo) {
-          console.log(
-            `[CouponService.update] Deleting rules for promotion id: ${linkedPromo.id}`,
-          );
-          await this.db
+                    await this.db
             .delete(promotion_rules)
             .where(eq(promotion_rules.promotion_id, linkedPromo.id));
-
-          console.log('[CouponService.update] Reinserting updated rules');
-          await this.insertRules(this.db, linkedPromo.id, dto.rules);
+                    await this.insertRules(this.db, linkedPromo.id, dto.rules);
         }
       }
-
-      console.log(
-        `[CouponService.update] Coupon update completed for id: ${id}`,
-      );
-      return { message: 'Coupon successfully updated.' };
+            return { message: 'Coupon successfully updated.' };
     } catch (error) {
       if (error instanceof HttpException) throw error;
       throw new InternalServerErrorException('Failed to update coupon', {
@@ -470,29 +336,15 @@ export class CouponService {
       });
     }
   }
-
   // ─────────────────────────────────────────────────────────────────
   // The remaining methods (verifyCoupon, validateAppliedCoupon,
   // findAll, findCoupons, findOne, remove) are unchanged from the
   // previous version — no rule-related changes needed there.
   // ─────────────────────────────────────────────────────────────────
-
   async verifyCoupon(code: string, userId: string, domain: string) {
     try {
-      console.log(
-        `[CouponService.verifyCoupon] Request received for code: ${code}, userId: ${userId}`,
-      );
-      console.log(
-        `[CouponService.verifyCoupon] Resolving company for domain: ${domain}`,
-      );
-      const companyId = await this.resolveCompanyId(domain);
-      console.log(
-        `[CouponService.verifyCoupon] Company resolved: ${companyId}`,
-      );
-      console.log(
-        '[CouponService.verifyCoupon] Querying active coupon promotion',
-      );
-      const [promoData] = await this.db
+                  const companyId = await this.resolveCompanyId(domain);
+                  const [promoData] = await this.db
         .select({ promoId: promotions.id })
         .from(promotions)
         .innerJoin(coupons, eq(promotions.coupon_id, coupons.id))
@@ -504,14 +356,9 @@ export class CouponService {
           ),
         )
         .limit(1);
-
       if (!promoData)
         return { valid: false, message: 'Invalid or inactive coupon code' };
-
-      console.log(
-        '[CouponService.verifyCoupon] Checking whether coupon was already used',
-      );
-      const isUsed = await this.db
+            const isUsed = await this.db
         .select()
         .from(promotion_usage)
         .where(
@@ -521,19 +368,15 @@ export class CouponService {
           ),
         )
         .limit(1);
-
       if (isUsed.length > 0)
         return { valid: false, message: 'Coupon already used' };
-
-      console.log('[CouponService.verifyCoupon] Coupon verified successfully');
-      return { valid: true, message: 'Coupon is valid' };
+            return { valid: true, message: 'Coupon is valid' };
     } catch (error) {
       throw new InternalServerErrorException('Failed to verify coupon', {
         cause: error,
       });
     }
   }
-
   async findAll(
     domain: string,
     filters?: {
@@ -546,14 +389,8 @@ export class CouponService {
     },
   ) {
     try {
-      console.log(
-        `[CouponService.findAll] Request received for domain: ${domain}`,
-      );
-      console.log('[CouponService.findAll] Resolving company identifier');
-      const companyId = await this.resolveCompanyId(domain);
-      console.log(`[CouponService.findAll] Company resolved: ${companyId}`);
-      console.log('[CouponService.findAll] Querying coupons and promotions');
-      const query = this.db
+                  const companyId = await this.resolveCompanyId(domain);
+                  const query = this.db
         .select({
           id: coupons.id,
           code: coupons.code,
@@ -572,17 +409,11 @@ export class CouponService {
         .innerJoin(promotions, eq(promotions.coupon_id, coupons.id))
         .where(eq(coupons.company_id, companyId))
         .orderBy(desc(coupons.created_at));
-
       if (filters) {
         (query as any).limit(filters.limit).offset(filters.offset);
       }
-
       const results = await query;
-
-      console.log(
-        `[CouponService.findAll] Retrieved ${results.length} coupon(s)`,
-      );
-      return results.map((row) => {
+            return results.map((row) => {
         const config = row.discount_config as Record<string, unknown> | null;
         const discountValue =
           config && 'value' in config ? Number(config.value) : 0;
@@ -609,17 +440,10 @@ export class CouponService {
       });
     }
   }
-
   async findOne(id: string, domain: string) {
     try {
-      console.log(
-        `[CouponService.findOne] Request received for coupon id: ${id}`,
-      );
-      console.log('[CouponService.findOne] Resolving company identifier');
-      const companyId = await this.resolveCompanyId(domain);
-      console.log(`[CouponService.findOne] Company resolved: ${companyId}`);
-      console.log('[CouponService.findOne] Querying coupon and promotion row');
-      const [coupon] = await this.db
+                  const companyId = await this.resolveCompanyId(domain);
+                  const [coupon] = await this.db
         .select({
           id: coupons.id,
           code: coupons.code,
@@ -638,12 +462,9 @@ export class CouponService {
         .innerJoin(promotions, eq(promotions.coupon_id, coupons.id))
         .where(and(eq(coupons.id, id), eq(coupons.company_id, companyId)))
         .limit(1);
-
       if (!coupon) throw new NotFoundException('Coupon not found');
-
       // Also fetch associated rules so the edit form can repopulate them
-      console.log('[CouponService.findOne] Querying promotion rules');
-      const rules = await this.db
+            const rules = await this.db
         .select({
           rule_type: promotion_rules.rule_type,
           rule_config: promotion_rules.rule_config,
@@ -651,14 +472,12 @@ export class CouponService {
         })
         .from(promotion_rules)
         .where(eq(promotion_rules.promotion_id, coupon.promo_id));
-
       const config = coupon.discount_config as Record<string, unknown> | null;
       const discountValue =
         config && 'value' in config ? Number(config.value) : 0;
       const maxDiscountAmount =
         config && 'cap' in config ? Number(config.cap) : null;
-      console.log(`[CouponService.findOne] Coupon found: ${coupon.id}`);
-      return {
+            return {
         id: coupon.id,
         code: coupon.code,
         description: coupon.description,
@@ -680,19 +499,10 @@ export class CouponService {
       });
     }
   }
-
   async remove(id: string, domain: string) {
     try {
-      console.log(
-        `[CouponService.remove] Request received for coupon id: ${id}`,
-      );
-      console.log('[CouponService.remove] Resolving company identifier');
-      const companyId = await this.resolveCompanyId(domain);
-      console.log(`[CouponService.remove] Company resolved: ${companyId}`);
-      console.log(
-        '[CouponService.remove] Deactivating coupon and linked promotion',
-      );
-      await this.db
+                  const companyId = await this.resolveCompanyId(domain);
+                  await this.db
         .update(coupons)
         .set({ is_active: false })
         .where(and(eq(coupons.id, id), eq(coupons.company_id, companyId)));
@@ -700,35 +510,26 @@ export class CouponService {
         .update(promotions)
         .set({ status: PromotionStatus.INACTIVE })
         .where(eq(promotions.coupon_id, id));
-      console.log(`[CouponService.remove] Coupon deactivated: ${id}`);
-      return { message: 'Coupon deactivated successfully' };
+            return { message: 'Coupon deactivated successfully' };
     } catch (error) {
       throw new InternalServerErrorException('Failed to remove coupon', {
         cause: error,
       });
     }
   }
-
   async findCoupons(domain: string, productId?: string) {
     try {
-      console.log(
-        `[CouponService.findCoupons] Request received for domain: ${domain}, productId: ${productId}`,
-      );
-      console.log('[CouponService.findCoupons] Resolving company identifier');
-      const companyId = await this.resolveCompanyId(domain);
-      console.log(`[CouponService.findCoupons] Company resolved: ${companyId}`);
-      const cleanProductId =
+                  const companyId = await this.resolveCompanyId(domain);
+            const cleanProductId =
         productId === 'null' || productId === 'undefined' || !productId
           ? undefined
           : productId;
-
       const dynamicApplicabilityRule = cleanProductId
         ? or(
             isNull(promotion_targets.id),
             eq(promotion_targets.target_id, cleanProductId),
           )
         : isNull(promotion_targets.id);
-
       const validCoupons = await this.db
         .select({
           id: coupons.id,
@@ -754,11 +555,7 @@ export class CouponService {
           ),
         )
         .groupBy(coupons.id, promotions.id);
-
-      console.log(
-        `[CouponService.findCoupons] Retrieved ${validCoupons.length} valid coupon(s)`,
-      );
-      return validCoupons.map((row) => {
+            return validCoupons.map((row) => {
         const config = row.discount_config as Record<string, unknown> | null;
         const discountValue =
           config && 'value' in config ? Number(config.value) : 0;
@@ -777,7 +574,6 @@ export class CouponService {
       });
     }
   }
-
   async validateAppliedCoupon(
     userId: string,
     code: string,
@@ -785,13 +581,7 @@ export class CouponService {
     currentProductIds: string[],
   ) {
     try {
-      console.log(
-        `[CouponService.validateAppliedCoupon] Request received for userId: ${userId}, code: ${code}`,
-      );
-      console.log(
-        '[CouponService.validateAppliedCoupon] Querying active promotion and coupon',
-      );
-      const [isCouponExist] = await this.db
+                  const [isCouponExist] = await this.db
         .select({ id: coupons.id })
         .from(coupons)
         .where(eq(coupons.code, code.toUpperCase()))
@@ -809,7 +599,6 @@ export class CouponService {
       if (isCouponUsed) {
         throw new BadRequestException('You have already used this coupon.');
       }
-
       const couponPromotion = await this.db.query.promotions.findFirst({
         where: and(
           eq(promotions.status, PromotionStatus.ACTIVE),
@@ -817,22 +606,14 @@ export class CouponService {
         ),
         with: { coupon: true, rules: true, targets: true },
       });
-      console.log('couponPromotion?.coupon', couponPromotion?.coupon);
-      if (
+            if (
         !couponPromotion ||
         couponPromotion.coupon?.code !== code.toUpperCase()
       ) {
         throw new NotFoundException('Invalid or inactive promo code.');
       }
-
-      console.log(
-        '[CouponService.validateAppliedCoupon] Checking per-user usage limits',
-      );
-
-      console.log(
-        '[CouponService.validateAppliedCoupon] Checking validity window',
-      );
-      const now = new Date();
+      
+            const now = new Date();
       if (
         couponPromotion.valid_from &&
         new Date(couponPromotion.valid_from) > now
@@ -845,16 +626,12 @@ export class CouponService {
       ) {
         throw new BadRequestException('This offer has expired.');
       }
-
       // Rules engine — now uses the enum for comparison (no string literals)
       const minCartRule = couponPromotion.rules.find(
         (r) => r.rule_type === PromotionRuleType.MIN_CART_VALUE,
       );
       if (minCartRule) {
-        console.log(
-          '[CouponService.validateAppliedCoupon] Evaluating minimum cart value rule',
-        );
-        const ruleConfig =
+                const ruleConfig =
           typeof minCartRule.rule_config === 'object' &&
           minCartRule.rule_config !== null
             ? minCartRule.rule_config
@@ -870,20 +647,12 @@ export class CouponService {
           );
         }
       }
-
       const isGlobalCoupon = couponPromotion.targets.length === 0;
       let validForProductIds: string[] = [];
-
       if (isGlobalCoupon) {
-        console.log(
-          '[CouponService.validateAppliedCoupon] Coupon is global; using all current product ids',
-        );
-        validForProductIds = currentProductIds;
+                validForProductIds = currentProductIds;
       } else {
-        console.log(
-          '[CouponService.validateAppliedCoupon] Checking product target applicability',
-        );
-        const allowedProductIds = couponPromotion.targets
+                const allowedProductIds = couponPromotion.targets
           .filter(
             (t) => t.target_type === PromotionTargetType.PRODUCT && !t.exclude,
           )
@@ -897,15 +666,11 @@ export class CouponService {
           );
         }
       }
-
       const discountConfig = couponPromotion.discount_config as Record<
         string,
         unknown
       > | null;
-      console.log(
-        '[CouponService.validateAppliedCoupon] Coupon validated successfully',
-      );
-      return {
+            return {
         id: couponPromotion.coupon_id,
         promotion_id: couponPromotion.id,
         code: couponPromotion.coupon.code,

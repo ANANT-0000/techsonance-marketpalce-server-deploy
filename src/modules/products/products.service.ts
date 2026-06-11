@@ -39,6 +39,7 @@ import { product_tax, warehouse } from '../../drizzle/schema';
 import { domainExtractor } from '../../common/filters/domainExtractor.filter';
 import { GetProductsQueryDto, SortBy } from './dto/get-products-query.dto';
 import { extractCloudinaryPublicId } from '../../common/filters/extractCloudinaryPublicId.filter';
+import { ProductsErrorKeyEnum } from './constants/products.enums';
 
 @Injectable()
 export class ProductsService {
@@ -50,20 +51,10 @@ export class ProductsService {
     private readonly companyService: CompanyService,
   ) { }
   private async resolveCompanyId(domain: string): Promise<string> {
-    console.log(
-      `[ProductsService.resolveCompanyId] Resolving company for domain: ${domain}`,
-    );
     const filterDomain = domainExtractor(domain);
-    console.log(
-      `[ProductsService.resolveCompanyId] Extracted filter domain: ${filterDomain}`,
-    );
-    console.log(
-      `[ProductsService.resolveCompanyId] Querying CompanyService.find(...)`,
-    );
     return this.companyService.find(filterDomain);
   }
   async getVendorProducts(domain: string, query: GetProductsQueryDto = {}) {
-    console.log('[ProductsService.getAllProducts] Request received', query);
     try {
       const companyId = await this.resolveCompanyId(domain);
       const {
@@ -141,8 +132,7 @@ export class ProductsService {
         .from(products)
         .where(eq(products.company_id, companyId))
         .catch((error) => {
-          console.error('Error counting products:', error);
-          throw new InternalServerErrorException('Failed to count products', {
+          throw new InternalServerErrorException(ProductsErrorKeyEnum.FAILED_TO_COUNT_PRODUCTS, {
             cause: error,
           });
         });
@@ -177,12 +167,10 @@ export class ProductsService {
           },
         })
         .catch((error) => {
-          console.error('Error fetching products:', error);
-          throw new InternalServerErrorException('Failed to fetch products', {
+          throw new InternalServerErrorException(ProductsErrorKeyEnum.FAILED_TO_FETCH_PRODUCTS, {
             cause: error,
           });
         });
-      console.log('productList.length', productList.length);
       return {
         data: productList,
         total: Number(total),
@@ -191,20 +179,18 @@ export class ProductsService {
         totalPages: Math.ceil(Number(total) / limit),
       };
     } catch (error) {
-      console.error('Error in getAllProducts:', error);
       if (
         error instanceof HttpException ||
         error instanceof InternalServerErrorException
       ) {
         throw error;
       }
-      throw new InternalServerErrorException('Failed to fetch products', {
+      throw new InternalServerErrorException(ProductsErrorKeyEnum.FAILED_TO_FETCH_PRODUCTS, {
         cause: error,
       });
     }
   }
   async getAllProducts(domain: string, query: GetProductsQueryDto = {}) {
-    console.log('[ProductsService.getAllProducts] Request received', query);
     try {
       const companyId = await this.resolveCompanyId(domain);
       const {
@@ -282,8 +268,7 @@ export class ProductsService {
         .from(products)
         .where(eq(products.company_id, companyId))
         .catch((error) => {
-          console.error('Error counting products:', error);
-          throw new InternalServerErrorException('Failed to count products', {
+          throw new InternalServerErrorException(ProductsErrorKeyEnum.FAILED_TO_COUNT_PRODUCTS, {
             cause: error,
           });
         });
@@ -318,12 +303,10 @@ export class ProductsService {
           },
         })
         .catch((error) => {
-          console.error('Error fetching products:', error);
-          throw new InternalServerErrorException('Failed to fetch products', {
+          throw new InternalServerErrorException(ProductsErrorKeyEnum.FAILED_TO_FETCH_PRODUCTS, {
             cause: error,
           });
         });
-      console.log('productList.length', productList.length);
       return {
         data: productList,
         total: Number(total),
@@ -332,14 +315,13 @@ export class ProductsService {
         totalPages: Math.ceil(Number(total) / limit),
       };
     } catch (error) {
-      console.error('Error in getAllProducts:', error);
       if (
         error instanceof HttpException ||
         error instanceof InternalServerErrorException
       ) {
         throw error;
       }
-      throw new InternalServerErrorException('Failed to fetch products', {
+      throw new InternalServerErrorException(ProductsErrorKeyEnum.FAILED_TO_FETCH_PRODUCTS, {
         cause: error,
       });
     }
@@ -368,44 +350,29 @@ export class ProductsService {
         .orderBy(asc(products.name));
       return { data: suggestions };
     } catch (error) {
-      throw new InternalServerErrorException('Failed to fetch suggestions');
+      throw new InternalServerErrorException(ProductsErrorKeyEnum.FAILED_TO_FETCH_SUGGESTIONS);
     }
   }
 
   async getAllProductOptions(domain: string) {
-    console.log('[ProductsService.getAllProductOptions] Request received');
     try {
-      console.log(
-        `[ProductsService.getAllProductOptions] Resolving company id for domain: ${domain}`,
-      );
       const companyId = await this.resolveCompanyId(domain);
-      console.log(
-        `[ProductsService.getAllProductOptions] Querying product options for company_id: ${companyId}`,
-      );
       const productOptions = await this.db
         .select({ id: products.id, name: products.name })
         .from(products)
         .where(eq(products.company_id, companyId))
         .catch((e) => {
-          console.log('error in fetching products', e);
           return [];
         });
-      console.log('response product ', productOptions);
       return productOptions;
     } catch (error) {
-      throw new InternalServerErrorException('Failed to fetch products', {
+      throw new InternalServerErrorException(ProductsErrorKeyEnum.FAILED_TO_FETCH_PRODUCTS, {
         cause: error,
       });
     }
   }
   async getProductMainDetails(productId: string, domain: string) {
-    console.log(
-      `[ProductsService.getProductMainDetails] Request received for productId: ${productId}`,
-    );
     try {
-      console.log(
-        `[ProductsService.getProductMainDetails] Querying product main details for id: ${productId}`,
-      );
       const productRecord = await this.db.query.products
         .findFirst({
           where: (products) => eq(products.id, productId),
@@ -422,31 +389,23 @@ export class ProductsService {
           },
         })
         .catch((error) => {
-          console.error('Error fetching product by ID:', error);
-          throw new InternalServerErrorException('Failed to fetch product', {
+          throw new InternalServerErrorException(ProductsErrorKeyEnum.FAILED_TO_FETCH_PRODUCT, {
             cause: error,
           });
         });
       if (!productRecord) {
-        throw new HttpException('Product not found', HttpStatus.NOT_FOUND);
+        throw new HttpException(ProductsErrorKeyEnum.PRODUCT_NOT_FOUND, HttpStatus.NOT_FOUND);
       }
-      console.log('sending product main details', productRecord);
       return productRecord;
     } catch (error) {
-      throw new InternalServerErrorException('Failed to fetch product', {
+      throw new InternalServerErrorException(ProductsErrorKeyEnum.FAILED_TO_FETCH_PRODUCT, {
         cause: error,
       });
     }
   }
 
   async getProductById(productId: string, domain: string) {
-    console.log(
-      `[ProductsService.getProductById] Request received for productId: ${productId}`,
-    );
     try {
-      console.log(
-        `[ProductsService.getProductById] Resolving company id for domain: ${domain}`,
-      );
       const companyId = await this.resolveCompanyId(domain);
 
       const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(productId);
@@ -476,9 +435,6 @@ export class ProductsService {
         }
       }
 
-      console.log(
-        `[ProductsService.getProductById] Querying product and company_id: ${companyId}`,
-      );
       const productRecord = await this.db.query.products
         .findFirst({
           where: and(eq(products.company_id, companyId), ...condition),
@@ -498,53 +454,34 @@ export class ProductsService {
           },
         })
         .catch((error) => {
-          console.error('Error fetching product by ID/SKU/Name:', error);
-          throw new InternalServerErrorException('Failed to fetch product', {
+          throw new InternalServerErrorException(ProductsErrorKeyEnum.FAILED_TO_FETCH_PRODUCT, {
             cause: error,
           });
         });
 
       if (!productRecord) {
-        throw new HttpException('Product not found', HttpStatus.NOT_FOUND);
+        throw new HttpException(ProductsErrorKeyEnum.PRODUCT_NOT_FOUND, HttpStatus.NOT_FOUND);
       }
-      console.log(
-        `[ProductsService.getProductById] Product record:`,
-        productRecord?.id,
-      );
       return productRecord;
     } catch (error) {
       if (error instanceof HttpException) throw error;
-      throw new InternalServerErrorException('Failed to fetch product', {
+      throw new InternalServerErrorException(ProductsErrorKeyEnum.FAILED_TO_FETCH_PRODUCT, {
         cause: error,
       });
     }
   }
   async getProductDetailsById(productVariantId: string, domain: string) {
-    console.log(
-      `[ProductsService.getProductDetailsById] Request received for productVariantId: ${productVariantId}`,
-    );
     try {
-      console.log(
-        `[ProductsService.getProductDetailsById] Checking product variant existence for id: ${productVariantId}`,
-      );
       const isProductVariantExist = await this.db
         .select({ id: product_variants.id })
         .from(product_variants)
         .where(eq(product_variants.id, productVariantId))
         .catch((error) => {
-          console.error('Error checking product variant existence:', error);
           throw new InternalServerErrorException(
-            'Failed to check product variant existence',
+            ProductsErrorKeyEnum.FAILED_TO_CHECK_PRODUCT_VARIANT_EXISTENCE,
           );
         });
-      console.log(
-        `[ProductsService.getProductDetailsById] isProductVariantExist:`,
-        isProductVariantExist,
-      );
 
-      console.log(
-        `[ProductsService.getProductDetailsById] Querying product variant details for id: ${productVariantId}`,
-      );
       const productVariant = await this.db.query.product_variants
         .findFirst({
           where: eq(product_variants.id, productVariantId),
@@ -577,18 +514,16 @@ export class ProductsService {
           },
         })
         .then((res) => {
-          console.log('res', res);
           return res;
         })
         .catch((error) => {
-          console.error('Error fetching product by ID:', error);
-          throw new InternalServerErrorException('Failed to fetch product', {
+          throw new InternalServerErrorException(ProductsErrorKeyEnum.FAILED_TO_FETCH_PRODUCT, {
             cause: error,
           });
         });
       if (!productVariant) {
         throw new HttpException(
-          'Product variant not found',
+          ProductsErrorKeyEnum.PRODUCT_VARIANT_NOT_FOUND,
           HttpStatus.NOT_FOUND,
         );
       }
@@ -601,7 +536,7 @@ export class ProductsService {
       ) {
         throw error;
       }
-      throw new InternalServerErrorException('Failed to fetch product', {
+      throw new InternalServerErrorException(ProductsErrorKeyEnum.FAILED_TO_FETCH_PRODUCT, {
         cause: error,
       });
     }
@@ -617,15 +552,8 @@ export class ProductsService {
       sortby: string;
     },
   ) {
-    console.log(`[ProductsService.getActiveProducts] Request received`);
     try {
-      console.log(
-        `[ProductsService.getActiveProducts] Resolving company id for domain: ${domain}`,
-      );
       const companyId = await this.resolveCompanyId(domain);
-      console.log(
-        `[ProductsService.getActiveProducts] Querying active products for company_id: ${companyId}`,
-      );
       const result = await this.db.query.products.findMany({
         where: and(eq(products.company_id, companyId)),
         columns: {
@@ -645,11 +573,10 @@ export class ProductsService {
         },
       });
       const response = result.map((product) => product.variants).flat();
-      console.log('response', response);
       return response;
     } catch (error) {
       throw new InternalServerErrorException(
-        'Failed to fetch active products',
+        ProductsErrorKeyEnum.FAILED_TO_FETCH_ACTIVE_PRODUCTS,
         {
           cause: error,
         },
@@ -658,7 +585,6 @@ export class ProductsService {
   }
 
   async getHomepageProducts(domain: string, limit: number = 8) {
-    console.log(`[ProductsService.getHomepageProducts] Request received`);
     try {
       const companyId = await this.resolveCompanyId(domain);
       const productList = await this.db.query.products.findMany({
@@ -684,8 +610,7 @@ export class ProductsService {
       });
       return productList;
     } catch (error) {
-      console.log("error", error)
-      throw new InternalServerErrorException('Failed to fetch homepage products', { cause: error });
+      throw new InternalServerErrorException(ProductsErrorKeyEnum.FAILED_TO_FETCH_HOMEPAGE_PRODUCTS, { cause: error });
     }
   }
   async createProduct(
@@ -694,11 +619,6 @@ export class ProductsService {
     domain: string,
     files?: ProductFiles,
   ) {
-    console.log('[ProductsService.createProduct] Request received');
-    console.log(
-      '[ProductsService.createProduct] Incoming payload:',
-      productDto,
-    );
     const finalResults: {
       url: string;
       type: productImageType;
@@ -709,8 +629,6 @@ export class ProductsService {
       const mainRes = await this.uploadToCloudService.uploadFile(
         files.product[0],
       );
-      console.log('productImageType.GALLERY', productImageType.GALLERY);
-      console.log('productImageType.MAIN', productImageType.MAIN);
       finalResults.push({
         url: mainRes.secure_url,
         type: productImageType.MAIN,
@@ -730,24 +648,13 @@ export class ProductsService {
         })),
       );
     }
-    console.log(`[ProductsService.createProduct] domain: ${domain}`);
     try {
-      console.log(
-        `[ProductsService.createProduct] Resolving company id for domain: ${domain}`,
-      );
       const companyId = await this.resolveCompanyId(domain);
       return await this.db.transaction(async (tx) => {
-        console.log(
-          `[ProductsService.createProduct] Querying category for id: ${productDto.category_id}`,
-        );
         const categoryRecord = await tx
           .select({ id: categories.id })
           .from(categories)
           .where(eq(categories.id, productDto.category_id));
-        console.log(
-          `[ProductsService.createProduct] categoryRecord:`,
-          categoryRecord,
-        );
         if (!categoryRecord) {
           throw new Error('Category not found');
         }
@@ -762,22 +669,11 @@ export class ProductsService {
           vendor_id: vendorId,
           company_id: companyId,
         };
-        console.log(
-          '[ProductsService.createProduct] Inserting product into database',
-          productInsert,
-        );
         const [createdProduct] = await tx
           .insert(products)
           .values(productInsert)
           .returning({ id: products.id });
 
-        console.log(
-          '[ProductsService.createProduct] createdProduct:',
-          createdProduct,
-        );
-        console.log(
-          '[ProductsService.createProduct] Inserting product variant into database',
-        );
         const [variantRecords] = await tx
           .insert(product_variants)
           .values({
@@ -792,16 +688,14 @@ export class ProductsService {
             id: product_variants.id,
           })
           .catch((error) => {
-            console.error('Error inserting product variant:', error);
             throw new InternalServerErrorException(
-              'Failed to create product variant',
+              ProductsErrorKeyEnum.FAILED_TO_CREATE_PRODUCT_VARIANT,
               {
                 cause: error,
               },
             );
           });
 
-        console.log('variantRecords', variantRecords);
         if (finalResults.length > 0) {
           const imageInserts = finalResults.map((image, index) => ({
             variant_id: variantRecords?.id,
@@ -815,7 +709,6 @@ export class ProductsService {
             .insert(product_images)
             .values(imageInserts)
             .returning();
-          console.log('createdImages', createdImages);
         }
         if (!productDto.warehouse_id && variantRecords?.id) {
           const defaultWarehouse = await tx
@@ -831,7 +724,6 @@ export class ProductsService {
             companyId,
             tx as DrizzleService, // pass transaction context
           );
-          console.log('inventoryResult', inventoryResult);
         }
         if (productDto.warehouse_id && variantRecords?.id) {
           const inventoryResult = await this.inventoryService.setStock(
@@ -841,7 +733,6 @@ export class ProductsService {
             companyId,
             tx as DrizzleService, // pass transaction context
           );
-          console.log('inventoryResult', inventoryResult);
         }
         await tx
           .insert(product_tax)
@@ -850,9 +741,8 @@ export class ProductsService {
             tax_slab_id: productDto.tax_slab_id,
           })
           .catch((error) => {
-            console.error('Error inserting product tax mapping:', error);
             throw new InternalServerErrorException(
-              'Failed to create product tax mapping',
+              ProductsErrorKeyEnum.FAILED_TO_CREATE_PRODUCT_TAX_MAPPING,
               {
                 cause: error,
               },
@@ -880,7 +770,7 @@ export class ProductsService {
       ) {
         throw error;
       }
-      throw new InternalServerErrorException('Failed to register vendor', {
+      throw new InternalServerErrorException(ProductsErrorKeyEnum.FAILED_TO_REGISTER_VENDOR, {
         cause: error,
       });
     }
@@ -892,31 +782,17 @@ export class ProductsService {
     imagesToDelete?: string[],
     files?: ProductFiles,
   ) {
-    console.log(
-      `[ProductsService.updateProduct] Request received for productVariantId: ${productVariantId}`,
-    );
-    console.log('[ProductsService.updateProduct] Incoming payload:', product);
-    console.log(
-      '[ProductsService.updateProduct] imagesToDelete:',
-      imagesToDelete,
-    );
     const imageToDeleteUrl: {
       toDeleteUrl: string | undefined;
       url: string | undefined;
     }[] = [];
     if (!productVariantId) {
       return new HttpException(
-        'Product Variant ID is required',
+        ProductsErrorKeyEnum.PRODUCT_VARIANT_ID_IS_REQUIRED,
         HttpStatus.BAD_REQUEST,
       );
     }
-    console.log(
-      `[ProductsService.updateProduct] Resolving company id for domain: ${domain}`,
-    );
     const companyId = await this.resolveCompanyId(domain);
-    console.log(
-      `[ProductsService.updateProduct] Querying product_id for variant id: ${productVariantId}`,
-    );
     const [productId] = await this.db
       .select({
         product_id: product_variants.product_id,
@@ -924,13 +800,11 @@ export class ProductsService {
       .from(product_variants)
       .where(eq(product_variants.id, productVariantId))
       .then((res) => {
-        console.log('[ProductsService.updateProduct] productId:', res);
         return res.map((item) => item.product_id);
       })
       .catch((error) => {
-        console.error('Error fetching product variant:', error);
         throw new InternalServerErrorException(
-          'Failed to fetch product variant',
+          ProductsErrorKeyEnum.FAILED_TO_FETCH_PRODUCT_VARIANT,
           {
             cause: error,
           },
@@ -938,7 +812,7 @@ export class ProductsService {
       });
     if (!productId && productId === null) {
       throw new HttpException(
-        'Product ID not found for the given variant',
+        ProductsErrorKeyEnum.PRODUCT_ID_NOT_FOUND_FOR_THE_GIVEN_VARIANT,
         HttpStatus.NOT_FOUND,
       );
     }
@@ -954,29 +828,24 @@ export class ProductsService {
     try {
       if (!product) {
         throw new HttpException(
-          'Product data not valid',
+          ProductsErrorKeyEnum.PRODUCT_DATA_NOT_VALID,
           HttpStatus.BAD_REQUEST,
         );
       }
       await this.db
         .transaction(async (tx) => {
-          console.log(
-            `[ProductsService.updateProduct] Updating product id: ${productVariantId}`,
-          );
           const updatedProductResult = await tx
             .update(products)
             .set(productUpdatedData)
             .where(eq(products.id, productVariantId))
             .catch((error) => {
-              console.error('Error updating product:', error);
               throw new InternalServerErrorException(
-                'Failed to update product',
+                ProductsErrorKeyEnum.FAILED_TO_UPDATE_PRODUCT,
                 {
                   cause: error,
                 },
               );
             });
-          console.log('updatedProductResult', updatedProductResult);
           const finalResults: { url: string; type: productImageType }[] = [];
 
           if (files?.product?.[0]) {
@@ -1006,10 +875,8 @@ export class ProductsService {
               })),
             );
           }
-          console.log('finalResults *******', product.variant_id);
           if (finalResults.length > 0 && product.variant_id) {
             const imageInserts = finalResults.map((image, index) => {
-              console.log('images inserts');
               console.table(image);
               return {
                 variant_id: product.variant_id,
@@ -1025,16 +892,13 @@ export class ProductsService {
               .insert(product_images)
               .values(imageInserts)
               .catch((error) => {
-                console.error('Error inserting product images:', error);
                 throw new InternalServerErrorException(
-                  'Failed to insert product images',
+                  ProductsErrorKeyEnum.FAILED_TO_INSERT_PRODUCT_IMAGES,
                   {
                     cause: error,
                   },
                 );
               });
-            console.log('createdImages', createdImages);
-            console.log('imagesToDelete', imagesToDelete);
             const imagesToDeleteIds = imagesToDelete?.map((id) => id);
             if (imagesToDeleteIds && imagesToDeleteIds.length > 0) {
               const urls = await tx
@@ -1042,16 +906,11 @@ export class ProductsService {
                 .from(product_images)
                 .where(inArray(product_images.id, imagesToDeleteIds))
                 .then((res) => {
-                  console.log('urls to delete', res);
                   return res.map((item) => item.image_url);
                 })
                 .catch((error) => {
-                  console.error(
-                    'Error fetching image URLs for deletion:',
-                    error,
-                  );
                   throw new InternalServerErrorException(
-                    'Failed to fetch image URLs for deletion',
+                    ProductsErrorKeyEnum.FAILED_TO_FETCH_IMAGE_URLS_FOR_DELETION,
                     {
                       cause: error,
                     },
@@ -1059,25 +918,17 @@ export class ProductsService {
                 });
               if (urls && urls.length > 0) {
                 for (const url of urls) {
-                  console.log('deleting image from cloudinary', url);
                   const publicId = extractCloudinaryPublicId(url);
-                  console.log('extracted publicId', publicId);
                   await this.uploadToCloudService
                     .deleteFile(publicId!, 'image')
                     .then(() => {
-                      console.log(`Deleted image from cloud storage: ${url}`);
                     })
                     .catch((error) => {
-                      console.error(
-                        'Error deleting image from cloud storage:',
-                        error,
-                      );
                     });
                 }
               }
             }
             if (imagesToDelete) {
-              console.log('starting deleting images');
               const deletePromises = imagesToDelete.map(
                 async (id) =>
                   await tx
@@ -1089,13 +940,11 @@ export class ProductsService {
                       ),
                     )
                     .then(() => {
-                      console.log(`Deleted product image with ID: ${id}`);
                       return id;
                     })
                     .catch((error) => {
-                      console.error('Error deleting product image:', error);
                       throw new InternalServerErrorException(
-                        'Failed to delete product image',
+                        ProductsErrorKeyEnum.FAILED_TO_DELETE_PRODUCT_IMAGE,
                         {
                           cause: error,
                         },
@@ -1103,9 +952,7 @@ export class ProductsService {
                     }),
               );
               const deletedImages = await Promise.all(deletePromises);
-              console.log('deletedImages', deletedImages);
             }
-            console.log();
             const updateProductVariantData = {
               variant_name: product.variant_name,
               sku: product.sku,
@@ -1114,7 +961,6 @@ export class ProductsService {
               status: product.status,
               seo_meta: null,
             };
-            console.log('updateProductVariantDat', updateProductVariantData);
             const updatedVariantResult = await tx
               .update(product_variants)
               .set(updateProductVariantData)
@@ -1125,15 +971,13 @@ export class ProductsService {
                 ),
               )
               .catch((error) => {
-                console.error('Error updating product variant:', error);
                 throw new InternalServerErrorException(
-                  'Failed to update product variant',
+                  ProductsErrorKeyEnum.FAILED_TO_UPDATE_PRODUCT_VARIANT,
                   {
                     cause: error,
                   },
                 );
               });
-            console.log('updatedVariantResult', updatedVariantResult);
           }
           if (product.warehouse_id && productVariantId) {
             await this.inventoryService.setStock(
@@ -1156,53 +1000,35 @@ export class ProductsService {
               this.uploadToCloudService
                 .deleteFile(publicId, 'image')
                 .then(() => {
-                  console.log(
-                    `Deleted image from cloud storage due to transaction failure: ${file.url}`,
-                  );
                 })
                 .catch((err) => {
-                  console.error(
-                    'Error deleting image from cloud storage after transaction failure:',
-                    err,
-                  );
                 });
             }
           }
-          console.error('Error in transaction:', error);
-          throw new InternalServerErrorException('Failed to update product', {
+          throw new InternalServerErrorException(ProductsErrorKeyEnum.FAILED_TO_UPDATE_PRODUCT, {
             cause: error,
           });
         });
     } catch (error) {
-      throw new InternalServerErrorException('Failed to register vendor', {
+      throw new InternalServerErrorException(ProductsErrorKeyEnum.FAILED_TO_REGISTER_VENDOR, {
         cause: error,
       });
     }
   }
 
   async deleteProduct(productId: string) {
-    console.log(
-      `[ProductsService.deleteProduct] Request received for productId: ${productId}`,
-    );
     if (!productId) {
-      console.log(
-        '[ProductsService.deleteProduct] Stopping: productId is missing',
-      );
       return new HttpException(
-        'Product ID is required',
+        ProductsErrorKeyEnum.PRODUCT_ID_IS_REQUIRED,
         HttpStatus.BAD_REQUEST,
       );
     }
     try {
-      console.log(
-        `[ProductsService.deleteProduct] Deleting product id: ${productId}`,
-      );
       await this.db
         .delete(products)
         .where(eq(products.id, productId))
         .catch((error) => {
-          console.error('Error deleting product:', error);
-          throw new InternalServerErrorException('Failed to delete product', {
+          throw new InternalServerErrorException(ProductsErrorKeyEnum.FAILED_TO_DELETE_PRODUCT, {
             cause: error,
           });
         });
@@ -1211,28 +1037,19 @@ export class ProductsService {
         status: HttpStatus.OK,
       };
     } catch (error) {
-      throw new InternalServerErrorException('Failed to delete product', {
+      throw new InternalServerErrorException(ProductsErrorKeyEnum.FAILED_TO_DELETE_PRODUCT, {
         cause: error,
       });
     }
   }
   async UpdateProductCategory(categoryId: string, productId: string) {
-    console.log(
-      `[ProductsService.UpdateProductCategory] Request received for categoryId: ${categoryId}, productId: ${productId}`,
-    );
     if (!categoryId && !productId) {
-      console.log(
-        '[ProductsService.UpdateProductCategory] Stopping: categoryId or productId is missing',
-      );
       return new HttpException(
-        'Category ID is required',
+        ProductsErrorKeyEnum.CATEGORY_ID_IS_REQUIRED,
         HttpStatus.BAD_REQUEST,
       );
     }
     try {
-      console.log(
-        `[ProductsService.UpdateProductCategory] Updating product category for productId: ${productId}`,
-      );
       await this.db
         .update(products)
         .set({ category_id: categoryId })
@@ -1243,7 +1060,7 @@ export class ProductsService {
       };
     } catch (error) {
       throw new InternalServerErrorException(
-        'Failed to update product category',
+        ProductsErrorKeyEnum.FAILED_TO_UPDATE_PRODUCT_CATEGORY,
         {
           cause: error,
         },
@@ -1252,23 +1069,13 @@ export class ProductsService {
   }
 
   async deleteSelectedProducts(productIds: string[]) {
-    console.log(
-      `[ProductsService.deleteSelectedProducts] Request received for productIds:`,
-      productIds,
-    );
     if (!productIds || productIds.length === 0) {
-      console.log(
-        '[ProductsService.deleteSelectedProducts] Stopping: productIds array is empty',
-      );
       return new HttpException(
-        'Product IDs are required',
+        ProductsErrorKeyEnum.PRODUCT_IDS_ARE_REQUIRED,
         HttpStatus.BAD_REQUEST,
       );
     }
     try {
-      console.log(
-        `[ProductsService.deleteSelectedProducts] Deleting selected products`,
-      );
       await this.db.delete(products).where(inArray(products.id, productIds));
       return {
         message: 'Selected products deleted successfully',
@@ -1276,7 +1083,7 @@ export class ProductsService {
       };
     } catch (error) {
       throw new InternalServerErrorException(
-        'Failed to delete  selected products',
+        ProductsErrorKeyEnum.FAILED_TO_DELETE_SELECTED_PRODUCTS,
         {
           cause: error,
         },
@@ -1285,22 +1092,13 @@ export class ProductsService {
   }
 
   async deleteProductVariant(variantId: string) {
-    console.log(
-      `[ProductsService.deleteProductVariant] Request received for variantId: ${variantId}`,
-    );
     if (!variantId) {
-      console.log(
-        '[ProductsService.deleteProductVariant] Stopping: variantId is missing',
-      );
       return new HttpException(
-        'Variant ID is required',
+        ProductsErrorKeyEnum.VARIANT_ID_IS_REQUIRED,
         HttpStatus.BAD_REQUEST,
       );
     }
     try {
-      console.log(
-        `[ProductsService.deleteProductVariant] Deleting product variant id: ${variantId}`,
-      );
       await this.db
         .delete(product_variants)
         .where(eq(product_variants.id, variantId));
@@ -1310,7 +1108,7 @@ export class ProductsService {
       };
     } catch (error) {
       throw new InternalServerErrorException(
-        'Failed to delete product variant',
+        ProductsErrorKeyEnum.FAILED_TO_DELETE_PRODUCT_VARIANT,
         {
           cause: error,
         },
@@ -1318,23 +1116,13 @@ export class ProductsService {
     }
   }
   async deleteSelectedProductVariants(variantIds: string[]) {
-    console.log(
-      `[ProductsService.deleteSelectedProductVariants] Request received for variantIds:`,
-      variantIds,
-    );
     if (!variantIds || variantIds.length === 0) {
-      console.log(
-        '[ProductsService.deleteSelectedProductVariants] Stopping: variantIds array is empty',
-      );
       return new HttpException(
-        'Variant IDs are required',
+        ProductsErrorKeyEnum.VARIANT_IDS_ARE_REQUIRED,
         HttpStatus.BAD_REQUEST,
       );
     }
     try {
-      console.log(
-        `[ProductsService.deleteSelectedProductVariants] Deleting selected product variants`,
-      );
       await this.db.delete(product_variants).where(inArray(product_variants.id, variantIds));
       return {
         message: 'Product variant deleted successfully',
@@ -1342,7 +1130,7 @@ export class ProductsService {
       };
     } catch (error) {
       throw new InternalServerErrorException(
-        'Failed to delete product variant',
+        ProductsErrorKeyEnum.FAILED_TO_DELETE_PRODUCT_VARIANT,
         {
           cause: error,
         },
@@ -1350,19 +1138,10 @@ export class ProductsService {
     }
   }
   async deleteProductImage(imageId: string) {
-    console.log(
-      `[ProductsService.deleteProductImage] Request received for imageId: ${imageId}`,
-    );
     if (!imageId) {
-      console.log(
-        '[ProductsService.deleteProductImage] Stopping: imageId is missing',
-      );
-      return new HttpException('Image ID is required', HttpStatus.BAD_REQUEST);
+      return new HttpException(ProductsErrorKeyEnum.IMAGE_ID_IS_REQUIRED, HttpStatus.BAD_REQUEST);
     }
     try {
-      console.log(
-        `[ProductsService.deleteProductImage] Deleting product image id: ${imageId}`,
-      );
       await this.db
         .delete(product_images)
         .where(eq(product_images.id, imageId));
@@ -1371,7 +1150,7 @@ export class ProductsService {
         status: HttpStatus.OK,
       };
     } catch (error) {
-      throw new InternalServerErrorException('Failed to delete product image', {
+      throw new InternalServerErrorException(ProductsErrorKeyEnum.FAILED_TO_DELETE_PRODUCT_IMAGE, {
         cause: error,
       });
     }

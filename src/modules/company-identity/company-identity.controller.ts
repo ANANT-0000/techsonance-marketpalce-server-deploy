@@ -6,7 +6,6 @@ import {
   Headers,
   HttpCode,
   HttpStatus,
-  Param,
   Post,
   UploadedFiles,
 } from '@nestjs/common';
@@ -30,9 +29,7 @@ export class CompanyIdentityController {
   @Get('branding')
   @HttpCode(HttpStatus.OK)
   async getBranding(@Headers('company-domain') domain: string) {
-    console.log('Fetching branding for domain:', domain);
-    const data = await this.service.getBranding(domain);
-    return { data };
+    return this.service.getBranding(domain);
   }
 
   @Post('branding')
@@ -54,7 +51,7 @@ export class CompanyIdentityController {
       favicon?: Express.Multer.File[];
     },
   ) {
-    return await this.service.upsertBranding(domain, dto, files ?? {});
+    return this.service.upsertBranding(domain, dto, files ?? {});
   }
 
   // ─── LEGAL PROFILE ────────────────────────────────────────────────────────
@@ -62,18 +59,16 @@ export class CompanyIdentityController {
   @Get('legal-profile')
   @HttpCode(HttpStatus.OK)
   async getLegalProfile(@Headers('company-domain') domain: string) {
-    console.log('Fetching legal profile for domain:', domain);
-    return await this.service.getLegalProfile(domain);
+    return this.service.getLegalProfile(domain);
   }
 
   @Post('legal-profile')
   @HttpCode(HttpStatus.OK)
   async upsertLegalProfile(
     @Headers('company-domain') domain: string,
-    @Body() dto: any,
+    @Body() dto: UpsertLegalProfileDto,
   ) {
-    console.log('Upserting legal profile for domain:', domain, dto);
-    return await this.service.upsertLegalProfile(domain, dto);
+    return this.service.upsertLegalProfile(domain, dto);
   }
 
   // ─── COMPLIANCE ───────────────────────────────────────────────────────────
@@ -81,7 +76,7 @@ export class CompanyIdentityController {
   @Get('compliance')
   @HttpCode(HttpStatus.OK)
   async getCompliance(@Headers('company-domain') domain: string) {
-    return await this.service.getCompliance(domain);
+    return this.service.getCompliance(domain);
   }
 
   // @Post('compliance')
@@ -108,7 +103,7 @@ export class CompanyIdentityController {
   @Get('document-config')
   @HttpCode(HttpStatus.OK)
   async getDocumentConfig(@Headers('company-domain') domain: string) {
-    return await this.service.getDocumentConfig(domain);
+    return this.service.getDocumentConfig(domain);
   }
 
   @Post('document-config')
@@ -116,13 +111,12 @@ export class CompanyIdentityController {
   @HttpCode(HttpStatus.OK)
   async upsertDocumentConfig(
     @Headers('company-domain') domain: string,
-    @Body(ParseJsonPipe) dto: any,
+    @Body(ParseJsonPipe) dto: UpsertDocumentConfigDto,
     @UploadedFiles()
     files: {
       signatory_signature_file?: Express.Multer.File[];
     },
   ) {
-    console.log('dro', dto);
-    return await this.service.upsertDocumentConfig(domain, dto, files ?? {});
+    return this.service.upsertDocumentConfig(domain, dto, files ?? {});
   }
 }

@@ -23,7 +23,6 @@ export class TemplateController {
     @Body('templateData', ParseJsonPipe) createTemplateDto: any,
     @UploadedFiles() files: { template_file: Express.Multer.File[] },
   ) {
-    console.log(createTemplateDto);
     return this.templateService.create(createTemplateDto, files);
   }
 
@@ -44,13 +43,11 @@ export class TemplateController {
     @Body('templateData', ParseJsonPipe) updateTemplateDto: any,
     @UploadedFiles() files?: { template_file: Express.Multer.File[] },
   ) {
-    console.log(updateTemplateDto);
     return this.templateService.update(id, updateTemplateDto, files);
   }
 
   @Delete(':id')
   remove(@Param('id') id: string) {
-    console.log('id', id);
     return this.templateService.remove(id);
   }
 }

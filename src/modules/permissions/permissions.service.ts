@@ -8,6 +8,7 @@ import { eq } from 'drizzle-orm';
 import { DRIZZLE } from '../../drizzle/drizzle.module';
 import { permissions } from '../../drizzle/schema';
 import { type DrizzleDB } from '../../drizzle/types/drizzle';
+import { PermissionsErrorKeyEnum } from './constants/permissions.enums';
 
 @Injectable()
 export class PermissionsService {
@@ -15,10 +16,9 @@ export class PermissionsService {
   async getAllPermissions() {
     try {
       const allPermissions = await this.db.select().from(permissions);
-      console.log('permissions', allPermissions);
       return allPermissions;
     } catch (error) {
-      throw new InternalServerErrorException('Failed to fetch permissions', {
+      throw new InternalServerErrorException(PermissionsErrorKeyEnum.FAILED_TO_FETCH_PERMISSIONS, {
         cause: error,
       });
     }
@@ -40,7 +40,7 @@ export class PermissionsService {
       });
       return permission;
     } catch (error) {
-      throw new InternalServerErrorException('Failed to create permission', {
+      throw new InternalServerErrorException(PermissionsErrorKeyEnum.FAILED_TO_CREATE_PERMISSION, {
         cause: error,
       });
     }
@@ -52,7 +52,7 @@ export class PermissionsService {
         .where(eq(permissions.id, permissionId));
       return removed;
     } catch (error) {
-      throw new InternalServerErrorException('Failed to remove permission', {
+      throw new InternalServerErrorException(PermissionsErrorKeyEnum.FAILED_TO_REMOVE_PERMISSION, {
         cause: error,
       });
     }
@@ -73,7 +73,7 @@ export class PermissionsService {
 
       return updated;
     } catch (error) {
-      throw new InternalServerErrorException('Failed to update permission', {
+      throw new InternalServerErrorException(PermissionsErrorKeyEnum.FAILED_TO_UPDATE_PERMISSION, {
         cause: error,
       });
     }

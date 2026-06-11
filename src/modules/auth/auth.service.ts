@@ -25,6 +25,7 @@ import { randomInt } from 'crypto';
 import bcrypt from 'bcrypt';
 import { AccessStatus, UserRole, UserStatus } from '../../drizzle/types/types';
 import { domainExtractor } from '../../common/filters/domainExtractor.filter';
+import { AuthErrorKeyEnum } from './constants/auth.enums';
 
 @Injectable()
 export class AuthService {
@@ -48,7 +49,10 @@ export class AuthService {
       email: email,
     });
     if (!user) {
-      throw new HttpException('User not found', HttpStatus.UNAUTHORIZED);
+      throw new HttpException(
+        AuthErrorKeyEnum.USER_NOT_FOUND,
+        HttpStatus.UNAUTHORIZED,
+      );
     }
     return user;
   }
@@ -60,7 +64,10 @@ export class AuthService {
 
   async forgetPassword(email: string) {
     if (!email) {
-      throw new HttpException('Email is required', HttpStatus.BAD_REQUEST);
+      throw new HttpException(
+        AuthErrorKeyEnum.EMAIL_IS_REQUIRED,
+        HttpStatus.BAD_REQUEST,
+      );
     }
 
     try {
@@ -69,16 +76,22 @@ export class AuthService {
         .from(user)
         .where(eq(user.email, email));
       if (!mailExists || mailExists.length === 0) {
-        throw new HttpException('User not found', HttpStatus.NOT_FOUND);
+        throw new HttpException(
+          AuthErrorKeyEnum.USER_NOT_FOUND,
+          HttpStatus.NOT_FOUND,
+        );
       }
       await this.mail.sendResetPasswordEmail(email);
       return {
         message: 'Password reset link sent to email',
       };
     } catch (error) {
-      throw new InternalServerErrorException('Failed to reset password', {
-        cause: error,
-      });
+      throw new InternalServerErrorException(
+        AuthErrorKeyEnum.FAILED_TO_RESET_PASSWORD,
+        {
+          cause: error,
+        },
+      );
     }
   }
 
@@ -86,7 +99,7 @@ export class AuthService {
     const email = this.mail.verifyResetToken(token);
     if (!email) {
       throw new HttpException(
-        'Invalid or expired token',
+        AuthErrorKeyEnum.INVALID_OR_EXPIRED_TOKEN,
         HttpStatus.BAD_REQUEST,
       );
     }
@@ -98,15 +111,21 @@ export class AuthService {
         .where(eq(user.email, email));
       return { message: 'Password reset successful' };
     } catch (error) {
-      throw new InternalServerErrorException('Failed to reset password', {
-        cause: error,
-      });
+      throw new InternalServerErrorException(
+        AuthErrorKeyEnum.FAILED_TO_RESET_PASSWORD,
+        {
+          cause: error,
+        },
+      );
     }
   }
 
   async requestPasswordReset(email: string, domain: string) {
     if (!email) {
-      throw new HttpException('Email is required', HttpStatus.BAD_REQUEST);
+      throw new HttpException(
+        AuthErrorKeyEnum.EMAIL_IS_REQUIRED,
+        HttpStatus.BAD_REQUEST,
+      );
     }
     try {
       const [userExists] = await this.db
@@ -114,7 +133,10 @@ export class AuthService {
         .from(user)
         .where(eq(user.email, email));
       if (!userExists) {
-        throw new HttpException('User not found', HttpStatus.NOT_FOUND);
+        throw new HttpException(
+          AuthErrorKeyEnum.USER_NOT_FOUND,
+          HttpStatus.NOT_FOUND,
+        );
       }
       const otp = randomInt(100000, 999999).toString();
       const companyId = await this.resolveCompanyId(domain);
@@ -123,7 +145,10 @@ export class AuthService {
         .from(company)
         .where(eq(company.id, companyId));
       if (!companyId || !companyDetails) {
-        throw new HttpException('Domain not found', HttpStatus.NOT_FOUND);
+        throw new HttpException(
+          AuthErrorKeyEnum.DOMAIN_NOT_FOUND,
+          HttpStatus.NOT_FOUND,
+        );
       }
       const otpExpires = new Date();
       otpExpires.setMinutes(otpExpires.getMinutes() + 15); //15 minutes from now
@@ -148,9 +173,12 @@ export class AuthService {
         message: 'Password reset OTP sent to email',
       };
     } catch (error) {
-      throw new InternalServerErrorException('Failed to reset password', {
-        cause: error,
-      });
+      throw new InternalServerErrorException(
+        AuthErrorKeyEnum.FAILED_TO_RESET_PASSWORD,
+        {
+          cause: error,
+        },
+      );
     }
   }
 
@@ -160,13 +188,16 @@ export class AuthService {
       .from(user)
       .where(eq(user.email, email));
     if (!userRecord)
-      throw new HttpException('User not found', HttpStatus.NOT_FOUND);
+      throw new HttpException(
+        AuthErrorKeyEnum.USER_NOT_FOUND,
+        HttpStatus.NOT_FOUND,
+      );
 
     if (!userRecord.otp || userRecord.otp !== otp) {
-      throw new UnauthorizedException('Invalid OTP');
+      throw new UnauthorizedException(AuthErrorKeyEnum.INVALID_OTP);
     }
     if (!userRecord.otp_expires) {
-      throw new UnauthorizedException('Invalid OTP');
+      throw new UnauthorizedException(AuthErrorKeyEnum.INVALID_OTP);
     }
 
     if (new Date() > new Date(userRecord.otp_expires)) {
@@ -175,7 +206,7 @@ export class AuthService {
         .set({ otp: null, otp_expires: null })
         .where(eq(user.id, userRecord.id));
       throw new UnauthorizedException(
-        'OTP has expired. Please request a new one.',
+        AuthErrorKeyEnum.OTP_HAS_EXPIRED_PLEASE_REQUEST_A_NEW_ONE,
       );
     }
     const hashedPassword = bcrypt.hashSync(newPassword, 10);
@@ -200,22 +231,14 @@ export class AuthService {
     | { message: string; status: number; email: string }
   > {
     try {
-      console.log(
-        '[AuthService.validateOAuthLogin] Validating OAuth login for:',
-        oauthUser.email,
-      );
       const filteredDomain = domainExtractor(domain);
-      console.log(
-        '[AuthService.validateOAuthLogin] Resolving company for domain:',
-        filteredDomain,
-      );
       // Find company by domain
       const companyId = await this.companyService.find(filteredDomain);
       if (!companyId) {
-        console.log(
-          '[AuthService.validateOAuthLogin] Stopping: Company not found',
+        throw new HttpException(
+          AuthErrorKeyEnum.DOMAIN_NOT_FOUND,
+          HttpStatus.NOT_FOUND,
         );
-        throw new HttpException('Domain not found', HttpStatus.NOT_FOUND);
       }
 
       const [existingUser] = await this.db
@@ -229,29 +252,16 @@ export class AuthService {
           ),
         )
         .catch((error) => {
-          console.error(
-            '[AuthService.validateOAuthLogin] Error validating OAuth login:',
-            error,
-          );
           throw new InternalServerErrorException(
-            'Failed to validate OAuth login',
+            AuthErrorKeyEnum.FAILED_TO_VALIDATE_OAUTH_LOGIN,
             {
               cause: error,
             },
           );
         });
 
-      console.log(
-        '[AuthService.validateOAuthLogin] existing user:',
-        existingUser,
-      );
       // If user exists, log them in
       if (existingUser) {
-        console.log(
-          '[AuthService.validateOAuthLogin] Existing user found, logging in:',
-          existingUser.user.email,
-        );
-
         // Get user role
         const [roleRecord] = await this.db
           .select({ id: user_roles.id, role_name: user_roles.role_name })
@@ -259,7 +269,10 @@ export class AuthService {
           .where(eq(user_roles.role_name, UserRole.CUSTOMER));
 
         if (!roleRecord) {
-          throw new HttpException('User role not found', HttpStatus.NOT_FOUND);
+          throw new HttpException(
+            AuthErrorKeyEnum.USER_ROLE_NOT_FOUND,
+            HttpStatus.NOT_FOUND,
+          );
         }
         const [userAndCompany] = await this.db
           .select()
@@ -272,7 +285,7 @@ export class AuthService {
           );
         if (!userAndCompany) {
           throw new HttpException(
-            'User and company not found',
+            AuthErrorKeyEnum.USER_AND_COMPANY_NOT_FOUND,
             HttpStatus.NOT_FOUND,
           );
         }
@@ -322,11 +335,6 @@ export class AuthService {
         return { access_token: accessToken, refresh_token: refreshToken };
       }
 
-      console.log(
-        '[AuthService.validateOAuthLogin] New user, registering:',
-        oauthUser.email,
-      );
-
       const [roleRecord] = await this.db
         .select({ id: user_roles.id, role_name: user_roles.role_name })
         .from(user_roles)
@@ -334,7 +342,7 @@ export class AuthService {
 
       if (!roleRecord) {
         throw new HttpException(
-          'Customer role not found',
+          AuthErrorKeyEnum.CUSTOMER_ROLE_NOT_FOUND,
           HttpStatus.NOT_FOUND,
         );
       }
@@ -356,12 +364,8 @@ export class AuthService {
         })
         .returning()
         .catch((err) => {
-          console.error(
-            '[AuthService.validateOAuthLogin] Failed to create user with Google OAuth:',
-            err,
-          );
           throw new HttpException(
-            'Failed to create user account',
+            AuthErrorKeyEnum.FAILED_TO_CREATE_USER_ACCOUNT,
             HttpStatus.INTERNAL_SERVER_ERROR,
           );
         });
@@ -371,10 +375,6 @@ export class AuthService {
         access_status: AccessStatus.ACTIVE,
         role_id: roleRecord.id,
       });
-      console.log(
-        '[AuthService.validateOAuthLogin] New user created successfully:',
-        newUser.email,
-      );
 
       // Send welcome email
       try {
@@ -383,10 +383,6 @@ export class AuthService {
           `${newUser.first_name} ${newUser.last_name}`,
         );
       } catch (emailError) {
-        console.error(
-          '[AuthService.validateOAuthLogin] Failed to send welcome email:',
-          emailError,
-        );
         // Don't fail the registration if email fails
       }
 
@@ -410,17 +406,12 @@ export class AuthService {
 
       return { access_token: accessToken, refresh_token: refreshToken };
     } catch (error) {
-      console.error(
-        '[AuthService.validateOAuthLogin] OAuth validation error:',
-        error,
-      );
-
       if (error instanceof HttpException) {
         throw error;
       }
 
       throw new HttpException(
-        'Failed to process OAuth login',
+        AuthErrorKeyEnum.FAILED_TO_PROCESS_OAUTH_LOGIN,
         HttpStatus.INTERNAL_SERVER_ERROR,
       );
     }
@@ -445,9 +436,8 @@ export class AuthService {
         };
       }
     } catch (error) {
-      console.error('Email verification error:', error);
       throw new HttpException(
-        'Failed to verify email',
+        AuthErrorKeyEnum.FAILED_TO_VERIFY_EMAIL,
         HttpStatus.INTERNAL_SERVER_ERROR,
       );
     }

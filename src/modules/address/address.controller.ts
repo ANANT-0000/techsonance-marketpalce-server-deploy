@@ -62,8 +62,6 @@ export class AddressController {
     @Param('customerId') customerId: string,
     @Body() addressData: CreateAddressDto,
   ) {
-    console.log('addressData 8888888888888888888 \n', addressData);
-    console.log('customerId', customerId);
     return this.addressService.createAddress(customerId, addressData);
   }
 
@@ -74,9 +72,6 @@ export class AddressController {
     @Param('addressId') addressId: string,
     @Body() addressData: UpdateAddressDto,
   ) {
-    console.log('customer', customerId);
-    console.log('address', addressId);
-    console.log(addressData);
     return this.addressService.updateAddress(
       customerId,
       addressId,

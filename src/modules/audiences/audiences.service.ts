@@ -17,6 +17,7 @@ import { CompanyService } from '../company/company.service';
 import { domainExtractor } from '../../common/filters/domainExtractor.filter';
 import { CreateSegmentDto } from './dto/audience.dto';
 import { SegmentCriteriaOperator } from '../../drizzle/types/types';
+import { AudiencesErrorKeyEnum } from './constants/audiences.enums';
 
 export interface SegmentCriterion {
   field:
@@ -62,7 +63,7 @@ export class AudiencesService {
         eq(customer_segments.company_id, companyId),
       ),
     });
-    if (!segment) throw new NotFoundException('Segment not found');
+    if (!segment) throw new NotFoundException(AudiencesErrorKeyEnum.SEGMENT_NOT_FOUND);
 
     // Fetch a preview of members (last 50) with basic user info
     const members = await this.db
@@ -100,18 +101,13 @@ export class AudiencesService {
         })
         .then(() => ({ success: true, message: 'Segment created' }))
         .catch((err) => {
-          console.error(
-            '[AudiencesService.create] Error inserting segment:',
-            err,
-          );
-          throw new InternalServerErrorException('Failed to create segment', {
+          throw new InternalServerErrorException(AudiencesErrorKeyEnum.FAILED_TO_CREATE_SEGMENT, {
             cause: err,
           });
         });
     } catch (err) {
-      console.error('[AudiencesService.create] Error creating segment:', err);
       if (err instanceof InternalServerErrorException) throw err;
-      throw new InternalServerErrorException('Failed to create segment', {
+      throw new InternalServerErrorException(AudiencesErrorKeyEnum.FAILED_TO_CREATE_SEGMENT, {
         cause: err,
       });
     }
@@ -137,14 +133,13 @@ export class AudiencesService {
         ),
       )
       .catch((err) => {
-        console.error('[AudiencesService.update] Error updating segment:', err);
-        throw new InternalServerErrorException('Failed to update segment', {
+        throw new InternalServerErrorException(AudiencesErrorKeyEnum.FAILED_TO_UPDATE_SEGMENT, {
           cause: err,
         });
       });
 
     if (!updated)
-      throw new NotFoundException('Segment not found or no changes made');
+      throw new NotFoundException(AudiencesErrorKeyEnum.SEGMENT_NOT_FOUND_OR_NO_CHANGES_MADE);
     return { success: true, message: 'Segment updated' };
   }
 
@@ -161,11 +156,7 @@ export class AudiencesService {
         ),
       )
       .catch((err) => {
-        console.error(
-          '[AudiencesService.deactivate] Error deactivating segment:',
-          err,
-        );
-        throw new InternalServerErrorException('Failed to deactivate segment', {
+        throw new InternalServerErrorException(AudiencesErrorKeyEnum.FAILED_TO_DEACTIVATE_SEGMENT, {
           cause: err,
         });
       });
@@ -184,7 +175,7 @@ export class AudiencesService {
         eq(customer_segments.company_id, companyId),
       ),
     });
-    if (!segment) throw new NotFoundException('Segment not found');
+    if (!segment) throw new NotFoundException(AudiencesErrorKeyEnum.SEGMENT_NOT_FOUND);
 
     const criteria = segment.criteria as SegmentCriterion[];
     if (!criteria.length) return 0;

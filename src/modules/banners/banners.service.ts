@@ -20,6 +20,7 @@ import { domainExtractor } from '../../common/filters/domainExtractor.filter';
 import { BannerPlacement, PromoEventType } from '../../drizzle/types/types';
 import { CreateBannerDto } from './dto/banner.dto';
 import { UploadToCloudService } from '../../utils/upload-to-cloud/upload-to-cloud.service';
+import { BannersErrorKeyEnum } from './constants/banners.enums';
 
 // export interface CreateBannerDto {
 //   placement: BannerPlacement;
@@ -46,36 +47,19 @@ export class BannersService {
   ) {}
 
   private async resolveCompanyId(domain: string) {
-    console.log(
-      '[BannersService.resolveCompanyId] Resolving company for domain:',
-      domain,
-    );
     try {
       const companyId = await this.companyService.find(domainExtractor(domain));
-      console.log(
-        '[BannersService.resolveCompanyId] Company resolved:',
-        companyId,
-      );
       return companyId;
     } catch (err) {
-      console.error(
-        '[BannersService.resolveCompanyId] Error resolving company:',
-        err,
-      );
-      throw new InternalServerErrorException('Failed to resolve company', {
+      throw new InternalServerErrorException(BannersErrorKeyEnum.FAILED_TO_RESOLVE_COMPANY, {
         cause: err,
       });
     }
   }
 
   async findAll(domain: string) {
-    console.log(
-      '[BannersService.findAll] Request received for domain:',
-      domain,
-    );
     try {
       const companyId = await this.resolveCompanyId(domain);
-      console.log('[BannersService.findAll] Company resolved:', companyId);
       const rows = await this.db.query.marketing_banners
         .findMany({
           where: eq(marketing_banners.company_id, companyId),
@@ -85,19 +69,14 @@ export class BannersService {
           orderBy: [desc(marketing_banners.display_order)],
         })
         .catch((err) => {
-          console.error(
-            '[BannersService.findAll] Error fetching banners:',
-            err,
-          );
-          throw new InternalServerErrorException('Failed to fetch banners', {
+          throw new InternalServerErrorException(BannersErrorKeyEnum.FAILED_TO_FETCH_BANNERS, {
             cause: err,
           });
         });
       return rows;
     } catch (error) {
       if (error instanceof HttpException) throw error;
-      console.error('[BannersService.findAll] Unexpected error:', error);
-      throw new InternalServerErrorException('Failed to list banners', {
+      throw new InternalServerErrorException(BannersErrorKeyEnum.FAILED_TO_LIST_BANNERS, {
         cause: error,
       });
     }
@@ -107,15 +86,8 @@ export class BannersService {
   // within their validity window. Called by the frontend storefront,
   // not the vendor dashboard.
   async findActive(domain: string, placement: BannerPlacement) {
-    console.log(
-      '[BannersService.findActive] Request received for domain:',
-      domain,
-      'placement:',
-      placement,
-    );
     try {
       const companyId = await this.resolveCompanyId(domain);
-      console.log('[BannersService.findActive] Company resolved:', companyId);
       const now = new Date();
       const rows = await this.db.query.marketing_banners
         .findMany({
@@ -131,29 +103,22 @@ export class BannersService {
           orderBy: [desc(marketing_banners.display_order)],
         })
         .catch((err) => {
-          console.error(
-            '[BannersService.findActive] Error fetching active banners:',
-            err,
-          );
           throw new InternalServerErrorException(
-            'Failed to fetch active banners',
+            BannersErrorKeyEnum.FAILED_TO_FETCH_ACTIVE_BANNERS,
             { cause: err },
           );
         });
       return { success: true, data: rows };
     } catch (error) {
       if (error instanceof HttpException) throw error;
-      console.error('[BannersService.findActive] Unexpected error:', error);
-      throw new InternalServerErrorException('Failed to list active banners', {
+      throw new InternalServerErrorException(BannersErrorKeyEnum.FAILED_TO_LIST_ACTIVE_BANNERS, {
         cause: error,
       });
     }
   }
   async findOne(id: string, domain: string) {
-    console.log('[BannersService.findOne] Request received for id:', id);
     try {
       const companyId = await this.resolveCompanyId(domain);
-      console.log('[BannersService.findOne] Company resolved:', companyId);
       const [isExisting] = await this.db
         .select({ id: marketing_banners.id })
         .from(marketing_banners)
@@ -164,30 +129,22 @@ export class BannersService {
           ),
         )
         .catch((err) => {
-          console.error(
-            '[BannersService.findOne] Error checking banner existence:',
-            err,
-          );
-          throw new InternalServerErrorException('Failed to fetch banner', {
+          throw new InternalServerErrorException(BannersErrorKeyEnum.FAILED_TO_FETCH_BANNER, {
             cause: err,
           });
         });
       if (!isExisting || !isExisting.id)
-        throw new NotFoundException('Banner does not exist');
+        throw new NotFoundException(BannersErrorKeyEnum.BANNER_DOES_NOT_EXIST);
       return isExisting;
     } catch (error) {
       if (error instanceof HttpException) throw error;
-      throw new InternalServerErrorException('Failed to fetch banner', {
+      throw new InternalServerErrorException(BannersErrorKeyEnum.FAILED_TO_FETCH_BANNER, {
         cause: error,
       });
     }
   }
   async getBannerDetails(bannerId: string, domain: string) {
     const companyId = await this.resolveCompanyId(domain);
-    console.log(
-      '[BannersService.getBannerDetails] Request received for id:',
-      bannerId,
-    );
 
     // Using Drizzle Query Builder with Left Joins to get names instead of just IDs
     const [records] = await this.db
@@ -220,12 +177,8 @@ export class BannersService {
       )
       .limit(1)
       .catch((err) => {
-        console.error(
-          '[BannersService.getBannerDetails] Error fetching banner details:',
-          err,
-        );
         throw new InternalServerErrorException(
-          'Failed to fetch banner details',
+          BannersErrorKeyEnum.FAILED_TO_FETCH_BANNER_DETAILS,
           {
             cause: err,
           },
@@ -233,7 +186,7 @@ export class BannersService {
       });
 
     if (!records.id) {
-      throw new NotFoundException('Banner not found');
+      throw new NotFoundException(BannersErrorKeyEnum.BANNER_NOT_FOUND);
     }
 
     return records;
@@ -252,7 +205,7 @@ export class BannersService {
       columns: { id: true, promotion_id: true },
     });
 
-    if (!banner) throw new NotFoundException('Banner not found');
+    if (!banner) throw new NotFoundException(BannersErrorKeyEnum.BANNER_NOT_FOUND);
 
     // Default empty analytics object
     const analytics = {
@@ -344,18 +297,11 @@ export class BannersService {
       image_url_mobile?: Express.Multer.File[];
     },
   ) {
-    console.log('[BannersService.create] Request received');
     try {
       const companyId = await this.resolveCompanyId(domain);
-      console.log('[BannersService.create] Company resolved:', companyId);
-      console.log('[BannersService.create] Files received:', files);
 
       let imageUrl = '';
       if (files.image_url[0]) {
-        console.log(
-          '[BannersService.create] Uploading primary image',
-          files.image_url[0].buffer ? 'with buffer' : 'no buffer',
-        );
         await this.uploadToCloudService
           .uploadBanner(
             files.image_url[0]?.buffer,
@@ -365,10 +311,6 @@ export class BannersService {
       }
       let imageUrlMobile: string | null = null;
       if (files.image_url_mobile && files.image_url_mobile[0]) {
-        console.log(
-          '[BannersService.create] Uploading mobile image',
-          files.image_url_mobile[0].buffer ? 'with buffer' : 'no buffer',
-        );
         await this.uploadToCloudService
           .uploadBanner(
             files.image_url_mobile[0]?.buffer,
@@ -376,7 +318,6 @@ export class BannersService {
           )
           .then((data) => (imageUrlMobile = data));
       }
-      console.log(imageUrl, '\n', imageUrlMobile);
       const [banner] = await this.db
         .insert(marketing_banners)
         .values({
@@ -398,8 +339,7 @@ export class BannersService {
         })
         .returning()
         .catch((err) => {
-          console.error('[BannersService.create] Error inserting banner:', err);
-          throw new InternalServerErrorException('Failed to create banner', {
+          throw new InternalServerErrorException(BannersErrorKeyEnum.FAILED_TO_CREATE_BANNER, {
             cause: err,
           });
         });
@@ -407,18 +347,15 @@ export class BannersService {
       return banner;
     } catch (error) {
       if (error instanceof HttpException) throw error;
-      console.error('[BannersService.create] Unexpected error:', error);
-      throw new InternalServerErrorException('Failed to create banner', {
+      throw new InternalServerErrorException(BannersErrorKeyEnum.FAILED_TO_CREATE_BANNER, {
         cause: error,
       });
     }
   }
 
   async update(id: string, dto: Partial<CreateBannerDto>, domain: string) {
-    console.log('[BannersService.update] Request received for id:', id);
     try {
       const companyId = await this.resolveCompanyId(domain);
-      console.log('[BannersService.update] Company resolved:', companyId);
       const patch: Record<string, unknown> = {};
       const fields: (keyof CreateBannerDto)[] = [
         'placement',
@@ -449,27 +386,23 @@ export class BannersService {
         )
         .returning()
         .catch((err) => {
-          console.error('[BannersService.update] Error updating banner:', err);
-          throw new InternalServerErrorException('Failed to update banner', {
+          throw new InternalServerErrorException(BannersErrorKeyEnum.FAILED_TO_UPDATE_BANNER, {
             cause: err,
           });
         });
-      if (!updated) throw new NotFoundException('Banner not found');
+      if (!updated) throw new NotFoundException(BannersErrorKeyEnum.BANNER_NOT_FOUND);
       return { success: true, data: updated };
     } catch (error) {
       if (error instanceof HttpException) throw error;
-      console.error('[BannersService.update] Unexpected error:', error);
-      throw new InternalServerErrorException('Failed to update banner', {
+      throw new InternalServerErrorException(BannersErrorKeyEnum.FAILED_TO_UPDATE_BANNER, {
         cause: error,
       });
     }
   }
 
   async remove(id: string, domain: string) {
-    console.log('[BannersService.remove] Request received for id:', id);
     try {
       const companyId = await this.resolveCompanyId(domain);
-      console.log('[BannersService.remove] Company resolved:', companyId);
       await this.db
         .delete(marketing_banners)
         .where(
@@ -479,16 +412,14 @@ export class BannersService {
           ),
         )
         .catch((err) => {
-          console.error('[BannersService.remove] Error deleting banner:', err);
-          throw new InternalServerErrorException('Failed to delete banner', {
+          throw new InternalServerErrorException(BannersErrorKeyEnum.FAILED_TO_DELETE_BANNER, {
             cause: err,
           });
         });
       return { success: true, message: 'Banner deleted' };
     } catch (error) {
       if (error instanceof HttpException) throw error;
-      console.error('[BannersService.remove] Unexpected error:', error);
-      throw new InternalServerErrorException('Failed to delete banner', {
+      throw new InternalServerErrorException(BannersErrorKeyEnum.FAILED_TO_DELETE_BANNER, {
         cause: error,
       });
     }

@@ -38,7 +38,6 @@ export class OrdersController {
     @Query('limit') limit?: string,
     @Query('status') status?: OrderStatus,
   ) {
-    console.log('orderlist');
     return this.ordersService.getOrdersList(
       domain,
       Number(offset),
@@ -103,9 +102,6 @@ export class OrdersController {
   }
   @Get('warranty/:orderId')
   async getWarrantyUrl(@Param('orderId') orderId: string) {
-    console.log(
-      `[ProductPoliciesController.getWarrantyUrl] Fetching warranty URL for orderId: ${orderId}`,
-    );
     return this.productPoliciesService.getWarrantyUrl(orderId);
   }
   @Get('analytics/revenue')

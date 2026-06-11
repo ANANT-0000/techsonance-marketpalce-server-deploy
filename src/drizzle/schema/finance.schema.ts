@@ -1,7 +1,9 @@
 import * as pg from 'drizzle-orm/pg-core';
 import { company } from './main.schema';
+import { EntityStatusEnum } from './enums.schema';
 import { orders, products } from './shop.schema';
 import { relations, sql } from 'drizzle-orm';
+import { EntityStatus } from '../types/types';
 
 export const tax_profiles = pg.pgTable('tax_profiles', {
   id: pg.uuid('id').primaryKey().defaultRandom(),
@@ -93,6 +95,8 @@ export const gst_invoices = pg.pgTable('gst_invoices', {
     .$onUpdate(() => new Date()),
   order_id: pg.uuid('order_id').references(() => orders.id).unique(),
   company_id: pg.uuid('company_id').references(() => company.id),
+  status: EntityStatusEnum('status').default(EntityStatus.ACTIVE),
+  deleted_at: pg.timestamp('deleted_at'),
 });
 
 export const gstInvoicesRelations = relations(gst_invoices, ({ one }) => ({

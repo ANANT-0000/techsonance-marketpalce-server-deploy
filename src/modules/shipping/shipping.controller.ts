@@ -23,8 +23,6 @@ export class ShippingController {
     @Body('trackingUrl') trackingUrl: string,
     @Headers('company-domain') domain: string,
   ) {
-    console.log(orderId, trackingUrl);
-    console.log(domain);
     return this.shippingService.addTrackingUrl(orderId, trackingUrl, domain);
   }
   @Patch(':orderId')

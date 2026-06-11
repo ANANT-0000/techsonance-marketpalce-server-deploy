@@ -1,15 +1,22 @@
-import { Controller, Get, Post, Body, Param, Query, Headers, UseInterceptors, UploadedFile, BadRequestException } from '@nestjs/common';
+import {
+  Controller,
+  Get,
+  Post,
+  Body,
+  Param,
+  Query,
+  Headers,
+  UseInterceptors,
+  UploadedFile,
+} from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { CmsService } from './cms.service';
 import { CreateCmsDto } from './dto/create-cms.dto';
-
+import { CmsLanguageEnum } from './constants/cms.enums';
 
 @Controller({ version: '1', path: 'cms' })
 export class CmsController {
-  constructor(
-    private readonly cmsService: CmsService,
-
-  ) { }
+  constructor(private readonly cmsService: CmsService) {}
 
   @Post('upload')
   @UseInterceptors(FileInterceptor('file'))
@@ -23,7 +30,11 @@ export class CmsController {
     @Param('type') type: string,
     @Query('lang') lang?: string,
   ) {
-    return this.cmsService.getPage(domain, type, lang || 'en');
+    return this.cmsService.getPage(
+      domain,
+      type,
+      (lang as CmsLanguageEnum) || CmsLanguageEnum.ENGLISH,
+    );
   }
 
   @Post()

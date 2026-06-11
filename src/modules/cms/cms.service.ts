@@ -1,4 +1,11 @@
-import { Injectable, Inject, InternalServerErrorException, HttpStatus, NotFoundException, BadRequestException } from '@nestjs/common';
+import {
+  Injectable,
+  Inject,
+  InternalServerErrorException,
+  HttpStatus,
+  NotFoundException,
+  BadRequestException,
+} from '@nestjs/common';
 import { eq, and } from 'drizzle-orm';
 import { DRIZZLE, type DrizzleService } from '../../drizzle/drizzle.module';
 import { cms_pages } from '../../drizzle/schema';
@@ -6,47 +13,70 @@ import { CompanyService } from '../company/company.service';
 import { domainExtractor } from '../../common/filters/domainExtractor.filter';
 import { CreateCmsDto } from './dto/create-cms.dto';
 import { UploadToCloudService } from '../../utils/upload-to-cloud/upload-to-cloud.service';
+import {
+  CMS_ALLOWED_IMAGE_MIME_TYPES,
+  CMS_IMAGE_MAX_FILE_SIZE_BYTES,
+  CMS_MESSAGES,
+  CMS_THEME_COLOR_KEYS,
+} from './constants/cms.constants';
+import { CmsLanguageEnum, CmsPageContentTypeEnum } from './constants/cms.enums';
 
-function isValidHexColor(color: any): boolean {
+function isValidHexColor(color: unknown): boolean {
   if (typeof color !== 'string') return false;
   return /^#([A-Fa-f0-9]{3,4}|[A-Fa-f0-9]{6}|[A-Fa-f0-9]{8})$/.test(color);
 }
 
+function isCmsContentRecord(
+  content: unknown,
+): content is Record<string, unknown> {
+  return typeof content === 'object' && content !== null;
+}
+
+const STRUCTURED_CMS_PAGE_TYPES: Record<string, CmsPageContentTypeEnum> = {
+  [CmsPageContentTypeEnum.THEME]: CmsPageContentTypeEnum.THEME,
+  [CmsPageContentTypeEnum.NAVBAR]: CmsPageContentTypeEnum.NAVBAR,
+  [CmsPageContentTypeEnum.FOOTER]: CmsPageContentTypeEnum.FOOTER,
+};
+
+function getStructuredPageType(
+  pageType: string,
+): CmsPageContentTypeEnum | undefined {
+  return STRUCTURED_CMS_PAGE_TYPES[pageType];
+}
+
 function validateCmsContent(pageType: string, contentStr: string) {
-  let content: any;
+  let parsedContent: unknown;
   try {
-    content = typeof contentStr === 'string' ? JSON.parse(contentStr) : contentStr;
-  } catch (err) {
-    throw new BadRequestException('CMS content must be valid JSON');
+    parsedContent =
+      typeof contentStr === 'string' ? JSON.parse(contentStr) : contentStr;
+  } catch {
+    throw new BadRequestException(CMS_MESSAGES.INVALID_JSON_CONTENT);
   }
 
-  if (typeof content !== 'object' || content === null) {
-    throw new BadRequestException('CMS content must be a JSON object');
+  if (!isCmsContentRecord(parsedContent)) {
+    throw new BadRequestException(CMS_MESSAGES.INVALID_JSON_OBJECT);
   }
 
-  if (pageType === 'theme') {
-    const requiredColors = [
-      'primary_color',
-      'secondary_color',
-      'background_color',
-      'text_color',
-      'navbar_bg',
-      'navbar_fg',
-      'footer_bg',
-      'footer_fg'
-    ];
-    for (const key of requiredColors) {
-      if (content[key] !== undefined && content[key] !== null && !isValidHexColor(content[key])) {
-        throw new BadRequestException(`${key} must be a valid hex color code (e.g. #2563eb)`);
+  const content = parsedContent;
+  const structuredPageType = getStructuredPageType(pageType);
+
+  if (structuredPageType === CmsPageContentTypeEnum.THEME) {
+    for (const key of CMS_THEME_COLOR_KEYS) {
+      if (
+        content[key] !== undefined &&
+        content[key] !== null &&
+        !isValidHexColor(content[key])
+      ) {
+        throw new BadRequestException(CMS_MESSAGES.INVALID_HEX_COLOR(key));
       }
     }
-  } else if (pageType === 'navbar') {
+  } else if (structuredPageType === CmsPageContentTypeEnum.NAVBAR) {
     if (content.links && !Array.isArray(content.links)) {
-      throw new BadRequestException('Navbar links must be an array');
+      throw new BadRequestException(CMS_MESSAGES.NAVBAR_LINKS_MUST_BE_ARRAY);
     }
-  } else if (pageType === 'footer') {
+  } else if (structuredPageType === CmsPageContentTypeEnum.FOOTER) {
     if (content.content && !Array.isArray(content.content)) {
-      throw new BadRequestException('Footer sections must be an array');
+      throw new BadRequestException(CMS_MESSAGES.FOOTER_SECTIONS_MUST_BE_ARRAY);
     }
   }
 }
@@ -57,19 +87,23 @@ export class CmsService {
     @Inject(DRIZZLE) private readonly db: DrizzleService,
     private readonly companyService: CompanyService,
     private readonly uploadService: UploadToCloudService,
-  ) { }
+  ) {}
 
   private async resolveCompanyId(domain: string): Promise<string> {
-    console.log(`[CmsService.resolveCompanyId] Resolving company for domain: ${domain}`);
     const filterDomain = domainExtractor(domain);
     return this.companyService.find(filterDomain);
   }
 
-  async getPage(domain: string, pageContentType: string, language = 'en') {
-    console.log(`[CmsService.getPage] Request received`, { domain, pageContentType, language });
+  async getPage(
+    domain: string,
+    pageContentType: string,
+    language = CmsLanguageEnum.ENGLISH,
+  ) {
     const companyId = await this.resolveCompanyId(domain);
     if (!companyId) {
-      throw new InternalServerErrorException(`Company not found for domain: ${domain}`);
+      throw new InternalServerErrorException(
+        CMS_MESSAGES.COMPANY_NOT_FOUND(domain),
+      );
     }
 
     // Try finding the page in the requested language
@@ -88,9 +122,8 @@ export class CmsService {
       return pages;
     }
 
-    // Fallback to English ('en') if language is not 'en'
-    if (language !== 'en') {
-      console.log(`[CmsService.getPage] Page not found for '${language}'. Falling back to English.`);
+    // Fallback to English if the requested language has no page record.
+    if (language !== CmsLanguageEnum.ENGLISH) {
       const [englishPages] = await this.db
         .select()
         .from(cms_pages)
@@ -98,7 +131,7 @@ export class CmsService {
           and(
             eq(cms_pages.company_id, companyId),
             eq(cms_pages.page_content_type, pageContentType),
-            eq(cms_pages.language, 'en'),
+            eq(cms_pages.language, CmsLanguageEnum.ENGLISH),
           ),
         );
       if (englishPages) {
@@ -106,22 +139,20 @@ export class CmsService {
       }
     }
 
-    throw new NotFoundException(`CMS page for ${pageContentType} not found`);
+    throw new NotFoundException(CMS_MESSAGES.PAGE_NOT_FOUND(pageContentType));
   }
 
   async upsertPage(domain: string, dto: CreateCmsDto) {
-    console.log(`[CmsService.upsertPage] Request received`, { domain, type: dto.page_content_type });
-
-    // Validate CMS content schema first
     validateCmsContent(dto.page_content_type, dto.content);
     const companyId = await this.resolveCompanyId(domain);
     if (!companyId) {
-      throw new InternalServerErrorException(`Company not found for domain: ${domain}`);
+      throw new InternalServerErrorException(
+        CMS_MESSAGES.COMPANY_NOT_FOUND(domain),
+      );
     }
 
-    const language = dto.language || 'en';
+    const language = dto.language || CmsLanguageEnum.ENGLISH;
 
-    // Check if page already exists for this language and page_content_type
     const existing = await this.db
       .select()
       .from(cms_pages)
@@ -146,7 +177,7 @@ export class CmsService {
           .where(eq(cms_pages.id, existing[0].id));
 
         return {
-          message: 'CMS Page updated successfully',
+          message: CMS_MESSAGES.PAGE_UPDATED_SUCCESS,
           status: HttpStatus.OK,
         };
       } else {
@@ -160,35 +191,39 @@ export class CmsService {
         });
 
         return {
-          message: 'CMS Page created successfully',
+          message: CMS_MESSAGES.PAGE_CREATED_SUCCESS,
           status: HttpStatus.CREATED,
         };
       }
     } catch (error) {
-      console.error(`[CmsService.upsertPage] Failed to upsert page`, error);
-      throw new InternalServerErrorException('Failed to save CMS page content', { cause: error });
+      throw new InternalServerErrorException(CMS_MESSAGES.PAGE_SAVE_FAILED, {
+        cause: error,
+      });
     }
   }
+
   async uploadCmsImage(file: Express.Multer.File) {
     if (!file) {
-      throw new BadRequestException('No image file provided.');
+      throw new BadRequestException(CMS_MESSAGES.IMAGE_REQUIRED);
     }
-    const allowedMimeTypes = ['image/jpeg', 'image/png', 'image/webp', 'image/gif'];
-    if (!allowedMimeTypes.includes(file.mimetype)) {
-      throw new BadRequestException('Invalid file format. Only JPG, PNG, WEBP, and GIF are allowed.');
+    if (!CMS_ALLOWED_IMAGE_MIME_TYPES.includes(file.mimetype as never)) {
+      throw new BadRequestException(CMS_MESSAGES.IMAGE_FORMAT_INVALID);
     }
-    if (file.size > 5 * 1024 * 1024) {
-      throw new BadRequestException('File size exceeds 5MB limit.');
+    if (file.size > CMS_IMAGE_MAX_FILE_SIZE_BYTES) {
+      throw new BadRequestException(CMS_MESSAGES.IMAGE_SIZE_EXCEEDED);
     }
     const result = await this.uploadService.uploadFile(file).catch((error) => {
-      console.error(`[CmsService.uploadCmsImage] Failed to upload image`, error);
-      throw new InternalServerErrorException('Failed to upload image', { cause: error });
+      throw new InternalServerErrorException(CMS_MESSAGES.IMAGE_UPLOAD_FAILED, {
+        cause: error,
+      });
     });
     if (!result || !result.secure_url) {
-      throw new InternalServerErrorException('Failed to upload image', { cause: 'No secure URL returned' });
+      throw new InternalServerErrorException(CMS_MESSAGES.IMAGE_UPLOAD_FAILED, {
+        cause: CMS_MESSAGES.IMAGE_UPLOAD_MISSING_URL,
+      });
     }
     return {
-      message: 'Image uploaded successfully',
+      message: CMS_MESSAGES.IMAGE_UPLOAD_SUCCESS,
       status: HttpStatus.OK,
       secure_url: result.secure_url,
     };

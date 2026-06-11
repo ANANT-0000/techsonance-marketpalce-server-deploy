@@ -7,11 +7,11 @@ export class CreateCmsDto {
 
   @IsString()
   @IsNotEmpty()
-  content: string; // Dynamic page structure stored as string/JSON
+  content: string;
 
   @IsString()
   @IsNotEmpty()
-  page_content_type: string; // e.g. 'home', 'footer', 'about', 'contact'
+  page_content_type: string;
 
   @IsObject()
   @IsOptional()

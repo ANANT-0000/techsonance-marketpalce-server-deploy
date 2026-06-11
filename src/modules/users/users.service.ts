@@ -27,6 +27,7 @@ import { CompanyService } from '../company/company.service.js';
 import { randomInt } from 'crypto';
 
 import { domainExtractor } from '../../common/filters/domainExtractor.filter.js';
+import { UsersErrorKeyEnum } from './constants/users.enums';
 type UserRecord = InferSelectModel<typeof user>;
 type UserRoleRecord = InferSelectModel<typeof user_roles>;
 @Injectable()
@@ -60,7 +61,7 @@ export class UsersService {
         .limit(1);
       if (!userRecord) {
         throw new HttpException(
-          'User not found or deactivated',
+          UsersErrorKeyEnum.USER_NOT_FOUND_OR_DEACTIVATED,
           HttpStatus.UNAUTHORIZED,
         );
       }
@@ -71,7 +72,7 @@ export class UsersService {
         .limit(1);
       if (!userAndCompanyRecord) {
         throw new HttpException(
-          'User and company not found',
+          UsersErrorKeyEnum.USER_AND_COMPANY_NOT_FOUND,
           HttpStatus.UNAUTHORIZED,
         );
       }
@@ -81,14 +82,14 @@ export class UsersService {
         .where(eq(user_roles.id, userAndCompanyRecord.role_id))
         .limit(1);
       if (!roleRecord) {
-        throw new HttpException('User role not found', HttpStatus.UNAUTHORIZED);
+        throw new HttpException(UsersErrorKeyEnum.USER_ROLE_NOT_FOUND, HttpStatus.UNAUTHORIZED);
       }
       return {
         ...userRecord,
         role: roleRecord.role_name,
       };
     } catch (error) {
-      throw new InternalServerErrorException('Failed to find user', {
+      throw new InternalServerErrorException(UsersErrorKeyEnum.FAILED_TO_FIND_USER, {
         cause: error,
       });
     }
@@ -102,7 +103,7 @@ export class UsersService {
         .where(eq(user_roles.role_name, UserRole.CUSTOMER))
         .limit(1);
       if (!customerRole) {
-        throw new InternalServerErrorException('Customer role not found');
+        throw new InternalServerErrorException(UsersErrorKeyEnum.CUSTOMER_ROLE_NOT_FOUND);
       }
       const customers = await this.db.query.user_and_company.findMany({
         where: eq(user_and_company.role_id, customerRole?.id),
@@ -124,7 +125,7 @@ export class UsersService {
 
       return customers;
     } catch (error) {
-      throw new InternalServerErrorException('Failed to retrieve customers', {
+      throw new InternalServerErrorException(UsersErrorKeyEnum.FAILED_TO_RETRIEVE_CUSTOMERS, {
         cause: error,
       });
     }
@@ -150,7 +151,7 @@ export class UsersService {
         });
       return userRecord;
     } catch (error) {
-      throw new InternalServerErrorException('Failed to update profile', {
+      throw new InternalServerErrorException(UsersErrorKeyEnum.FAILED_TO_UPDATE_PROFILE, {
         cause: error,
       });
     }
@@ -172,14 +173,14 @@ export class UsersService {
         .where(eq(user.id, userId))
         .limit(1);
       if (!userRecord) {
-        throw new UnauthorizedException('User not found');
+        throw new UnauthorizedException(UsersErrorKeyEnum.USER_NOT_FOUND);
       }
       const isPasswordValid = await bcrypt.compare(
         currentPassword,
         userRecord.password_hash,
       );
       if (!isPasswordValid) {
-        throw new UnauthorizedException('Current password is incorrect');
+        throw new UnauthorizedException(UsersErrorKeyEnum.CURRENT_PASSWORD_IS_INCORRECT);
       }
       const hashedNewPassword = await bcrypt.hash(newPassword, 10);
       await this.db
@@ -187,7 +188,7 @@ export class UsersService {
         .set({ password_hash: hashedNewPassword })
         .where(eq(user.id, userId));
     } catch (error) {
-      throw new InternalServerErrorException('Failed to update password', {
+      throw new InternalServerErrorException(UsersErrorKeyEnum.FAILED_TO_UPDATE_PASSWORD, {
         cause: error,
       });
     }
@@ -199,24 +200,17 @@ export class UsersService {
       const companyId = await this.resolveCompanyId(domain);
 
       if (!companyId) {
-        throw new HttpException('Company not found', HttpStatus.NOT_FOUND);
+        throw new HttpException(UsersErrorKeyEnum.COMPANY_NOT_FOUND, HttpStatus.NOT_FOUND);
       }
 
       // ── 2. Check if user already exists ────────────────────────────
-      console.log('[UsersService.register] Checking if user already exists', {
-        email: userData.email,
-      });
       const [existingUser] = await this.db
         .select()
         .from(user)
         .where(eq(user.email, userData.email))
         .catch((error) => {
-          console.error(
-            '[UsersService.register] Error checking existing user:',
-            error,
-          );
           throw new InternalServerErrorException(
-            'Failed to check existing user',
+            UsersErrorKeyEnum.FAILED_TO_CHECK_EXISTING_USER,
             {
               cause: error,
             },
@@ -226,10 +220,6 @@ export class UsersService {
       // ── 3. FIXED: Only query user_and_company if user exists ────────
       //    Previously crashed with existingUser.id when existingUser = undefined
       if (existingUser) {
-        console.log(
-          '[UsersService.register] User exists, checking company link',
-          { existingUserId: existingUser.id, companyId },
-        );
         const [existingCompanyUser] = await this.db
           .select()
           .from(user_and_company)
@@ -240,12 +230,8 @@ export class UsersService {
             ),
           )
           .catch((error) => {
-            console.error(
-              '[UsersService.register] Error checking existing company user:',
-              error,
-            );
             throw new InternalServerErrorException(
-              'Failed to check existing company user',
+              UsersErrorKeyEnum.FAILED_TO_CHECK_EXISTING_COMPANY_USER,
               { cause: error },
             );
           });
@@ -282,8 +268,7 @@ export class UsersService {
         })
         .returning()
         .catch((error) => {
-          console.error('[UsersService.register] Error inserting user:', error);
-          throw new InternalServerErrorException('Failed to create user', {
+          throw new InternalServerErrorException(UsersErrorKeyEnum.FAILED_TO_CREATE_USER, {
             cause: error,
           });
         });
@@ -308,7 +293,7 @@ export class UsersService {
       ) {
         throw error;
       }
-      throw new InternalServerErrorException('Failed to register user', {
+      throw new InternalServerErrorException(UsersErrorKeyEnum.FAILED_TO_REGISTER_USER, {
         cause: error,
       });
     }
@@ -322,30 +307,27 @@ export class UsersService {
       .where(eq(user_roles.role_name, UserRole.CUSTOMER))
       .limit(1)
       .catch((error) => {
-        console.error('Error fetching user role:', error);
-        throw new InternalServerErrorException('Failed to fetch user role', {
+        throw new InternalServerErrorException(UsersErrorKeyEnum.FAILED_TO_FETCH_USER_ROLE, {
           cause: error,
         });
       });
 
     if (!result[0]) {
-      throw new InternalServerErrorException('Customer role not found');
+      throw new InternalServerErrorException(UsersErrorKeyEnum.CUSTOMER_ROLE_NOT_FOUND);
     }
 
     return result;
   }
   async login(login: LoginDto, domain: string) {
-    console.log('[UsersService.login] Request received for domain:', domain);
     try {
-      console.log('[UsersService.login] Resolving company id');
       const companyId = await this.resolveCompanyId(domain);
       if (!companyId) {
-        throw new HttpException('Company not found', HttpStatus.UNAUTHORIZED);
+        throw new HttpException(UsersErrorKeyEnum.COMPANY_NOT_FOUND, HttpStatus.UNAUTHORIZED);
       }
 
       const records = await this.findByEmail(login.email);
       if (!records) {
-        throw new HttpException('Invalid credentials', HttpStatus.UNAUTHORIZED);
+        throw new HttpException(UsersErrorKeyEnum.INVALID_CREDENTIALS, HttpStatus.UNAUTHORIZED);
       }
       const [userAndCompanyRecord] = await this.db
         .select()
@@ -358,7 +340,7 @@ export class UsersService {
         );
       if (userAndCompanyRecord.access_status === AccessStatus.INACTIVE) {
         throw new HttpException(
-          'Your account has been deactivated. Please Activate Your Account.',
+          UsersErrorKeyEnum.YOUR_ACCOUNT_HAS_BEEN_DEACTIVATED_PLEASE_ACTIVATE_YOUR_ACCOUNT,
           HttpStatus.LOCKED,
         );
       }
@@ -377,25 +359,18 @@ export class UsersService {
         throw new ConflictException('User is not registered to this company');
       }
       if (!userRecord || !userRecord?.password_hash) {
-        console.log(
-          '[UsersService.login] Stopping: User record incomplete or missing password hash',
-        );
-        throw new HttpException('Invalid credentials', HttpStatus.UNAUTHORIZED);
+        throw new HttpException(UsersErrorKeyEnum.INVALID_CREDENTIALS, HttpStatus.UNAUTHORIZED);
       }
-      console.log(
-        '[UsersService.login] Verifying password for user:',
-        userRecord.email,
-      );
       const isPasswordValid = await bcrypt.compare(
         login.password,
         userRecord.password_hash,
       );
       if (!isPasswordValid) {
-        throw new HttpException('Invalid credentials', HttpStatus.UNAUTHORIZED);
+        throw new HttpException(UsersErrorKeyEnum.INVALID_CREDENTIALS, HttpStatus.UNAUTHORIZED);
       }
       if (!userRecord?.id && !userRecord?.email) {
         throw new HttpException(
-          'User record is incomplete',
+          UsersErrorKeyEnum.USER_RECORD_IS_INCOMPLETE,
           HttpStatus.INTERNAL_SERVER_ERROR,
         );
       }
@@ -423,10 +398,6 @@ export class UsersService {
         ...userRecord,
         password_hash: undefined, // Exclude password hash from the response
       };
-      console.log(
-        '[UsersService.login] Login successful for user:',
-        filteredUser.email,
-      );
 
       return {
         user: filteredUser,
@@ -441,39 +412,25 @@ export class UsersService {
       ) {
         throw error;
       }
-      throw new InternalServerErrorException('Failed to login user', {
+      throw new InternalServerErrorException(UsersErrorKeyEnum.FAILED_TO_LOGIN_USER, {
         cause: error,
       });
     }
   }
 
   async listCustomersByDomain(domain: string) {
-    console.log(
-      '[UsersService.listCustomersByDomain] Request received for domain:',
-      domain,
-    );
     try {
       const companyId = await this.resolveCompanyId(domain);
       if (!companyId) {
-        console.log(
-          '[UsersService.listCustomersByDomain] Stopping: Company not found',
-        );
-        throw new HttpException('Company not found', HttpStatus.UNAUTHORIZED);
+        throw new HttpException(UsersErrorKeyEnum.COMPANY_NOT_FOUND, HttpStatus.UNAUTHORIZED);
       }
-      console.log(
-        '[UsersService.listCustomersByDomain] Querying role record for CUSTOMER',
-      );
       const [roleRecord] = await this.db
         .select()
         .from(user_roles)
         .where(eq(user_roles.role_name, UserRole.CUSTOMER))
         .catch((error) => {
-          console.error(
-            '[UsersService.listCustomersByDomain] Error fetching role record:',
-            error,
-          );
           throw new InternalServerErrorException(
-            'Failed to fetch role record',
+            UsersErrorKeyEnum.FAILED_TO_FETCH_ROLE_RECORD,
             {
               cause: error,
             },
@@ -481,11 +438,8 @@ export class UsersService {
         });
 
       if (!roleRecord) {
-        console.log(
-          '[UsersService.listCustomersByDomain] Stopping: Role not found',
-        );
         throw new HttpException(
-          'Role not found',
+          UsersErrorKeyEnum.ROLE_NOT_FOUND,
           HttpStatus.INTERNAL_SERVER_ERROR,
         );
       }
@@ -501,10 +455,6 @@ export class UsersService {
           },
         })
         .then((data) => {
-          console.log(
-            '[UsersService.listCustomersByDomain] Customer data retrieved',
-            { count: data.length },
-          );
           return data.map((item) => {
             return {
               id: item.user.id,
@@ -517,18 +467,14 @@ export class UsersService {
           });
         })
         .catch((error) => {
-          console.error(
-            '[UsersService.listCustomersByDomain] Error listing customers:',
-            error,
-          );
-          throw new InternalServerErrorException('Failed to list customers', {
+          throw new InternalServerErrorException(UsersErrorKeyEnum.FAILED_TO_LIST_CUSTOMERS, {
             cause: error,
           });
         });
 
       return customers;
     } catch (error) {
-      throw new InternalServerErrorException('Failed to list customers', {
+      throw new InternalServerErrorException(UsersErrorKeyEnum.FAILED_TO_LIST_CUSTOMERS, {
         cause: error,
       });
     }
@@ -564,7 +510,7 @@ export class UsersService {
       }
       return { userRecord, roleRecord };
     } catch (error) {
-      throw new InternalServerErrorException('Failed to find user by email', {
+      throw new InternalServerErrorException(UsersErrorKeyEnum.FAILED_TO_FIND_USER_BY_EMAIL, {
         cause: error,
       });
     }
@@ -582,7 +528,7 @@ export class UsersService {
       }
       return userRecord;
     } catch (error) {
-      throw new InternalServerErrorException('Failed to find user by payload', {
+      throw new InternalServerErrorException(UsersErrorKeyEnum.FAILED_TO_FIND_USER_BY_PAYLOAD, {
         cause: error,
       });
     }
@@ -593,19 +539,10 @@ export class UsersService {
     customer_id?: string,
     email?: string,
   ) {
-    console.log('[UsersService.initializeAccountActionOtp] Request received', {
-      domain,
-      actionType,
-      customer_id,
-      email,
-    });
     try {
       if (!email && !customer_id) {
-        console.log(
-          '[UsersService.initializeAccountActionOtp] Stopping: Either email or customer_id must be provided',
-        );
         throw new HttpException(
-          'Either email or customer_id not provided',
+          UsersErrorKeyEnum.EITHER_EMAIL_OR_CUSTOMER_ID_NOT_PROVIDED,
           HttpStatus.BAD_REQUEST,
         );
       }
@@ -613,23 +550,22 @@ export class UsersService {
       const isEmailExists = email ? eq(user.email, email) : null;
       const condition = isCustomerExists || isEmailExists;
       if (!condition) {
-        throw new HttpException('User not found', HttpStatus.NOT_FOUND);
+        throw new HttpException(UsersErrorKeyEnum.USER_NOT_FOUND, HttpStatus.NOT_FOUND);
       }
       const [userRecord] = await this.db
         .select()
         .from(user)
         .where(condition)
         .catch((error) => {
-          console.error('Error fetching user record:', error);
           throw new InternalServerErrorException(
-            'Failed to fetch user record',
+            UsersErrorKeyEnum.FAILED_TO_FETCH_USER_RECORD,
             {
               cause: error,
             },
           );
         });
       if (!userRecord || userRecord?.id == null) {
-        throw new HttpException('User not found', HttpStatus.NOT_FOUND);
+        throw new HttpException(UsersErrorKeyEnum.USER_NOT_FOUND, HttpStatus.NOT_FOUND);
       }
       const otp = randomInt(100000, 999999).toString();
       const companyId = await this.resolveCompanyId(domain);
@@ -638,7 +574,7 @@ export class UsersService {
         .from(company)
         .where(eq(company.id, companyId));
       if (!companyId || !companyDetails) {
-        throw new HttpException('Domain not found', HttpStatus.NOT_FOUND);
+        throw new HttpException(UsersErrorKeyEnum.DOMAIN_NOT_FOUND, HttpStatus.NOT_FOUND);
       }
       const otpExpires = new Date();
       otpExpires.setMinutes(otpExpires.getMinutes() + 15); //15 minutes from now
@@ -652,7 +588,6 @@ export class UsersService {
         hour12: true,
         timeZone: 'Asia/Kolkata',
       }).format(otpExpires);
-      console.log('[UsersService.initializeAccountActionOtp] Sending OTP mail');
       if (actionType === UserStatus.INACTIVE)
         await this.mailService.sendAccountDeactivationOtp(
           userRecord?.email,
@@ -669,9 +604,6 @@ export class UsersService {
           formattedExpireTime,
           companyDetails.company_name,
         );
-      console.log(
-        '[UsersService.initializeAccountActionOtp] Sent OTP mail successfully',
-      );
       return {
         message:
           actionType === UserStatus.INACTIVE
@@ -682,7 +614,7 @@ export class UsersService {
       if (error instanceof HttpException) {
         throw error;
       }
-      throw new InternalServerErrorException('Failed to send OTP to user', {
+      throw new InternalServerErrorException(UsersErrorKeyEnum.FAILED_TO_SEND_OTP_TO_USER, {
         cause: error,
       });
     }
@@ -694,19 +626,10 @@ export class UsersService {
     customer_id?: string,
     email?: string,
   ) {
-    console.log('[UsersService.confirmAccountAction] Request received', {
-      domain,
-      actionType,
-      customer_id,
-      email,
-    });
     try {
       if (!email && !customer_id) {
-        console.log(
-          '[UsersService.confirmAccountAction] Stopping: Either email or customer_id must be provided',
-        );
         throw new HttpException(
-          'Either email or customer_id not provided',
+          UsersErrorKeyEnum.EITHER_EMAIL_OR_CUSTOMER_ID_NOT_PROVIDED,
           HttpStatus.BAD_REQUEST,
         );
       }
@@ -714,59 +637,45 @@ export class UsersService {
       const isEmailExists = email ? eq(user.email, email) : null;
       const condition = isCustomerExists || isEmailExists;
       if (!condition) {
-        throw new HttpException('User not found', HttpStatus.NOT_FOUND);
+        throw new HttpException(UsersErrorKeyEnum.USER_NOT_FOUND, HttpStatus.NOT_FOUND);
       }
       const [userRecord] = await this.db
         .select()
         .from(user)
         .where(condition)
         .catch((error) => {
-          console.error('Error fetching user record:', error);
           throw new InternalServerErrorException(
-            'Failed to fetch user record',
+            UsersErrorKeyEnum.FAILED_TO_FETCH_USER_RECORD,
             {
               cause: error,
             },
           );
         });
       if (!userRecord || userRecord?.id == null) {
-        throw new HttpException('User not found', HttpStatus.NOT_FOUND);
+        throw new HttpException(UsersErrorKeyEnum.USER_NOT_FOUND, HttpStatus.NOT_FOUND);
       }
       if (!userRecord.otp || userRecord.otp !== otp) {
-        throw new UnauthorizedException('Invalid OTP.');
+        throw new UnauthorizedException(UsersErrorKeyEnum.INVALID_OTP);
       }
-      console.log(
-        '[UsersService.confirmAccountAction] OTP matches successfully',
-      );
       if (!userRecord.otp_expires) {
-        throw new UnauthorizedException('Invalid OTP');
+        throw new UnauthorizedException(UsersErrorKeyEnum.INVALID_OTP);
       }
-      console.log(
-        '[UsersService.confirmAccountAction] Validating OTP expiration',
-        { expires: userRecord.otp_expires, current: new Date() },
-      );
       if (new Date() > new Date(userRecord.otp_expires)) {
         await this.db
           .update(user)
           .set({ otp: null, otp_expires: null })
           .where(eq(user.id, userRecord.id));
         throw new UnauthorizedException(
-          'OTP has expired. Please request a new one.',
+          UsersErrorKeyEnum.OTP_HAS_EXPIRED_PLEASE_REQUEST_A_NEW_ONE,
         );
       }
       const companyId = await this.resolveCompanyId(domain);
       if (!companyId) {
-        console.log(
-          '[UsersService.confirmAccountAction] Stopping: Action not allowed for this company/domain',
-        );
         throw new HttpException(
-          'You cannot perform this action. Please try again.',
+          UsersErrorKeyEnum.YOU_CANNOT_PERFORM_THIS_ACTION_PLEASE_TRY_AGAIN,
           HttpStatus.UNAUTHORIZED,
         );
       }
-      console.log(
-        '[UsersService.confirmAccountAction] Starting database updates',
-      );
       const [userAndCompany] = await this.db
         .select()
         .from(user_and_company)
@@ -778,7 +687,7 @@ export class UsersService {
         )
         .limit(1);
       if (!userAndCompany) {
-        throw new HttpException('User not found', HttpStatus.NOT_FOUND);
+        throw new HttpException(UsersErrorKeyEnum.USER_NOT_FOUND, HttpStatus.NOT_FOUND);
       }
       await this.db
         .update(user_and_company)
@@ -798,9 +707,6 @@ export class UsersService {
         .update(user)
         .set({ otp: null, otp_expires: null })
         .where(eq(user.id, userRecord.id));
-      console.log(
-        '[UsersService.confirmAccountAction] Action confirmed and records updated successfully',
-      );
       return {
         message:
           actionType === UserStatus.INACTIVE
@@ -808,37 +714,34 @@ export class UsersService {
             : 'User reactivated successfully',
       };
     } catch (error) {
-      throw new InternalServerErrorException('Failed to deactivate user', {
+      throw new InternalServerErrorException(UsersErrorKeyEnum.FAILED_TO_DEACTIVATE_USER, {
         cause: error,
       });
     }
   }
 
   async changePassword(userId: string, currentPassword: string, newPassword: string, domain: string) {
-    console.log(`[UsersService.changePassword] Request to change password for user: ${userId}`);
     try {
       // 1. Verify current password
       const [userRecord] = await this.db.select().from(user).where(eq(user.id, userId)).limit(1).catch((err) => {
-        console.error('[UsersService.changePassword] Error fetching user record:', err);
-        throw new InternalServerErrorException('Failed to fetch user record', {
+        throw new InternalServerErrorException(UsersErrorKeyEnum.FAILED_TO_FETCH_USER_RECORD, {
           cause: err,
         });
       });
 
       if (!userRecord) {
-        throw new HttpException('User not found', HttpStatus.NOT_FOUND);
+        throw new HttpException(UsersErrorKeyEnum.USER_NOT_FOUND, HttpStatus.NOT_FOUND);
       }
 
       const isCurrentPasswordValid = await bcrypt.compare(currentPassword, userRecord.password_hash);
 
       if (!isCurrentPasswordValid) {
-        throw new UnauthorizedException('Invalid current password');
+        throw new UnauthorizedException(UsersErrorKeyEnum.INVALID_CURRENT_PASSWORD);
       }
 
       // 2. Hash new password
       const hashedPassword = await bcrypt.hash(newPassword, 10).catch((err) => {
-        console.error('[UsersService.changePassword] Error hashing password:', err);
-        throw new InternalServerErrorException('Failed to hash password', {
+        throw new InternalServerErrorException(UsersErrorKeyEnum.FAILED_TO_HASH_PASSWORD, {
           cause: err,
         });
       });
@@ -851,8 +754,7 @@ export class UsersService {
         })
         .where(eq(user.id, userId))
         .catch((err) => {
-          console.error('[UsersService.changePassword] Error updating password:', err);
-          throw new InternalServerErrorException('Failed to update password', {
+          throw new InternalServerErrorException(UsersErrorKeyEnum.FAILED_TO_UPDATE_PASSWORD, {
             cause: err,
           });
         });
@@ -865,8 +767,7 @@ export class UsersService {
       if (error instanceof HttpException || error instanceof UnauthorizedException || error instanceof InternalServerErrorException) {
         throw error;
       }
-      console.error('[UsersService.changePassword] Error changing password:', error);
-      throw new InternalServerErrorException('Failed to change password', {
+      throw new InternalServerErrorException(UsersErrorKeyEnum.FAILED_TO_CHANGE_PASSWORD, {
         cause: error,
       });
     }

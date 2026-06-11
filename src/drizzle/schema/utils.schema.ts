@@ -2,7 +2,12 @@ import * as pg from 'drizzle-orm/pg-core';
 import { company } from './main.schema';
 import { address, user, vendor } from './users.schema';
 import { product_variants, orders } from './shop.schema';
-import { SupportTicketPriority, SupportTicketStatus } from '../types/types';
+import {
+  EntityStatus,
+  SupportTicketPriority,
+  SupportTicketStatus,
+} from '../types/types';
+import { EntityStatusEnum } from './enums.schema';
 export const support_tickets_status_enum = pg.pgEnum(
   'support_tickets_status_enum',
   SupportTicketStatus,
@@ -44,6 +49,8 @@ export const warehouse = pg.pgTable('warehouse', {
     .uuid('address_id')
     .references(() => address.id, { onDelete: 'cascade' })
     .notNull(),
+  status: EntityStatusEnum('status').default(EntityStatus.ACTIVE),
+  deleted_at: pg.timestamp('deleted_at'),
   company_id: pg
     .uuid('company_id')
     .references(() => company.id, { onDelete: 'cascade' })
@@ -60,8 +67,9 @@ export const inventory = pg.pgTable(
       .notNull(),
     restocked_at: pg
       .timestamp('restocked_at')
-      .$onUpdate(() => new Date())
-      .notNull(),
+      .notNull()
+      .defaultNow()
+      .$onUpdate(() => new Date()),
     product_variant_id: pg
       .uuid('product_variant_id')
       .references(() => product_variants.id, { onDelete: 'cascade' })

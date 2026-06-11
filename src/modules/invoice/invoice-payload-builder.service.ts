@@ -43,6 +43,7 @@ import {
 import { randomUUID } from 'crypto';
 import { fetchImageAsBuffer } from '../../utils/image-fetcher.util';
 import { COUNTRIES_COMPLIANCE, getStateByCode } from '../../common/constants';
+import { InvoiceErrorKeyEnum } from './constants/invoice.enums';
 
 // ─── helpers ────────────────────────────────────────────────────
 
@@ -196,12 +197,6 @@ export class InvoicePayloadBuilderService {
   // ══════════════════════════════════════════════════════════════════
 
   async fetchOrderWithRelations(orderId: string): Promise<OrderWithRelations> {
-    console.log(
-      `[InvoicePayloadBuilderService.fetchOrderWithRelations] Request received for orderId: ${orderId}`,
-    );
-    console.log(
-      '[InvoicePayloadBuilderService.fetchOrderWithRelations] Querying order with relations',
-    );
     const orderData = (await this.db.query.orders
       .findFirst({
         where: eq(orders.id, orderId),
@@ -247,9 +242,6 @@ export class InvoicePayloadBuilderService {
     if (!orderData) throw new NotFoundException(`Order ${orderId} not found`);
     if (!orderData.items?.length)
       throw new NotFoundException(`Order ${orderId} has no items`);
-    console.log(
-      `[InvoicePayloadBuilderService.fetchOrderWithRelations] Order loaded with ${orderData.items.length} item(s)`,
-    );
     return orderData;
   }
 
@@ -258,12 +250,6 @@ export class InvoicePayloadBuilderService {
   // ══════════════════════════════════════════════════════════════════
 
   async fetchCompanyContext(companyId: string): Promise<CompanyContext> {
-    console.log(
-      `[InvoicePayloadBuilderService.fetchCompanyContext] Request received for companyId: ${companyId}`,
-    );
-    console.log(
-      '[InvoicePayloadBuilderService.fetchCompanyContext] Querying branding, legal, and document config',
-    );
     const [config, branding, legal] = await Promise.all([
       this.db.query.company_document_config.findFirst({
         where: eq(company_document_config.company_id, companyId),
@@ -312,9 +298,8 @@ export class InvoicePayloadBuilderService {
       .from(company_compliance)
       .where(eq(company_compliance.company_id, companyId))
       .catch((error) => {
-        console.error('Error fetching company compliance:', error);
         throw new HttpException(
-          'Error fetching company compliance: ' + error,
+          InvoiceErrorKeyEnum.ERROR_FETCHING_COMPANY_COMPLIANCE + error,
           HttpStatus.INTERNAL_SERVER_ERROR,
         );
       });
@@ -324,11 +309,10 @@ export class InvoicePayloadBuilderService {
     )?.fields;
     if (!fields) {
       throw new HttpException(
-        'Country compliance config not found.',
+        InvoiceErrorKeyEnum.COUNTRY_COMPLIANCE_CONFIG_NOT_FOUND,
         HttpStatus.BAD_REQUEST,
       );
     }
-    // console.log('Compliance fields:', fields);
     /**
      * Find tax field (GSTIN for India)
      */
@@ -338,11 +322,10 @@ export class InvoicePayloadBuilderService {
 
     if (!gstField?.value) {
       throw new HttpException(
-        'GST field config missing.',
+        InvoiceErrorKeyEnum.GST_FIELD_CONFIG_MISSING,
         HttpStatus.BAD_REQUEST,
       );
     }
-    console.log('Found GST field:', gstField);
     const [gstNumberRow] = await this.db
       .select()
       .from(company_compliance)
@@ -354,16 +337,15 @@ export class InvoicePayloadBuilderService {
         ),
       )
       .catch((error) => {
-        console.error('Error fetching vendor GST number:', error);
         throw new HttpException(
-          'Error fetching vendor GST number: ' + error,
+          InvoiceErrorKeyEnum.ERROR_FETCHING_VENDOR_GST_NUMBER + error,
           HttpStatus.INTERNAL_SERVER_ERROR,
         );
       });
 
     if (!gstNumberRow?.field_value) {
       throw new HttpException(
-        'Vendor GST number is missing.',
+        InvoiceErrorKeyEnum.VENDOR_GST_NUMBER_IS_MISSING,
         HttpStatus.BAD_REQUEST,
       );
     }
@@ -410,10 +392,6 @@ export class InvoicePayloadBuilderService {
       ? order.promotionUsage.reduce((sum, usage) => sum + Number(usage.discount_amount ?? 0), 0)
       : 0;
 
-    console.log(
-      `[InvoicePayloadBuilderService.mapOrderInfo] Resolved discount amount: ${discountAmount}`,
-      { promotionUsage: order.promotionUsage },
-    );
     const addr = order.address;
     return {
       id: order.id,

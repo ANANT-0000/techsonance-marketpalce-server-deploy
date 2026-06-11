@@ -62,6 +62,7 @@ import { domainExtractor } from '../../common/filters/domainExtractor.filter';
 import { randomBytes } from 'crypto';
 import { extractCloudinaryPublicId } from '../../common/filters/extractCloudinaryPublicId.filter';
 import { SubscriptionService } from '../subscription/subscription.service';
+import { VendorsErrorKeyEnum } from './constants/vendors.enums';
 
 const SALT_ROUNDS = 10;
 type UserType = typeof userTable.$inferSelect;
@@ -88,28 +89,14 @@ export class VendorsService {
       resource_type: string;
     }[] = [];
     try {
-      console.log(
-        '[VendorsService.vendorRegister] Request received for vendor: ',
-        vendorData.email,
-      );
       const docFiles = Array.isArray(files['documents'])
         ? files['documents']
         : [];
-      console.log(
-        `[VendorsService.vendorRegister] Processing ${docFiles.length} document(s)`,
-      );
       const documentPromises = docFiles.map(
         async (file: Express.Multer.File) => {
-          console.log(
-            `[VendorsService.vendorRegister] Uploading document: ${file.originalname}`,
-          );
           return await this.uploadToCloudService
             .uploadDocument(file, file.originalname.split('__')[0])
             .catch((error) => {
-              console.error(
-                `Error uploading document ${file.originalname}:`,
-                error,
-              );
               throw new InternalServerErrorException(
                 `Failed to upload document ${file.originalname}`,
                 { cause: error },
@@ -119,20 +106,19 @@ export class VendorsService {
       );
       const resolvedDocuments = await Promise.all(documentPromises);
       vendorDocuments.push(...resolvedDocuments);
-      console.log(
-        '[VendorsService.vendorRegister] All documents uploaded successfully',
+      const companyDomainToCheck = formatCompanyDomain(
+        vendorData.company_domain,
       );
-      console.log(
-        '[VendorsService.vendorRegister] Checking email and company domain uniqueness',
-      );
-      const companyDomainToCheck = formatCompanyDomain(vendorData.company_domain);
       const [existingEmail] = await this.db
         .select({ id: userTable.id })
         .from(userTable)
         .where(eq(userTable.email, vendorData.email))
         .limit(1);
       if (existingEmail) {
-        throw new HttpException('Email already in use. Please use a different email or login.', HttpStatus.CONFLICT);
+        throw new HttpException(
+          VendorsErrorKeyEnum.EMAIL_ALREADY_IN_USE_PLEASE_USE_A_DIFFERENT_EMAIL_OR_LOGIN,
+          HttpStatus.CONFLICT,
+        );
       }
       const [existingDomain] = await this.db
         .select({ id: companyTable.id })
@@ -140,31 +126,24 @@ export class VendorsService {
         .where(eq(companyTable.company_domain, companyDomainToCheck))
         .limit(1);
       if (existingDomain) {
-        throw new HttpException('Company domain already registered. Please choose a different domain.', HttpStatus.CONFLICT);
+        throw new HttpException(
+          VendorsErrorKeyEnum.COMPANY_DOMAIN_ALREADY_REGISTERED_PLEASE_CHOOSE_A_DIFFERENT_DOMAIN,
+          HttpStatus.CONFLICT,
+        );
       }
 
-      console.log(
-        '[VendorsService.vendorRegister] Starting database transaction for vendor registration',
-      );
       const result = await this.db.transaction(async (tx) => {
-        console.log(
-          '[VendorsService.vendorRegister] Database transaction started',
-        );
         const password = randomBytes(9).toString('base64').slice(0, 12);
         const hashedPassword = await bcrypt
           .hash(password, SALT_ROUNDS)
           .catch((error) => {
-            console.error(
-              '[VendorsService.vendorRegister] Error hashing password:',
-              error,
+            throw new InternalServerErrorException(
+              VendorsErrorKeyEnum.FAILED_TO_HASH_PASSWORD,
+              {
+                cause: error,
+              },
             );
-            throw new InternalServerErrorException('Failed to hash password', {
-              cause: error,
-            });
           });
-        console.log(
-          '[VendorsService.vendorRegister] Password hashed successfully',
-        );
         const [newRole] = await tx
           .insert(user_rolesTable)
           .values({
@@ -176,16 +155,14 @@ export class VendorsService {
           })
           .returning({ id: user_rolesTable.id })
           .catch((error) => {
-            console.error('Error creating vendor role:', error);
             throw new InternalServerErrorException(
-              'Failed to create vendor role',
+              VendorsErrorKeyEnum.FAILED_TO_CREATE_VENDOR_ROLE,
               {
                 cause: error,
               },
             );
           });
 
-        console.log('[VendorsService.vendorRegister] Creating company record');
         const companyDomain = formatCompanyDomain(vendorData.company_domain);
         const [newCompany] = await tx
           .insert(companyTable)
@@ -196,29 +173,19 @@ export class VendorsService {
           })
           .returning({ id: companyTable.id })
           .catch((error) => {
-            console.error(
-              '[VendorsService.vendorRegister] Error creating company:',
-              error,
-            );
             throw new InternalServerErrorException(
-              'Failed to create company for vendor',
+              VendorsErrorKeyEnum.FAILED_TO_CREATE_COMPANY_FOR_VENDOR,
               {
                 cause: error,
               },
             );
           });
-        console.log(
-          `[VendorsService.vendorRegister] Company created with ID: ${newCompany?.id}`,
-        );
         if (!newCompany || !newCompany.id) {
           throw new HttpException(
-            'Failed to create company for vendor',
+            VendorsErrorKeyEnum.FAILED_TO_CREATE_COMPANY_FOR_VENDOR,
             HttpStatus.INTERNAL_SERVER_ERROR,
           );
         }
-        console.log(
-          '[VendorsService.vendorRegister] Creating vendor admin user',
-        );
         const [newUser] = await tx
           .insert(userTable)
           .values({
@@ -232,20 +199,13 @@ export class VendorsService {
           })
           .returning({ id: userTable.id, email: userTable.email })
           .catch((error) => {
-            console.error(
-              '[VendorsService.vendorRegister] Error creating user:',
-              error,
-            );
             throw new InternalServerErrorException(
-              'Failed to create user for vendor',
+              VendorsErrorKeyEnum.FAILED_TO_CREATE_USER_FOR_VENDOR,
               {
                 cause: error,
               },
             );
           });
-        console.log(
-          '[VendorsService.vendorRegister] User created, linking to company',
-        );
         await tx
           .insert(user_and_company)
           .values({
@@ -255,27 +215,19 @@ export class VendorsService {
             role_id: newRole.id,
           })
           .catch((error) => {
-            console.error(
-              '[VendorsService.vendorRegister] Error creating user-company association:',
-              error,
-            );
             throw new InternalServerErrorException(
-              'Failed to create user_and_company for vendor',
+              VendorsErrorKeyEnum.FAILED_TO_CREATE_USER_AND_COMPANY_FOR_VENDOR,
               {
                 cause: error,
               },
             );
           });
-        console.log(
-          `[VendorsService.vendorRegister] User-company association created for user: ${newUser?.id}`,
-        );
         if (!newUser || !newUser.id) {
           throw new HttpException(
-            'Failed to create user for vendor',
+            VendorsErrorKeyEnum.FAILED_TO_CREATE_USER_FOR_VENDOR,
             HttpStatus.INTERNAL_SERVER_ERROR,
           );
         }
-        console.log('[VendorsService.vendorRegister] Creating vendor record');
         const [newVendor] = await tx
           .insert(vendorTable)
           .values({
@@ -289,23 +241,16 @@ export class VendorsService {
           })
           .returning({ id: vendorTable.id })
           .catch((error) => {
-            console.error(
-              '[VendorsService.vendorRegister] Error creating vendor:',
-              error,
-            );
             throw new InternalServerErrorException(
-              'Failed to create vendor record',
+              VendorsErrorKeyEnum.FAILED_TO_CREATE_VENDOR_RECORD,
               {
                 cause: error,
               },
             );
           });
-        console.log(
-          `[VendorsService.vendorRegister] Vendor record created with ID: ${newVendor?.id}`,
-        );
         if (!newVendor || !newVendor.id) {
           throw new HttpException(
-            'Failed to create vendor record',
+            VendorsErrorKeyEnum.FAILED_TO_CREATE_VENDOR_RECORD,
             HttpStatus.INTERNAL_SERVER_ERROR,
           );
         }
@@ -326,19 +271,14 @@ export class VendorsService {
               document_type: vendor_documentTable.document_type,
             })
             .catch((error) => {
-              console.error('Error inserting vendor document record:', error);
               throw new InternalServerErrorException(
-                'Failed to insert vendor document',
+                VendorsErrorKeyEnum.FAILED_TO_INSERT_VENDOR_DOCUMENT,
                 { cause: error },
               );
             });
 
           if (insertedDoc) insertedDocs.push(insertedDoc);
         }
-
-        console.log(
-          '[VendorsService.vendorRegister] Vendor documents inserted successfully',
-        );
 
         // Build a lookup map: document_type -> document_id
         const docTypeToIdMap = new Map(
@@ -347,7 +287,6 @@ export class VendorsService {
         const date = new Date(); // current date,
 
         date.setFullYear(date.getFullYear() + 2);
-        console.log('date', date);
 
         const compliancePayloads = vendorData.company_compliance.map(
           (compliance) => {
@@ -383,17 +322,12 @@ export class VendorsService {
               ],
             })
             .catch((error) => {
-              console.error('Error inserting company compliance:', error);
               throw new InternalServerErrorException(
-                'Failed to insert company compliance',
+                VendorsErrorKeyEnum.FAILED_TO_INSERT_COMPANY_COMPLIANCE,
                 { cause: error },
               );
             });
         }
-
-        console.log(
-          '[VendorsService.vendorRegister] Company compliance records inserted',
-        );
 
         return {
           vendorMail: newUser.email,
@@ -404,9 +338,6 @@ export class VendorsService {
       });
 
       try {
-        console.log(
-          '[VendorsService.vendorRegister] Transaction completed, sending registration email',
-        );
         await this.mailService
           .sendVendorRegistrationEmail(
             result.vendorMail,
@@ -414,45 +345,24 @@ export class VendorsService {
             result.randomPassword,
           )
           .catch((error) => {
-            console.error(
-              '[VendorsService.vendorRegister] Error sending registration email:',
-              error,
-            );
             throw new InternalServerErrorException(
-              'Failed to send registration email',
+              VendorsErrorKeyEnum.FAILED_TO_SEND_REGISTRATION_EMAIL,
               {
                 cause: error,
               },
             );
           });
-        console.log(
-          '[VendorsService.vendorRegister] Registration email sent successfully',
-        );
-      } catch (emailError) {
-        console.error(
-          '[VendorsService.vendorRegister] Failed to send welcome email, but vendor is registered:',
-          emailError,
-        );
-      }
-      console.log(
-        '[VendorsService.vendorRegister] Vendor registration process completed successfully',
-      );
+      } catch (emailError) {}
       return {
         message: 'Vendor registered successfully',
       };
     } catch (error) {
       for (const file of vendorDocuments) {
-        console.log(file);
         const publicId = extractCloudinaryPublicId(file.secure_url);
         if (publicId) {
           this.uploadToCloudService
             .deleteFile(publicId, file.resource_type)
-            .catch((deleteError) => {
-              console.error(
-                '[VendorsService.vendorRegister] Error deleting uploaded documents after failure:',
-                deleteError,
-              );
-            });
+            .catch((deleteError) => {});
         }
       }
       if (
@@ -461,15 +371,15 @@ export class VendorsService {
       ) {
         throw error;
       }
-      throw new InternalServerErrorException('Failed to register vendor', {
-        cause: error,
-      });
+      throw new InternalServerErrorException(
+        VendorsErrorKeyEnum.FAILED_TO_REGISTER_VENDOR,
+        {
+          cause: error,
+        },
+      );
     }
   }
   async vendorLogin(loginDto: LoginDto) {
-    console.log(
-      `[VendorsService.vendorLogin] Login request received for email: ${loginDto.email}`,
-    );
     try {
       const existingUser:
         | {
@@ -478,34 +388,26 @@ export class VendorsService {
             role: Partial<UserRoleType>;
           }
         | HttpException = await this.db.transaction(async (tx) => {
-        console.log(
-          '[VendorsService.vendorLogin] Starting database transaction for authentication',
-        );
         if (!loginDto.email || !loginDto.password) {
           throw new HttpException(
-            'Email and password are required',
+            VendorsErrorKeyEnum.EMAIL_AND_PASSWORD_ARE_REQUIRED,
             HttpStatus.BAD_REQUEST,
           );
         }
-        console.log('[VendorsService.vendorLogin] Querying user by email');
         const [userRecord]: Partial<UserType>[] = await tx
           .select()
           .from(userTable)
           .where(eq(userTable.email, loginDto.email));
         if (!userRecord || !userRecord.id || !userRecord.password_hash) {
-          throw new UnauthorizedException('User not found');
+          throw new UnauthorizedException(VendorsErrorKeyEnum.USER_NOT_FOUND);
         }
-        console.log('[VendorsService.vendorLogin] Validating password');
         const isPasswordValid = await bcrypt.compare(
           loginDto.password,
           userRecord.password_hash,
         );
         if (!isPasswordValid) {
-          throw new UnauthorizedException('Invalid password');
+          throw new UnauthorizedException(VendorsErrorKeyEnum.INVALID_PASSWORD);
         }
-        console.log(
-          '[VendorsService.vendorLogin] Password validated, querying vendor record',
-        );
         const [vendorRecord] = await tx
           .select()
           .from(vendorTable)
@@ -515,11 +417,13 @@ export class VendorsService {
         //   .select()
         //   .from(user_and_company)
         //   .where(eq(user_and_company.user_id, userRecord.id));
-        // console.log('vendorRecord', vendorRecord);
+        // ('vendorRecord', vendorRecord);
         if (!userRecord) {
-          throw new UnauthorizedException('User role not found');
+          throw new UnauthorizedException(
+            VendorsErrorKeyEnum.USER_ROLE_NOT_FOUND,
+          );
         }
-        // console.log('userAndCompanyRecord', userAndCompanyRecord)
+        // ('userAndCompanyRecord', userAndCompanyRecord)
         //------------------------------------------------------
         // uncommit in future
         //------------------------------------------------------
@@ -531,22 +435,19 @@ export class VendorsService {
         //-----------------------------------------------------
         // for bypassing the role check in future comment this and uncommit above
         //-----------------------------------------------------
-        console.log('[VendorsService.vendorLogin] Fetching vendor role');
         const [roleRecord] = await tx
           .select({ role_name: user_rolesTable.role_name })
           .from(user_rolesTable)
           .where(eq(user_rolesTable.role_name, 'vendor'))
           .limit(1);
-        if (!vendorRecord) throw new UnauthorizedException('Vendor not found');
-        console.log(
-          '[VendorsService.vendorLogin] Checking vendor approval status',
-        );
+        if (!vendorRecord)
+          throw new UnauthorizedException(VendorsErrorKeyEnum.VENDOR_NOT_FOUND);
         const isVendorApproved =
           vendorRecord.vendor_status === UserStatus.ACTIVE;
         // const isVendorApproved = vendorRecord.vendor_status === UserStatus.ACTIVE &&  userAndCompanyRecord.access_status === AccessStatus.ACTIVE;
         if (!isVendorApproved)
           throw new HttpException(
-            'Vendor application is still under review',
+            VendorsErrorKeyEnum.VENDOR_APPLICATION_IS_STILL_UNDER_REVIEW,
             HttpStatus.UNAUTHORIZED,
           );
         return { user: userRecord, vendor: vendorRecord, role: roleRecord };
@@ -558,9 +459,6 @@ export class VendorsService {
       const user = existingUser?.user;
       const vendor = existingUser?.vendor;
       const role = existingUser?.role;
-      console.log(
-        '[VendorsService.vendorLogin] Transaction completed, generating JWT tokens',
-      );
       const payload: {
         sub: string | undefined;
         email: string | undefined;
@@ -575,12 +473,10 @@ export class VendorsService {
         password_change_required: user.password_change_required,
       };
 
-      console.log('[VendorsService.vendorLogin] Signing access token');
       const accessToken = await this.jwtService.signAsync(payload, {
         expiresIn: '1h',
         secret: process.env.JWT_SECRET,
       });
-      console.log('[VendorsService.vendorLogin] Signing refresh token');
       const refreshToken = await this.jwtService.signAsync(payload, {
         expiresIn: '7d',
         secret: process.env.JWT_REFRESH_SECRET,
@@ -607,9 +503,6 @@ export class VendorsService {
         refresh_token: refreshToken,
         role: role?.role_name,
       };
-      console.log(
-        '[VendorsService.vendorLogin] Login successful, returning response',
-      );
       return response;
     } catch (error) {
       if (
@@ -619,16 +512,16 @@ export class VendorsService {
       ) {
         throw error;
       }
-      throw new InternalServerErrorException('Failed to Login vendor', {
-        cause: error,
-      });
+      throw new InternalServerErrorException(
+        VendorsErrorKeyEnum.FAILED_TO_LOGIN_VENDOR,
+        {
+          cause: error,
+        },
+      );
     }
   }
   async findVendorByEmail(email: string) {
     try {
-      console.log(
-        `[VendorsService.findVendorByEmail] Querying vendor by email: ${email}`,
-      );
       const [vendorRecord] = await this.db
         .select()
         .from(vendorTable)
@@ -636,14 +529,8 @@ export class VendorsService {
         .where(eq(userTable.email, email))
         .limit(1);
       if (!vendorRecord) {
-        console.log(
-          `[VendorsService.findVendorByEmail] Vendor not found for email: ${email}`,
-        );
-        return new UnauthorizedException('Vendor not found');
+        return new UnauthorizedException(VendorsErrorKeyEnum.VENDOR_NOT_FOUND);
       }
-      console.log(
-        `[VendorsService.findVendorByEmail] Vendor found with ID: ${vendorRecord.vendor?.id}`,
-      );
       return vendorRecord;
     } catch (error) {
       if (
@@ -652,17 +539,16 @@ export class VendorsService {
       ) {
         throw error;
       }
-      throw new InternalServerErrorException('Failed to find vendor by email', {
-        cause: error,
-      });
+      throw new InternalServerErrorException(
+        VendorsErrorKeyEnum.FAILED_TO_FIND_VENDOR_BY_EMAIL,
+        {
+          cause: error,
+        },
+      );
     }
   }
   async approveVendor(vendorId: string) {
     try {
-      console.log(
-        `[VendorsService.approveVendor] Request to approve vendor: ${vendorId}`,
-      );
-      console.log('[VendorsService.approveVendor] Querying vendor details');
       const [isVendorExists] = await this.db
         .select({
           id: vendorTable.id,
@@ -674,60 +560,39 @@ export class VendorsService {
         .where(eq(vendorTable.id, vendorId))
         .limit(1);
       if (!isVendorExists || !isVendorExists.user_id) {
-        console.log(
-          `[VendorsService.approveVendor] Vendor not found: ${vendorId}`,
-        );
-        return new UnauthorizedException('Vendor not found');
+        return new UnauthorizedException(VendorsErrorKeyEnum.VENDOR_NOT_FOUND);
       }
-      console.log(
-        '[VendorsService.approveVendor] Updating vendor status to ACTIVE',
-      );
       await this.db
         .update(vendorTable)
         .set({ vendor_status: UserStatus.ACTIVE })
         .where(eq(vendorTable.id, vendorId))
         .catch((error) => {
-          console.error(
-            '[VendorsService.approveVendor] Database update error:',
-            error,
-          );
           throw new InternalServerErrorException(
-            'Failed to update vendor status in database',
+            VendorsErrorKeyEnum.FAILED_TO_UPDATE_VENDOR_STATUS_IN_DATABASE,
             {
               cause: error,
             },
           );
         });
 
-      console.log(
-        '[VendorsService.approveVendor] Updating user-company access status to ACTIVE',
-      );
       const [updatedUserAndCompany] = await this.db
         .update(user_and_company)
         .set({ access_status: AccessStatus.ACTIVE })
         .where(eq(user_and_company.user_id, isVendorExists.user_id))
         .returning({ company_id: user_and_company.company_id });
-      console.log('[VendorsService.approveVendor] Fetching company details');
       const [companyDetails] = await this.db
         .select({ company_name: company.company_name })
         .from(company)
         .where(eq(company.id, updatedUserAndCompany.company_id))
         .limit(1);
 
-      console.log(
-        `[VendorsService.approveVendor] Activating trial subscription for company: ${updatedUserAndCompany.company_id}`,
-      );
       await this.subscriptionService.startTrial(
         updatedUserAndCompany.company_id,
       );
 
-      console.log('[VendorsService.approveVendor] Sending approval email');
       await this.mailService.sendVendorApprovalEmail(
         isVendorExists.email,
         companyDetails.company_name,
-      );
-      console.log(
-        '[VendorsService.approveVendor] Vendor approval process completed',
       );
       return {
         success: true,
@@ -738,23 +603,17 @@ export class VendorsService {
       if (error instanceof HttpException) {
         throw error;
       }
-      throw new InternalServerErrorException('Failed to approve vendor', {
-        cause: error,
-      });
+      throw new InternalServerErrorException(
+        VendorsErrorKeyEnum.FAILED_TO_APPROVE_VENDOR,
+        {
+          cause: error,
+        },
+      );
     }
   }
   async rejectVendor(vendorId: string) {
     try {
-      console.log(
-        `[VendorsService.rejectVendor] Request to reject vendor: ${vendorId}`,
-      );
       const vendorUser = await this.db.transaction(async (tx) => {
-        console.log(
-          '[VendorsService.rejectVendor] Starting database transaction',
-        );
-        console.log(
-          '[VendorsService.rejectVendor] Querying vendor user details',
-        );
         const [vendorUser] = await tx
           .select({ email: userTable.email })
           .from(vendorTable)
@@ -766,9 +625,6 @@ export class VendorsService {
             `Failed to retrieve vendor user details for vendor ID ${vendorId}.`,
           );
         }
-        console.log(
-          '[VendorsService.rejectVendor] Updating vendor status to REJECTED',
-        );
         await tx
           .update(vendorTable)
           .set({ vendor_status: UserStatus.REJECTED })
@@ -788,52 +644,42 @@ export class VendorsService {
           `Failed to retrieve vendor user email for vendor ID ${vendorId}.`,
         );
       }
-      console.log('[VendorsService.rejectVendor] Sending rejection email');
       await this.mailService.sendEmail(
         vendorUser.email,
         'Vendor Account Rejected',
         `<p>We regret to inform you that your vendor account has been rejected...</p>`,
       );
-      console.log(
-        '[VendorsService.rejectVendor] Vendor rejection process completed',
-      );
       return {
         message: 'Vendor rejected and notification email sent successfully',
       };
     } catch (error) {
-      console.error('RejectVendor Error:', error);
       if (
         error instanceof HttpException ||
         error instanceof UnauthorizedException
       ) {
         throw error;
       }
-      throw new InternalServerErrorException('Failed to reject vendor', {
-        cause: error,
-      });
+      throw new InternalServerErrorException(
+        VendorsErrorKeyEnum.FAILED_TO_REJECT_VENDOR,
+        {
+          cause: error,
+        },
+      );
     }
   }
   async removeVendor(vendorId: string) {
     try {
-      console.log(
-        `[VendorsService.removeVendor] Request to remove vendor: ${vendorId}`,
-      );
-      console.log('[VendorsService.removeVendor] Querying vendor record');
       const [vendorRow] = await this.db
         .select({ user_id: vendorTable.user_id })
         .from(vendorTable)
         .where(eq(vendorTable.id, vendorId))
         .limit(1);
       if (!vendorRow || !vendorRow.user_id) {
-        throw new UnauthorizedException('Vendor not found');
+        throw new UnauthorizedException(VendorsErrorKeyEnum.VENDOR_NOT_FOUND);
       }
-      console.log(
-        '[VendorsService.removeVendor] Deleting user and associated vendor record',
-      );
       const deleteUserResult = await this.db
         .delete(userTable)
         .where(eq(userTable.id, vendorRow.user_id));
-      console.log('[VendorsService.removeVendor] Vendor removal completed');
       return {
         message: 'Vendor and associated user removed successfully',
       };
@@ -844,21 +690,17 @@ export class VendorsService {
       ) {
         throw error;
       }
-      throw new InternalServerErrorException('Failed to remove vendor', {
-        cause: error,
-      });
+      throw new InternalServerErrorException(
+        VendorsErrorKeyEnum.FAILED_TO_REMOVE_VENDOR,
+        {
+          cause: error,
+        },
+      );
     }
   }
   async suspendedVendor(vendorId: string) {
     try {
-      console.log(
-        `[VendorsService.suspendedVendor] Request to suspend vendor: ${vendorId}`,
-      );
       const suspendedVendor = await this.db.transaction(async (tx) => {
-        console.log(
-          '[VendorsService.suspendedVendor] Starting database transaction',
-        );
-        console.log('[VendorsService.suspendedVendor] Querying vendor details');
         const [vendorUser] = await tx
           .select({
             email: userTable.email,
@@ -874,16 +716,10 @@ export class VendorsService {
             `Failed to retrieve vendor details for vendor ID ${vendorId}.`,
           );
         }
-        console.log(
-          '[VendorsService.suspendedVendor] Updating vendor status to SUSPENDED',
-        );
         await tx
           .update(vendorTable)
           .set({ vendor_status: UserStatus.SUSPENDED })
           .where(eq(vendorTable.id, vendorId));
-        console.log(
-          '[VendorsService.suspendedVendor] Updating user status to SUSPENDED',
-        );
         await tx
           .update(userTable)
           .set({ user_status: UserStatus.SUSPENDED })
@@ -900,9 +736,6 @@ export class VendorsService {
         };
       });
       // await this.mailService.sendVendorSuspendedEmail(suspendedVendor.email, suspendedVendor.store_name);
-      console.log(
-        '[VendorsService.suspendedVendor] Vendor suspension completed',
-      );
       return {
         message: 'Vendor suspended successfully',
       };
@@ -913,44 +746,37 @@ export class VendorsService {
       ) {
         throw error;
       }
-      throw new InternalServerErrorException('Failed to suspend vendor', {
-        cause: error,
-      });
+      throw new InternalServerErrorException(
+        VendorsErrorKeyEnum.FAILED_TO_SUSPEND_VENDOR,
+        {
+          cause: error,
+        },
+      );
     }
   }
 
   async vendorApplicationCount() {
     try {
-      console.log(
-        '[VendorsService.vendorApplicationCount] Querying pending vendor applications count',
-      );
       const count = await this.db
         .select()
         .from(vendor)
         .innerJoin(company, eq(vendor.company_id, company.id))
         .where(eq(vendor.vendor_status, UserStatus.PENDING))
         .catch((error) => {
-          console.error(
-            '[VendorsService.vendorApplicationCount] Error counting vendor applications:',
-            error,
-          );
           throw new InternalServerErrorException(
-            'Failed to count vendor applications',
+            VendorsErrorKeyEnum.FAILED_TO_COUNT_VENDOR_APPLICATIONS,
             {
               cause: error,
             },
           );
         });
-      console.log(
-        `[VendorsService.vendorApplicationCount] Found ${count.length} pending vendor applications`,
-      );
       return { count: count.length };
     } catch (error) {
       if (error instanceof HttpException) {
         throw error;
       }
       throw new InternalServerErrorException(
-        'Failed to count vendor applications',
+        VendorsErrorKeyEnum.FAILED_TO_COUNT_VENDOR_APPLICATIONS,
         {
           cause: error,
         },
@@ -966,9 +792,6 @@ export class VendorsService {
     sortby: 'asc' | 'desc';
   }) {
     try {
-      console.log(
-        '[VendorsService.vendorApplications] Fetching all pending vendor applications',
-      );
       const whereConditions: SQL[] = [];
       if (filters.status) {
         whereConditions.push(eq(vendor.vendor_status, filters.status));
@@ -992,29 +815,18 @@ export class VendorsService {
               : asc(vendor.created_at),
         })
         .then((results) => {
-          console.log(
-            `[VendorsService.vendorApplications] Successfully retrieved ${results.length} applications`,
-          );
           return results;
         })
         .catch((error) => {
-          console.error(
-            '[VendorsService.vendorApplications] Error fetching vendor applications:',
-            error,
-          );
           throw new InternalServerErrorException(
-            'Failed to retrieve vendor applications',
+            VendorsErrorKeyEnum.FAILED_TO_RETRIEVE_VENDOR_APPLICATIONS,
             {
               cause: error,
             },
           );
         });
-      console.log(
-        `[VendorsService.vendorApplications] Retrieved ${applications.length} pending applications`,
-      );
       return applications;
     } catch (error) {
-      console.log(`[VendorsService.vendorApplications] `, error);
       if (
         error instanceof HttpException ||
         error instanceof InternalServerErrorException
@@ -1022,7 +834,7 @@ export class VendorsService {
         throw error;
       }
       throw new InternalServerErrorException(
-        'Failed to retrieve vendor applications',
+        VendorsErrorKeyEnum.FAILED_TO_RETRIEVE_VENDOR_APPLICATIONS,
         {
           cause: error,
         },
@@ -1031,10 +843,6 @@ export class VendorsService {
   }
   async updateVendorStatus(vendorId: string, status: UserStatus) {
     try {
-      console.log(
-        `[VendorsService.updateVendorStatus] Request to update vendor: ${vendorId} to status: ${status}`,
-      );
-      console.log('[VendorsService.updateVendorStatus] Querying vendor record');
       const [existingVendor] = await this.db
         .select()
         .from(vendorTable)
@@ -1047,16 +855,10 @@ export class VendorsService {
           status: HttpStatus.NOT_FOUND,
         };
       }
-      console.log(
-        `[VendorsService.updateVendorStatus] Updating vendor status to: ${status}`,
-      );
       await this.db
         .update(vendorTable)
         .set({ vendor_status: status })
         .where(eq(vendorTable.id, vendorId));
-      console.log(
-        '[VendorsService.updateVendorStatus] Vendor status updated successfully',
-      );
       return {
         success: true,
         status: HttpStatus.OK,
@@ -1069,9 +871,12 @@ export class VendorsService {
       ) {
         throw error;
       }
-      throw new InternalServerErrorException('Failed to update vendor status', {
-        cause: error,
-      });
+      throw new InternalServerErrorException(
+        VendorsErrorKeyEnum.FAILED_TO_UPDATE_VENDOR_STATUS,
+        {
+          cause: error,
+        },
+      );
     }
   }
   async getAllVendors(
@@ -1081,9 +886,6 @@ export class VendorsService {
     sort?: string,
   ) {
     try {
-      console.log(
-        `[VendorsService.getAllVendors] Request received with offset: ${offset}, limit: ${limit}, status: ${status}, sort: ${sort}`,
-      );
       const offsetClause = offset ? Number(offset) : 0;
       const limitClause = limit ? Number(limit) : 10;
       const statusClause = status
@@ -1093,9 +895,6 @@ export class VendorsService {
         sort === 'desc'
           ? desc(vendorTable.created_at)
           : asc(vendorTable.created_at);
-      console.log(
-        '[VendorsService.getAllVendors] Querying vendors from database',
-      );
       const vendors = await this.db.query.vendor.findMany({
         where: statusClause,
         offset: offsetClause,
@@ -1106,32 +905,26 @@ export class VendorsService {
           user: true,
         },
       });
-      console.log(
-        `[VendorsService.getAllVendors] Retrieved ${vendors.length} vendors`,
-      );
       return vendors;
     } catch (error) {
-      throw new InternalServerErrorException('Failed to retrieve vendors', {
-        cause: error,
-      });
+      throw new InternalServerErrorException(
+        VendorsErrorKeyEnum.FAILED_TO_RETRIEVE_VENDORS,
+        {
+          cause: error,
+        },
+      );
     }
   }
   async getUnverifiedVendors() {
     try {
-      console.log(
-        '[VendorsService.getUnverifiedVendors] Querying unverified vendors',
-      );
       const vendors = await this.db
         .select()
         .from(vendorTable)
         .where(eq(vendorTable.is_verified, false));
-      console.log(
-        `[VendorsService.getUnverifiedVendors] Retrieved ${vendors.length} unverified vendors`,
-      );
       return vendors;
     } catch (error) {
       throw new InternalServerErrorException(
-        'Failed to retrieve unverified vendors',
+        VendorsErrorKeyEnum.FAILED_TO_RETRIEVE_UNVERIFIED_VENDORS,
         {
           cause: error,
         },
@@ -1140,26 +933,20 @@ export class VendorsService {
   }
   async getVerifiedVendors() {
     try {
-      console.log(
-        '[VendorsService.getVerifiedVendors] Querying verified vendors',
-      );
       const vendors = await this.db
         .select()
         .from(vendorTable)
         .where(eq(vendorTable.is_verified, true));
       if (!vendors) {
         throw new HttpException(
-          'No verified vendors found',
+          VendorsErrorKeyEnum.NO_VERIFIED_VENDORS_FOUND,
           HttpStatus.NOT_FOUND,
         );
       }
-      console.log(
-        `[VendorsService.getVerifiedVendors] Retrieved ${vendors.length} verified vendors`,
-      );
       return vendors;
     } catch (error) {
       throw new InternalServerErrorException(
-        'Failed to retrieve verified vendors',
+        VendorsErrorKeyEnum.FAILED_TO_RETRIEVE_VERIFIED_VENDORS,
         {
           cause: error,
         },
@@ -1168,9 +955,6 @@ export class VendorsService {
   }
   async getVendorById(vendorId: string) {
     try {
-      console.log(
-        `[VendorsService.getVendorById] Querying vendor details for ID: ${vendorId}`,
-      );
       const [existingVendor] = await this.db
         .select()
         .from(vendorTable)
@@ -1182,33 +966,25 @@ export class VendorsService {
         .where(eq(vendorTable.id, vendorId))
         .limit(1);
       if (!existingVendor) {
-        console.log(
-          `[VendorsService.getVendorById] Vendor not found: ${vendorId}`,
-        );
-        throw new UnauthorizedException('Vendor not found');
+        throw new UnauthorizedException(VendorsErrorKeyEnum.VENDOR_NOT_FOUND);
       }
-      console.log(`[VendorsService.getVendorById] Vendor found and returned`);
       return existingVendor;
     } catch (error) {
-      throw new InternalServerErrorException('Failed to retrieve vendor', {
-        cause: error,
-      });
+      throw new InternalServerErrorException(
+        VendorsErrorKeyEnum.FAILED_TO_RETRIEVE_VENDOR,
+        {
+          cause: error,
+        },
+      );
     }
   }
   async getVendorDetails(vendorId: string) {
     try {
-      console.log(
-        `[VendorsService.getVendorDetails] Fetching detailed vendor information for ID: ${vendorId}`,
-      );
-      console.log('[VendorsService.getVendorDetails] Querying customer role');
       const [roleRecord] = await this.db
         .select()
         .from(user_roles)
         .where(eq(user_roles.role_name, UserRole.CUSTOMER))
         .limit(1);
-      console.log(
-        '[VendorsService.getVendorDetails] Fetching vendor with related company and user data',
-      );
       const vendorDetails = await this.db.query.vendor
         .findFirst({
           where: eq(vendorTable.id, vendorId),
@@ -1233,18 +1009,11 @@ export class VendorsService {
           },
         })
         .then((res) => {
-          console.log(
-            '[VendorsService.getVendorDetails] Vendor details retrieved successfully',
-          );
           return res;
         })
         .catch((error) => {
-          console.error(
-            '[VendorsService.getVendorDetails] Error fetching vendor details:',
-            error,
-          );
           throw new InternalServerErrorException(
-            'Failed to retrieve vendor details',
+            VendorsErrorKeyEnum.FAILED_TO_RETRIEVE_VENDOR_DETAILS,
             {
               cause: error,
             },
@@ -1256,11 +1025,11 @@ export class VendorsService {
         !vendorDetails.company_id ||
         !vendorDetails.company
       ) {
-        throw new HttpException('Vendor not found', HttpStatus.NOT_FOUND);
+        throw new HttpException(
+          VendorsErrorKeyEnum.VENDOR_NOT_FOUND,
+          HttpStatus.NOT_FOUND,
+        );
       }
-      console.log(
-        '[VendorsService.getVendorDetails] Calculating order statistics for vendor',
-      );
       const [orderStats] = await this.db
         .select({
           totalRevenue: sql<number>`COALESCE(SUM(${orders.total_amount}), 0)`,
@@ -1268,9 +1037,6 @@ export class VendorsService {
         })
         .from(orders)
         .where(eq(orders.company_id, vendorDetails.company_id));
-      console.log(
-        '[VendorsService.getVendorDetails] Counting active products for vendor',
-      );
       const [activeProducts] = await this.db
         .select({ count: countDistinct(product_variants.id) })
         .from(products)
@@ -1283,9 +1049,6 @@ export class VendorsService {
         )
         .where(eq(products.company_id, vendorDetails.company_id))
         .limit(1);
-      console.log(
-        '[VendorsService.getVendorDetails] Building comprehensive vendor response with statistics',
-      );
       const response = {
         owner: {
           ...vendorDetails,
@@ -1309,27 +1072,21 @@ export class VendorsService {
       // const response = vendorDetails
       return response;
     } catch (error) {
-      throw new InternalServerErrorException('Failed to retrieve vendor', {
-        cause: error,
-      });
+      throw new InternalServerErrorException(
+        VendorsErrorKeyEnum.FAILED_TO_RETRIEVE_VENDOR,
+        {
+          cause: error,
+        },
+      );
     }
   }
   async createRegistrationAddress(
     domain: string,
     addressData: CreateAddressDto,
   ) {
-    console.log(
-      `[VendorsService.createRegistrationAddress] Creating address for domain: ${domain}`,
-    );
-    console.log(
-      '[VendorsService.createRegistrationAddress] Extracting and resolving company ID',
-    );
     const filteredDomain = domainExtractor(domain);
     const companyId = await this.companyService.find(filteredDomain);
     try {
-      console.log(
-        `[VendorsService.createRegistrationAddress] Company ID resolved: ${companyId}`,
-      );
       const payload = {
         company_id: companyId,
         name: addressData.name,
@@ -1345,20 +1102,13 @@ export class VendorsService {
         landmark: addressData.landmark,
         is_default: addressData.is_default,
       };
-      console.log(
-        '[VendorsService.createRegistrationAddress] Inserting address record into database',
-      );
       const [createdAddress] = await this.db
         .insert(addressTable)
         .values(payload)
         .returning({ id: addressTable.id })
         .catch((error) => {
-          console.error(
-            '[VendorsService.createRegistrationAddress] Error creating registration address:',
-            error,
-          );
           throw new InternalServerErrorException(
-            'Failed to create registration address',
+            VendorsErrorKeyEnum.FAILED_TO_CREATE_REGISTRATION_ADDRESS,
             {
               cause: error,
             },
@@ -1367,13 +1117,10 @@ export class VendorsService {
 
       if (!createdAddress || !createdAddress.id) {
         throw new HttpException(
-          'Failed to create registration address',
+          VendorsErrorKeyEnum.FAILED_TO_CREATE_REGISTRATION_ADDRESS,
           HttpStatus.INTERNAL_SERVER_ERROR,
         );
       }
-      console.log(
-        `[VendorsService.createRegistrationAddress] Address created with ID: ${createdAddress?.id}`,
-      );
       return {
         message: 'Registration address created successfully',
         address_id: createdAddress.id,
@@ -1386,7 +1133,7 @@ export class VendorsService {
         throw error;
       }
       throw new InternalServerErrorException(
-        'Failed to create registration address',
+        VendorsErrorKeyEnum.FAILED_TO_CREATE_REGISTRATION_ADDRESS,
         {
           cause: error,
         },
@@ -1394,37 +1141,21 @@ export class VendorsService {
     }
   }
   async getCompanyAddresses(domain: string) {
-    console.log(
-      `[VendorsService.getCompanyAddresses] Fetching addresses for domain: ${domain}`,
-    );
-    console.log(
-      '[VendorsService.getCompanyAddresses] Extracting and resolving company ID',
-    );
     const filteredDomain = domainExtractor(domain);
     const companyId = await this.companyService.find(filteredDomain);
     try {
-      console.log(
-        `[VendorsService.getCompanyAddresses] Querying addresses for company ID: ${companyId}`,
-      );
       const addresses = await this.db
         .select()
         .from(addressTable)
         .where(eq(addressTable.company_id, companyId))
         .catch((error) => {
-          console.error(
-            '[VendorsService.getCompanyAddresses] Error retrieving company addresses:',
-            error,
-          );
           throw new InternalServerErrorException(
-            'Failed to retrieve company addresses',
+            VendorsErrorKeyEnum.FAILED_TO_RETRIEVE_COMPANY_ADDRESSES,
             {
               cause: error,
             },
           );
         });
-      console.log(
-        `[VendorsService.getCompanyAddresses] Retrieved ${addresses.length} addresses for company`,
-      );
       return addresses;
     } catch (error) {
       if (
@@ -1434,7 +1165,7 @@ export class VendorsService {
         throw error;
       }
       throw new InternalServerErrorException(
-        'Failed to retrieve company addresses',
+        VendorsErrorKeyEnum.FAILED_TO_RETRIEVE_COMPANY_ADDRESSES,
         {
           cause: error,
         },
@@ -1444,36 +1175,21 @@ export class VendorsService {
 
   async getAnalyticsData(domain: string, start?: string, end?: string) {
     try {
-      console.log(
-        `[VendorsService.getAnalyticsData] Fetching analytics data for domain: ${domain}`,
-      );
       // 1. Resolve Company ID from Domain
-      console.log(
-        '[VendorsService.getAnalyticsData] Resolving company ID from domain',
-      );
       const filteredDomain = domainExtractor(domain);
       const companyId = await this.companyService.find(filteredDomain);
 
       if (!companyId) {
         throw new UnauthorizedException(
-          'Company not found for the provided domain',
+          VendorsErrorKeyEnum.COMPANY_NOT_FOUND_FOR_THE_PROVIDED_DOMAIN,
         );
       }
-      console.log(
-        `[VendorsService.getAnalyticsData] Company ID resolved: ${companyId}`,
-      );
 
       // 2. Parse Dates (Default to last 30 days if not provided)
-      console.log(
-        `[VendorsService.getAnalyticsData] Parsing date range - start: ${start}, end: ${end}`,
-      );
       const startDate = start
         ? new Date(start)
         : new Date(new Date().setDate(new Date().getDate() - 30));
       const endDate = end ? new Date(end) : new Date();
-      console.log(
-        `[VendorsService.getAnalyticsData] Date range set: ${startDate} to ${endDate}`,
-      );
 
       const baseFilter = and(
         eq(orders.company_id, companyId),
@@ -1482,9 +1198,6 @@ export class VendorsService {
       );
 
       // 3A. Gross Revenue & Orders
-      console.log(
-        '[VendorsService.getAnalyticsData] Calculating gross revenue and total orders',
-      );
       const [salesStats] = await this.db
         .select({
           grossRevenue: sql<number>`COALESCE(SUM(${orders.total_amount}), 0)::float`,
@@ -1494,9 +1207,6 @@ export class VendorsService {
         .where(baseFilter);
 
       // 3B. Tax Collected
-      console.log(
-        '[VendorsService.getAnalyticsData] Calculating tax collected',
-      );
       const [taxStats] = await this.db
         .select({
           taxCollected: sql<number>`COALESCE(SUM(${gst_invoices.total_tax}), 0)::float`,
@@ -1506,9 +1216,6 @@ export class VendorsService {
         .where(baseFilter);
 
       // 3C. Refunds
-      console.log(
-        '[VendorsService.getAnalyticsData] Calculating total refunds',
-      );
       const [refundStats] = await this.db
         .select({
           refunds: sql<number>`COALESCE(SUM(${refunds.refund_amount}), 0)::float`,
@@ -1526,9 +1233,6 @@ export class VendorsService {
         platformFees;
 
       // 4. Monthly Trend
-      console.log(
-        '[VendorsService.getAnalyticsData] Calculating monthly revenue trend',
-      );
       const monthlyTrend = await this.db
         .select({
           month: sql<string>`TO_CHAR(${orders.created_at}, 'Mon YYYY')`,
@@ -1545,9 +1249,6 @@ export class VendorsService {
         .orderBy(sql`TO_CHAR(${orders.created_at}, 'YYYY-MM')`);
 
       // 5. Top Selling Products
-      console.log(
-        '[VendorsService.getAnalyticsData] Fetching top selling products',
-      );
       const topProducts = await this.db
         .select({
           sku: product_variants.sku,
@@ -1565,9 +1266,6 @@ export class VendorsService {
         .limit(5);
 
       // 6. Category Performance
-      console.log(
-        '[VendorsService.getAnalyticsData] Calculating category performance metrics',
-      );
       const categoryPerformance = await this.db
         .select({
           name: categories.name,
@@ -1584,9 +1282,6 @@ export class VendorsService {
         .where(baseFilter)
         .groupBy(categories.name);
 
-      console.log(
-        '[VendorsService.getAnalyticsData] All analytics data calculated successfully, building response',
-      );
       return {
         summary: {
           grossRevenue: salesStats.grossRevenue,
@@ -1602,12 +1297,8 @@ export class VendorsService {
       };
     } catch (error) {
       if (error instanceof HttpException) throw error;
-      console.error(
-        '[VendorsService.getAnalyticsData] Error retrieving vendor analytics data:',
-        error,
-      );
       throw new InternalServerErrorException(
-        'Failed to retrieve vendor analytics data',
+        VendorsErrorKeyEnum.FAILED_TO_RETRIEVE_VENDOR_ANALYTICS_DATA,
         {
           cause: error,
         },
@@ -1619,16 +1310,12 @@ export class VendorsService {
   // Returns a single, comprehensive payload for the frontend HTML+Chart.js PDF.
   async getAnalyticsPdfData(domain: string, start?: string, end?: string) {
     try {
-      console.log(
-        `[VendorsService.getAnalyticsPdfData] Fetching PDF analytics data for domain: ${domain}`,
-      );
-
       const filteredDomain = domainExtractor(domain);
       const companyId = await this.companyService.find(filteredDomain);
 
       if (!companyId) {
         throw new UnauthorizedException(
-          'Company not found for the provided domain',
+          VendorsErrorKeyEnum.COMPANY_NOT_FOUND_FOR_THE_PROVIDED_DOMAIN,
         );
       }
 
@@ -1706,7 +1393,11 @@ export class VendorsService {
           eq(order_items.product_variant_id, product_variants.id),
         )
         .where(baseFilter)
-        .groupBy(product_variants.id, product_variants.variant_name, product_variants.sku)
+        .groupBy(
+          product_variants.id,
+          product_variants.variant_name,
+          product_variants.sku,
+        )
         .orderBy(desc(sql`SUM(${order_items.quantity})`))
         .limit(8);
 
@@ -1727,7 +1418,9 @@ export class VendorsService {
         .innerJoin(categories, eq(products.category_id, categories.id))
         .where(baseFilter)
         .groupBy(categories.name)
-        .orderBy(desc(sql`SUM(${order_items.price} * ${order_items.quantity})`));
+        .orderBy(
+          desc(sql`SUM(${order_items.price} * ${order_items.quantity})`),
+        );
 
       // ── 5. Order Status Distribution ─────────────────────────────────────────
       const orderStatusBreakdown = await this.db
@@ -1774,10 +1467,6 @@ export class VendorsService {
         .groupBy(sql`TO_CHAR(${orders.created_at}, 'YYYY-MM-DD')`)
         .orderBy(sql`TO_CHAR(${orders.created_at}, 'YYYY-MM-DD')`);
 
-      console.log(
-        '[VendorsService.getAnalyticsPdfData] All PDF analytics data compiled successfully',
-      );
-
       return {
         meta: {
           generatedAt: new Date().toISOString(),
@@ -1805,12 +1494,8 @@ export class VendorsService {
       };
     } catch (error) {
       if (error instanceof HttpException) throw error;
-      console.error(
-        '[VendorsService.getAnalyticsPdfData] Error:',
-        error,
-      );
       throw new InternalServerErrorException(
-        'Failed to retrieve PDF analytics data',
+        VendorsErrorKeyEnum.FAILED_TO_RETRIEVE_PDF_ANALYTICS_DATA,
         { cause: error },
       );
     }

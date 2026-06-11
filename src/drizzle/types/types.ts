@@ -12,6 +12,11 @@ export enum UserStatus {
   PENDING = 'pending',
   REJECTED = 'rejected',
 }
+export enum EntityStatus {
+  ACTIVE = 'active',
+  INACTIVE = 'inactive',
+  DELETED = 'deleted',
+}
 export enum AccessStatus {
   ACTIVE = 'active',
   INACTIVE = 'inactive',

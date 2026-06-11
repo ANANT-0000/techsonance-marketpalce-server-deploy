@@ -9,6 +9,7 @@ import {
   Post,
 } from '@nestjs/common';
 import { PermissionsService } from './permissions.service';
+import { PermissionsErrorKeyEnum } from './constants/permissions.enums';
 @Controller({
   version: '1',
   path: 'permissions',
@@ -28,7 +29,7 @@ export class PermissionsController {
   @Post()
   createPermission(@Body('permissionName') permissionName: string) {
     if (!permissionName) {
-      throw new BadRequestException('Permission name is required');
+      throw new BadRequestException(PermissionsErrorKeyEnum.PERMISSION_NAME_IS_REQUIRED);
     }
     return this.permissionsService.createPermission(permissionName);
   }
@@ -38,14 +39,14 @@ export class PermissionsController {
     @Body('permissionName') permissionName: string,
   ) {
     if (!id || !permissionName) {
-      throw new BadRequestException('Permission ID and name are required');
+      throw new BadRequestException(PermissionsErrorKeyEnum.PERMISSION_ID_AND_NAME_ARE_REQUIRED);
     }
     return this.permissionsService.updatePermission(id, permissionName);
   }
   @Delete(':id')
   removePermission(@Param('id') id: string) {
     if (!id) {
-      throw new BadRequestException('Permission ID is required');
+      throw new BadRequestException(PermissionsErrorKeyEnum.PERMISSION_ID_IS_REQUIRED);
     }
     return this.permissionsService.removePermission(id);
   }

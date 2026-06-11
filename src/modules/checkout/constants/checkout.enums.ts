@@ -1,0 +1,16 @@
+export enum CheckoutErrorKeyEnum {
+  EITHER_CARTID_OR_PRODUCTVARIANTID_MUST_BE_PROVIDED = 'Either cartId or productVariantId must be provided',
+  COMPANY_DOMAIN_MUST_BE_PROVIDED_IN_HEADERS = 'Company domain must be provided in headers',
+  FAILED_TO_FETCH_ADDRESS_FOR_CHECKOUT = 'Failed to fetch address for checkout',
+  ADDRESS_NOT_FOUND = 'Address not found',
+  NO_VALID_ORDER_LINES_FOUND_FOR_CHECKOUT = 'No valid order lines found for checkout',
+  COMPANY_NOT_FOUND = 'Company not found',
+  USER_NOT_FOUND = 'user not found',
+  CUSTOMER_NOT_FOUND = 'customer not found',
+  FAILED_TO_CLEAR_SINGLE_PRODUCT_VARIANT_CHECKOUT_RECORD_AFTER_SUCCESSFUL_CHECKOUT = 'Failed to clear single product variant checkout record after successful checkout',
+  FAILED_TO_VERIFY_CHECKOUT = 'Failed to verify checkout',
+  PRODUCT_VARIANT_NOT_FOUND = 'Product variant not found',
+  CART_NOT_FOUND = 'Cart not found',
+  FAILED_TO_CLEAR_CART_AFTER_SUCCESSFUL_CHECKOUT = 'Failed to clear cart after successful checkout',
+  FAILED_TO_CLEAR_CART_ITEMS_AFTER_SUCCESSFUL_CHECKOUT = 'Failed to clear cart items after successful checkout',
+}

@@ -29,7 +29,6 @@ export class ProductReviewController {
     @Body('reviewData', ParseJsonPipe) createProductReviewDto: any,
     @Headers('company-domain') domain: string,
   ) {
-    console.log('Create Product Review DTO:', createProductReviewDto);
     return this.productReviewService.create(
       createProductReviewDto,
       userId,

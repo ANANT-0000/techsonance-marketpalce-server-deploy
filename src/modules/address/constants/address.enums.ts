@@ -1,0 +1,16 @@
+export enum AddressErrorKeyEnum {
+  USER_ID_REQUIRED = 'User ID is required',
+  DOMAIN_REQUIRED = 'Domain is required',
+  FAILED_TO_FIND = 'Failed to find addresses',
+  FAILED_TO_CREATE = 'Failed to create address',
+  FAILED_TO_UPDATE = 'Failed to update address',
+  FAILED_TO_DELETE = 'Failed to delete address',
+  FAILED_TO_SET_DEFAULT = 'Failed to set default address',
+  NO_ADDRESSES_FOUND_FOR_THIS_USER = 'No addresses found for this user',
+  ADDRESS_ID_IS_REQUIRED = 'Address ID is required',
+  VENDOR_NOT_FOUND_FOR_THE_GIVEN_COMPANY_DOMAIN = 'Vendor not found for the given company domain',
+  CUSTOMER_ID_IS_REQUIRED = 'Customer ID is required',
+  FAILED_TO_UPDATE_DEFAULT_ADDRESS = 'Failed to update default address',
+  ADDRESS_ID_AND_CUSTOMER_ID_ARE_REQUIRED = 'Address ID and Customer ID are required',
+  CUSTOMER_ID_AND_ADDRESS_ID_ARE_REQUIRED = 'Customer ID and Address ID are required',
+}

@@ -83,11 +83,7 @@ export class ProductVariantController {
     @UploadedFiles() files: ProductFiles,
     @Body('imagesToDelete') imagesToDelete?: string[],
   ) {
-    // console.log('Received update request :', body);
-    console.log('id', id);
-    console.log('dto', dto);
-    console.log('imagesToDelete', imagesToDelete);
-    console.log('files', files);
+    // ('Received update request :', body);
     return this.productVariantService.update(
       id,
       dto,
@@ -109,7 +105,6 @@ export class ProductVariantController {
   }
   @Delete(':id')
   async delete(@Param('id') id: string) {
-    console.log('Deleting product variant with ID:', id);
     return await this.productVariantService.delete(id);
   }
 }

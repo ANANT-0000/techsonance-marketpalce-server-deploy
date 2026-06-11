@@ -62,7 +62,6 @@ export class InventoryController {
     @Body('quantity') quantity: number,
     @Headers('company-domain') domain: string,
   ) {
-    console.log('quantity', quantity);
     return this.inventoryService.updateStock(id, quantity, domain);
   }
 

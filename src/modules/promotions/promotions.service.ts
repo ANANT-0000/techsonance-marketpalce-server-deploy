@@ -23,6 +23,7 @@ import {
   PromotionType,
 } from '../../drizzle/types/types';
 import { CreatePromotionDto } from './dto/promotions..dto';
+import { PromotionsErrorKeyEnum } from './constants/promotions.enums';
 
 @Injectable()
 export class PromotionsService {
@@ -32,23 +33,11 @@ export class PromotionsService {
   ) {}
 
   private async resolveCompanyId(domain: string): Promise<string> {
-    console.log(
-      '[PromotionsService.resolveCompanyId] Resolving company for',
-      domain,
-    );
     try {
       const companyId = await this.companyService.find(domainExtractor(domain));
-      console.log(
-        '[PromotionsService.resolveCompanyId] Resolved company id:',
-        companyId,
-      );
       return companyId;
     } catch (err) {
-      console.error(
-        '[PromotionsService.resolveCompanyId] Error resolving company id:',
-        err,
-      );
-      throw new InternalServerErrorException('Failed to resolve company id', {
+      throw new InternalServerErrorException(PromotionsErrorKeyEnum.FAILED_TO_RESOLVE_COMPANY_ID, {
         cause: err,
       });
     }
@@ -74,7 +63,7 @@ export class PromotionsService {
       case PromotionType.FIXED_AMOUNT:
         if (typeof config.value !== 'number' || config.value <= 0)
           throw new BadRequestException(
-            'fixed_amount requires value: positive number',
+            PromotionsErrorKeyEnum.FIXED_AMOUNT_REQUIRES_VALUE_POSITIVE_NUMBER,
           );
         break;
       case PromotionType.BUY_X_GET_Y:
@@ -84,18 +73,18 @@ export class PromotionsService {
           !config.get_product_variant_id
         )
           throw new BadRequestException(
-            'buy_x_get_y requires buy_qty, get_qty, get_product_variant_id',
+            PromotionsErrorKeyEnum.BUY_X_GET_Y_REQUIRES_BUY_QTY_GET_QTY_GET_PRODUCT_VARIANT_ID,
           );
         break;
       case PromotionType.FREE_SHIPPING:
         if (typeof config.max_shipping_waived !== 'number')
           throw new BadRequestException(
-            'free_shipping requires max_shipping_waived: number',
+            PromotionsErrorKeyEnum.FREE_SHIPPING_REQUIRES_MAX_SHIPPING_WAIVED_NUMBER,
           );
         break;
       case PromotionType.TIERED_DISCOUNT:
         if (!Array.isArray(config.tiers) || config.tiers.length === 0)
-          throw new BadRequestException('tiered_discount requires tiers array');
+          throw new BadRequestException(PromotionsErrorKeyEnum.TIERED_DISCOUNT_REQUIRES_TIERS_ARRAY);
         break;
       case PromotionType.BUNDLE_DEAL:
         if (
@@ -113,13 +102,8 @@ export class PromotionsService {
   // Returns promotions that are NOT coupon-linked (campaigns only).
   // Coupon promotions are managed by CouponService.
   async findAll(domain: string) {
-    console.log(
-      '[PromotionsService.findAll] Request received for domain:',
-      domain,
-    );
     try {
       const companyId = await this.resolveCompanyId(domain);
-      console.log('[PromotionsService.findAll] Company resolved:', companyId);
 
       const rows = await this.db.query.promotions
         .findMany({
@@ -140,11 +124,7 @@ export class PromotionsService {
           orderBy: [desc(promotions.created_at)],
         })
         .catch((err) => {
-          console.error(
-            '[PromotionsService.findAll] Error fetching promotions:',
-            err,
-          );
-          throw new InternalServerErrorException('Failed to fetch promotions', {
+          throw new InternalServerErrorException(PromotionsErrorKeyEnum.FAILED_TO_FETCH_PROMOTIONS, {
             cause: err,
           });
         });
@@ -155,23 +135,14 @@ export class PromotionsService {
       }));
     } catch (error) {
       if (error instanceof HttpException) throw error;
-      console.error('[PromotionsService.findAll] Unexpected error:', error);
-      throw new InternalServerErrorException('Failed to list promotions', {
+      throw new InternalServerErrorException(PromotionsErrorKeyEnum.FAILED_TO_LIST_PROMOTIONS, {
         cause: error,
       });
     }
   }
   async findOptions(domain: string) {
-    console.log(
-      '[PromotionsService.findOptions] Request received for domain:',
-      domain,
-    );
     try {
       const companyId = await this.resolveCompanyId(domain);
-      console.log(
-        '[PromotionsService.findOptions] Company resolved:',
-        companyId,
-      );
 
       const options = await this.db
         .select({
@@ -181,12 +152,8 @@ export class PromotionsService {
         .from(promotions)
         .where(eq(promotions.company_id, companyId))
         .catch((err) => {
-          console.error(
-            '[PromotionsService.findOptions] Error fetching promotion options:',
-            err,
-          );
           throw new InternalServerErrorException(
-            'Failed to fetch promotion options',
+            PromotionsErrorKeyEnum.FAILED_TO_FETCH_PROMOTION_OPTIONS,
             {
               cause: err,
             },
@@ -195,9 +162,8 @@ export class PromotionsService {
       return options;
     } catch (error) {
       if (error instanceof HttpException) throw error;
-      console.error('[PromotionsService.findOptions] Unexpected error:', error);
       throw new InternalServerErrorException(
-        'Failed to list promotion options',
+        PromotionsErrorKeyEnum.FAILED_TO_LIST_PROMOTION_OPTIONS,
         {
           cause: error,
         },
@@ -206,15 +172,8 @@ export class PromotionsService {
   }
   // ── findOne ──────────────────────────────────────────────────
   async findOne(id: string, domain: string) {
-    console.log(
-      '[PromotionsService.findOne] Request received for id:',
-      id,
-      'domain:',
-      domain,
-    );
     try {
       const companyId = await this.resolveCompanyId(domain);
-      console.log('[PromotionsService.findOne] Company resolved:', companyId);
 
       const row = await this.db.query.promotions
         .findFirst({
@@ -229,21 +188,16 @@ export class PromotionsService {
           },
         })
         .catch((err) => {
-          console.error(
-            '[PromotionsService.findOne] Error fetching promotion:',
-            err,
-          );
-          throw new InternalServerErrorException('Failed to fetch promotion', {
+          throw new InternalServerErrorException(PromotionsErrorKeyEnum.FAILED_TO_FETCH_PROMOTION, {
             cause: err,
           });
         });
 
-      if (!row) throw new NotFoundException('Promotion not found');
+      if (!row) throw new NotFoundException(PromotionsErrorKeyEnum.PROMOTION_NOT_FOUND);
       return { ...row, total_used: row.usage.length };
     } catch (error) {
       if (error instanceof HttpException) throw error;
-      console.error('[PromotionsService.findOne] Unexpected error:', error);
-      throw new InternalServerErrorException('Failed to get promotion', {
+      throw new InternalServerErrorException(PromotionsErrorKeyEnum.FAILED_TO_GET_PROMOTION, {
         cause: error,
       });
     }
@@ -253,18 +207,8 @@ export class PromotionsService {
   // Funnel counts: viewed → clicked → applied → redeemed
   // Plus total discount granted (for ROI calculation)
   async getAnalytics(id: string, domain: string) {
-    console.log(
-      '[PromotionsService.getAnalytics] Request received for id:',
-      id,
-      'domain:',
-      domain,
-    );
     try {
       const companyId = await this.resolveCompanyId(domain);
-      console.log(
-        '[PromotionsService.getAnalytics] Company resolved:',
-        companyId,
-      );
 
       const events = await this.db
         .select({
@@ -281,12 +225,8 @@ export class PromotionsService {
         )
         .groupBy(promotion_analytics_events.event_type)
         .catch((err) => {
-          console.error(
-            '[PromotionsService.getAnalytics] Error fetching analytics events:',
-            err,
-          );
           throw new InternalServerErrorException(
-            'Failed to fetch promotion analytics',
+            PromotionsErrorKeyEnum.FAILED_TO_FETCH_PROMOTION_ANALYTICS,
             { cause: err },
           );
         });
@@ -326,12 +266,8 @@ export class PromotionsService {
       };
     } catch (error) {
       if (error instanceof HttpException) throw error;
-      console.error(
-        '[PromotionsService.getAnalytics] Unexpected error:',
-        error,
-      );
       throw new InternalServerErrorException(
-        'Failed to get promotion analytics',
+        PromotionsErrorKeyEnum.FAILED_TO_GET_PROMOTION_ANALYTICS,
         { cause: error },
       );
     }
@@ -339,18 +275,13 @@ export class PromotionsService {
 
   // ── create ────────────────────────────────────────────────────
   async create(dto: CreatePromotionDto, domain: string, userId: string) {
-    console.log('[PromotionsService.create] Request received');
     try {
       const companyId = await this.resolveCompanyId(domain);
-      console.log('[PromotionsService.create] Company resolved:', companyId);
 
       this.validateDiscountConfig(dto.promotion_type, dto.discount_config);
-      console.log('[PromotionsService.create] Discount config validated');
 
-      console.log('[PromotionsService.create] Starting transaction');
       return await this.db
         .transaction(async (tx) => {
-          console.log('[PromotionsService.create] Transaction started');
           const [newPromotion] = await tx
             .insert(promotions)
             .values({
@@ -372,22 +303,14 @@ export class PromotionsService {
             })
             .returning()
             .catch((err) => {
-              console.error(
-                '[PromotionsService.create] Error inserting promotion:',
-                err,
-              );
               throw new InternalServerErrorException(
-                'Failed to create promotion',
+                PromotionsErrorKeyEnum.FAILED_TO_CREATE_PROMOTION,
                 { cause: err },
               );
             });
 
           // Insert rules
           if (dto.rules?.length) {
-            console.log(
-              '[PromotionsService.create] Inserting rules count:',
-              dto.rules.length,
-            );
             await tx
               .insert(promotion_rules)
               .values(
@@ -399,12 +322,8 @@ export class PromotionsService {
                 })),
               )
               .catch((err) => {
-                console.error(
-                  '[PromotionsService.create] Error inserting rules:',
-                  err,
-                );
                 throw new InternalServerErrorException(
-                  'Failed to insert promotion rules',
+                  PromotionsErrorKeyEnum.FAILED_TO_INSERT_PROMOTION_RULES,
                   { cause: err },
                 );
               });
@@ -412,10 +331,6 @@ export class PromotionsService {
 
           // Insert targets
           if (dto.targets?.length) {
-            console.log(
-              '[PromotionsService.create] Inserting targets count:',
-              dto.targets.length,
-            );
             await tx
               .insert(promotion_targets)
               .values(
@@ -427,12 +342,8 @@ export class PromotionsService {
                 })),
               )
               .catch((err) => {
-                console.error(
-                  '[PromotionsService.create] Error inserting targets:',
-                  err,
-                );
                 throw new InternalServerErrorException(
-                  'Failed to insert promotion targets',
+                  PromotionsErrorKeyEnum.FAILED_TO_INSERT_PROMOTION_TARGETS,
                   { cause: err },
                 );
               });
@@ -441,21 +352,19 @@ export class PromotionsService {
           return newPromotion;
         })
         .catch((err) => {
-          console.error('[PromotionsService.create] Transaction error:', err);
           if (
             err instanceof HttpException ||
             err instanceof InternalServerErrorException
           )
             throw err; // pass through known exceptions
           throw new InternalServerErrorException(
-            'Failed to create promotion transaction',
+            PromotionsErrorKeyEnum.FAILED_TO_CREATE_PROMOTION_TRANSACTION,
             { cause: err },
           );
         });
     } catch (error) {
       if (error instanceof HttpException) throw error;
-      console.error('[PromotionsService.create] Unexpected error:', error);
-      throw new InternalServerErrorException('Failed to create promotion', {
+      throw new InternalServerErrorException(PromotionsErrorKeyEnum.FAILED_TO_CREATE_PROMOTION, {
         cause: error,
       });
     }
@@ -463,10 +372,8 @@ export class PromotionsService {
 
   // ── update ────────────────────────────────────────────────────
   async update(id: string, dto: Partial<CreatePromotionDto>, domain: string) {
-    console.log('[PromotionsService.update] Request received for id:', id);
     try {
       const companyId = await this.resolveCompanyId(domain);
-      console.log('[PromotionsService.update] Company resolved:', companyId);
 
       const existing = await this.db.query.promotions
         .findFirst({
@@ -476,16 +383,12 @@ export class PromotionsService {
           ),
         })
         .catch((err) => {
-          console.error(
-            '[PromotionsService.update] Error fetching existing promotion:',
-            err,
-          );
           throw new InternalServerErrorException(
-            'Failed to fetch existing promotion',
+            PromotionsErrorKeyEnum.FAILED_TO_FETCH_EXISTING_PROMOTION,
             { cause: err },
           );
         });
-      if (!existing) throw new NotFoundException('Promotion not found');
+      if (!existing) throw new NotFoundException(PromotionsErrorKeyEnum.PROMOTION_NOT_FOUND);
 
       // Validate config only if type or config is changing
       const newType = dto.promotion_type ?? existing.promotion_type;
@@ -493,9 +396,7 @@ export class PromotionsService {
         dto.discount_config ??
         (existing.discount_config as Record<string, unknown>);
       this.validateDiscountConfig(newType, newConfig);
-      console.log('[PromotionsService.update] Discount config validated');
 
-      console.log('[PromotionsService.update] Starting transaction');
       return await this.db
         .transaction(async (tx) => {
           const updatePayload: Record<string, unknown> = {};
@@ -531,32 +432,20 @@ export class PromotionsService {
             )
             .returning()
             .catch((err) => {
-              console.error(
-                '[PromotionsService.update] Error updating promotion:',
-                err,
-              );
               throw new InternalServerErrorException(
-                'Failed to update promotion',
+                PromotionsErrorKeyEnum.FAILED_TO_UPDATE_PROMOTION,
                 { cause: err },
               );
             });
 
           // Rules — full replace when provided
           if (dto.rules !== undefined) {
-            console.log(
-              '[PromotionsService.update] Replacing rules, count:',
-              dto.rules.length,
-            );
             await tx
               .delete(promotion_rules)
               .where(eq(promotion_rules.promotion_id, id))
               .catch((err) => {
-                console.error(
-                  '[PromotionsService.update] Error deleting old rules:',
-                  err,
-                );
                 throw new InternalServerErrorException(
-                  'Failed to delete old promotion rules',
+                  PromotionsErrorKeyEnum.FAILED_TO_DELETE_OLD_PROMOTION_RULES,
                   { cause: err },
                 );
               });
@@ -572,12 +461,8 @@ export class PromotionsService {
                   })),
                 )
                 .catch((err) => {
-                  console.error(
-                    '[PromotionsService.update] Error inserting new rules:',
-                    err,
-                  );
                   throw new InternalServerErrorException(
-                    'Failed to insert promotion rules',
+                    PromotionsErrorKeyEnum.FAILED_TO_INSERT_PROMOTION_RULES,
                     { cause: err },
                   );
                 });
@@ -586,20 +471,12 @@ export class PromotionsService {
 
           // Targets — full replace when provided
           if (dto.targets !== undefined) {
-            console.log(
-              '[PromotionsService.update] Replacing targets, count:',
-              dto.targets.length,
-            );
             await tx
               .delete(promotion_targets)
               .where(eq(promotion_targets.promotion_id, id))
               .catch((err) => {
-                console.error(
-                  '[PromotionsService.update] Error deleting old targets:',
-                  err,
-                );
                 throw new InternalServerErrorException(
-                  'Failed to delete old promotion targets',
+                  PromotionsErrorKeyEnum.FAILED_TO_DELETE_OLD_PROMOTION_TARGETS,
                   { cause: err },
                 );
               });
@@ -615,12 +492,8 @@ export class PromotionsService {
                   })),
                 )
                 .catch((err) => {
-                  console.error(
-                    '[PromotionsService.update] Error inserting new targets:',
-                    err,
-                  );
                   throw new InternalServerErrorException(
-                    'Failed to insert promotion targets',
+                    PromotionsErrorKeyEnum.FAILED_TO_INSERT_PROMOTION_TARGETS,
                     { cause: err },
                   );
                 });
@@ -630,16 +503,14 @@ export class PromotionsService {
           return { success: true, data: updated };
         })
         .catch((err) => {
-          console.error('[PromotionsService.update] Transaction error:', err);
           throw new InternalServerErrorException(
-            'Failed to update promotion transaction',
+            PromotionsErrorKeyEnum.FAILED_TO_UPDATE_PROMOTION_TRANSACTION,
             { cause: err },
           );
         });
     } catch (error) {
       if (error instanceof HttpException) throw error;
-      console.error('[PromotionsService.update] Unexpected error:', error);
-      throw new InternalServerErrorException('Failed to update promotion', {
+      throw new InternalServerErrorException(PromotionsErrorKeyEnum.FAILED_TO_UPDATE_PROMOTION, {
         cause: error,
       });
     }
@@ -649,25 +520,16 @@ export class PromotionsService {
   // Soft delete — sets status to INACTIVE, never hard deletes
   // because promotion_usage rows reference the promotion with onDelete: restrict
   async deactivate(id: string, domain: string) {
-    console.log('[PromotionsService.deactivate] Request received for id:', id);
     try {
       const companyId = await this.resolveCompanyId(domain);
-      console.log(
-        '[PromotionsService.deactivate] Company resolved:',
-        companyId,
-      );
 
       await this.db
         .update(promotions)
         .set({ status: PromotionStatus.INACTIVE })
         .where(and(eq(promotions.id, id), eq(promotions.company_id, companyId)))
         .catch((err) => {
-          console.error(
-            '[PromotionsService.deactivate] Error deactivating promotion:',
-            err,
-          );
           throw new InternalServerErrorException(
-            'Failed to deactivate promotion',
+            PromotionsErrorKeyEnum.FAILED_TO_DEACTIVATE_PROMOTION,
             { cause: err },
           );
         });
@@ -675,8 +537,7 @@ export class PromotionsService {
       return { success: true, message: 'Campaign deactivated' };
     } catch (error) {
       if (error instanceof HttpException) throw error;
-      console.error('[PromotionsService.deactivate] Unexpected error:', error);
-      throw new InternalServerErrorException('Failed to deactivate promotion', {
+      throw new InternalServerErrorException(PromotionsErrorKeyEnum.FAILED_TO_DEACTIVATE_PROMOTION, {
         cause: error,
       });
     }

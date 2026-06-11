@@ -1,0 +1,15 @@
+export enum CartErrorKeyEnum {
+  COMPANY_NOT_FOUND = 'Company not found',
+  PRODUCT_VARIANT_NOT_FOUND = 'Product variant not found',
+  FAILED_TO_CREATE_CART = 'Failed to create cart',
+  FAILED_TO_CREATE_CART_ITEM = 'Failed to create cart item',
+  USER_CART_NOT_FOUND = 'User Cart not found',
+  CART_ITEMS_NOT_FOUND = 'Cart items not found ',
+  FAILED_TO_FETCH_CART_ITEM = 'Failed to fetch cart item',
+  FAILED_TO_FETCH_CART_ITEMS = 'Failed to fetch cart items',
+  CART_ITEM_NOT_FOUND_FOR_PRODUCT_VARIANT_ID_PRODUCTVARIANTID = 'Cart item not found for product variant ID ${productVariantId}',
+  FAILED_TO_UPDATE_CART_ITEM = 'FAILED TO UPDATE CART ITEM',
+  FAILED_TO_FETCH_USER_CART_INFORMATION = 'FAILED TO FETCH USER CART INFORMATION',
+  FAILED_TO_FIND_CART_ITEM = 'FAILED TO FIND CART ITEM',
+  FAILED_TO_DELETE_CART_ITEM = 'FAILED TO DELETE CART ITEM',
+}

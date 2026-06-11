@@ -1,3 +1,4 @@
+export * from './enums.schema';
 export * from './users.schema';
 export * from './main.schema';
 export * from './utils.schema';

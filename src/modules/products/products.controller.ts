@@ -49,7 +49,6 @@ export class ProductsController {
   ) {
     const dto = plainToInstance(CreateProductDto, productDto);
     const errors = await validate(dto);
-    console.log('VALIDATION ERRORS:', JSON.stringify(errors, null, 2));
     return await this.productsService.createProduct(
       productDto,
       vendorId,

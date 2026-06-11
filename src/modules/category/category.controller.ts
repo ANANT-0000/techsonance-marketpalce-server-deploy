@@ -70,8 +70,6 @@ export class CategoryController {
     @Headers('company-domain') domain: string,
     @Body('category') createCategoryDto: any,
   ) {
-    console.log('Received request to create category for domain:', domain);
-    console.log('Category data:', createCategoryDto);
     return this.categoryService.create(createCategoryDto, domain);
   }
   @Get(':id')

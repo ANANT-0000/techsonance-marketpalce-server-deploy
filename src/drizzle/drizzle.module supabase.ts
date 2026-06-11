@@ -3,7 +3,6 @@ import { ConfigService } from '@nestjs/config';
 import { NodePgDatabase, drizzle } from 'drizzle-orm/node-postgres';
 import { Pool } from 'pg';
 import * as schema from './schema/index';
-
 export const DRIZZLE: unique symbol = Symbol('DRIZZLE');
 export type DrizzleService = NodePgDatabase<typeof schema>;
 @Module({
@@ -13,15 +12,13 @@ export type DrizzleService = NodePgDatabase<typeof schema>;
       inject: [ConfigService],
       useFactory: (configService: ConfigService) => {
         const databaseUrl = configService.get<string>('DATABASE_URL');
-        console.log('databaseUrl', databaseUrl);
-        if (!databaseUrl) {
+                if (!databaseUrl) {
           throw new Error(
             'DATABASE_URL is not defined in the environment variables.',
           );
         }
         const pool = new Pool({
           connectionString: databaseUrl,
-
           ssl:
             process.env.NODE_ENV === 'production'
               ? { rejectUnauthorized: false }

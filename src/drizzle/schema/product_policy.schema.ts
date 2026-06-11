@@ -2,6 +2,8 @@
 
 import * as pg from 'drizzle-orm/pg-core';
 import { company } from './main.schema';
+import { EntityStatusEnum } from './enums.schema';
+import { EntityStatus } from '../types/types';
 import { categories, order_items, products } from './shop.schema';
 import { templates } from './utils.schema';
 import { relations } from 'drizzle-orm';
@@ -72,6 +74,8 @@ export const product_policies = pg.pgTable(
       .notNull()
       .defaultNow()
       .$onUpdate(() => new Date()),
+    status: EntityStatusEnum('status').default(EntityStatus.ACTIVE),
+    deleted_at: pg.timestamp('deleted_at'),
   },
   (table) => [
     pg.index('idx_policy_company_id').on(table.company_id),

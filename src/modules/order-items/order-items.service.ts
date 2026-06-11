@@ -29,6 +29,7 @@ import { and, asc, desc, eq, inArray, SQL } from 'drizzle-orm';
 import { address, user } from '../../drizzle/schema/users.schema';
 import { user_and_company, user_roles } from '../../drizzle/schema';
 import { domainExtractor } from '../../common/filters/domainExtractor.filter';
+import { OrderItemsErrorKeyEnum } from './constants/order-items.enums';
 
 @Injectable()
 export class OrderItemsService {
@@ -41,41 +42,19 @@ export class OrderItemsService {
 
   private async resolveCompanyId(domain: string): Promise<string> {
     const filteredDomain = domainExtractor(domain);
-    console.log(
-      `[OrderItemsService.resolveCompanyId] Resolving company for domain: ${domain}`,
-    );
-    console.log(
-      `[OrderItemsService.resolveCompanyId] Extracted filter domain: ${filteredDomain}`,
-    );
-    console.log(
-      '[OrderItemsService.resolveCompanyId] Querying CompanyService.find(...)',
-    );
     const companyId = await this.companyService.find(filteredDomain);
-    console.log(
-      `[OrderItemsService.resolveCompanyId] Company resolved: ${companyId}`,
-    );
     return companyId;
   }
 
   async getOrderItemDetails(orderItemId: string, domain: string) {
     try {
-      console.log(
-        '[OrderItemsService.getOrderItemDetails] Starting order item lookup',
-        {
-          orderItemId,
-          domain,
-        },
-      );
       const companyId = await this.resolveCompanyId(domain);
-      console.log('[OrderItemsService.getOrderItemDetails] Company resolved', {
-        companyId,
-      });
       const itemExists = await this.db
         .select({ id: order_items.id })
         .from(order_items)
         .where(eq(order_items.id, orderItemId));
       if (!itemExists.length) {
-        throw new HttpException('Order item not found', HttpStatus.NOT_FOUND);
+        throw new HttpException(OrderItemsErrorKeyEnum.ORDER_ITEM_NOT_FOUND, HttpStatus.NOT_FOUND);
       }
       const orderItem = await this.db.query.order_items
         .findFirst({
@@ -98,27 +77,18 @@ export class OrderItemsService {
           },
         })
         .catch((error) => {
-          console.error('Error fetching order item details:', error);
           throw new InternalServerErrorException(
-            'Failed to fetch order item details',
+            OrderItemsErrorKeyEnum.FAILED_TO_FETCH_ORDER_ITEM_DETAILS,
             {
               cause: error,
             },
           );
         });
-      console.log('orderItem', orderItem);
       if (!orderItem) {
-        throw new HttpException('Order item not found', HttpStatus.NOT_FOUND);
+        throw new HttpException(OrderItemsErrorKeyEnum.ORDER_ITEM_NOT_FOUND, HttpStatus.NOT_FOUND);
       }
-      console.log(
-        '[OrderItemsService.getOrderItemDetails] Order item details loaded',
-        {
-          orderItemId,
-        },
-      );
       return orderItem;
     } catch (error) {
-      console.error('Error fetching order item details:', error);
       if (
         error instanceof HttpException ||
         error instanceof InternalServerErrorException
@@ -126,7 +96,7 @@ export class OrderItemsService {
         throw error;
       }
       throw new InternalServerErrorException(
-        'Failed to fetch order item details',
+        OrderItemsErrorKeyEnum.FAILED_TO_FETCH_ORDER_ITEM_DETAILS,
         {
           cause: error,
         },
@@ -138,14 +108,6 @@ export class OrderItemsService {
     newStatus: OrderStatus,
     domain: string,
   ) {
-    console.log(
-      '[OrderItemsService.setOrderItemStatus] Starting status update',
-      {
-        itemId,
-        newStatus,
-        domain,
-      },
-    );
     const companyId = await this.resolveCompanyId(domain);
     if (!companyId) {
       throw new HttpException(
@@ -161,12 +123,8 @@ export class OrderItemsService {
         .where(eq(order_items.id, itemId))
         .limit(1);
       if (!existingItem || !existingItem.order_id) {
-        throw new HttpException('Order item not found', HttpStatus.NOT_FOUND);
+        throw new HttpException(OrderItemsErrorKeyEnum.ORDER_ITEM_NOT_FOUND, HttpStatus.NOT_FOUND);
       }
-      console.log('[OrderItemsService.setOrderItemStatus] Order item located', {
-        itemId: existingItem.id,
-        orderId: existingItem.order_id,
-      });
       const [isOrderExist] = await this.db
         .select({ id: orders.id })
         .from(orders)
@@ -179,27 +137,18 @@ export class OrderItemsService {
         .limit(1);
       if (!isOrderExist) {
         throw new HttpException(
-          'Order not found for the item',
+          OrderItemsErrorKeyEnum.ORDER_NOT_FOUND_FOR_THE_ITEM,
           HttpStatus.NOT_FOUND,
         );
       }
-      console.log(
-        '[OrderItemsService.setOrderItemStatus] Order verified for item',
-        {
-          orderId: isOrderExist.id,
-          companyId,
-        },
-      );
       if (
         Object.values(OrderStatus).includes(
           newStatus.toLowerCase() as OrderStatus,
         )
       ) {
-        console.log('✅ Valid enum value', newStatus);
       } else {
-        console.log('❌ Not a valid enum value', newStatus);
         throw new HttpException(
-          'Invalid order status value',
+          OrderItemsErrorKeyEnum.INVALID_ORDER_STATUS_VALUE,
           HttpStatus.BAD_REQUEST,
         );
       }
@@ -213,30 +162,19 @@ export class OrderItemsService {
           ),
         )
         .catch((error) => {
-          console.error('Error updating order status:', error);
           throw new InternalServerErrorException(
-            'Failed to update order status',
+            OrderItemsErrorKeyEnum.FAILED_TO_UPDATE_ORDER_STATUS,
             {
               cause: error,
             },
           );
         });
-      console.log(
-        '[OrderItemsService.setOrderItemStatus] Order item status updated',
-        {
-          itemId: existingItem.id,
-          orderId: isOrderExist.id,
-          newStatus: newStatus.toLowerCase(),
-          affectedRows: orderItemUpdated,
-        },
-      );
       return { message: 'Order item status updated successfully' };
     } catch (error) {
-      console.error('Error updating order status:', error);
       if (error instanceof HttpException) {
         throw error;
       }
-      throw new InternalServerErrorException('Failed to update order status', {
+      throw new InternalServerErrorException(OrderItemsErrorKeyEnum.FAILED_TO_UPDATE_ORDER_STATUS, {
         cause: error,
       });
     }
@@ -253,26 +191,9 @@ export class OrderItemsService {
     },
   ) {
     try {
-      console.log(
-        '[OrderItemsService.getUserOrderItems] Fetching order items for user',
-        {
-          userId,
-          domain,
-        },
-      );
       const companyId = await this.resolveCompanyId(domain);
-      console.log(
-        '[OrderItemsService.getUserOrderItems] Company resolved for user order items',
-        {
-          companyId,
-          filters,
-        },
-      );
       if (!userId) {
-        console.log(
-          '[OrderItemsService.getUserOrderItems] Stopping: User ID is missing',
-        );
-        throw new HttpException('User ID is required', HttpStatus.BAD_REQUEST);
+        throw new HttpException(OrderItemsErrorKeyEnum.USER_ID_IS_REQUIRED, HttpStatus.BAD_REQUEST);
       }
       const userOrders = await this.db
         .select({ id: orders.id })
@@ -352,19 +273,17 @@ export class OrderItemsService {
           },
         })
         .catch((error) => {
-          console.error('Error fetching user orders:', error);
           throw new InternalServerErrorException(
-            'Failed to retrieve user orders',
+            OrderItemsErrorKeyEnum.FAILED_TO_RETRIEVE_USER_ORDERS,
             { cause: error },
           );
         });
     } catch (error) {
-      console.error('Error fetching user order items:', error);
       if (error instanceof HttpException) {
         throw error;
       }
       throw new InternalServerErrorException(
-        'Failed to fetch user order items',
+        OrderItemsErrorKeyEnum.FAILED_TO_FETCH_USER_ORDER_ITEMS,
         {
           cause: error,
         },
@@ -379,20 +298,7 @@ export class OrderItemsService {
     domain: string,
   ) {
     try {
-      console.log(
-        '[OrderItemsService.cancelOrder] Cancellation request received',
-        {
-          orderItemId,
-          userId,
-          domain,
-          cancelReason,
-        },
-      );
       const companyId = await this.resolveCompanyId(domain);
-      console.log('[OrderItemsService.cancelOrder] Company resolved', {
-        companyId,
-      });
-      console.log('[OrderItemsService.cancelOrder] Loading user record');
       const [userRecord] = await this.db
         .select({ role_id: user_and_company.role_id, id: user.id })
         .from(user)
@@ -400,51 +306,34 @@ export class OrderItemsService {
         .where(eq(user.id, userId))
         .limit(1)
         .catch((error) => {
-          console.error('Error fetching user record:', error);
           throw new InternalServerErrorException(
-            'Failed to fetch user record',
+            OrderItemsErrorKeyEnum.FAILED_TO_FETCH_USER_RECORD,
             {
               cause: error,
             },
           );
         });
       if (!userRecord || !userRecord.role_id) {
-        console.log('User not found', userRecord);
-        throw new HttpException('User not found', HttpStatus.NOT_FOUND);
+        throw new HttpException(OrderItemsErrorKeyEnum.USER_NOT_FOUND, HttpStatus.NOT_FOUND);
       }
-      console.log('[OrderItemsService.cancelOrder] User record loaded', {
-        userId: userRecord.id,
-        roleId: userRecord.role_id,
-      });
-      console.log('[OrderItemsService.cancelOrder] Loading role record');
       const [RoleRecord] = await this.db
         .select({ role_id: user_roles.id, role_name: user_roles.role_name })
         .from(user_roles)
         .where(eq(user_roles.id, userRecord.role_id))
         .limit(1)
         .catch((error) => {
-          console.error('Error fetching user role record:', error);
           throw new InternalServerErrorException(
-            'Failed to fetch user role record',
+            OrderItemsErrorKeyEnum.FAILED_TO_FETCH_USER_ROLE_RECORD,
             {
               cause: error,
             },
           );
         });
       if (!RoleRecord) {
-        console.log('User role not found', RoleRecord);
-        throw new HttpException('User role not found', HttpStatus.NOT_FOUND);
+        throw new HttpException(OrderItemsErrorKeyEnum.USER_ROLE_NOT_FOUND, HttpStatus.NOT_FOUND);
       }
-      console.log('[OrderItemsService.cancelOrder] Role record loaded', {
-        roleId: RoleRecord.role_id,
-        roleName: RoleRecord.role_name,
-      });
 
       return await this.db.transaction(async (tx) => {
-        console.log('[OrderItemsService.cancelOrder] Transaction started');
-        console.log(
-          '[OrderItemsService.cancelOrder] Fetching order item inside transaction',
-        );
         const [existingOrderItem] = await tx
           .select({
             id: order_items.id,
@@ -461,41 +350,29 @@ export class OrderItemsService {
             return result;
           })
           .catch((error) => {
-            console.error('Error fetching order item:', error);
             throw new InternalServerErrorException(
-              'Failed to fetch order item',
+              OrderItemsErrorKeyEnum.FAILED_TO_FETCH_ORDER_ITEM,
               {
                 cause: error,
               },
             );
           });
         if (!existingOrderItem) {
-          throw new HttpException('Order item not found', HttpStatus.NOT_FOUND);
+          throw new HttpException(OrderItemsErrorKeyEnum.ORDER_ITEM_NOT_FOUND, HttpStatus.NOT_FOUND);
         }
-        console.log('[OrderItemsService.cancelOrder] Order item loaded', {
-          orderItemId: existingOrderItem.id,
-          orderId: existingOrderItem.order_id,
-          status: existingOrderItem.order_status,
-        });
 
         if (
           !existingOrderItem.order_id ||
           !existingOrderItem.product_variant_id
         ) {
           throw new HttpException(
-            'Order item has incomplete data',
+            OrderItemsErrorKeyEnum.ORDER_ITEM_HAS_INCOMPLETE_DATA,
             HttpStatus.INTERNAL_SERVER_ERROR,
           );
         }
         if (existingOrderItem.order_status === OrderStatus.CANCELLED) {
-          console.log(
-            '[OrderItemsService.cancelOrder] Order item already cancelled',
-            {
-              orderItemId: existingOrderItem.id,
-            },
-          );
           throw new HttpException(
-            'Order item is already cancelled',
+            OrderItemsErrorKeyEnum.ORDER_ITEM_IS_ALREADY_CANCELLED,
             HttpStatus.BAD_REQUEST,
           );
         }
@@ -504,19 +381,11 @@ export class OrderItemsService {
           existingOrderItem.order_status === OrderStatus.SHIPPED ||
           existingOrderItem.order_status === OrderStatus.DELIVERED
         ) {
-          console.log(
-            '[OrderItemsService.cancelOrder] Order item cannot be cancelled',
-            {
-              orderItemId: existingOrderItem.id,
-              status: existingOrderItem.order_status,
-            },
-          );
           throw new HttpException(
             `Order item is already ${existingOrderItem.order_status} and cannot be cancelled`,
             HttpStatus.BAD_REQUEST,
           );
         }
-        console.log('[OrderItemsService.cancelOrder] Loading parent order');
         const [order] = await tx
           .select({
             id: orders.id,
@@ -532,25 +401,17 @@ export class OrderItemsService {
           )
           .limit(1)
           .catch((error) => {
-            console.error('Error fetching order:', error);
-            throw new InternalServerErrorException('Failed to fetch order', {
+            throw new InternalServerErrorException(OrderItemsErrorKeyEnum.FAILED_TO_FETCH_ORDER, {
               cause: error,
             });
           });
 
         if (!order) {
           throw new HttpException(
-            'Order not found or does not belong to this company',
+            OrderItemsErrorKeyEnum.ORDER_NOT_FOUND_OR_DOES_NOT_BELONG_TO_THIS_COMPANY,
             HttpStatus.NOT_FOUND,
           );
         }
-        console.log('[OrderItemsService.cancelOrder] Parent order loaded', {
-          orderId: order.id,
-          totalAmount: order.total_amount,
-        });
-        console.log(
-          '[OrderItemsService.cancelOrder] Loading all order items for cancellation checks',
-        );
         const allOrderItems = await tx
           .select({
             id: order_items.id,
@@ -566,20 +427,13 @@ export class OrderItemsService {
             ),
           )
           .catch((error) => {
-            console.error('Error fetching order items:', error);
             throw new InternalServerErrorException(
-              'Failed to fetch order items',
+              OrderItemsErrorKeyEnum.FAILED_TO_FETCH_ORDER_ITEMS,
               {
                 cause: error,
               },
             );
           });
-        console.log(
-          '[OrderItemsService.cancelOrder] Order items loaded for validation',
-          {
-            itemCount: allOrderItems.length,
-          },
-        );
 
         const hasShippedOrDelivered = allOrderItems.some((item) =>
           [OrderStatus.SHIPPED, OrderStatus.DELIVERED].includes(
@@ -588,25 +442,19 @@ export class OrderItemsService {
         );
 
         if (hasShippedOrDelivered) {
-          console.log(
-            '[OrderItemsService.cancelOrder] Cancellation blocked because another item is already shipped or delivered',
-            { orderId: order.id },
-          );
           throw new HttpException(
-            'Cannot cancel: one or more items in this order have already been shipped or delivered',
+            OrderItemsErrorKeyEnum.CANNOT_CANCEL_ONE_OR_MORE_ITEMS_IN_THIS_ORDER_HAVE_ALREADY_BEEN_SHIPPED_OR_DELIVERED,
             HttpStatus.BAD_REQUEST,
           );
         }
-        console.log('[OrderItemsService.cancelOrder] Loading payment record');
         const [paymentRecord] = await tx
           .select({ id: payments.id, payment_method: payments.payment_method })
           .from(payments)
           .where(eq(payments.order_id, existingOrderItem.order_id))
           .limit(1)
           .catch((error) => {
-            console.error('Error fetching payment record:', error);
             throw new InternalServerErrorException(
-              'Failed to fetch payment record',
+              OrderItemsErrorKeyEnum.FAILED_TO_FETCH_PAYMENT_RECORD,
               {
                 cause: error,
               },
@@ -614,42 +462,25 @@ export class OrderItemsService {
           });
         if (!paymentRecord) {
           throw new HttpException(
-            'Payment record not found for this order',
+            OrderItemsErrorKeyEnum.PAYMENT_RECORD_NOT_FOUND_FOR_THIS_ORDER,
             HttpStatus.NOT_FOUND,
           );
         }
-        console.log('[OrderItemsService.cancelOrder] Payment record loaded', {
-          paymentId: paymentRecord.id,
-          paymentMethod: paymentRecord.payment_method,
-        });
         const refundAmount =
           Number(existingOrderItem.price) * existingOrderItem.quantity;
         const isPrepaid = paymentRecord.payment_method !== 'COD';
-        console.log(
-          '[OrderItemsService.cancelOrder] Marking order item as cancelled',
-          {
-            orderItemId: existingOrderItem.id,
-          },
-        );
         await tx
           .update(order_items)
           .set({ order_status: OrderStatus.CANCELLED })
           .where(eq(order_items.id, existingOrderItem.id))
           .catch((error) => {
-            console.error(
-              'Error updating order item status to cancelled:',
-              error,
-            );
             throw new InternalServerErrorException(
-              'Failed to cancel order item',
+              OrderItemsErrorKeyEnum.FAILED_TO_CANCEL_ORDER_ITEM,
               {
                 cause: error,
               },
             );
           });
-        console.log(
-          '[OrderItemsService.cancelOrder] Writing cancellation audit record',
-        );
         await tx
           .insert(order_item_cancelled)
           .values({
@@ -660,19 +491,11 @@ export class OrderItemsService {
             company_id: companyId,
           })
           .catch((error) => {
-            console.error('Error recording cancellation audit entry:', error);
             throw new InternalServerErrorException(
-              'Failed to record cancellation audit entry',
+              OrderItemsErrorKeyEnum.FAILED_TO_RECORD_CANCELLATION_AUDIT_ENTRY,
               { cause: error },
             );
           });
-        console.log(
-          '[OrderItemsService.cancelOrder] Rolling back inventory for cancelled item',
-          {
-            variantId: existingOrderItem.product_variant_id,
-            quantity: existingOrderItem.quantity,
-          },
-        );
         await this.inventoryService.rollbackStockForOrder(
           {
             variantId: existingOrderItem.product_variant_id,
@@ -682,12 +505,6 @@ export class OrderItemsService {
           tx as DrizzleService,
         );
         if (isPrepaid) {
-          console.log(
-            '[OrderItemsService.cancelOrder] Creating refund record for prepaid order',
-            {
-              refundAmount: String(refundAmount),
-            },
-          );
           await tx
             .insert(refunds)
             .values({
@@ -700,9 +517,8 @@ export class OrderItemsService {
               company_id: companyId,
             })
             .catch((error) => {
-              console.error('Error creating refund record:', error);
               throw new InternalServerErrorException(
-                'Failed to create refund record',
+                OrderItemsErrorKeyEnum.FAILED_TO_CREATE_REFUND_RECORD,
                 { cause: error },
               );
             });
@@ -713,29 +529,18 @@ export class OrderItemsService {
             item.order_status !== OrderStatus.CANCELLED,
         );
 
-        console.log(
-          '[OrderItemsService.cancelOrder] Recalculating order total',
-          {
-            remainingActiveItems: remainingActiveItems.length,
-          },
-        );
         const newOrderTotal = remainingActiveItems.reduce(
           (sum, item) => sum + Number(item.price) * item.quantity,
           0,
         );
 
-        console.log('[OrderItemsService.cancelOrder] Updating order total', {
-          orderId: existingOrderItem.order_id,
-          newOrderTotal: String(newOrderTotal),
-        });
         await tx
           .update(orders)
           .set({ total_amount: String(newOrderTotal) })
           .where(eq(orders.id, existingOrderItem.order_id))
           .catch((error) => {
-            console.error('Error updating order total:', error);
             throw new InternalServerErrorException(
-              'Failed to update order total',
+              OrderItemsErrorKeyEnum.FAILED_TO_UPDATE_ORDER_TOTAL,
               { cause: error },
             );
           });
@@ -746,29 +551,18 @@ export class OrderItemsService {
           const finalPaymentStatus = isPrepaid
             ? PaymentStatus.REFUNDED
             : PaymentStatus.CANCELLED;
-          console.log(
-            '[OrderItemsService.cancelOrder] All items cancelled, updating payment status',
-            {
-              paymentId: paymentRecord.id,
-              finalPaymentStatus,
-            },
-          );
           await tx
             .update(payments)
             .set({ payment_status: finalPaymentStatus })
             .where(eq(payments.id, paymentRecord.id))
             .catch((error) => {
-              console.error('Error updating payment status:', error);
 
               throw new InternalServerErrorException(
-                'Failed to update payment status',
+                OrderItemsErrorKeyEnum.FAILED_TO_UPDATE_PAYMENT_STATUS,
                 { cause: error },
               );
             });
         }
-        console.log(
-          '[OrderItemsService.cancelOrder] Checking whether cancellation email should be sent',
-        );
         const [customerRecord] = await tx
           .select({
             email: user.email,
@@ -780,13 +574,6 @@ export class OrderItemsService {
           .limit(1);
 
         if (customerRecord?.email) {
-          console.log(
-            '[OrderItemsService.cancelOrder] Sending cancellation email',
-            {
-              email: customerRecord.email,
-              orderId: order.id,
-            },
-          );
           await this.mailService.sendOrderCancelledEmail(
             customerRecord.email,
             `${customerRecord.first_name} ${customerRecord.last_name} `,
@@ -794,14 +581,6 @@ export class OrderItemsService {
             true,
           );
         }
-        console.log(
-          '[OrderItemsService.cancelOrder] Cancellation transaction completed',
-          {
-            orderItemId,
-            refundAmount: String(refundAmount),
-            orderFullyCancelled: allItemsNowCancelled,
-          },
-        );
         return {
           message: 'Order item cancelled successfully',
           orderItemId,
@@ -819,7 +598,7 @@ export class OrderItemsService {
       ) {
         throw error;
       }
-      throw new InternalServerErrorException('Failed to cancel order', {
+      throw new InternalServerErrorException(OrderItemsErrorKeyEnum.FAILED_TO_CANCEL_ORDER, {
         cause: error,
       });
     }

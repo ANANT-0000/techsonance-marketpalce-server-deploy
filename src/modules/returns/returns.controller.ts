@@ -62,7 +62,6 @@ export class ReturnsController {
     @Body() dto: any,
     @Headers('company-domain') domain: string,
   ) {
-    console.log('return status dto', dto);
     return this.returnsService.updateReturnStatus(returnId, domain, dto);
   }
 }

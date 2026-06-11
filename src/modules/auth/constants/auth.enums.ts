@@ -1,0 +1,16 @@
+export enum AuthErrorKeyEnum {
+  USER_NOT_FOUND = 'User not found',
+  EMAIL_IS_REQUIRED = 'Email is required',
+  FAILED_TO_RESET_PASSWORD = 'Failed to reset password',
+  INVALID_OR_EXPIRED_TOKEN = 'Invalid or expired token',
+  DOMAIN_NOT_FOUND = 'Domain not found',
+  INVALID_OTP = 'Invalid OTP',
+  OTP_HAS_EXPIRED_PLEASE_REQUEST_A_NEW_ONE = 'OTP has expired. Please request a new one.',
+  FAILED_TO_VALIDATE_OAUTH_LOGIN = 'Failed to validate OAuth login',
+  USER_ROLE_NOT_FOUND = 'User role not found',
+  USER_AND_COMPANY_NOT_FOUND = 'User and company not found',
+  CUSTOMER_ROLE_NOT_FOUND = 'Customer role not found',
+  FAILED_TO_CREATE_USER_ACCOUNT = 'Failed to create user account',
+  FAILED_TO_PROCESS_OAUTH_LOGIN = 'Failed to process OAuth login',
+  FAILED_TO_VERIFY_EMAIL = 'Failed to verify email',
+}

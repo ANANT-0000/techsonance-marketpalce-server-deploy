@@ -18,6 +18,7 @@ import {
 import { and, eq, or, sql } from 'drizzle-orm';
 import { CompanyService } from '../company/company.service';
 import { domainExtractor } from '../../common/filters/domainExtractor.filter';
+import { CartErrorKeyEnum } from './constants/cart.enums';
 
 @Injectable()
 export class CartService {
@@ -35,48 +36,26 @@ export class CartService {
     domain: string,
   ) {
     try {
-      console.log('[CartService.create] Request received', {
-        customerId,
-        productVariantId: createCartDto.productVariantId,
-        quantity: createCartDto.quantity,
-      });
       const companyId = await this.resolveCompanyId(domain);
       if (!companyId) {
-        console.log('[CartService.create] Company not found for domain', {
-          domain,
-        });
-        throw new HttpException('Company not found', HttpStatus.NOT_FOUND);
+        throw new HttpException(CartErrorKeyEnum.COMPANY_NOT_FOUND, HttpStatus.NOT_FOUND);
       }
-      console.log('[CartService.create] Validating product variant');
       const [isProductVariantExist] = await this.db
         .select({ id: product_variants.id })
         .from(product_variants)
         .where(eq(product_variants.id, createCartDto.productVariantId));
-      console.log(
-        '[CartService.create] Product variant existence check completed',
-      );
       if (!isProductVariantExist.id || isProductVariantExist.id === '') {
-        console.log('[CartService.create] Product variant not found', {
-          productVariantId: createCartDto.productVariantId,
-        });
         throw new HttpException(
-          'Product variant not found',
+          CartErrorKeyEnum.PRODUCT_VARIANT_NOT_FOUND,
           HttpStatus.NOT_FOUND,
         );
       }
-      console.log(
-        '[CartService.create] Starting database transaction to create/update cart',
-      );
       const cartRecord = await this.db.transaction(async (tx) => {
         const [isExitingCart] = await tx
           .select({ id: carts.id, user_id: carts.user_id })
           .from(carts)
           .where(eq(carts.user_id, customerId));
-        console.log('[CartService.create] Existing cart check completed');
         if (isExitingCart && isExitingCart.user_id === customerId) {
-          console.log('[CartService.create] Adding item to existing cart', {
-            cartId: isExitingCart.id,
-          });
           const [createCartItem] = await tx
             .insert(cart_items)
             .values({
@@ -93,9 +72,6 @@ export class CartService {
               },
             })
             .returning();
-          console.log(
-            '[CartService.create] Cart item added/updated successfully',
-          );
           return {
             cart_id: isExitingCart.id,
             cart_item_id: createCartItem.id,
@@ -103,7 +79,6 @@ export class CartService {
             product_variant_id: createCartItem.product_variant_id,
           };
         } else {
-          console.log('[CartService.create] Creating new cart for user');
           const [createCart] = await tx
             .insert(carts)
             .values({
@@ -112,14 +87,10 @@ export class CartService {
             })
             .returning({ id: carts.id })
             .catch((error) => {
-              console.error('[CartService.create] Error creating cart:', error);
-              throw new InternalServerErrorException('Failed to create cart', {
+              throw new InternalServerErrorException(CartErrorKeyEnum.FAILED_TO_CREATE_CART, {
                 cause: error,
               });
             });
-          console.log(
-            '[CartService.create] Cart created successfully, now creating cart item',
-          );
           const [createCartItem] = await tx
             .insert(cart_items)
             .values({
@@ -129,18 +100,13 @@ export class CartService {
             })
             .returning()
             .catch((error) => {
-              console.error(
-                '[CartService.create] Error creating cart item:',
-                error,
-              );
               throw new InternalServerErrorException(
-                'Failed to create cart item',
+                CartErrorKeyEnum.FAILED_TO_CREATE_CART_ITEM,
                 {
                   cause: error,
                 },
               );
             });
-          console.log('[CartService.create] Cart item created successfully');
           return {
             cart_id: createCart.id,
             cart_item_id: createCartItem.id,
@@ -158,8 +124,7 @@ export class CartService {
       ) {
         throw error;
       }
-      console.error('Error creating cart item:', error);
-      throw new InternalServerErrorException('Failed to create cart item', {
+      throw new InternalServerErrorException(CartErrorKeyEnum.FAILED_TO_CREATE_CART_ITEM, {
         cause: error,
       });
     }
@@ -171,23 +136,16 @@ export class CartService {
     filters: { limit: number, offset: number },
   ) {
     try {
-      console.log('[CartService.findAll] Request received', { customerId });
       const companyId = await this.resolveCompanyId(domain);
-      console.log('[CartService.findAll] Checking for existing cart');
       const [isUserCartExits] = await this.db
         .select({ id: carts.id })
         .from(carts)
         .where(
           and(eq(carts.user_id, customerId), eq(carts.company_id, companyId)),
         );
-      console.log('[CartService.findAll] Cart existence check completed');
       if (isUserCartExits === undefined || isUserCartExits.id === '') {
-        console.log('[CartService.findAll] User cart not found');
-        throw new NotFoundException('User Cart not found');
+        throw new NotFoundException(CartErrorKeyEnum.USER_CART_NOT_FOUND);
       }
-      console.log(
-        '[CartService.findAll] Fetching cart items with product details',
-      );
       const cartItems = await this.db.query.cart_items
         .findMany({
           where: (cart_item) => eq(cart_item.cart_id, isUserCartExits.id),
@@ -226,13 +184,8 @@ export class CartService {
         })
         .then((cartItem) => {
           if (!cartItem || cartItem.length === 0) {
-            console.log('[CartService.findAll] No cart items found');
-            throw new NotFoundException(`Cart items not found `);
+            throw new NotFoundException(CartErrorKeyEnum.CART_ITEMS_NOT_FOUND);
           }
-          console.log(
-            '[CartService.findAll] Cart items retrieved successfully',
-            { itemCount: cartItem.length },
-          );
           return cartItem;
         })
         .catch((error) => {
@@ -242,11 +195,7 @@ export class CartService {
           ) {
             throw error;
           }
-          console.error(
-            '[CartService.findAll] Error fetching cart items:',
-            error,
-          );
-          throw new InternalServerErrorException('Failed to fetch cart item', {
+          throw new InternalServerErrorException(CartErrorKeyEnum.FAILED_TO_FETCH_CART_ITEM, {
             cause: error,
           });
         });
@@ -258,8 +207,7 @@ export class CartService {
       ) {
         throw error;
       }
-      console.error('[CartService.findAll] Error in findAll:', error);
-      throw new InternalServerErrorException('Failed to fetch cart items', {
+      throw new InternalServerErrorException(CartErrorKeyEnum.FAILED_TO_FETCH_CART_ITEMS, {
         cause: error,
       });
     }
@@ -267,12 +215,7 @@ export class CartService {
 
   async findOne(productVariantId: string, customerId: string, domain: string) {
     try {
-      console.log('[CartService.findOne] Request received', {
-        customerId,
-        productVariantId,
-      });
       const companyId = await this.resolveCompanyId(domain);
-      console.log('[CartService.findOne] Checking for existing cart');
       const [isUserCartExits] = await this.db
         .select({ id: carts.id })
         .from(carts)
@@ -289,21 +232,15 @@ export class CartService {
           ),
         )
         .catch((error) => {
-          console.error(
-            '[CartService.findOne] Error fetching cart item:',
-            error,
-          );
-          throw new InternalServerErrorException('Failed to fetch cart item', {
+          throw new InternalServerErrorException(CartErrorKeyEnum.FAILED_TO_FETCH_CART_ITEM, {
             cause: error,
           });
         });
       if (!cartItem) {
-        console.log('[CartService.findOne] Cart item not found');
         throw new NotFoundException(
           `Cart item not found for product variant ID ${productVariantId}`,
         );
       }
-      console.log('[CartService.findOne] Cart item found successfully');
       const response = {
         cartId: cartItem.cart_id,
         quantity: cartItem.quantity,
@@ -323,13 +260,6 @@ export class CartService {
 
   async updateCartItemQuantity(cartId: string, updateCartDto: UpdateCartDto) {
     try {
-      console.log('[CartService.updateCartItemQuantity] Request received', {
-        cartId,
-        newQuantity: updateCartDto.quantity,
-      });
-      console.log(
-        '[CartService.updateCartItemQuantity] Validating cart item exists',
-      );
       await this.db
         .select({
           id: cart_items.id,
@@ -340,32 +270,19 @@ export class CartService {
         .where(eq(cart_items.id, cartId))
         .then((cartItems) => {
           if (!cartItems || cartItems.length === 0) {
-            console.log(
-              '[CartService.updateCartItemQuantity] Cart item not found',
-            );
             throw new NotFoundException(
               `Cart item with ID ${cartId} not found`,
             );
           }
-          console.log(
-            '[CartService.updateCartItemQuantity] Cart item validation successful',
-          );
         })
         .catch((error) => {
           if (error instanceof NotFoundException) {
             throw error;
           }
-          console.error(
-            '[CartService.updateCartItemQuantity] Error validating cart item:',
-            error,
-          );
-          throw new InternalServerErrorException('Failed to update cart item', {
+          throw new InternalServerErrorException(CartErrorKeyEnum.FAILED_TO_UPDATE_CART_ITEM, {
             cause: error,
           });
         });
-      console.log(
-        '[CartService.updateCartItemQuantity] Updating cart item quantity in database',
-      );
       const updatedCartItem = await this.db
         .update(cart_items)
         .set({ quantity: updateCartDto.quantity })
@@ -376,19 +293,12 @@ export class CartService {
           ),
         )
         .returning();
-      console.log(
-        '[CartService.updateCartItemQuantity] Cart item quantity updated successfully',
-      );
       return updatedCartItem;
     } catch (error) {
       if (error instanceof NotFoundException) {
         throw error;
       }
-      console.error(
-        '[CartService.updateCartItemQuantity] Error updating cart:',
-        error,
-      );
-      throw new InternalServerErrorException('Failed to update cart item', {
+      throw new InternalServerErrorException(CartErrorKeyEnum.FAILED_TO_UPDATE_CART_ITEM, {
         cause: error,
       });
     }
@@ -401,11 +311,6 @@ export class CartService {
     domain: string,
   ) {
     try {
-      console.log('[CartService.removeCartItem] Request received', {
-        customerId,
-        cartId,
-        cartItemId,
-      });
       const companyId = await this.resolveCompanyId(domain);
       const [isUserCartExits] = await this.db
         .select({ id: carts.id })
@@ -418,9 +323,8 @@ export class CartService {
           ),
         )
         .catch((error) => {
-          console.error('Error fetching user cart:', error);
           throw new HttpException(
-            'Failed to fetch user cart information',
+            CartErrorKeyEnum.FAILED_TO_FETCH_USER_CART_INFORMATION,
             HttpStatus.INTERNAL_SERVER_ERROR,
             {
               cause: error,
@@ -428,10 +332,9 @@ export class CartService {
           );
         });
       if (!isUserCartExits.id || isUserCartExits.id === '') {
-        throw new NotFoundException('User Cart not found');
+        throw new NotFoundException(CartErrorKeyEnum.USER_CART_NOT_FOUND);
       }
 
-      console.log('company record', companyId);
       const [cartItemRecord] = await this.db
         .select({ id: cart_items.id, quantity: cart_items.quantity })
         .from(cart_items)
@@ -442,12 +345,11 @@ export class CartService {
           if (error instanceof NotFoundException) {
             throw error;
           }
-          throw new InternalServerErrorException('Failed to find cart item', {
+          throw new InternalServerErrorException(CartErrorKeyEnum.FAILED_TO_FIND_CART_ITEM, {
             cause: error,
           });
         });
 
-      console.log('cartItemRecord', cartItemRecord);
       if (!cartItemRecord) {
         throw new NotFoundException(
           `Cart item with ID ${cartItemId} not found`,
@@ -460,7 +362,6 @@ export class CartService {
             .set({ quantity: cartItemRecord.quantity - 1 })
             .where(eq(cart_items.id, cartItemId))
             .returning();
-          console.log('updatedCartItem', updatedCartItem);
           return {
             cart_id: updatedCartItem.cart_id,
             cart_item_id: updatedCartItem.id,
@@ -479,14 +380,13 @@ export class CartService {
               throw error;
             }
             throw new InternalServerErrorException(
-              'Failed to delete cart item',
+              CartErrorKeyEnum.FAILED_TO_DELETE_CART_ITEM,
               {
                 cause: error,
               },
             );
           })
           .then((res) => {
-            console.log('deleteResponse', res);
             return {
               cartId: cartId,
               // product_variant_id: cartItemRecord.product_variant_id,
@@ -501,15 +401,13 @@ export class CartService {
             ) {
               throw error;
             }
-            console.error('Error deleting cart item:', error);
             throw new InternalServerErrorException(
-              'Failed to delete cart item',
+              CartErrorKeyEnum.FAILED_TO_DELETE_CART_ITEM,
               {
                 cause: error,
               },
             );
           });
-        console.log('deleteResponse', deleteResponse);
         return deleteResponse;
       });
     } catch (error) {
@@ -519,8 +417,7 @@ export class CartService {
       ) {
         throw error;
       }
-      console.error('Error deleting cart item:', error);
-      throw new InternalServerErrorException('Failed to delete cart item', {
+      throw new InternalServerErrorException(CartErrorKeyEnum.FAILED_TO_DELETE_CART_ITEM, {
         cause: error,
       });
     }

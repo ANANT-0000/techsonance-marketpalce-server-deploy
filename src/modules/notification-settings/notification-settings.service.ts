@@ -2,6 +2,7 @@ import { Inject, Injectable, InternalServerErrorException } from '@nestjs/common
 import { eq } from 'drizzle-orm';
 import { DRIZZLE, type DrizzleService } from '../../drizzle/drizzle.module';
 import { notification_settings } from '../../drizzle/schema';
+import { NotificationSettingsErrorKeyEnum } from './constants/notification-settings.enums';
 
 @Injectable()
 export class NotificationSettingsService {
@@ -31,8 +32,7 @@ export class NotificationSettingsService {
 
       return settings;
     } catch (error) {
-      console.error('[NotificationSettingsService.getSettings] Error:', error);
-      throw new InternalServerErrorException('Failed to fetch notification settings');
+      throw new InternalServerErrorException(NotificationSettingsErrorKeyEnum.FAILED_TO_FETCH_NOTIFICATION_SETTINGS);
     }
   }
 
@@ -81,8 +81,7 @@ export class NotificationSettingsService {
         return created;
       }
     } catch (error) {
-      console.error('[NotificationSettingsService.updateSettings] Error:', error);
-      throw new InternalServerErrorException('Failed to update notification settings');
+      throw new InternalServerErrorException(NotificationSettingsErrorKeyEnum.FAILED_TO_UPDATE_NOTIFICATION_SETTINGS);
     }
   }
 }

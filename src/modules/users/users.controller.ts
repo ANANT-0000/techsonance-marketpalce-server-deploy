@@ -12,7 +12,7 @@ import {
   Req,
 } from '@nestjs/common';
 import { UsersService } from './users.service';
-import { SkipSubscription } from '../subscription/subscription.guard';
+import { SkipSubscription } from '../../common/decorators/skip-subscription.decorator';
 import { RoleGuard } from '../../guards/role.guard';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { Roles } from '../../common/decorators/roles.decorator';
@@ -36,7 +36,6 @@ export class UsersController {
     @Param('customer_id') customer_id: string,
     @Headers('company-domain') domain: string,
   ) {
-    console.log('deactivate customer', customer_id, domain);
     return this.userService.initializeAccountActionOtp(
       domain,
       UserStatus.INACTIVE,
@@ -49,7 +48,6 @@ export class UsersController {
     @Body('email') email: string,
     @Headers('company-domain') domain: string,
   ) {
-    console.log('reactivate customer', email, domain);
     return this.userService.initializeAccountActionOtp(
       domain,
       UserStatus.ACTIVE,
@@ -76,7 +74,6 @@ export class UsersController {
     @Body() body: { otp: string; email: string },
     @Headers('company-domain') domain: string,
   ) {
-    console.log('confirm account reactivation', body, domain);
     return this.userService.confirmAccountAction(
       domain,
       UserStatus.ACTIVE,

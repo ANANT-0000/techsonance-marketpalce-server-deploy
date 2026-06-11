@@ -26,9 +26,6 @@ export class CartController {
     @Body() createCartDto: CreateCartDto,
     @Headers('company-domain') domain: string,
   ) {
-    console.log('customerId', customerId);
-    console.log('createCartDto', createCartDto);
-    console.log('domain', domain);
     return this.cartService.create(createCartDto, customerId, domain);
   }
 

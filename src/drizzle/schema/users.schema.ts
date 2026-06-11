@@ -1,6 +1,7 @@
 import * as pg from 'drizzle-orm/pg-core';
-import { company} from './main.schema';
-import { UserStatus } from '../types/types';
+import { company } from './main.schema';
+import { EntityStatusEnum } from './enums.schema';
+import { EntityStatus, UserStatus } from '../types/types';
 
 export const UserStatusEnum = pg.pgEnum('user_status_enum', UserStatus);
 export const user = pg.pgTable(
@@ -50,6 +51,8 @@ export const vendor = pg.pgTable('vendor', {
     .notNull()
     .defaultNow()
     .$onUpdate(() => new Date()),
+  record_status: EntityStatusEnum('record_status').default(EntityStatus.ACTIVE),
+  deleted_at: pg.timestamp('deleted_at'),
   company_id: pg.uuid('company_id').references(() => company.id),
   user_id: pg
     .uuid('user_id')
@@ -78,5 +81,7 @@ export const address = pg.pgTable('address', {
   user_id: pg
     .uuid('user_id')
     .references(() => user.id, { onDelete: 'cascade' }),
+  status: EntityStatusEnum('status').default(EntityStatus.ACTIVE),
+  deleted_at: pg.timestamp('deleted_at'),
   company_id: pg.uuid('company_id').references(() => company.id),
 });

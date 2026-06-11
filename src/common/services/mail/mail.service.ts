@@ -46,16 +46,13 @@ export class MailService {
         pass: configService.get<string>('MAIL_PASS'),
       },
     });
-
     // this.fromEmail = this.configService.getOrThrow<string>('MAIL_USER');
-
     // Uses HTTPS under the hood — not blocked by Render
     // this.oauth2Client = new google.auth.OAuth2(
     //   this.configService.getOrThrow<string>('OAUTH_CLIENT_ID'),
     //   this.configService.getOrThrow<string>('OAUTH_CLIENT_SECRET'),
     //   'https://developers.google.com/oauthplayground',
     // );
-
     // this.oauth2Client.setCredentials({
     //   refresh_token: this.configService.getOrThrow<string>(
     //     'OAUTH_REFRESH_TOKEN',
@@ -65,11 +62,9 @@ export class MailService {
   // private async createTransporter(): Promise<nodemailer.Transporter> {
   //   // Fetches a fresh access token via HTTPS each time — never expires
   //   const { token: accessToken } = await this.oauth2Client.getAccessToken();
-
   //   if (!accessToken) {
   //     throw new Error('Failed to get Gmail OAuth access token');
   //   }
-
   //   return nodemailer.createTransport({
   //     service: 'gmail',
   //     auth: {
@@ -87,22 +82,15 @@ export class MailService {
   //   });
   // }
   public async sendResetPasswordEmail(email: string) {
-    console.log(
-      `[MailService.sendResetPasswordEmail] Request received for email: ${email}`,
-    );
-    const expiresIn = parseInt(
+        const expiresIn = parseInt(
       this.configService.get<string>('JWT_EXPIRES_IN') || '3600',
       10,
     ); // Default to 1 hour
-    console.log(
-      '[MailService.sendResetPasswordEmail] Looking up user and preparing reset token',
-    );
-    const [userExists] = await this.drizzle
+        const [userExists] = await this.drizzle
       .select({ id: user.id, email: user.email })
       .from(user)
       .where(eq(user.email, email))
       .limit(1);
-
     if (!userExists) {
       throw new Error('User not found');
     }
@@ -126,10 +114,7 @@ export class MailService {
       )
       .returning();
     // eslint-disable-next-line @typescript-eslint/no-unsafe-return
-    console.log(
-      '[MailService.sendResetPasswordEmail] Sending password reset email',
-    );
-    return await this.sendEmail(
+        return await this.sendEmail(
       email,
       'Password Reset Request',
       `<p>You requested a password reset. Click the link below to reset your password:</p>
@@ -138,34 +123,26 @@ export class MailService {
     );
   }
   public async sendEmail(to: string, subject: string, html: string) {
-    console.log(
-      `[MailService.sendEmail] Sending email to ${to} with subject: ${subject}`,
-    );
-    const mailOptions = {
+        const mailOptions = {
       from: `${this.configService.get<string>('MAIL_FROM_NAME')} <${this.configService.get<string>('MAIL_FROM_EMAIL')}>`,
       to,
       subject,
       html,
     };
     // const transporter = await this.createTransporter();
-
     // const resend = new Resend(this.configService.get<string>('RESEND_KEY'));
-
     // return await transporter.sendMail(mailOptions).catch((error) => {
-    //   console.error('Error sending email:', error);
     //   throw new Error('Failed to send email. Please try again later.');
     // });
     return await this.nodeMailerTransporter
       .sendMail(mailOptions)
       .catch((error) => {
-        console.error('Error sending email:', error);
-        throw new Error('Failed to send email. Please try again later.');
+                throw new Error('Failed to send email. Please try again later.');
       });
   }
   public verifyResetToken(token: string): string {
     try {
-      console.log('[MailService.verifyResetToken] Verifying reset token');
-      // @ts-ignore
+            // @ts-ignore
       const decoded: any = this.jwtService.verify(token, {
         secret: this.configService.get<string>('JWT_SECRET'),
       });
@@ -176,7 +153,6 @@ export class MailService {
       ) {
         return decoded?.email as string;
       }
-
       // If the payload is valid JWT but missing the email field
       throw new BadRequestException('Invalid token payload structure.');
     } catch (error: any) {
@@ -194,18 +170,11 @@ export class MailService {
     userName: string,
     verificationUrl?: string,
   ) {
-    console.log(
-      `[MailService.sendUserWelcomeEmail] Preparing welcome email for ${email}`,
-    );
-    const html = userRegistrationTemplate(userName, verificationUrl);
+        const html = userRegistrationTemplate(userName, verificationUrl);
     return this.sendEmail(email, 'Welcome to Techsonance Marketplace!', html);
   }
-
   public async sendVendorRegistrationEmail(email: string, storeName: string, randomPassword: string) {
-    console.log(
-      `[MailService.sendVendorRegistrationEmail] Preparing vendor registration email for ${email}`,
-    );
-    const html = vendorRegistrationTemplate(storeName, randomPassword);
+        const html = vendorRegistrationTemplate(storeName, randomPassword);
     return await this.sendEmail(
       email,
       'Vendor Registration Received - Techsonance',
@@ -213,39 +182,28 @@ export class MailService {
     );
   }
   public async sendVendorApprovalEmail(email: string, storeName: string) {
-    console.log(
-      `[MailService.sendVendorApprovalEmail] Preparing vendor approval email for ${email}`,
-    );
-    const html = vendorApprovalTemplate(storeName);
+        const html = vendorApprovalTemplate(storeName);
     return this.sendEmail(
       email,
       'Vendor Approval - Techsonance Marketplace',
       html,
     );
   }
-
   async sendOrderPlacedEmail(
     email: string,
     customerName: string,
     orderId: string,
     totalAmount: number,
   ) {
-    console.log(
-      `[MailService.sendOrderPlacedEmail] Preparing order placed email for orderId: ${orderId}`,
-    );
-    const html = orderPlacedTemplate(customerName, orderId, totalAmount);
+        const html = orderPlacedTemplate(customerName, orderId, totalAmount);
     return await this.sendEmail(email, `Order Confirmed: #${orderId}`, html);
   }
-
   async sendOrderReturnEmail(
     email: string,
     customerName: string,
     orderId: string,
   ) {
-    console.log(
-      `[MailService.sendOrderReturnEmail] Preparing order return email for orderId: ${orderId}`,
-    );
-    const html = orderReturnTemplate(customerName, orderId);
+        const html = orderReturnTemplate(customerName, orderId);
     return this.sendEmail(email, `Return Initiated: #${orderId}`, html);
   }
   async sendReturnRequestedEmail(
@@ -253,22 +211,15 @@ export class MailService {
     customerName: string,
     orderId: string,
   ) {
-    console.log(
-      `[MailService.sendReturnRequestedEmail] Preparing return requested email for orderId: ${orderId}`,
-    );
-    const html = returnRequestedTemplate(customerName, orderId);
+        const html = returnRequestedTemplate(customerName, orderId);
     return this.sendEmail(email, `Return Request Received: #${orderId}`, html);
   }
-
   async sendReplacementRequestedEmail(
     email: string,
     customerName: string,
     orderId: string,
   ) {
-    console.log(
-      `[MailService.sendReplacementRequestedEmail] Preparing replacement requested email for orderId: ${orderId}`,
-    );
-    const html = replacementRequestedTemplate(customerName, orderId);
+        const html = replacementRequestedTemplate(customerName, orderId);
     return this.sendEmail(
       email,
       `Replacement Request Received: #${orderId}`,
@@ -280,23 +231,16 @@ export class MailService {
     customerName: string,
     orderId: string,
   ) {
-    console.log(
-      `[MailService.sendOrderReplacementEmail] Preparing order replacement email for orderId: ${orderId}`,
-    );
-    const html = orderReplacementTemplate(customerName, orderId);
+        const html = orderReplacementTemplate(customerName, orderId);
     return this.sendEmail(email, `Replacement Approved: #${orderId}`, html);
   }
-
   async sendOrderCancelledEmail(
     email: string,
     customerName: string,
     orderId: string,
     refundInitiated: boolean,
   ) {
-    console.log(
-      `[MailService.sendOrderCancelledEmail] Preparing order cancelled email for orderId: ${orderId}`,
-    );
-    const html = orderCancelledTemplate(customerName, orderId, refundInitiated);
+        const html = orderCancelledTemplate(customerName, orderId, refundInitiated);
     return this.sendEmail(email, `Order Cancelled: #${orderId}`, html);
   }
   async sendOrderShippedEmail(
@@ -306,10 +250,7 @@ export class MailService {
     trackingUrl: string,
     itemName?: string,
   ) {
-    console.log(
-      `[MailService.sendOrderShippedEmail] Preparing order shipped email for orderId: ${orderId}`,
-    );
-    const html = orderShippedTemplate(
+        const html = orderShippedTemplate(
       customerName,
       orderId,
       trackingUrl,
@@ -324,10 +265,7 @@ export class MailService {
     expireAt: string,
     companyName: string,
   ) {
-    console.log(
-      `[MailService.sendPasswordResetOtp] Preparing password reset OTP email for ${email}`,
-    );
-    const html = passwordResetOtpTemplate(name, otp, expireAt, companyName);
+        const html = passwordResetOtpTemplate(name, otp, expireAt, companyName);
     return this.sendEmail(email, `Password Reset OTP - ${companyName}`, html);
   }
   async sendAccountDeactivationOtp(
@@ -337,10 +275,7 @@ export class MailService {
     expireAt: string,
     companyName: string,
   ) {
-    console.log(
-      `[MailService.sendAccountDeactivationOtp] Preparing account deactivation OTP email for ${email}`,
-    );
-    const html = deactivateAccountOtpTemplate(name, otp, expireAt, companyName);
+        const html = deactivateAccountOtpTemplate(name, otp, expireAt, companyName);
     return this.sendEmail(
       email,
       `Confirm Account Deactivation - ${companyName}`,
@@ -354,19 +289,14 @@ export class MailService {
     expireAt: string,
     companyName: string,
   ) {
-    console.log(
-      `[MailService.sendAccountReactivationOtp] Preparing account reactivation OTP email for ${email}`,
-    );
-    const html = reactivateAccountOtpTemplate(name, otp, expireAt, companyName);
+        const html = reactivateAccountOtpTemplate(name, otp, expireAt, companyName);
     return this.sendEmail(
       email,
       `Confirm Account Reactivation - ${companyName}`,
       html,
     );
   }
-
   // Add to your existing MailService class
-
   async sendTrialReminderEmail(email: string, daysLeft: number): Promise<void> {
     // Fetch company email from DB however your existing mail methods do it
     await this.sendEmail(
@@ -378,7 +308,6 @@ export class MailService {
     `,
     );
   }
-
   async sendTrialExpiredEmail(email: string): Promise<void> {
     await this.sendEmail(
       email,

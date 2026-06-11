@@ -1,6 +1,7 @@
 import * as pg from 'drizzle-orm/pg-core';
 import { relations, sql } from 'drizzle-orm';
 import { company } from './main.schema';
+import { EntityStatusEnum } from './enums.schema';
 import { orders, order_items, coupons } from './shop.schema';
 import {
   BannerPlacement,
@@ -11,6 +12,7 @@ import {
   PromotionTargetType,
   PromotionType,
   SegmentCriteriaOperator,
+  EntityStatus,
 } from '../types/types';
 import { user } from './users.schema';
 
@@ -183,6 +185,8 @@ export const promotions = pg.pgTable(
       .notNull()
       .defaultNow()
       .$onUpdate(() => new Date()),
+    record_status: EntityStatusEnum('record_status').default(EntityStatus.ACTIVE),
+    deleted_at: pg.timestamp('deleted_at'),
     // Set by cron when status is moved to EXPIRED
     expired_at: pg.timestamp('expired_at', { withTimezone: true }),
   },
@@ -603,7 +607,7 @@ export const promotion_analytics_events = pg.pgTable(
     promotion_id: pg
       .uuid('promotion_id')
       .notNull()
-      .references(() => promotions.id, { onDelete: 'cascade' }),
+      .references(() => promotions.id),
     company_id: pg
       .uuid('company_id')
       .notNull()

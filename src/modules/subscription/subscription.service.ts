@@ -16,6 +16,7 @@ import {
 import { SubscriptionStatus } from '../../drizzle/types/types';
 import { CompanyService } from '../company/company.service';
 import { domainExtractor } from '../../common/filters/domainExtractor.filter';
+import { SubscriptionErrorKeyEnum } from './constants/subscription.enums';
 
 export enum BannerUrgency {
   INFO = 'info',
@@ -79,7 +80,7 @@ export class SubscriptionService {
       })
       .catch((err) => {
         this.logger.error('Failed to fetch trial plan from database', err);
-        throw new InternalServerErrorException('Failed to fetch trial plan', {
+        throw new InternalServerErrorException(SubscriptionErrorKeyEnum.FAILED_TO_FETCH_TRIAL_PLAN, {
           cause: err,
         });
       });
@@ -172,10 +173,6 @@ export class SubscriptionService {
     const plan = await this.getTrialPlan();
     const now = new Date();
     const trialEnd = addDays(now, plan.trial_days ?? 14);
-    console.log(
-      `Starting trial for company ${companyId}, ends on ${trialEnd.toISOString()} (UTC) plan trial_days=${plan.trial_days})`,
-    );
-    console.log(`Plan details: ${JSON.stringify(plan)}`);
     const [sub] = await this.db
       .insert(vendor_subscriptions)
       .values({
@@ -194,7 +191,7 @@ export class SubscriptionService {
           err,
         );
         throw new InternalServerErrorException(
-          'Failed to start trial subscription',
+          SubscriptionErrorKeyEnum.FAILED_TO_START_TRIAL_SUBSCRIPTION,
           {
             cause: err,
           },
@@ -232,7 +229,7 @@ export class SubscriptionService {
         err,
       );
       throw new InternalServerErrorException(
-        'Failed to fetch subscription status',
+        SubscriptionErrorKeyEnum.FAILED_TO_FETCH_SUBSCRIPTION_STATUS,
         {
           cause: err,
         },

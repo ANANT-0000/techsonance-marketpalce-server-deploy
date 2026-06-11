@@ -20,6 +20,7 @@ import {
 import { and, asc, desc, eq, ilike, or, SQL, sql } from 'drizzle-orm';
 import { productImageType } from '../../drizzle/types/types';
 import { domainExtractor } from '../../common/filters/domainExtractor.filter';
+import { InventoryErrorKeyEnum } from './constants/inventory.enums';
 export const LOW_STOCK_THRESHOLD = 5; // configurable
 
 @Injectable()
@@ -31,23 +32,11 @@ export class InventoryService {
 
   private async resolveCompanyId(domain: string): Promise<string> {
     const filteredDomain = domainExtractor(domain);
-    console.log(
-      `[InventoryService.resolveCompanyId] Resolving company for domain: ${domain}`,
-    );
     return this.companyService.find(filteredDomain);
   }
   async create(dto: CreateInventoryDto, domain: string) {
-    console.log(
-      '[InventoryService.create] Request received for inventory creation',
-      dto,
-      domain,
-    );
     try {
-      console.log('[InventoryService.create] Resolving company id');
       const companyId = await this.resolveCompanyId(domain);
-      console.log(
-        '[InventoryService.create] Querying existing inventory record',
-      );
       const [existingInventory] = await this.db
         .select({ id: inventory.id })
         .from(inventory)
@@ -59,10 +48,6 @@ export class InventoryService {
         )
         .limit(1);
       if (existingInventory) {
-        console.log(
-          '[InventoryService.create] Updating existing inventory quantity',
-          existingInventory.id,
-        );
         // upsert — just increase quantity
         const [updated] = await this.db
           .update(inventory)
@@ -73,7 +58,6 @@ export class InventoryService {
           .returning();
         return updated;
       }
-      console.log('[InventoryService.create] Inserting new inventory record');
       const [created] = await this.db
         .insert(inventory)
         .values({
@@ -88,7 +72,7 @@ export class InventoryService {
       if (error instanceof HttpException) {
         throw error;
       }
-      throw new InternalServerErrorException('Failed to create inventory', {
+      throw new InternalServerErrorException(InventoryErrorKeyEnum.FAILED_TO_CREATE_INVENTORY, {
         cause: error,
       });
     }
@@ -105,14 +89,8 @@ export class InventoryService {
       sortby: 'asc' | 'desc';
     },
   ) {
-    console.log('[InventoryService.findAll] Request received', domain);
     try {
-      console.log('[InventoryService.findAll] Resolving company id');
       const companyId = await this.resolveCompanyId(domain);
-      console.log(
-        '[InventoryService.findAll] Querying all inventory records',
-        companyId,
-      );
 
       // const whereClause: SQL[] = []
       // if (filters?.search) {
@@ -182,8 +160,7 @@ export class InventoryService {
           },
         })
         .catch((error) => {
-          console.log(error);
-          throw new InternalServerErrorException('Failed to fetch inventory', {
+          throw new InternalServerErrorException(InventoryErrorKeyEnum.FAILED_TO_FETCH_INVENTORY, {
             cause: error,
           });
         });
@@ -269,7 +246,6 @@ export class InventoryService {
 
       const formattedInventory = Array.from(variantMap.values());
 
-      console.log('formattedInventory', formattedInventory);
       return formattedInventory;
     } catch (error) {
       if (
@@ -277,7 +253,7 @@ export class InventoryService {
         error instanceof InternalServerErrorException
       )
         throw error;
-      throw new InternalServerErrorException('Failed to fetch inventory', {
+      throw new InternalServerErrorException(InventoryErrorKeyEnum.FAILED_TO_FETCH_INVENTORY, {
         cause: error,
       });
     }
@@ -291,14 +267,6 @@ export class InventoryService {
     tx?: DrizzleService,
   ) {
     const db = tx ?? this.db;
-    console.log(
-      '[InventoryService.setStock] Starting stock update',
-      productVariantId,
-      warehouseId,
-      newQuantity,
-      companyId,
-    );
-    console.log('[InventoryService.setStock] Querying existing stock');
     const [existing] = await db
       .select({ id: inventory.id, stock_quantity: inventory.stock_quantity })
       .from(inventory)
@@ -311,35 +279,24 @@ export class InventoryService {
       )
       .limit(1)
       .catch((error) => {
-        throw new InternalServerErrorException('Failed to set stock', {
+        throw new InternalServerErrorException(InventoryErrorKeyEnum.FAILED_TO_SET_STOCK, {
           cause: error,
         });
       });
 
     if (existing) {
-      console.log(
-        '[InventoryService.setStock] Existing stock found, updating',
-        existing,
-      );
       const updateResult = await db
         .update(inventory)
         .set({ stock_quantity: newQuantity })
         .where(eq(inventory.id, existing.id))
         .returning()
         .catch((error) => {
-          throw new InternalServerErrorException('Failed to set stock', {
+          throw new InternalServerErrorException(InventoryErrorKeyEnum.FAILED_TO_SET_STOCK, {
             cause: error,
           });
         });
-      console.log(
-        '[InventoryService.setStock] Stock updated successfully',
-        updateResult,
-      );
       return updateResult;
     } else {
-      console.log(
-        '[InventoryService.setStock] No existing stock found, inserting new record',
-      );
       const insertResult = await db
         .insert(inventory)
         .values({
@@ -350,11 +307,10 @@ export class InventoryService {
         })
         .returning()
         .catch((error) => {
-          throw new InternalServerErrorException('Failed to set stock', {
+          throw new InternalServerErrorException(InventoryErrorKeyEnum.FAILED_TO_SET_STOCK, {
             cause: error,
           });
         });
-      console.log('insertResult', insertResult);
       return insertResult;
     }
   }
@@ -363,20 +319,8 @@ export class InventoryService {
     newQuantity: number,
     domain: string,
   ) {
-    console.log(
-      '[InventoryService.updateStock] Request received',
-      productVariantId,
-      newQuantity,
-      domain,
-    );
     try {
-      console.log('[InventoryService.updateStock] Resolving company id');
       const companyId = await this.resolveCompanyId(domain);
-      console.log(
-        '[InventoryService.updateStock] Querying inventory record for variant',
-        productVariantId,
-        companyId,
-      );
       const [inv] = await this.db
         .select({
           id: inventory.id,
@@ -392,18 +336,17 @@ export class InventoryService {
         )
         .limit(1)
         .catch((error) => {
-          throw new InternalServerErrorException('Failed to update stock', {
+          throw new InternalServerErrorException(InventoryErrorKeyEnum.FAILED_TO_UPDATE_STOCK, {
             cause: error,
           });
         });
 
       if (!inv) {
         throw new HttpException(
-          'Inventory record not found',
+          InventoryErrorKeyEnum.INVENTORY_RECORD_NOT_FOUND,
           HttpStatus.NOT_FOUND,
         );
       }
-      console.log('inventory', inv);
       // Use centralized method — syncs both tables
       await this.setStock(
         inv.product_variant_id,
@@ -411,7 +354,7 @@ export class InventoryService {
         newQuantity,
         companyId,
       ).catch((error) => {
-        throw new InternalServerErrorException('Failed to update stock', {
+        throw new InternalServerErrorException(InventoryErrorKeyEnum.FAILED_TO_UPDATE_STOCK, {
           cause: error,
         });
       });
@@ -428,7 +371,7 @@ export class InventoryService {
       ) {
         throw error;
       }
-      throw new InternalServerErrorException('Failed to update stock', {
+      throw new InternalServerErrorException(InventoryErrorKeyEnum.FAILED_TO_UPDATE_STOCK, {
         cause: error,
       });
     }
@@ -438,17 +381,8 @@ export class InventoryService {
     companyId: string,
     tx: DrizzleService, // transaction context
   ) {
-    console.log(
-      '[InventoryService.deductStockForOrder] Request received',
-      orderLines,
-      companyId,
-    );
     try {
       for (const line of orderLines) {
-        console.log(
-          '[InventoryService.deductStockForOrder] Querying stock for variant',
-          line.variantId,
-        );
         const [idv] = await tx
           .select({
             id: inventory.id,
@@ -487,13 +421,7 @@ export class InventoryService {
               eq(inventory.product_variant_id, line.variantId),
             ),
           );
-        console.log(
-          '[InventoryService.deductStockForOrder] Stock deducted successfully',
-          line.variantId,
-          line.quantity,
-        );
       }
-      console.log('[InventoryService.deductStockForOrder] Process completed');
     } catch (error) {
       if (
         error instanceof HttpException ||
@@ -501,7 +429,7 @@ export class InventoryService {
       ) {
         throw error;
       }
-      throw new InternalServerErrorException('Failed to create inventory', {
+      throw new InternalServerErrorException(InventoryErrorKeyEnum.FAILED_TO_CREATE_INVENTORY, {
         cause: error,
       });
     }
@@ -588,28 +516,21 @@ export class InventoryService {
       ) {
         throw error;
       }
-      throw new InternalServerErrorException('Failed to create inventory', {
+      throw new InternalServerErrorException(InventoryErrorKeyEnum.FAILED_TO_CREATE_INVENTORY, {
         cause: error,
       });
     }
   }
   async remove(id: string, domain: string) {
-    console.log('[InventoryService.remove] Request received', id, domain);
     try {
-      console.log('[InventoryService.remove] Resolving company id');
       const companyId = await this.resolveCompanyId(domain);
-      console.log(
-        '[InventoryService.remove] Querying existing inventory record',
-        id,
-        companyId,
-      );
       const [existing] = await this.db
         .select({ id: inventory.id })
         .from(inventory)
         .where(and(eq(inventory.id, id), eq(inventory.company_id, companyId)));
       if (!existing) {
         throw new HttpException(
-          'Inventory record not found',
+          InventoryErrorKeyEnum.INVENTORY_RECORD_NOT_FOUND,
           HttpStatus.NOT_FOUND,
         );
       }
@@ -618,17 +539,13 @@ export class InventoryService {
         .where(and(eq(inventory.id, id), eq(inventory.company_id, companyId)));
       return { message: 'Inventory record removed' };
     } catch (error) {
-      throw new InternalServerErrorException('Failed to remove inventory', {
+      throw new InternalServerErrorException(InventoryErrorKeyEnum.FAILED_TO_REMOVE_INVENTORY, {
         cause: error,
       });
     }
   }
 
   async getLowStockAlerts(domain: string) {
-    console.log(
-      '[InventoryService.getLowStockAlerts] Request received',
-      domain,
-    );
     try {
       const companyId = await this.resolveCompanyId(domain);
       // Using the threshold defined at the top of your service
@@ -664,7 +581,7 @@ export class InventoryService {
     } catch (error) {
       if (error instanceof HttpException) throw error;
       throw new InternalServerErrorException(
-        'Failed to fetch low stock alerts',
+        InventoryErrorKeyEnum.FAILED_TO_FETCH_LOW_STOCK_ALERTS,
         {
           cause: error,
         },

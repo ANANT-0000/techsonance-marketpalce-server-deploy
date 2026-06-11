@@ -14,7 +14,7 @@ import { domainExtractor } from '../../common/filters/domainExtractor.filter';
 import { CompanyService } from '../company/company.service';
 import { MailService } from '../../common/services/mail/mail.service';
 import { user } from '../../drizzle/schema/users.schema';
-
+import { TicketsErrorKeyEnum } from './constants/tickets.enums';
 @Injectable()
 export class TicketsService {
   constructor(
@@ -22,7 +22,6 @@ export class TicketsService {
     private readonly companyService: CompanyService,
     private readonly mailService: MailService,
   ) {
-    console.log('[TicketsService] Service initialized');
   }
 
   private async resolveCompanyId(domain: string): Promise<string> {
@@ -41,11 +40,6 @@ export class TicketsService {
       attachmentUrl?: string;
     },
   ) {
-    console.log('[TicketsService.createTicket] Creating ticket', {
-      userId,
-      domain,
-      ticketData,
-    });
     try {
       const companyId = await this.resolveCompanyId(domain);
       const [newTicket] = await this.db
@@ -62,9 +56,6 @@ export class TicketsService {
           attachment_url: ticketData.attachmentUrl || null,
         })
         .returning();
-      console.log('[TicketsService.createTicket] Ticket created successfully', {
-        ticketId: newTicket.id,
-      });
       // Send confirmation email to the user (best-effort)
       try {
         const [u] = await this.db
@@ -83,33 +74,19 @@ export class TicketsService {
               `Support ticket received: #${newTicket.id}`,
               html,
             )
-            .catch((err) =>
-              console.error(
-                '[TicketsService] Failed to send ticket email:',
-                err,
-              ),
-            );
+            .catch((err) => {});
         }
       } catch (err) {
-        console.error('[TicketsService] Error sending ticket email:', err);
       }
       return newTicket;
     } catch (error) {
-      console.error(
-        '[TicketsService.createTicket] Error creating ticket:',
-        error,
-      );
-      throw new InternalServerErrorException('Failed to create ticket', {
+      throw new InternalServerErrorException(TicketsErrorKeyEnum.FAILED_TO_CREATE_TICKET, {
         cause: error,
       });
     }
   }
 
   async getTickets(userId: string, domain: string) {
-    console.log('[TicketsService.getTickets] Fetching tickets', {
-      userId,
-      domain,
-    });
     try {
       const companyId = await this.resolveCompanyId(domain);
 
@@ -130,16 +107,9 @@ export class TicketsService {
         orderBy: (table, { desc }) => [desc(table.created_at)],
       });
 
-      console.log('[TicketsService.getTickets] Found tickets', {
-        count: ticketsList.length,
-      });
       return ticketsList;
     } catch (error) {
-      console.error(
-        '[TicketsService.getTickets] Error fetching tickets:',
-        error,
-      );
-      throw new InternalServerErrorException('Failed to fetch tickets', {
+      throw new InternalServerErrorException(TicketsErrorKeyEnum.FAILED_TO_FETCH_TICKETS, {
         cause: error,
       });
     }
@@ -151,7 +121,6 @@ export class TicketsService {
     commentText: string,
     isInternal: boolean = false,
   ) {
-    console.log('[TicketsService.addComment] Adding comment', { ticketId, userId, isInternal });
     try {
       const [newComment] = await this.db
         .insert(ticket_comments)
@@ -209,20 +178,16 @@ export class TicketsService {
                   `Ticket #${ticketId.slice(0, 8)} update`,
                   html,
                 )
-                .catch((err) =>
-                  console.error('[TicketsService] Failed to send ticket comment email:', err),
-                );
+                .catch((err) => {});
             }
           }
         } catch (emailErr) {
-          console.error('[TicketsService] Email error on comment:', emailErr);
         }
       }
 
       return newComment;
     } catch (error) {
-      console.error('[TicketsService.addComment] Error:', error);
-      throw new InternalServerErrorException('Failed to add comment');
+      throw new InternalServerErrorException(TicketsErrorKeyEnum.FAILED_TO_ADD_COMMENT);
     }
   }
 
@@ -243,8 +208,7 @@ export class TicketsService {
         },
       });
     } catch (error) {
-      console.error('[TicketsService.getComments] Error:', error);
-      throw new InternalServerErrorException('Failed to fetch comments');
+      throw new InternalServerErrorException(TicketsErrorKeyEnum.FAILED_TO_FETCH_COMMENTS);
     }
   }
 
@@ -280,8 +244,7 @@ export class TicketsService {
 
       return newRating;
     } catch (error) {
-      console.error('[TicketsService.submitRating] Error:', error);
-      throw new InternalServerErrorException('Failed to submit ticket rating');
+      throw new InternalServerErrorException(TicketsErrorKeyEnum.FAILED_TO_SUBMIT_TICKET_RATING);
     }
   }
 }

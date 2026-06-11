@@ -10,6 +10,7 @@ import { DRIZZLE, type DrizzleService } from '../../drizzle/drizzle.module';
 import { templates } from '../../drizzle/schema/utils.schema';
 import { eq } from 'drizzle-orm';
 import { UploadToCloudService } from '../../utils/upload-to-cloud/upload-to-cloud.service';
+import { TemplateErrorKeyEnum } from './constants/template.enums';
 
 @Injectable()
 export class TemplateService {
@@ -22,7 +23,6 @@ export class TemplateService {
     file: { template_file: Express.Multer.File[] },
   ) {
     try {
-      console.log('[TemplateService.create] Request received', { templateName: dto.template_name });
       // const [exist] = await this.db
       //   .select()
       //   .from(templates)
@@ -36,7 +36,7 @@ export class TemplateService {
       //       },
       //     );
       //   });
-      // console.log('Existing template:', exist);
+      // ('Existing template:', exist);
       // if (exist) {
       //   throw new HttpException(
       //     'Template with this name already exists',
@@ -44,23 +44,21 @@ export class TemplateService {
       //   );
       // }
       if (!file) {
-        console.log('[TemplateService.create] Template file is missing');
-        throw new HttpException('File is required', HttpStatus.BAD_REQUEST);
+        throw new HttpException(
+          TemplateErrorKeyEnum.FILE_IS_REQUIRED,
+          HttpStatus.BAD_REQUEST,
+        );
       }
-      console.log('[TemplateService.create] Uploading template file to cloud storage');
       const uploadResult = await this.UploadToCloud.uploadTemplate(
         file.template_file[0].buffer,
         dto.template_name,
       );
-      console.log('[TemplateService.create] Template file uploaded successfully');
       if (!dto.template_label) {
-        console.log('[TemplateService.create] Template label is required');
         throw new HttpException(
-          'Template label is required',
+          TemplateErrorKeyEnum.TEMPLATE_LABEL_IS_REQUIRED,
           HttpStatus.BAD_REQUEST,
         );
       }
-      console.log('[TemplateService.create] Inserting template record into database');
       const [result] = await this.db
         .insert(templates)
         .values({
@@ -73,19 +71,17 @@ export class TemplateService {
         })
         .returning()
         .catch((error) => {
-          console.error('[TemplateService.create] Error inserting template:', error);
           throw new InternalServerErrorException(
-            'Database error while inserting template',
+            TemplateErrorKeyEnum.DATABASE_ERROR_WHILE_INSERTING_TEMPLATE,
             {
               cause: error,
             },
           );
         });
-      console.log('[TemplateService.create] Template created successfully', { templateId: result.id });
       return result;
     } catch (error) {
       throw new InternalServerErrorException(
-        'Database error while creating template',
+        TemplateErrorKeyEnum.DATABASE_ERROR_WHILE_CREATING_TEMPLATE,
         {
           cause: error,
         },
@@ -95,49 +91,39 @@ export class TemplateService {
 
   async findAll() {
     try {
-      console.log('[TemplateService.findAll] Request received');
-      console.log('[TemplateService.findAll] Querying all templates from database');
       const result = await this.db
         .select()
         .from(templates)
         .catch((error) => {
-          console.error('[TemplateService.findAll] Error fetching templates:', error);
           throw new InternalServerErrorException(
-            'Database error while fetching templates',
+            TemplateErrorKeyEnum.DATABASE_ERROR_WHILE_FETCHING_TEMPLATES,
             {
               cause: error,
             },
           );
         });
-      console.log('[TemplateService.findAll] Templates retrieved successfully', { count: result.length });
       return result;
     } catch (error) {
-      console.error('[TemplateService.findAll] Error in findAll:', error);
       throw error;
     }
   }
 
   async findOne(id: string) {
     try {
-      console.log('[TemplateService.findOne] Request received', { templateId: id });
-      console.log('[TemplateService.findOne] Querying template by ID from database');
       const [result] = await this.db
         .select()
         .from(templates)
         .where(eq(templates.id, id))
         .catch((error) => {
-          console.error('[TemplateService.findOne] Error fetching template:', error);
           throw new InternalServerErrorException(
-            'Database error while fetching template',
+            TemplateErrorKeyEnum.DATABASE_ERROR_WHILE_FETCHING_TEMPLATE,
             {
               cause: error,
             },
           );
         });
-      console.log('[TemplateService.findOne] Template found successfully', { templateId: id });
       return result;
     } catch (error) {
-      console.error('[TemplateService.findOne] Error in findOne:', error);
       throw error;
     }
   }
@@ -148,35 +134,32 @@ export class TemplateService {
     file?: { template_file: Express.Multer.File[] },
   ) {
     try {
-      console.log('[TemplateService.update] Request received', { templateId: id });
-      console.log('[TemplateService.update] Checking for existing template');
       const isExist = await this.db
         .select()
         .from(templates)
         .where(eq(templates.id, id))
         .catch((error) => {
-          console.error('[TemplateService.update] Error checking existing template:', error);
           throw new InternalServerErrorException(
-            'Database error while checking existing template',
+            TemplateErrorKeyEnum.DATABASE_ERROR_WHILE_CHECKING_EXISTING_TEMPLATE,
             {
               cause: error,
             },
           );
         });
       if (!isExist) {
-        console.log('[TemplateService.update] Template not found for update', { templateId: id });
-        throw new HttpException('Template not found', HttpStatus.NOT_FOUND);
+        throw new HttpException(
+          TemplateErrorKeyEnum.TEMPLATE_NOT_FOUND,
+          HttpStatus.NOT_FOUND,
+        );
       }
       let templateUrl: string | undefined;
       if (file) {
-        console.log('[TemplateService.update] Uploading new template file to cloud storage');
         const uploadResult = await this.UploadToCloud.uploadTemplate(
           file.template_file[0].buffer,
           dto.template_name || isExist[0].template_name,
         );
         templateUrl = uploadResult;
       }
-      console.log('[TemplateService.update] Updating template record in database');
       const updatedTemplate = {
         template_name: dto.template_name,
         template_label: dto.template_label,
@@ -189,15 +172,13 @@ export class TemplateService {
         .where(eq(templates.id, id))
         .returning()
         .catch((error) => {
-          console.error('[TemplateService.update] Error updating template:', error);
           throw new InternalServerErrorException(
-            'Database error while updating template',
+            TemplateErrorKeyEnum.DATABASE_ERROR_WHILE_UPDATING_TEMPLATE,
             {
               cause: error,
             },
           );
         });
-      console.log('[TemplateService.update] Template updated successfully', { templateId: id });
       return result;
     } catch (error) {
       if (
@@ -207,7 +188,7 @@ export class TemplateService {
         throw error;
       }
       throw new InternalServerErrorException(
-        'Database error while updating template',
+        TemplateErrorKeyEnum.DATABASE_ERROR_WHILE_UPDATING_TEMPLATE,
         {
           cause: error,
         },
@@ -217,49 +198,43 @@ export class TemplateService {
 
   async remove(id: string) {
     try {
-      console.log('[TemplateService.remove] Request received', { templateId: id });
       if (!id) {
-        console.log('[TemplateService.remove] Template ID is missing');
         throw new HttpException(
-          'Template ID is required',
+          TemplateErrorKeyEnum.TEMPLATE_ID_IS_REQUIRED,
           HttpStatus.BAD_REQUEST,
         );
       }
-      console.log('[TemplateService.remove] Checking for existing template before deletion');
       const isExist = await this.db
         .select()
         .from(templates)
         .where(eq(templates.id, id))
         .catch((error) => {
-          console.error('[TemplateService.remove] Error checking existing template:', error);
           throw new InternalServerErrorException(
-            'Database error while checking existing template',
+            TemplateErrorKeyEnum.DATABASE_ERROR_WHILE_CHECKING_EXISTING_TEMPLATE,
             {
               cause: error,
             },
           );
         });
       if (!isExist) {
-        console.log('[TemplateService.remove] Template not found for deletion', { templateId: id });
-        throw new HttpException('Template not found', HttpStatus.NOT_FOUND);
+        throw new HttpException(
+          TemplateErrorKeyEnum.TEMPLATE_NOT_FOUND,
+          HttpStatus.NOT_FOUND,
+        );
       }
-      console.log('[TemplateService.remove] Deleting template from database');
       const result = await this.db
         .delete(templates)
         .where(eq(templates.id, id))
         .catch((error) => {
-          console.error('[TemplateService.remove] Error deleting template:', error);
           throw new InternalServerErrorException(
-            'Database error while deleting template',
+            TemplateErrorKeyEnum.DATABASE_ERROR_WHILE_DELETING_TEMPLATE,
             {
               cause: error,
             },
           );
         });
-      console.log('[TemplateService.remove] Template deleted successfully', { templateId: id });
       return result;
     } catch (error) {
-      console.error('[TemplateService.remove] Error in remove:', error);
       throw error;
     }
   }

@@ -50,9 +50,19 @@ import { FeedbackModule } from './modules/feedback/feedback.module';
 import { NotificationSettingsModule } from './modules/notification-settings/notification-settings.module';
 import { APP_GUARD } from '@nestjs/core';
 import { SubscriptionGuard } from './modules/subscription/subscription.guard';
-
+import { TraceModule } from './modules/trace/trace.module';
+import { JwtAuthGuard } from './modules/auth/jwt-auth.guard';
+import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
+export enum RATTELIMIT {
+  SHORT = 'short',
+  MEDIUM = 'medium',
+}
 @Module({
   imports: [
+    ThrottlerModule.forRoot([
+      { name: RATTELIMIT.SHORT, ttl: 1000, limit: 10 },
+      { name: RATTELIMIT.MEDIUM, ttl: 60_000, limit: 100 },
+    ]),
     DrizzleModule,
     AuthModule,
     UsersModule,
@@ -99,16 +109,16 @@ import { SubscriptionGuard } from './modules/subscription/subscription.guard';
     HelpArticlesModule,
     FeedbackModule,
     NotificationSettingsModule,
+    ...(process.env.NODE_ENV !== 'production' ? [TraceModule] : []),
   ],
   controllers: [AppController, UsersController],
   providers: [
     AppService,
     UsersService,
     DrizzleHealthIndicator,
-    {
-      provide: APP_GUARD,
-      useClass: SubscriptionGuard,
-    },
+    { provide: APP_GUARD, useClass: ThrottlerGuard },
+    { provide: APP_GUARD, useClass: JwtAuthGuard },
+    { provide: APP_GUARD, useClass: SubscriptionGuard },
   ],
 })
 export class AppModule {}

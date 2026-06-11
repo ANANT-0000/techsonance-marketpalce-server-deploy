@@ -116,10 +116,11 @@ export class UpsertBrandingDto {
 
   @IsOptional()
   @IsArray()
-  @Transform(({ value }) => {
+  @Transform(({ value }: { value: unknown }) => {
     if (typeof value === 'string') {
       try {
-        return JSON.parse(value);
+        const parsedValue: unknown = JSON.parse(value);
+        return parsedValue;
       } catch {
         return value.split(',').map((s) => s.trim());
       }

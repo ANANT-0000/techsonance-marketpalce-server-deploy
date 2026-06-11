@@ -3,7 +3,6 @@ import { PassportStrategy } from '@nestjs/passport';
 import { Strategy, VerifyCallback } from 'passport-google-oauth20';
 import { randomBytes } from 'crypto';
 import bcrypt from 'bcrypt';
-
 @Injectable()
 export class GoogleStrategy extends PassportStrategy(Strategy, 'google') {
   constructor() {
@@ -16,7 +15,6 @@ export class GoogleStrategy extends PassportStrategy(Strategy, 'google') {
       passReqToCallback: true, // Enable access to request object
     });
   }
-
   async validate(
     request: any,
     accessToken: string,
@@ -25,14 +23,11 @@ export class GoogleStrategy extends PassportStrategy(Strategy, 'google') {
     done: VerifyCallback,
   ): Promise<any> {
     try {
-      console.log('[GoogleStrategy.validate] Google Profile:', profile);
-
       // Generate a secure random password for OAuth users
       const randomPassword = bcrypt.hashSync(
         randomBytes(32).toString('hex'),
         10,
       );
-
       const user = {
         email: profile.emails?.[0]?.value,
         firstName: profile.name?.givenName || '',
@@ -43,19 +38,13 @@ export class GoogleStrategy extends PassportStrategy(Strategy, 'google') {
         password: randomPassword, // Secure random password
         provider: 'google',
       };
-
       // Validate required fields
       if (!user.email) {
         return done(new Error('Email not provided by Google'), false);
       }
-
       done(null, user);
     } catch (error) {
-      console.error(
-        '[GoogleStrategy.validate] Google OAuth validation error:',
-        error,
-      );
-      done(error, false);
+            done(error, false);
     }
   }
 }

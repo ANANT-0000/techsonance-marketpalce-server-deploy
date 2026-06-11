@@ -11,6 +11,7 @@ import { and, eq } from 'drizzle-orm';
 import { orders, shipping_details } from '../../drizzle/schema';
 import { MailService } from '../../common/services/mail/mail.service';
 import { domainExtractor } from '../../common/filters/domainExtractor.filter';
+import { ShippingErrorKeyEnum } from './constants/shipping.enums';
 
 @Injectable()
 export class ShippingService {
@@ -20,17 +21,8 @@ export class ShippingService {
     private readonly mailService: MailService,
   ) {}
   async addTrackingUrl(orderId: string, trackingUrl: string, domain: string) {
-    console.log('[ShippingService.addTrackingUrl] Request received', {
-      orderId,
-      trackingUrl,
-      domain,
-    });
-    console.log('[ShippingService.addTrackingUrl] Resolving company id');
     const filteredDomain = domainExtractor(domain);
     const companyId = await this.companyService.find(filteredDomain);
-    console.log(
-      `[ShippingService.addTrackingUrl] Company ID resolved: ${companyId}`,
-    );
     if (!companyId) {
       throw new HttpException(
         `Company with domain ${domain} not found`,
@@ -38,20 +30,14 @@ export class ShippingService {
       );
     }
     try {
-      console.log(
-        '[ShippingService.addTrackingUrl] Validating order ownership',
-      );
       const [isOrderValid] = await this.db
         .select({ id: orders.id })
         .from(orders)
         .where(and(eq(orders.id, orderId), eq(orders.company_id, companyId)))
         .limit(1);
       if (!isOrderValid.id) {
-        throw new HttpException('Order not found', HttpStatus.NOT_FOUND);
+        throw new HttpException(ShippingErrorKeyEnum.ORDER_NOT_FOUND, HttpStatus.NOT_FOUND);
       }
-      console.log(
-        '[ShippingService.addTrackingUrl] Inserting shipping details',
-      );
       await this.db
         .insert(shipping_details)
         .values({
@@ -60,9 +46,8 @@ export class ShippingService {
           tracking_url: trackingUrl,
         })
         .catch((error) => {
-          console.error('Error updating tracking URL:', error);
           throw new HttpException(
-            'Failed to update tracking URL',
+            ShippingErrorKeyEnum.FAILED_TO_UPDATE_TRACKING_URL,
             HttpStatus.INTERNAL_SERVER_ERROR,
           );
         });
@@ -83,11 +68,8 @@ export class ShippingService {
       });
 
       if (!orderDetail?.customer) {
-        throw new HttpException('Order not found', HttpStatus.NOT_FOUND);
+        throw new HttpException(ShippingErrorKeyEnum.ORDER_NOT_FOUND, HttpStatus.NOT_FOUND);
       }
-      console.log(
-        '[ShippingService.addTrackingUrl] Sending shipping notification email',
-      );
       const firstItem = orderDetail.items[0];
       const productName = firstItem?.variant?.variant_name || 'Item';
       const itemName =
@@ -106,7 +88,7 @@ export class ShippingService {
         throw error;
       }
       throw new InternalServerErrorException(
-        'Error occurred while fetching order',
+        ShippingErrorKeyEnum.ERROR_OCCURRED_WHILE_FETCHING_ORDER,
         {
           cause: error,
         },
@@ -118,12 +100,6 @@ export class ShippingService {
     trackingUrl: string,
     domain: string,
   ) {
-    console.log('[ShippingService.updateTrackingUrl] Request received', {
-      orderId,
-      trackingUrl,
-      domain,
-    });
-    console.log('[ShippingService.updateTrackingUrl] Resolving company id');
     const filteredDomain = domainExtractor(domain);
     const companyId = await this.companyService.find(filteredDomain);
     if (!companyId) {
@@ -133,20 +109,14 @@ export class ShippingService {
       );
     }
     try {
-      console.log(
-        '[ShippingService.updateTrackingUrl] Validating order ownership',
-      );
       const [isOrderValid] = await this.db
         .select({ id: orders.id })
         .from(orders)
         .where(and(eq(orders.id, orderId), eq(orders.company_id, companyId)))
         .limit(1);
       if (!isOrderValid.id) {
-        throw new HttpException('Order not found', HttpStatus.NOT_FOUND);
+        throw new HttpException(ShippingErrorKeyEnum.ORDER_NOT_FOUND, HttpStatus.NOT_FOUND);
       }
-      console.log(
-        '[ShippingService.updateTrackingUrl] Checking existing shipping details',
-      );
       const [existingShipping] = await this.db
         .select({ id: shipping_details.id })
         .from(shipping_details)
@@ -159,12 +129,11 @@ export class ShippingService {
         .limit(1);
       if (!existingShipping.id) {
         throw new HttpException(
-          'Shipping details not found',
+          ShippingErrorKeyEnum.SHIPPING_DETAILS_NOT_FOUND,
           HttpStatus.NOT_FOUND,
         );
       }
 
-      console.log('[ShippingService.updateTrackingUrl] Updating tracking URL');
       await this.db
         .update(shipping_details)
         .set({ tracking_url: trackingUrl })
@@ -175,21 +144,17 @@ export class ShippingService {
           ),
         )
         .catch((error) => {
-          console.error('Error updating tracking URL:', error);
           throw new HttpException(
-            'Failed to update tracking URL',
+            ShippingErrorKeyEnum.FAILED_TO_UPDATE_TRACKING_URL,
             HttpStatus.INTERNAL_SERVER_ERROR,
           );
         });
-      console.log(
-        '[ShippingService.updateTrackingUrl] Tracking URL updated successfully',
-      );
     } catch (error) {
       if (error instanceof HttpException) {
         throw error;
       }
       throw new InternalServerErrorException(
-        'Error occurred while fetching tracking information',
+        ShippingErrorKeyEnum.ERROR_OCCURRED_WHILE_FETCHING_TRACKING_INFORMATION,
         {
           cause: error,
         },

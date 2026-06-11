@@ -1,9 +1,15 @@
-import { Inject, Injectable, InternalServerErrorException, NotFoundException } from '@nestjs/common';
+import {
+  Inject,
+  Injectable,
+  InternalServerErrorException,
+  NotFoundException,
+} from '@nestjs/common';
 import { and, eq, like, or } from 'drizzle-orm';
 import { DRIZZLE, type DrizzleService } from '../../drizzle/drizzle.module';
 import { help_articles } from '../../drizzle/schema';
 import { CompanyService } from '../company/company.service';
 import { domainExtractor } from '../../common/filters/domainExtractor.filter';
+import { HelpArticlesErrorKeyEnum } from './constants/help-articles.enums';
 
 @Injectable()
 export class HelpArticlesService {
@@ -20,7 +26,10 @@ export class HelpArticlesService {
   async getArticles(domain: string, category?: string, search?: string) {
     try {
       const companyId = await this.resolveCompanyId(domain);
-      const conditions = [eq(help_articles.company_id, companyId), eq(help_articles.is_published, true)];
+      const conditions = [
+        eq(help_articles.company_id, companyId),
+        eq(help_articles.is_published, true),
+      ];
 
       if (category) {
         conditions.push(eq(help_articles.category, category));
@@ -28,7 +37,10 @@ export class HelpArticlesService {
 
       let articlesList = await this.db.query.help_articles.findMany({
         where: and(...conditions),
-        orderBy: (table, { asc }) => [asc(table.order_index), asc(table.created_at)],
+        orderBy: (table, { asc }) => [
+          asc(table.order_index),
+          asc(table.created_at),
+        ],
       });
 
       if (search) {
@@ -43,8 +55,9 @@ export class HelpArticlesService {
 
       return articlesList;
     } catch (error) {
-      console.error('[HelpArticlesService.getArticles] Error fetching articles:', error);
-      throw new InternalServerErrorException('Failed to fetch help articles');
+      throw new InternalServerErrorException(
+        HelpArticlesErrorKeyEnum.FAILED_TO_FETCH_HELP_ARTICLES,
+      );
     }
   }
 
@@ -63,23 +76,39 @@ export class HelpArticlesService {
         .update(help_articles)
         .set({ view_count: (article.view_count || 0) + 1 })
         .where(eq(help_articles.id, id))
-        .catch((err) => console.error('[HelpArticlesService] Failed to increment view count:', err));
+        .catch((err) => {
+          new InternalServerErrorException(
+            HelpArticlesErrorKeyEnum.FAILED_TO_FETCH_HELP_ARTICLE,
+            {
+              cause: err,
+            },
+          );
+        });
 
       return article;
     } catch (error) {
       if (error instanceof NotFoundException) throw error;
-      console.error('[HelpArticlesService.getArticleById] Error:', error);
-      throw new InternalServerErrorException('Failed to fetch help article');
+      throw new InternalServerErrorException(
+        HelpArticlesErrorKeyEnum.FAILED_TO_FETCH_HELP_ARTICLE,
+      );
     }
   }
 
   async createArticle(
     domain: string,
-    articleData: { title: string; content: string; category: string; order_index?: number },
+    articleData: {
+      title: string;
+      content: string;
+      category: string;
+      order_index?: number;
+    },
   ) {
     try {
       const companyId = await this.resolveCompanyId(domain);
-      const slug = articleData.title.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '');
+      const slug = articleData.title
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, '-')
+        .replace(/(^-|-$)/g, '');
 
       const [newArticle] = await this.db
         .insert(help_articles)
@@ -95,8 +124,9 @@ export class HelpArticlesService {
 
       return newArticle;
     } catch (error) {
-      console.error('[HelpArticlesService.createArticle] Error creating article:', error);
-      throw new InternalServerErrorException('Failed to create help article');
+      throw new InternalServerErrorException(
+        HelpArticlesErrorKeyEnum.FAILED_TO_CREATE_HELP_ARTICLE,
+      );
     }
   }
 
@@ -123,8 +153,9 @@ export class HelpArticlesService {
       return updated;
     } catch (error) {
       if (error instanceof NotFoundException) throw error;
-      console.error('[HelpArticlesService.voteArticle] Error:', error);
-      throw new InternalServerErrorException('Failed to submit vote');
+      throw new InternalServerErrorException(
+        HelpArticlesErrorKeyEnum.FAILED_TO_SUBMIT_VOTE,
+      );
     }
   }
 }

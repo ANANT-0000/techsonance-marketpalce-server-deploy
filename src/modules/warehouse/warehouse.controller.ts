@@ -26,7 +26,6 @@ export class WarehouseController {
     @Body() warehouseAddressDto: warehouseAddressDto,
     @Headers('company-domain') domain: string,
   ) {
-    console.log('warehouse', warehouseAddressDto);
     return this.warehouseService.create(warehouseAddressDto, domain);
   }
 
@@ -49,7 +48,6 @@ export class WarehouseController {
     @Body() updateWarehouseAddressDto: any,
     @Headers('company-domain') domain: string,
   ) {
-    console.log('updateWarehouseAddressDto', updateWarehouseAddressDto);
     return this.warehouseService.update(id, updateWarehouseAddressDto, domain);
   }
 

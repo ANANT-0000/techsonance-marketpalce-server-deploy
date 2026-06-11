@@ -1,5 +1,6 @@
 import * as pg from 'drizzle-orm/pg-core';
-import { AccessStatus, UserRole, UserStatus } from '../types/types';
+import { AccessStatus, UserRole, UserStatus, EntityStatus } from '../types/types';
+import { EntityStatusEnum } from './enums.schema';
 import { user } from './users.schema';
 export const companyEnum = pg.pgEnum('company_enum', UserStatus);
 export const company = pg.pgTable('company', {
@@ -14,6 +15,8 @@ export const company = pg.pgTable('company', {
     .notNull()
     .defaultNow()
     .$onUpdate(() => new Date()),
+  status: EntityStatusEnum('status').default(EntityStatus.ACTIVE),
+  deleted_at: pg.timestamp('deleted_at'),
 });
 export const UserRoleEnum = pg.pgEnum('user_role_enum', [
   UserRole.ADMIN,
