@@ -35,13 +35,13 @@ export class CompanyController {
   }
 
   @Patch(':company_id/suspend')
-  @UseGuards(JwtAuthGuard, RoleGuard)
+  @UseGuards(RoleGuard)
   @Roles(Role.ADMIN)
   async suspendCompany(@Param('company_id') company_id: string) {
     return this.companyService.suspendCompany(company_id);
   }
   @Post('address')
-  @UseGuards(JwtAuthGuard, RoleGuard)
+  @UseGuards(RoleGuard)
   @Roles(Role.VENDOR, Role.ADMIN)
   async addCompanyAddress(
     @Headers('company-domain') domain: string,
@@ -50,7 +50,7 @@ export class CompanyController {
     return this.vendorService.createRegistrationAddress(domain, payload);
   }
   @Get('address')
-  @UseGuards(JwtAuthGuard, RoleGuard)
+  @UseGuards(RoleGuard)
   @Roles(Role.VENDOR, Role.ADMIN)
   async getCompanyAddresses(@Headers('company-domain') domain: string) {
     return this.vendorService.getCompanyAddresses(domain);

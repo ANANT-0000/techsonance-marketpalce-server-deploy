@@ -195,7 +195,7 @@ export enum SubscriptionStatus {
   GRACE_PERIOD = 'grace_period',
 }
 // ================================================================
-// DISCOUNT CONFIG TYPE HELPERS (add to src/drizzle/types/promotions.ts)
+// DISCOUNT CONFIG TYPE HELPERS (add to ../../drizzle/types/promotions.ts)
 // ================================================================
 
 export type PercentageOffConfig = {

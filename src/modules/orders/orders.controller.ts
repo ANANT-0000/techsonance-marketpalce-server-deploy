@@ -23,7 +23,7 @@ import type { Response } from 'express';
   version: '1',
   path: 'orders',
 })
-@UseGuards(JwtAuthGuard, RoleGuard)
+@UseGuards(RoleGuard)
 export class OrdersController {
   constructor(
     private readonly ordersService: OrdersService,

@@ -1,4 +1,4 @@
-// src/modules/subscription/subscription.guard.ts
+// ../../modules/subscription/subscription.guard.ts
 import {
   CanActivate,
   ExecutionContext,
@@ -10,8 +10,8 @@ import { DRIZZLE, type DrizzleService } from '../../drizzle/drizzle.module';
 import { Inject } from '@nestjs/common';
 import { vendor_subscriptions } from '../../drizzle/schema';
 import { eq } from 'drizzle-orm';
-import { SKIP_SUBSCRIPTION_KEY } from 'src/common/decorators/skip-subscription.decorator';
-import { SubscriptionStatus, UserRole } from 'src/drizzle/types/types';
+import { SKIP_SUBSCRIPTION_KEY } from '../../common/decorators/skip-subscription.decorator';
+import { SubscriptionStatus, UserRole } from '../../drizzle/types/types';
 
 @Injectable()
 export class SubscriptionGuard implements CanActivate {
@@ -40,7 +40,7 @@ export class SubscriptionGuard implements CanActivate {
     if (user.role !== UserRole.VENDOR) return true;
 
     // 4. company_id must be in the JWT payload
-    const companyId = user.companyId; // ← comes from JWT, set at login
+    const companyId = user.company_id; // ← comes from JWT, set at login
     if (!companyId)
       throw new ForbiddenException('No company associated with this account');
 

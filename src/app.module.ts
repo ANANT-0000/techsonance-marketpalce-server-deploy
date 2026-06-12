@@ -116,8 +116,8 @@ export enum RATTELIMIT {
     AppService,
     UsersService,
     DrizzleHealthIndicator,
-    { provide: APP_GUARD, useClass: JwtAuthGuard },
     { provide: APP_GUARD, useClass: ThrottlerGuard },
+    { provide: APP_GUARD, useClass: JwtAuthGuard },
     { provide: APP_GUARD, useClass: SubscriptionGuard },
   ],
 })

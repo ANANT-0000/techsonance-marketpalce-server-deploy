@@ -35,7 +35,7 @@ export class ProductsController {
   constructor(private productsService: ProductsService) {}
 
   @Post(':vendor_id')
-  @UseGuards(JwtAuthGuard, RoleGuard)
+  @UseGuards(RoleGuard)
   @Roles(Role.ADMIN, Role.VENDOR)
   @UploadToCloud([
     { name: 'product', maxCount: 1 },
@@ -72,7 +72,6 @@ export class ProductsController {
     return await this.productsService.getAllProducts(domain, query);
   }
 
- 
   @Get('suggestions')
   async getProductSuggestions(
     @Headers('company-domain') domain: string,
@@ -91,11 +90,14 @@ export class ProductsController {
     @Headers('company-domain') domain: string,
     @Query('limit') limit?: number,
   ) {
-    return await this.productsService.getHomepageProducts(domain, Number(limit) || 8);
+    return await this.productsService.getHomepageProducts(
+      domain,
+      Number(limit) || 8,
+    );
   }
 
   @Get('active')
-  @UseGuards(JwtAuthGuard, RoleGuard)
+  @UseGuards(RoleGuard)
   @Roles(Role.ADMIN, Role.VENDOR)
   async getActiveProducts(
     @Headers('company-domain') domain: string,
@@ -126,7 +128,7 @@ export class ProductsController {
   }
 
   @Patch(':id')
-  @UseGuards(JwtAuthGuard, RoleGuard)
+  @UseGuards(RoleGuard)
   @Roles(Role.ADMIN, Role.VENDOR)
   @UploadToCloud([
     { name: 'product', maxCount: 1 },
@@ -149,7 +151,7 @@ export class ProductsController {
   }
 
   @Patch('update-product-category/:id')
-  @UseGuards(JwtAuthGuard, RoleGuard)
+  @UseGuards(RoleGuard)
   @Roles(Role.ADMIN, Role.VENDOR)
   async updateProductCategory(
     @Param('id') id: string,
@@ -176,28 +178,28 @@ export class ProductsController {
   }
 
   @Delete('delete-selected')
-  @UseGuards(JwtAuthGuard, RoleGuard)
+  @UseGuards(RoleGuard)
   @Roles(Role.ADMIN, Role.VENDOR)
   async deleteSelectedProduct(@Body('ids') ids: string[]) {
     return await this.productsService.deleteSelectedProducts(ids);
   }
 
   @Delete('delete-selected-variants')
-  @UseGuards(JwtAuthGuard, RoleGuard)
+  @UseGuards(RoleGuard)
   @Roles(Role.ADMIN, Role.VENDOR)
   async deleteSelectedProductVariants(@Body('ids') ids: string[]) {
     return await this.productsService.deleteSelectedProductVariants(ids);
   }
 
   @Delete(':id')
-  @UseGuards(JwtAuthGuard, RoleGuard)
+  @UseGuards(RoleGuard)
   @Roles(Role.ADMIN, Role.VENDOR)
   async deleteProduct(@Param('id') id: string) {
     return await this.productsService.deleteProduct(id);
   }
 
   @Delete('delete-variant/:id')
-  @UseGuards(JwtAuthGuard, RoleGuard)
+  @UseGuards(RoleGuard)
   @Roles(Role.ADMIN, Role.VENDOR)
   async deleteProductVariant(@Param('id') id: string) {
     return await this.productsService.deleteProductVariant(id);

@@ -27,7 +27,7 @@ export class CategoryController {
   constructor(private readonly categoryService: CategoryService) {}
 
   @Post('create-many-categories')
-  @UseGuards(JwtAuthGuard, RoleGuard)
+  @UseGuards(RoleGuard)
   @Roles(Role.ADMIN, Role.VENDOR)
   createMany(
     @Headers('company-domain') domain: string,
@@ -40,7 +40,10 @@ export class CategoryController {
     @Headers('company-domain') domain: string,
     @Query('limit') limit?: number,
   ) {
-    return this.categoryService.getHomepageCategories(domain, Number(limit) || 8);
+    return this.categoryService.getHomepageCategories(
+      domain,
+      Number(limit) || 8,
+    );
   }
 
   @Get()
@@ -64,7 +67,7 @@ export class CategoryController {
   }
   @Post()
   @HttpCode(HttpStatus.CREATED)
-  @UseGuards(JwtAuthGuard, RoleGuard)
+  @UseGuards(RoleGuard)
   @Roles(Role.ADMIN, Role.VENDOR)
   create(
     @Headers('company-domain') domain: string,
@@ -77,7 +80,7 @@ export class CategoryController {
     return this.categoryService.findOne(id, domain);
   }
   @Patch(':id')
-  @UseGuards(JwtAuthGuard, RoleGuard)
+  @UseGuards(RoleGuard)
   @Roles(Role.ADMIN, Role.VENDOR)
   update(
     @Headers('company-domain') domain: string,
@@ -87,7 +90,7 @@ export class CategoryController {
     return this.categoryService.update(id, domain, updateCategoryDto);
   }
   @Delete(':id')
-  @UseGuards(JwtAuthGuard, RoleGuard)
+  @UseGuards(RoleGuard)
   @Roles(Role.ADMIN, Role.VENDOR)
   delete(@Headers('company-domain') domain: string, @Param('id') id: string) {
     return this.categoryService.delete(id, domain);

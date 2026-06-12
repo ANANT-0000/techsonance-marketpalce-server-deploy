@@ -1,4 +1,4 @@
-// src/tax-slabs/dto/create-tax-slab.dto.ts
+// ../../tax-slabs/dto/create-tax-slab.dto.ts
 import {
   IsString,
   IsNotEmpty,

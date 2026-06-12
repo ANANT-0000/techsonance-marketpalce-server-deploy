@@ -16,7 +16,7 @@ import { Role } from '../../enums/role.enum';
 export class InvoiceController {
   constructor(private readonly invoiceService: InvoiceService) {}
   @Post('bulk-download')
-  @UseGuards(JwtAuthGuard, RoleGuard)
+  @UseGuards(RoleGuard)
   @Roles(Role.ADMIN, Role.VENDOR)
   async getBulkInvoiceUrls(
     @Headers('company-domain') domain: string,
@@ -25,13 +25,13 @@ export class InvoiceController {
     return this.invoiceService.getBulkInvoiceUrls(domain, payload.orderIds);
   }
   @Get('templates')
-  @UseGuards(JwtAuthGuard, RoleGuard)
+  @UseGuards(RoleGuard)
   @Roles(Role.ADMIN)
   listTemplates() {
     // return this.invoiceService.listAvailableTemplates();
   }
   @Get('payload/:orderId')
-  @UseGuards(JwtAuthGuard, RoleGuard)
+  @UseGuards(RoleGuard)
   @Roles(Role.ADMIN, Role.VENDOR, Role.CUSTOMER)
   async getInvoicePayload(
     @Param('orderId') orderId: string,

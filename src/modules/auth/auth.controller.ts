@@ -25,7 +25,7 @@ import { AuthGuard } from '@nestjs/passport';
 import { GoogleOAuthGuard } from './google-oauth.guard';
 import { AdminService } from '../admin/admin.service';
 import { Throttle } from '@nestjs/throttler';
-import { Public } from 'src/common/decorators/public.decorator';
+import { Public } from '../../common/decorators/public.decorator';
 
 @Controller({ version: '1', path: 'auth' })
 export class AuthController {
