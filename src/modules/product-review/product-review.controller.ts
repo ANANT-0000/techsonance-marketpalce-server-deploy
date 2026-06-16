@@ -16,6 +16,7 @@ import { UpdateProductReviewDto } from './dto/update-product-review.dto';
 import { ParseJsonPipe } from '../../common/pipes/parseJsonPipe';
 import { AnyFilesInterceptor } from '@nestjs/platform-express';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
+import { Public } from '../../common/decorators/public.decorator';
 
 @Controller({ version: '1', path: 'product-review' })
 export class ProductReviewController {
@@ -36,16 +37,19 @@ export class ProductReviewController {
     );
   }
 
+  @Public()
   @Get()
   findAll() {
     return this.productReviewService.findAll();
   }
 
+  @Public()
   @Get(':id')
   findOne(@Param('id') id: string) {
     return this.productReviewService.findOneById(id);
   }
 
+  @Public()
   @Get('product/:id')
   findByProductId(@Param('id') id: string) {
     return this.productReviewService.findAllByProductId(id);

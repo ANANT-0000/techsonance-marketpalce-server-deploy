@@ -311,6 +311,12 @@ export class CartService {
     domain: string,
   ) {
     try {
+      if (!cartItemId || cartItemId === '') {
+        throw new HttpException(
+          CartErrorKeyEnum.FAILED_TO_FIND_CART_ITEM,
+          HttpStatus.BAD_REQUEST,
+        );
+      }
       const companyId = await this.resolveCompanyId(domain);
       const [isUserCartExits] = await this.db
         .select({ id: carts.id })
@@ -331,7 +337,7 @@ export class CartService {
             },
           );
         });
-      if (!isUserCartExits.id || isUserCartExits.id === '') {
+      if (!isUserCartExits || !isUserCartExits.id || isUserCartExits.id === '') {
         throw new NotFoundException(CartErrorKeyEnum.USER_CART_NOT_FOUND);
       }
 
@@ -351,9 +357,14 @@ export class CartService {
         });
 
       if (!cartItemRecord) {
-        throw new NotFoundException(
-          `Cart item with ID ${cartItemId} not found`,
-        );
+        return {
+          cart_id: cartId,
+          cart_item_id: cartItemId,
+          quantity: 0,
+          product_variant_id: '',
+          success: true,
+          message: 'Cart item already deleted or not found',
+        };
       }
       return await this.db.transaction(async (tx) => {
         if (cartItemRecord.quantity > 1) {

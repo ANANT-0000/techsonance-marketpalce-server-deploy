@@ -597,13 +597,23 @@ export class ProductsService {
           },
           variants: {
             limit: 1,
-            columns: { id: true },
+            columns: {
+              id: true,
+              variant_name: true,
+              price: true,
+              sku: true,
+              status: true,
+              product_id: true,
+            },
             with: {
               images: {
                 limit: 1,
                 where: (images) => eq(images.is_primary, true),
                 columns: { image_url: true }
-              }
+              },
+              inventory: {
+                columns: { stock_quantity: true, warehouse_id: true },
+              },
             }
           }
         }

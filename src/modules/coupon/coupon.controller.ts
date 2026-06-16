@@ -11,6 +11,7 @@ import {
 } from '@nestjs/common';
 import { CouponService } from './coupon.service';
 import { CreateCouponDto, UpdateCouponDto } from './dto/coupon.dto';
+import { Public } from '../../common/decorators/public.decorator';
 
 @Controller({ version: '1', path: 'coupon' })
 export class CouponController {
@@ -39,6 +40,7 @@ export class CouponController {
   findOne(@Param('id') id: string, @Headers('company-domain') domain: string) {
     return this.couponService.findOne(id, domain);
   }
+  @Public()
   @Get('product/:id')
   findCoupons(
     @Headers('company-domain') domain: string,

@@ -16,6 +16,7 @@ import { UploadToCloud } from '../../common/decorators/upload.decorator';
 import { ParseJsonPipe } from '../../common/pipes/parseJsonPipe';
 import { type ProductFiles } from '../../common/Types/index.type';
 import { ProductStatus } from '../../drizzle/types/types';
+import { Public } from '../../common/decorators/public.decorator';
 
 @Controller({
   version: '1',
@@ -54,16 +55,19 @@ export class ProductVariantController {
     return this.productVariantService.findAll(vendorId);
   }
 
+  @Public()
   @Get(':productId')
   @HttpCode(HttpStatus.OK)
   findAllVariants(@Param('productId') productId: string) {
     return this.productVariantService.findAllVariantsByProductId(productId);
   }
+  @Public()
   @Get('variant/:id')
   @HttpCode(HttpStatus.OK)
   findOne(@Param('id') id: string) {
     return this.productVariantService.findOne(id);
   }
+  @Public()
   @Get('details/:id')
   @HttpCode(HttpStatus.OK)
   findVariantDetails(@Param('id') id: string) {

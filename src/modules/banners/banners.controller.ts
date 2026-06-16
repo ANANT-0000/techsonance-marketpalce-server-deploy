@@ -17,6 +17,7 @@ import { BannerPlacement } from '../../drizzle/types/types';
 import { UploadToCloud } from '../../common/decorators/upload.decorator';
 import { CreateBannerDto } from './dto/banner.dto';
 import { ParseJsonPipe } from '../../common/pipes/parseJsonPipe';
+import { Public } from '../../common/decorators/public.decorator';
 
 @Controller({ version: '1', path: 'banners' })
 export class BannersController {
@@ -28,6 +29,7 @@ export class BannersController {
   }
 
   // Storefront call: GET /v1/banners/active?placement=homepage_hero
+  @Public()
   @Get('active')
   findActive(
     @Headers('company-domain') domain: string,

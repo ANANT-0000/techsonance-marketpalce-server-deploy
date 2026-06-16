@@ -1,10 +1,12 @@
 import { Body, Controller, Get, Headers, HttpCode, HttpStatus, Param, Post, Query } from '@nestjs/common';
 import { HelpArticlesService } from './help-articles.service';
+import { Public } from '../../common/decorators/public.decorator';
 
 @Controller({ version: '1', path: 'help-articles' })
 export class HelpArticlesController {
   constructor(private readonly helpArticlesService: HelpArticlesService) {}
 
+  @Public()
   @Get()
   @HttpCode(HttpStatus.OK)
   async getArticles(
@@ -15,6 +17,7 @@ export class HelpArticlesController {
     return this.helpArticlesService.getArticles(domain, category, search);
   }
 
+  @Public()
   @Get(':id')
   @HttpCode(HttpStatus.OK)
   async getArticleById(@Param('id') id: string) {

@@ -1,23 +1,36 @@
 import * as pg from 'drizzle-orm/pg-core';
-import { AccessStatus, UserRole, UserStatus, EntityStatus } from '../types/types';
+import {
+  AccessStatus,
+  UserRole,
+  UserStatus,
+  EntityStatus,
+} from '../types/types';
 import { EntityStatusEnum } from './enums.schema';
 import { user } from './users.schema';
 export const companyEnum = pg.pgEnum('company_enum', UserStatus);
-export const company = pg.pgTable('company', {
-  id: pg.uuid('id').primaryKey().defaultRandom(),
-  company_name: pg.text('company_name').notNull(),
-  company_domain: pg.text('company_domain').notNull(),
-  company_structure: pg.text('company_structure').notNull(),
-  company_status: companyEnum('company_status').default(UserStatus.PENDING),
-  created_at: pg.timestamp('created_at').notNull().defaultNow(),
-  updated_at: pg
-    .timestamp('updated_at')
-    .notNull()
-    .defaultNow()
-    .$onUpdate(() => new Date()),
-  status: EntityStatusEnum('status').default(EntityStatus.ACTIVE),
-  deleted_at: pg.timestamp('deleted_at'),
-});
+export const company = pg.pgTable(
+  'company',
+  {
+    id: pg.uuid('id').primaryKey().defaultRandom(),
+    company_name: pg.text('company_name').notNull(),
+    company_domain: pg.text('company_domain').notNull(),
+    company_structure: pg.text('company_structure').notNull(),
+    company_status: companyEnum('company_status').default(UserStatus.PENDING),
+    created_at: pg.timestamp('created_at').notNull().defaultNow(),
+    updated_at: pg
+      .timestamp('updated_at')
+      .notNull()
+      .defaultNow()
+      .$onUpdate(() => new Date()),
+    status: EntityStatusEnum('status').default(EntityStatus.ACTIVE),
+    deleted_at: pg.timestamp('deleted_at'),
+  },
+  (t) => [
+    pg.uniqueIndex('uq_company_domain').on(t.company_domain),
+    pg.index('idx_company_status').on(t.company_status),
+    pg.index('idx_company_name').on(t.company_name),
+  ],
+);
 export const UserRoleEnum = pg.pgEnum('user_role_enum', [
   UserRole.ADMIN,
   UserRole.VENDOR,

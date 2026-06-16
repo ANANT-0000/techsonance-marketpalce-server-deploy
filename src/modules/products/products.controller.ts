@@ -26,6 +26,7 @@ import { RoleGuard } from '../../guards/role.guard';
 import { Roles } from '../../common/decorators/roles.decorator';
 import { Role } from '../../enums/role.enum';
 import { GetProductsQueryDto } from './dto/get-products-query.dto';
+import { Public } from '../../common/decorators/public.decorator';
 
 @Controller({
   version: '1',
@@ -56,7 +57,7 @@ export class ProductsController {
       files,
     );
   }
-
+  @Public()
   @Get('vendor-products')
   async getVendorProducts(
     @Headers('company-domain') domain: string,
@@ -64,6 +65,7 @@ export class ProductsController {
   ) {
     return await this.productsService.getVendorProducts(domain, query);
   }
+  @Public()
   @Get('all')
   async getAllProducts(
     @Headers('company-domain') domain: string,
@@ -72,6 +74,7 @@ export class ProductsController {
     return await this.productsService.getAllProducts(domain, query);
   }
 
+  @Public()
   @Get('suggestions')
   async getProductSuggestions(
     @Headers('company-domain') domain: string,
@@ -80,11 +83,13 @@ export class ProductsController {
     return await this.productsService.getProductSuggestions(domain, search);
   }
 
+  @Public()
   @Get('options')
   async getAllProductOptions(@Headers('company-domain') domain: string) {
     return await this.productsService.getAllProductOptions(domain);
   }
 
+  @Public()
   @Get('homepage')
   async getHomepageProducts(
     @Headers('company-domain') domain: string,
@@ -118,6 +123,7 @@ export class ProductsController {
     });
   }
 
+  @Public()
   @Get('main-details/:id')
   @HttpCode(HttpStatus.OK)
   async getProductMainDetails(
@@ -160,6 +166,7 @@ export class ProductsController {
     return await this.productsService.UpdateProductCategory(categoryId, id);
   }
 
+  @Public()
   @Get(':id/details')
   async getProductDetailsById(
     @Param('id') id: string,
@@ -168,6 +175,7 @@ export class ProductsController {
     return await this.productsService.getProductDetailsById(id, domain);
   }
 
+  @Public()
   @Get(':id')
   @HttpCode(HttpStatus.OK)
   async getProductById(

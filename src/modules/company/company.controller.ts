@@ -16,6 +16,7 @@ import { Roles } from '../../common/decorators/roles.decorator';
 import { VendorsService } from '../vendors/vendors.service';
 import { COMPANY_CONTROLLER_MESSAGES } from './constants/company.constants';
 import { CreateAddressDto } from '../address/dto/createAddress.dto';
+import { Public } from '../../common/decorators/public.decorator';
 
 @Controller({ version: '1', path: 'company' })
 export class CompanyController {
@@ -23,10 +24,12 @@ export class CompanyController {
     private readonly companyService: CompanyService,
     private readonly vendorService: VendorsService,
   ) {}
+  @Public()
   @Get()
   test() {
     return COMPANY_CONTROLLER_MESSAGES.HEALTH_CHECK;
   }
+  @Public()
   @Get('profile')
   // @UseGuards(JwtAuthGuard)
   // @Roles(Role.VENDOR, Role.ADMIN)

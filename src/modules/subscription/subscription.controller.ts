@@ -11,12 +11,14 @@ import {
 import { SubscriptionService } from './subscription.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { SkipSubscription } from '../../common/decorators/skip-subscription.decorator';
+import { Public } from '../../common/decorators/public.decorator';
 
 @Controller({ version: '1', path: 'subscription' })
 export class SubscriptionController {
   constructor(private readonly subscriptionService: SubscriptionService) { }
 
   // Public — used during vendor registration to show plan cards
+  @Public()
   @Get('plans')
   @SkipSubscription()
   getPlans() {

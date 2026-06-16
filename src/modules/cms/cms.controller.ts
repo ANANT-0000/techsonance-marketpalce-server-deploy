@@ -13,6 +13,10 @@ import { FileInterceptor } from '@nestjs/platform-express';
 import { CmsService } from './cms.service';
 import { CreateCmsDto } from './dto/create-cms.dto';
 import { CmsLanguageEnum } from './constants/cms.enums';
+import {
+  IS_PUBLIC_KEY,
+  Public,
+} from '../../common/decorators/public.decorator';
 
 @Controller({ version: '1', path: 'cms' })
 export class CmsController {
@@ -23,7 +27,7 @@ export class CmsController {
   async uploadCmsImage(@UploadedFile() file: Express.Multer.File) {
     return this.cmsService.uploadCmsImage(file);
   }
-
+  @Public()
   @Get(':type')
   getPage(
     @Headers('company-domain') domain: string,

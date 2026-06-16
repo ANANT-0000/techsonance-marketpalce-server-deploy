@@ -19,6 +19,7 @@ import {
   UpsertDocumentConfigDto,
   UpsertLegalProfileDto,
 } from './dto/upsert-company-identity.dto';
+import { Public } from '../../common/decorators/public.decorator';
 
 @Controller({ version: '1', path: 'company-identity' })
 export class CompanyIdentityController {
@@ -26,6 +27,7 @@ export class CompanyIdentityController {
 
   // ─── BRANDING ─────────────────────────────────────────────────────────────
 
+  @Public()
   @Get('branding')
   @HttpCode(HttpStatus.OK)
   async getBranding(@Headers('company-domain') domain: string) {

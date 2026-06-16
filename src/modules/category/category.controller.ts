@@ -18,6 +18,7 @@ import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { RoleGuard } from '../../guards/role.guard';
 import { Role } from '../../enums/role.enum';
 import { Roles } from '../../common/decorators/roles.decorator';
+import { Public } from '../../common/decorators/public.decorator';
 
 @Controller({
   version: '1',
@@ -35,6 +36,7 @@ export class CategoryController {
   ) {
     return this.categoryService.createMany(createCategoryDtos, domain);
   }
+  @Public()
   @Get('homepage')
   getHomepageCategories(
     @Headers('company-domain') domain: string,
@@ -46,6 +48,7 @@ export class CategoryController {
     );
   }
 
+  @Public()
   @Get()
   findAll(
     @Headers('company-domain') domain: string,
@@ -75,6 +78,7 @@ export class CategoryController {
   ) {
     return this.categoryService.create(createCategoryDto, domain);
   }
+  @Public()
   @Get(':id')
   findOne(@Headers('company-domain') domain: string, @Param('id') id: string) {
     return this.categoryService.findOne(id, domain);

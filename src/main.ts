@@ -20,7 +20,9 @@ async function bootstrap() {
   app.use(urlencoded({ limit: '50mb', extended: true }));
   const allowedOrigins = process.env.ALLOWED_ORIGINS
     ? process.env.ALLOWED_ORIGINS.split(',')
-    : ['https://localhost:3000'];
+        .map((origin) => origin.trim())
+        .filter((origin) => origin.length > 0)
+    : undefined;
   app.enableCors({
     origin: allowedOrigins,
     methods: 'GET,HEAD,PUT,PATCH,POST,DELETE',
@@ -29,7 +31,27 @@ async function bootstrap() {
   app.useGlobalPipes(
     new ValidationPipe({ whitelist: true, forbidNonWhitelisted: true }),
   );
-  app.use(helmet());
+  app.use(
+    helmet({
+      contentSecurityPolicy: {
+        directives: {
+          ...helmet.contentSecurityPolicy.getDefaultDirectives(),
+          'script-src': [
+            "'self'",
+            "'unsafe-inline'",
+            'https://cdnjs.cloudflare.com',
+          ],
+          'style-src': [
+            "'self'",
+            "'unsafe-inline'",
+            'https://cdnjs.cloudflare.com',
+            'https:',
+          ],
+          'img-src': ["'self'", 'data:', 'https:'],
+        },
+      },
+    }),
+  );
   app.enableVersioning();
   app.useGlobalFilters(new HttpExceptionFilter());
   app.useGlobalInterceptors(new ResponseInterceptor());
@@ -37,7 +59,6 @@ async function bootstrap() {
     .setTitle('Techsonance Marketplace API')
     .setDescription('API documentation for Techsonance Marketplace')
     .setVersion('1.0')
-    // .addServer(`http://localhost:${process.env.PORT ?? 8000}`)
     .addBearerAuth(
       {
         type: 'http',
@@ -59,9 +80,15 @@ async function bootstrap() {
     .build();
   const swaggerUiOptions: SwaggerCustomOptions = {
     swaggerOptions: {
-      persistAuthorization: true, // Keeps token after refresh
+      persistAuthorization: true,
     },
     customSiteTitle: 'API Documentation',
+    customCssUrl:
+      'https://cdnjs.cloudflare.com/ajax/libs/swagger-ui/4.15.5/swagger-ui.min.css',
+    customJs: [
+      'https://cdnjs.cloudflare.com/ajax/libs/swagger-ui/4.15.5/swagger-ui-bundle.min.js',
+      'https://cdnjs.cloudflare.com/ajax/libs/swagger-ui/4.15.5/swagger-ui-standalone-preset.min.js',
+    ],
   };
   const document = SwaggerModule.createDocument(app, config);
   SwaggerModule.setup('api', app, document, swaggerUiOptions);
