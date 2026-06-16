@@ -21,9 +21,7 @@ export class warehouseAddressDto {
   @IsString()
   @Transform(({ value }: { value: string }) => value.trim())
   address_line_1!: string;
-  @IsString()
-  @Transform(({ value }: { value: string }) => value.trim())
-  address_line_2!: string;
+
   @IsString()
   @Transform(({ value }: { value: string }) => value.trim())
   city!: string;
@@ -70,11 +68,6 @@ export class updateWarehouseAddressDto {
   @IsString()
   @Transform(({ value }: { value: string }) => value.trim())
   address_line_1!: string;
-
-  @IsOptional()
-  @IsString()
-  @Transform(({ value }: { value: string }) => value.trim())
-  address_line_2!: string;
 
   @IsOptional()
   @IsString()

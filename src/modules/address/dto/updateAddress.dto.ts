@@ -32,11 +32,6 @@ export class UpdateAddressDto {
   @IsOptional()
   @IsString()
   @Transform(({ value }: { value: string }) => value.trim())
-  address_line_2!: string;
-
-  @IsOptional()
-  @IsString()
-  @Transform(({ value }: { value: string }) => value.trim())
   city!: string;
 
   @IsOptional()

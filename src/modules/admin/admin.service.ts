@@ -93,8 +93,12 @@ export class AdminService {
         role: adminRole.role_name,
       };
 
+      const expiresIn: any = process.env.JWT_EXPIRES_IN
+        ? (isNaN(Number(process.env.JWT_EXPIRES_IN)) ? process.env.JWT_EXPIRES_IN : parseInt(process.env.JWT_EXPIRES_IN, 10))
+        : '7d';
+
       const accessToken = await this.jwtService.signAsync(payload, {
-        expiresIn: '5h',
+        expiresIn,
         secret: process.env.JWT_SECRET || 'defaultSecret',
       });
       const refreshToken = await this.jwtService.signAsync(payload, {

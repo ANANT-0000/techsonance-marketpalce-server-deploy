@@ -81,7 +81,7 @@ export class OrdersService {
     private readonly policyResolutionService: PolicyResolutionService,
     private readonly promotionService: PromotionsService,
     private readonly couponService: CouponService,
-  ) { }
+  ) {}
   private async resolveCompanyId(domain: string): Promise<string> {
     const filteredDomain = domainExtractor(domain);
     const companyId = await this.companyService.find(filteredDomain);
@@ -201,9 +201,12 @@ export class OrdersService {
           })
           .returning({ id: orders.id })
           .catch((error) => {
-            throw new InternalServerErrorException(OrdersErrorKeyEnum.FAILED_TO_CREATE_ORDER, {
-              cause: error,
-            });
+            throw new InternalServerErrorException(
+              OrdersErrorKeyEnum.FAILED_TO_CREATE_ORDER,
+              {
+                cause: error,
+              },
+            );
           });
         // 5. Create GST Invoice record
         const [updatedConfig] = await tx
@@ -417,9 +420,12 @@ export class OrdersService {
       ) {
         throw error;
       }
-      throw new InternalServerErrorException(OrdersErrorKeyEnum.FAILED_TO_CREATE_ORDER, {
-        cause: error,
-      });
+      throw new InternalServerErrorException(
+        OrdersErrorKeyEnum.FAILED_TO_CREATE_ORDER,
+        {
+          cause: error,
+        },
+      );
     }
   }
   // ── All other methods unchanged below this line ──────────────────
@@ -444,9 +450,12 @@ export class OrdersService {
       }
       return orderResult;
     } catch (error) {
-      throw new InternalServerErrorException(OrdersErrorKeyEnum.FAILED_TO_FETCH_ORDER, {
-        cause: error,
-      });
+      throw new InternalServerErrorException(
+        OrdersErrorKeyEnum.FAILED_TO_FETCH_ORDER,
+        {
+          cause: error,
+        },
+      );
     }
   }
   async getAllOrders(filters?: {
@@ -463,9 +472,12 @@ export class OrdersService {
       });
       return allOrders;
     } catch (error) {
-      throw new InternalServerErrorException(OrdersErrorKeyEnum.FAILED_TO_FETCH_ORDERS, {
-        cause: error,
-      });
+      throw new InternalServerErrorException(
+        OrdersErrorKeyEnum.FAILED_TO_FETCH_ORDERS,
+        {
+          cause: error,
+        },
+      );
     }
   }
   async completeOrderVerification(
@@ -489,15 +501,48 @@ export class OrdersService {
     message: string;
   }> {
     if (!orderId) {
-      throw new HttpException(OrdersErrorKeyEnum.ORDER_ID_IS_REQUIRED, HttpStatus.BAD_REQUEST);
+      throw new HttpException(
+        OrdersErrorKeyEnum.ORDER_ID_IS_REQUIRED,
+        HttpStatus.BAD_REQUEST,
+      );
     }
     if (!companyId) {
-      throw new HttpException(OrdersErrorKeyEnum.COMPANY_ID_IS_REQUIRED, HttpStatus.BAD_REQUEST);
+      throw new HttpException(
+        OrdersErrorKeyEnum.COMPANY_ID_IS_REQUIRED,
+        HttpStatus.BAD_REQUEST,
+      );
     }
     try {
       if (!existingOrder || !existingOrder.user_id) {
-        throw new HttpException(OrdersErrorKeyEnum.ORDER_NOT_FOUND, HttpStatus.NOT_FOUND);
+        throw new HttpException(
+          OrdersErrorKeyEnum.ORDER_NOT_FOUND,
+          HttpStatus.NOT_FOUND,
+        );
       }
+
+      // Enforce idempotency: if the order is already verified (not PENDING), return early.
+      const [orderRecord] = await this.db
+        .select({ order_status: orders.order_status })
+        .from(orders)
+        .where(eq(orders.id, orderId))
+        .limit(1);
+
+      if (!orderRecord) {
+        throw new HttpException(
+          OrdersErrorKeyEnum.ORDER_NOT_FOUND,
+          HttpStatus.NOT_FOUND,
+        );
+      }
+
+      if (orderRecord.order_status !== OrderStatus.PENDING) {
+        return {
+          tx: this.db as unknown as DrizzleService,
+          success: orderRecord.order_status !== OrderStatus.CANCELLED,
+          orderId,
+          message: `Order verification already completed with status: ${orderRecord.order_status}`,
+        };
+      }
+
       const orderLines = await this.db
         .select({
           variantId: order_items.product_variant_id,
@@ -508,29 +553,21 @@ export class OrdersService {
       return this.db.transaction(async (tx) => {
         if (isSuccess) {
           const orderItemsRecord = await tx
-            .select()
+            .select({ id: order_items.id })
             .from(order_items)
             .where(eq(order_items.order_id, orderId));
+
           if (orderItemsRecord.length > 0) {
-            await Promise.all(
-              orderItemsRecord.map((item) =>
-                tx
-                  .update(order_items)
-                  .set({ order_status: OrderStatus.PROCESSING })
-                  .where(
-                    and(
-                      eq(order_items.order_id, orderId),
-                      eq(order_items.id, item.id),
-                    ),
-                  )
-                  .catch((error) => {
-                    throw new InternalServerErrorException(
-                      OrdersErrorKeyEnum.FAILED_TO_UPDATE_ORDER_STATUS,
-                      { cause: error },
-                    );
-                  }),
-              ),
-            );
+            await tx
+              .update(order_items)
+              .set({ order_status: OrderStatus.PROCESSING })
+              .where(eq(order_items.order_id, orderId))
+              .catch((error) => {
+                throw new InternalServerErrorException(
+                  OrdersErrorKeyEnum.FAILED_TO_UPDATE_ORDER_STATUS,
+                  { cause: error },
+                );
+              });
           }
           await tx
             .update(orders)
@@ -543,13 +580,10 @@ export class OrdersService {
               );
             });
 
-          if (!orderItemsRecord[0]?.order_id) {
-            throw new HttpException(OrdersErrorKeyEnum.ORDER_NOT_FOUND, HttpStatus.NOT_FOUND);
-          }
           await tx
             .update(payments)
             .set({ payment_status: PaymentStatus.COMPLETED })
-            .where(eq(payments.order_id, orderItemsRecord[0].order_id))
+            .where(eq(payments.order_id, orderId))
             .returning()
             .catch((error) => {
               throw new InternalServerErrorException(
@@ -565,8 +599,7 @@ export class OrdersService {
                 orderId,
                 Number(existingOrder.total_amount),
               )
-              .catch((error) => {
-              });
+              .catch((error) => {});
           }
           // Fire-and-forget invoice generation
           // this.invoiceService
@@ -620,31 +653,16 @@ export class OrdersService {
             companyId,
             tx as DrizzleService,
           );
-          const orderItemsRecord = await tx
-            .select({ id: order_items.id })
-            .from(order_items)
-            .where(eq(order_items.order_id, orderId));
-          if (orderItemsRecord.length > 0) {
-            await Promise.all(
-              orderItemsRecord.map((item) =>
-                tx
-                  .update(order_items)
-                  .set({ order_status: OrderStatus.CANCELLED })
-                  .where(
-                    and(
-                      eq(order_items.order_id, orderId),
-                      eq(order_items.id, item.id),
-                    ),
-                  )
-                  .catch((error) => {
-                    throw new InternalServerErrorException(
-                      OrdersErrorKeyEnum.FAILED_TO_UPDATE_ORDER_STATUS,
-                      { cause: error },
-                    );
-                  }),
-              ),
-            );
-          }
+          await tx
+            .update(order_items)
+            .set({ order_status: OrderStatus.CANCELLED })
+            .where(eq(order_items.order_id, orderId))
+            .catch((error) => {
+              throw new InternalServerErrorException(
+                OrdersErrorKeyEnum.FAILED_TO_UPDATE_ORDER_STATUS,
+                { cause: error },
+              );
+            });
           await tx
             .update(orders)
             .set({ order_status: OrderStatus.CANCELLED })
@@ -658,7 +676,7 @@ export class OrdersService {
           await tx
             .update(payments)
             .set({ payment_status: PaymentStatus.FAILED })
-            .where(eq(payments.order_id, existingOrder.id))
+            .where(eq(payments.order_id, orderId))
             .catch((error) => {
               throw new InternalServerErrorException(
                 OrdersErrorKeyEnum.FAILED_TO_UPDATE_PAYMENT_STATUS,
@@ -689,7 +707,10 @@ export class OrdersService {
   async getOrdersCount(userId: string, domain: string) {
     try {
       if (!userId) {
-        throw new HttpException(OrdersErrorKeyEnum.USER_ID_IS_REQUIRED, HttpStatus.BAD_REQUEST);
+        throw new HttpException(
+          OrdersErrorKeyEnum.USER_ID_IS_REQUIRED,
+          HttpStatus.BAD_REQUEST,
+        );
       }
       const companyId = await this.resolveCompanyId(domain);
       const [ordersCount] = await this.db
@@ -758,7 +779,12 @@ export class OrdersService {
             },
             with: {
               variant: {
-                columns: { id: true, variant_name: true, price: true, product_id: true },
+                columns: {
+                  id: true,
+                  variant_name: true,
+                  price: true,
+                  product_id: true,
+                },
                 with: {
                   images: {
                     where: eq(product_images.is_primary, true),
@@ -782,7 +808,7 @@ export class OrdersService {
             columns: {
               name: true,
               address_line_1: true,
-              address_line_2: true,
+
               city: true,
               state: true,
               postal_code: true,
@@ -791,11 +817,14 @@ export class OrdersService {
           },
           payment: true,
           shipping: { columns: { tracking_url: true } },
-          gstInvoice: true
+          gstInvoice: true,
         },
       });
       if (!orderDetails) {
-        throw new HttpException(OrdersErrorKeyEnum.ORDER_NOT_FOUND, HttpStatus.NOT_FOUND);
+        throw new HttpException(
+          OrdersErrorKeyEnum.ORDER_NOT_FOUND,
+          HttpStatus.NOT_FOUND,
+        );
       }
       return orderDetails;
     } catch (error) {
@@ -822,10 +851,10 @@ export class OrdersService {
             eq(order_items.order_id, orders.id),
             Object.values(OrderStatus).includes(status as OrderStatus)
               ? and(
-                // @ts-ignore
-                eq(order_items.order_status, status),
-                gt(order_items.quantity, 0),
-              )
+                  // @ts-ignore
+                  eq(order_items.order_status, status),
+                  gt(order_items.quantity, 0),
+                )
               : undefined,
           ),
         )
@@ -840,10 +869,10 @@ export class OrdersService {
               eq(order_items.order_id, orders.id),
               Object.values(OrderStatus).includes(status as OrderStatus)
                 ? and(
-                  // @ts-ignore
-                  eq(order_items.order_status, status),
-                  gt(order_items.quantity, 0),
-                )
+                    // @ts-ignore
+                    eq(order_items.order_status, status),
+                    gt(order_items.quantity, 0),
+                  )
                 : undefined,
             ),
           )
@@ -864,10 +893,10 @@ export class OrdersService {
           items: {
             where: Object.values(OrderStatus).includes(status as OrderStatus)
               ? and(
-                // @ts-ignore
-                eq(order_items.order_status, status),
-                gt(order_items.quantity, 0),
-              )
+                  // @ts-ignore
+                  eq(order_items.order_status, status),
+                  gt(order_items.quantity, 0),
+                )
               : undefined,
             columns: { order_status: true, quantity: true, price: true },
             with: {
@@ -892,9 +921,12 @@ export class OrdersService {
       return { orders: ordersList, totalCount: totalOrders.length };
     } catch (error) {
       if (error instanceof HttpException) throw error;
-      throw new InternalServerErrorException(OrdersErrorKeyEnum.FAILED_TO_RETRIEVE_ORDERS_LIST, {
-        cause: error,
-      });
+      throw new InternalServerErrorException(
+        OrdersErrorKeyEnum.FAILED_TO_RETRIEVE_ORDERS_LIST,
+        {
+          cause: error,
+        },
+      );
     }
   }
   async getOrderDetails(orderId: string, domain: string) {
@@ -938,7 +970,7 @@ export class OrdersService {
                           address: {
                             columns: {
                               address_line_1: true,
-                              address_line_2: true,
+
                               city: true,
                               state: true,
                               postal_code: true,
@@ -966,7 +998,7 @@ export class OrdersService {
             columns: {
               name: true,
               address_line_1: true,
-              address_line_2: true,
+
               city: true,
               state: true,
               postal_code: true,
@@ -979,7 +1011,10 @@ export class OrdersService {
         },
       });
       if (!row) {
-        throw new HttpException(OrdersErrorKeyEnum.ORDER_NOT_FOUND, HttpStatus.NOT_FOUND);
+        throw new HttpException(
+          OrdersErrorKeyEnum.ORDER_NOT_FOUND,
+          HttpStatus.NOT_FOUND,
+        );
       }
       const warehouseIds = new Set(
         row.items.map((i) => i?.variant?.inventory?.warehouse_id ?? null),
@@ -1013,20 +1048,19 @@ export class OrdersService {
             invoice: item.invoice ?? null,
             warehouse: warehouse
               ? {
-                id: inventory?.warehouse_id ?? null,
-                name: warehouse.warehouse_name,
-                address: warehouse.address
-                  ? {
-                    address_line_1: warehouse.address.address_line_1,
-                    address_line_2:
-                      warehouse.address.address_line_2 ?? null,
-                    city: warehouse.address.city,
-                    state: warehouse.address.state,
-                    postal_code: warehouse.address.postal_code,
-                    country: warehouse.address.country,
-                  }
-                  : null,
-              }
+                  id: inventory?.warehouse_id ?? null,
+                  name: warehouse.warehouse_name,
+                  address: warehouse.address
+                    ? {
+                        address_line_1: warehouse.address.address_line_1,
+
+                        city: warehouse.address.city,
+                        state: warehouse.address.state,
+                        postal_code: warehouse.address.postal_code,
+                        country: warehouse.address.country,
+                      }
+                    : null,
+                }
               : null,
             product_variant: {
               id: item.variant?.id ?? null,
@@ -1038,20 +1072,20 @@ export class OrdersService {
         }),
         shipping_address: row.address
           ? {
-            name: row.address.name,
-            address_line_1: row.address.address_line_1,
-            address_line_2: row.address.address_line_2 ?? null,
-            city: row.address.city,
-            state: row.address.state,
-            postal_code: row.address.postal_code,
-            country: row.address.country,
-          }
+              name: row.address.name,
+              address_line_1: row.address.address_line_1,
+
+              city: row.address.city,
+              state: row.address.state,
+              postal_code: row.address.postal_code,
+              country: row.address.country,
+            }
           : null,
         payment: row.payment
           ? {
-            amount: row.payment.amount,
-            payment_method: row.payment.payment_method,
-          }
+              amount: row.payment.amount,
+              payment_method: row.payment.payment_method,
+            }
           : null,
         shipping: { tracking_url: row.shipping?.tracking_url ?? null },
       };
@@ -1083,7 +1117,10 @@ export class OrdersService {
         .where(and(eq(orders.id, orderId), eq(orders.company_id, companyId)))
         .limit(1);
       if (!existingOrder) {
-        throw new HttpException(OrdersErrorKeyEnum.ORDER_NOT_FOUND, HttpStatus.NOT_FOUND);
+        throw new HttpException(
+          OrdersErrorKeyEnum.ORDER_NOT_FOUND,
+          HttpStatus.NOT_FOUND,
+        );
       }
       if (
         !Object.values(OrderStatus).includes(
@@ -1134,9 +1171,12 @@ export class OrdersService {
       return orderId;
     } catch (error) {
       if (error instanceof HttpException) throw error;
-      throw new InternalServerErrorException(OrdersErrorKeyEnum.FAILED_TO_UPDATE_ORDER_STATUS, {
-        cause: error,
-      });
+      throw new InternalServerErrorException(
+        OrdersErrorKeyEnum.FAILED_TO_UPDATE_ORDER_STATUS,
+        {
+          cause: error,
+        },
+      );
     }
   }
   async getPendingOrders(
@@ -1160,13 +1200,13 @@ export class OrdersService {
           items: {
             where: filters?.status
               ? or(
-                filters?.status === OrderStatus.PENDING
-                  ? eq(order_items.order_status, OrderStatus.PENDING)
-                  : undefined,
-                filters?.status === OrderStatus.PROCESSING
-                  ? eq(order_items.order_status, OrderStatus.PROCESSING)
-                  : undefined,
-              )
+                  filters?.status === OrderStatus.PENDING
+                    ? eq(order_items.order_status, OrderStatus.PENDING)
+                    : undefined,
+                  filters?.status === OrderStatus.PROCESSING
+                    ? eq(order_items.order_status, OrderStatus.PROCESSING)
+                    : undefined,
+                )
               : undefined,
             columns: {
               id: true,
@@ -1180,9 +1220,12 @@ export class OrdersService {
       });
       return result.map((order) => order.items).flat();
     } catch (error) {
-      throw new InternalServerErrorException(OrdersErrorKeyEnum.FAILED_TO_FETCH_PENDING_ORDERS, {
-        cause: error,
-      });
+      throw new InternalServerErrorException(
+        OrdersErrorKeyEnum.FAILED_TO_FETCH_PENDING_ORDERS,
+        {
+          cause: error,
+        },
+      );
     }
   }
   async getSalesAnalytics(domain: string, days: number = 30) {
@@ -1537,9 +1580,12 @@ export class OrdersService {
       return csvString;
     } catch (error) {
       if (error instanceof InternalServerErrorException) throw error;
-      throw new InternalServerErrorException(OrdersErrorKeyEnum.FAILED_TO_EXPORT_ANALYTICS_CSV, {
-        cause: error,
-      });
+      throw new InternalServerErrorException(
+        OrdersErrorKeyEnum.FAILED_TO_EXPORT_ANALYTICS_CSV,
+        {
+          cause: error,
+        },
+      );
     }
   }
 }

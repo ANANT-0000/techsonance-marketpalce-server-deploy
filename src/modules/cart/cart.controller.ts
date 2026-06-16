@@ -66,12 +66,15 @@ export class CartController {
     @Body('cartItemId') cartItemId: string,
     @Headers('company-domain') domain: string,
   ) {
- 
     return this.cartService.removeCartItem(
       customerId,
       cartId,
       cartItemId,
       domain,
     );
+  }
+  @Delete('item/:cartItemId')
+  deleteItemFromCart(@Param('cartItemId') cartItemId: string) {
+    return this.cartService.deleteItemFromCart(cartItemId);
   }
 }

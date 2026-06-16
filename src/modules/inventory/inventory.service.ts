@@ -144,7 +144,7 @@ export class InventoryService {
                     number: true,
                     address_type: true,
                     address_line_1: true,
-                    address_line_2: true,
+      
                     street: true,
                     city: true,
                     state: true,
@@ -171,7 +171,7 @@ export class InventoryService {
         number: string | null;
         address_type: string | null;
         address_line_1: string | null;
-        address_line_2: string | null;
+    
         street: string | null;
         city: string | null;
         state: string | null;
@@ -383,67 +383,26 @@ export class InventoryService {
   ) {
     try {
       for (const line of orderLines) {
-        const [idv] = await tx
-          .select({
-            id: inventory.id,
-            stock_quantity: inventory.stock_quantity,
-          })
-          .from(inventory)
-          .where(
-            and(
-              eq(inventory.product_variant_id, line.variantId),
-              eq(inventory.company_id, companyId),
-            ),
-          )
-          .limit(1)
-          .for('update');
-        if (!idv) {
-          throw new HttpException(
-            `Inventory not found for variant ${line.variantId}`,
-            HttpStatus.NOT_FOUND,
-          );
-        }
-        if (idv.stock_quantity < line.quantity) {
-          throw new HttpException(
-            `Insufficient stock for variant ${line.variantId}`,
-            HttpStatus.BAD_REQUEST,
-          );
-        }
-        await tx
+        const [updated] = await tx
           .update(inventory)
           .set({
             stock_quantity: sql`${inventory.stock_quantity} - ${line.quantity}`,
           })
           .where(
             and(
-              eq(inventory.id, idv.id),
-              eq(inventory.company_id, companyId),
               eq(inventory.product_variant_id, line.variantId),
+              eq(inventory.company_id, companyId),
+              sql`${inventory.stock_quantity} >= ${line.quantity}`,
             ),
-          );
-      }
-    } catch (error) {
-      if (
-        error instanceof HttpException ||
-        error instanceof InternalServerErrorException
-      ) {
-        throw error;
-      }
-      throw new InternalServerErrorException(InventoryErrorKeyEnum.FAILED_TO_CREATE_INVENTORY, {
-        cause: error,
-      });
-    }
-  }
-  async rollbackStockForOrder(
-    orderLines:
-      | { variantId: string; quantity: number }[]
-      | { variantId: string; quantity: number },
-    companyId: string,
-    tx: DrizzleService,
-  ) {
-    try {
-      if (Array.isArray(orderLines)) {
-        for (const line of orderLines) {
+          )
+          .returning({
+            id: inventory.id,
+            stock_quantity: inventory.stock_quantity,
+          });
+
+        if (!updated) {
+          // If no row was updated, it means either inventory doesn't exist OR stock is insufficient.
+          // Let's do a quick select to determine the exact error to throw.
           const [idv] = await tx
             .select({
               id: inventory.id,
@@ -457,57 +416,64 @@ export class InventoryService {
               ),
             )
             .limit(1);
+
           if (!idv) {
             throw new HttpException(
               `Inventory not found for variant ${line.variantId}`,
               HttpStatus.NOT_FOUND,
             );
-          }
-          await tx
-            .update(inventory)
-            .set({
-              stock_quantity: sql`${inventory.stock_quantity} + ${line.quantity}`,
-            })
-            .where(
-              and(
-                eq(inventory.id, idv.id),
-                eq(inventory.company_id, companyId),
-                eq(inventory.product_variant_id, line.variantId),
-              ),
+          } else {
+            throw new HttpException(
+              `Insufficient stock for variant ${line.variantId}. Available: ${idv.stock_quantity}, requested: ${line.quantity}`,
+              HttpStatus.BAD_REQUEST,
             );
+          }
         }
-      } else {
-        const [idv] = await tx
-          .select({
-            id: inventory.id,
-            stock_quantity: inventory.stock_quantity,
+      }
+    } catch (error) {
+      if (
+        error instanceof HttpException ||
+        error instanceof InternalServerErrorException
+      ) {
+        throw error;
+      }
+      throw new InternalServerErrorException(InventoryErrorKeyEnum.FAILED_TO_CREATE_INVENTORY, {
+        cause: error,
+      });
+    }
+  }
+
+  async rollbackStockForOrder(
+    orderLines:
+      | { variantId: string; quantity: number }[]
+      | { variantId: string; quantity: number },
+    companyId: string,
+    tx: DrizzleService,
+  ) {
+    try {
+      const lines = Array.isArray(orderLines) ? orderLines : [orderLines];
+      for (const line of lines) {
+        const [updated] = await tx
+          .update(inventory)
+          .set({
+            stock_quantity: sql`${inventory.stock_quantity} + ${line.quantity}`,
           })
-          .from(inventory)
           .where(
             and(
-              eq(inventory.product_variant_id, orderLines.variantId),
+              eq(inventory.product_variant_id, line.variantId),
               eq(inventory.company_id, companyId),
             ),
           )
-          .limit(1);
-        if (!idv) {
+          .returning({
+            id: inventory.id,
+          });
+
+        if (!updated) {
           throw new HttpException(
-            `Inventory not found for variant ${orderLines.variantId}`,
+            `Inventory not found for variant ${line.variantId}`,
             HttpStatus.NOT_FOUND,
           );
         }
-        await tx
-          .update(inventory)
-          .set({
-            stock_quantity: sql`${inventory.stock_quantity} + ${orderLines.quantity}`,
-          })
-          .where(
-            and(
-              eq(inventory.id, idv.id),
-              eq(inventory.company_id, companyId),
-              eq(inventory.product_variant_id, orderLines.variantId),
-            ),
-          );
       }
     } catch (error) {
       if (

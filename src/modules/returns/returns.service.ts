@@ -80,7 +80,7 @@ export class ReturnsService {
     private readonly inventoryService: InventoryService,
     private readonly companyService: CompanyService,
     private readonly mailService: MailService,
-  ) { }
+  ) {}
 
   private async resolveCompanyId(domain: string): Promise<string> {
     const filteredDomain = domainExtractor(domain);
@@ -94,7 +94,7 @@ export class ReturnsService {
     files: { evidence_images?: Express.Multer.File[] },
     domain: string,
   ) {
-    const failedUploads: { url: string, resource_type: string }[] = [];
+    const failedUploads: { url: string; resource_type: string }[] = [];
     try {
       const companyId = await this.resolveCompanyId(domain);
       const [userDetails] = await this.db
@@ -114,9 +114,12 @@ export class ReturnsService {
           with: { order: true },
         })
         .catch((error) => {
-          throw new InternalServerErrorException(ReturnsErrorKeyEnum.FAILED_TO_FIND_ORDER_ITEM, {
-            cause: error,
-          });
+          throw new InternalServerErrorException(
+            ReturnsErrorKeyEnum.FAILED_TO_FIND_ORDER_ITEM,
+            {
+              cause: error,
+            },
+          );
         });
 
       if (!orderItem || !orderItem.order) {
@@ -151,7 +154,12 @@ export class ReturnsService {
         const uploaded = await this.uploadToCloudService.uploadEvidenceFiles(
           files.evidence_images,
         );
-        failedUploads.push(...uploaded.map(res => ({ url: res.secure_url, resource_type: res.resource_type })))
+        failedUploads.push(
+          ...uploaded.map((res) => ({
+            url: res.secure_url,
+            resource_type: res.resource_type,
+          })),
+        );
         finalResults.push(...uploaded.map((res) => ({ url: res.secure_url })));
       }
 
@@ -201,7 +209,10 @@ export class ReturnsService {
         for (const file of failedUploads) {
           const publicId = extractCloudinaryPublicId(file.url);
           if (publicId) {
-            await this.uploadToCloudService.deleteFile(publicId, file.resource_type);
+            await this.uploadToCloudService.deleteFile(
+              publicId,
+              file.resource_type,
+            );
           }
         }
       }
@@ -251,9 +262,12 @@ export class ReturnsService {
       return returns;
     } catch (error) {
       if (error instanceof InternalServerErrorException) throw error;
-      throw new InternalServerErrorException(ReturnsErrorKeyEnum.FAILED_TO_GET_CUSTOMER_RETURNS, {
-        cause: error,
-      });
+      throw new InternalServerErrorException(
+        ReturnsErrorKeyEnum.FAILED_TO_GET_CUSTOMER_RETURNS,
+        {
+          cause: error,
+        },
+      );
     }
   }
 
@@ -316,9 +330,12 @@ export class ReturnsService {
       return returns;
     } catch (error) {
       if (error instanceof InternalServerErrorException) throw error;
-      throw new InternalServerErrorException(ReturnsErrorKeyEnum.FAILED_TO_GET_VENDOR_RETURNS, {
-        cause: error,
-      });
+      throw new InternalServerErrorException(
+        ReturnsErrorKeyEnum.FAILED_TO_GET_VENDOR_RETURNS,
+        {
+          cause: error,
+        },
+      );
     }
   }
 
@@ -352,7 +369,7 @@ export class ReturnsService {
                       columns: {
                         id: true,
                         address_line_1: true,
-                        address_line_2: true,
+
                         city: true,
                         state: true,
                         country: true,
@@ -380,7 +397,9 @@ export class ReturnsService {
         });
 
       if (!requestDetails) {
-        throw new NotFoundException(ReturnsErrorKeyEnum.RETURN_REQUEST_NOT_FOUND);
+        throw new NotFoundException(
+          ReturnsErrorKeyEnum.RETURN_REQUEST_NOT_FOUND,
+        );
       }
 
       return requestDetails;
@@ -391,9 +410,12 @@ export class ReturnsService {
       ) {
         throw error;
       }
-      throw new InternalServerErrorException(ReturnsErrorKeyEnum.FAILED_TO_FETCH_RETURN_DETAILS, {
-        cause: error,
-      });
+      throw new InternalServerErrorException(
+        ReturnsErrorKeyEnum.FAILED_TO_FETCH_RETURN_DETAILS,
+        {
+          cause: error,
+        },
+      );
     }
   }
 
@@ -424,7 +446,9 @@ export class ReturnsService {
         });
 
       if (!returnRequest) {
-        throw new NotFoundException(ReturnsErrorKeyEnum.RETURN_REQUEST_NOT_FOUND_OR_UNAUTHORIZED);
+        throw new NotFoundException(
+          ReturnsErrorKeyEnum.RETURN_REQUEST_NOT_FOUND_OR_UNAUTHORIZED,
+        );
       }
 
       const currentStatus = returnRequest.status as ReturnStatus;
@@ -448,7 +472,7 @@ export class ReturnsService {
       if (!allowedNext.includes(newStatus)) {
         throw new BadRequestException(
           `Invalid status transition for ${returnType}: ${currentStatus} → ${newStatus}. ` +
-          `Allowed next statuses: [${allowedNext.join(', ') || 'none'}]`,
+            `Allowed next statuses: [${allowedNext.join(', ') || 'none'}]`,
         );
       }
 
@@ -546,9 +570,12 @@ export class ReturnsService {
       ) {
         throw error;
       }
-      throw new InternalServerErrorException(ReturnsErrorKeyEnum.FAILED_TO_UPDATE_RETURN_STATUS, {
-        cause: error,
-      });
+      throw new InternalServerErrorException(
+        ReturnsErrorKeyEnum.FAILED_TO_UPDATE_RETURN_STATUS,
+        {
+          cause: error,
+        },
+      );
     }
   }
 
@@ -673,6 +700,7 @@ export class ReturnsService {
             orderItemId: orderItem.id,
             reason: returnRequest.reason,
             domain: companyId, // passing companyId — companyService.find() handles UUID too
+            tx,
           });
 
           if (customerEmail) {
@@ -768,7 +796,7 @@ export class ReturnsService {
           ) {
             throw new BadRequestException(
               ReturnsErrorKeyEnum.CANNOT_APPROVE_REPLACEMENT_INSUFFICIENT_STOCK +
-              `Available: ${inventoryRecord?.stock_quantity ?? 0}, Required: ${orderItem.quantity}`,
+                `Available: ${inventoryRecord?.stock_quantity ?? 0}, Required: ${orderItem.quantity}`,
             );
           }
 
@@ -954,6 +982,7 @@ export class ReturnsService {
             orderItemId: orderItem.id,
             reason: returnRequest.reason,
             domain: companyId,
+            tx,
           });
 
           if (customerEmail) {
@@ -1026,7 +1055,6 @@ export class ReturnsService {
       if (email) {
         await this.mailService.sendEmail(email, subject, html);
       }
-    } catch (error) {
-    }
+    } catch (error) {}
   }
 }

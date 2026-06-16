@@ -53,6 +53,7 @@ import { SubscriptionGuard } from './modules/subscription/subscription.guard';
 import { TraceModule } from './modules/trace/trace.module';
 import { JwtAuthGuard } from './modules/auth/jwt-auth.guard';
 import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
+import { CustomersModule } from './modules/customers/customers.module';
 export enum RATTELIMIT {
   SHORT = 'short',
   MEDIUM = 'medium',
@@ -110,6 +111,7 @@ export enum RATTELIMIT {
     FeedbackModule,
     NotificationSettingsModule,
     ...(process.env.NODE_ENV !== 'production' ? [TraceModule] : []),
+    CustomersModule,
   ],
   controllers: [AppController, UsersController],
   providers: [

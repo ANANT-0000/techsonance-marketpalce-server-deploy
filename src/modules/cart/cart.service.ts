@@ -25,7 +25,7 @@ export class CartService {
   constructor(
     @Inject(DRIZZLE) private readonly db: DrizzleService,
     private readonly companyService: CompanyService,
-  ) { }
+  ) {}
   private async resolveCompanyId(domain: string): Promise<string> {
     const filterDomain = domainExtractor(domain);
     return this.companyService.find(filterDomain);
@@ -38,7 +38,10 @@ export class CartService {
     try {
       const companyId = await this.resolveCompanyId(domain);
       if (!companyId) {
-        throw new HttpException(CartErrorKeyEnum.COMPANY_NOT_FOUND, HttpStatus.NOT_FOUND);
+        throw new HttpException(
+          CartErrorKeyEnum.COMPANY_NOT_FOUND,
+          HttpStatus.NOT_FOUND,
+        );
       }
       const [isProductVariantExist] = await this.db
         .select({ id: product_variants.id })
@@ -87,9 +90,12 @@ export class CartService {
             })
             .returning({ id: carts.id })
             .catch((error) => {
-              throw new InternalServerErrorException(CartErrorKeyEnum.FAILED_TO_CREATE_CART, {
-                cause: error,
-              });
+              throw new InternalServerErrorException(
+                CartErrorKeyEnum.FAILED_TO_CREATE_CART,
+                {
+                  cause: error,
+                },
+              );
             });
           const [createCartItem] = await tx
             .insert(cart_items)
@@ -124,16 +130,19 @@ export class CartService {
       ) {
         throw error;
       }
-      throw new InternalServerErrorException(CartErrorKeyEnum.FAILED_TO_CREATE_CART_ITEM, {
-        cause: error,
-      });
+      throw new InternalServerErrorException(
+        CartErrorKeyEnum.FAILED_TO_CREATE_CART_ITEM,
+        {
+          cause: error,
+        },
+      );
     }
   }
 
   async findAll(
     customerId: string,
     domain: string,
-    filters: { limit: number, offset: number },
+    filters: { limit: number; offset: number },
   ) {
     try {
       const companyId = await this.resolveCompanyId(domain);
@@ -195,9 +204,12 @@ export class CartService {
           ) {
             throw error;
           }
-          throw new InternalServerErrorException(CartErrorKeyEnum.FAILED_TO_FETCH_CART_ITEM, {
-            cause: error,
-          });
+          throw new InternalServerErrorException(
+            CartErrorKeyEnum.FAILED_TO_FETCH_CART_ITEM,
+            {
+              cause: error,
+            },
+          );
         });
       return cartItems;
     } catch (error) {
@@ -207,9 +219,12 @@ export class CartService {
       ) {
         throw error;
       }
-      throw new InternalServerErrorException(CartErrorKeyEnum.FAILED_TO_FETCH_CART_ITEMS, {
-        cause: error,
-      });
+      throw new InternalServerErrorException(
+        CartErrorKeyEnum.FAILED_TO_FETCH_CART_ITEMS,
+        {
+          cause: error,
+        },
+      );
     }
   }
 
@@ -232,9 +247,12 @@ export class CartService {
           ),
         )
         .catch((error) => {
-          throw new InternalServerErrorException(CartErrorKeyEnum.FAILED_TO_FETCH_CART_ITEM, {
-            cause: error,
-          });
+          throw new InternalServerErrorException(
+            CartErrorKeyEnum.FAILED_TO_FETCH_CART_ITEM,
+            {
+              cause: error,
+            },
+          );
         });
       if (!cartItem) {
         throw new NotFoundException(
@@ -279,9 +297,12 @@ export class CartService {
           if (error instanceof NotFoundException) {
             throw error;
           }
-          throw new InternalServerErrorException(CartErrorKeyEnum.FAILED_TO_UPDATE_CART_ITEM, {
-            cause: error,
-          });
+          throw new InternalServerErrorException(
+            CartErrorKeyEnum.FAILED_TO_UPDATE_CART_ITEM,
+            {
+              cause: error,
+            },
+          );
         });
       const updatedCartItem = await this.db
         .update(cart_items)
@@ -298,9 +319,12 @@ export class CartService {
       if (error instanceof NotFoundException) {
         throw error;
       }
-      throw new InternalServerErrorException(CartErrorKeyEnum.FAILED_TO_UPDATE_CART_ITEM, {
-        cause: error,
-      });
+      throw new InternalServerErrorException(
+        CartErrorKeyEnum.FAILED_TO_UPDATE_CART_ITEM,
+        {
+          cause: error,
+        },
+      );
     }
   }
 
@@ -337,7 +361,11 @@ export class CartService {
             },
           );
         });
-      if (!isUserCartExits || !isUserCartExits.id || isUserCartExits.id === '') {
+      if (
+        !isUserCartExits ||
+        !isUserCartExits.id ||
+        isUserCartExits.id === ''
+      ) {
         throw new NotFoundException(CartErrorKeyEnum.USER_CART_NOT_FOUND);
       }
 
@@ -351,9 +379,12 @@ export class CartService {
           if (error instanceof NotFoundException) {
             throw error;
           }
-          throw new InternalServerErrorException(CartErrorKeyEnum.FAILED_TO_FIND_CART_ITEM, {
-            cause: error,
-          });
+          throw new InternalServerErrorException(
+            CartErrorKeyEnum.FAILED_TO_FIND_CART_ITEM,
+            {
+              cause: error,
+            },
+          );
         });
 
       if (!cartItemRecord) {
@@ -428,9 +459,39 @@ export class CartService {
       ) {
         throw error;
       }
-      throw new InternalServerErrorException(CartErrorKeyEnum.FAILED_TO_DELETE_CART_ITEM, {
-        cause: error,
+      throw new InternalServerErrorException(
+        CartErrorKeyEnum.FAILED_TO_DELETE_CART_ITEM,
+        {
+          cause: error,
+        },
+      );
+    }
+  }
+  async deleteItemFromCart(cartItemId: string) {
+    try {
+      await this.db.transaction(async (tx) => {
+        const [cartItem] = await tx
+          .select({ id: cart_items.id, quantity: cart_items.quantity })
+          .from(cart_items)
+          .where(eq(cart_items.id, cartItemId));
+        if (!cartItem) {
+          throw new NotFoundException(
+            CartErrorKeyEnum.FAILED_TO_FETCH_CART_ITEM,
+          );
+        }
+        const deleteResponse = await tx
+          .delete(cart_items)
+          .where(eq(cart_items.id, cartItemId));
+        return deleteResponse;
       });
+    } catch (error) {
+      if (error instanceof NotFoundException) {
+        throw error;
+      }
+      throw new InternalServerErrorException(
+        CartErrorKeyEnum.FAILED_TO_DELETE_CART_ITEM,
+        { cause: error },
+      );
     }
   }
 }

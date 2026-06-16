@@ -382,16 +382,16 @@ export class UsersService {
         company_id: userAndCompanyRecord.company_id,
         password_change_required: userRecord.password_change_required,
       };
-      const expiresIn = process.env.JWT_EXPIRES_IN
-        ? parseInt(process.env.JWT_EXPIRES_IN, 10)
-        : 3600;
+      const expiresIn: any = process.env.JWT_EXPIRES_IN
+        ? (isNaN(Number(process.env.JWT_EXPIRES_IN)) ? process.env.JWT_EXPIRES_IN : parseInt(process.env.JWT_EXPIRES_IN, 10))
+        : '7d';
 
       const accessToken = await this.jwtService.signAsync(payload, {
         expiresIn,
         secret: process.env.JWT_SECRET || 'defaultSecret',
       });
       const refreshToken = await this.jwtService.signAsync(payload, {
-        expiresIn,
+        expiresIn: '7d',
         secret: process.env.JWT_REFRESH_SECRET || 'defaultSecret',
       });
       const filteredUser = {

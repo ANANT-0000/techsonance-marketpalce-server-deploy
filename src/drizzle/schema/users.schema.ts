@@ -64,7 +64,7 @@ export const address = pg.pgTable('address', {
   number: pg.text('number').notNull(),
   address_type: pg.text('address_type').notNull(),
   address_line_1: pg.text('address_line_1').notNull(),
-  address_line_2: pg.text('address_line_2').notNull(),
+
   street: pg.text('street').notNull(),
   city: pg.text('city').notNull(),
   state: pg.text('state').notNull(),

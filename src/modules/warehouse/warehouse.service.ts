@@ -68,7 +68,7 @@ export class WarehouseService {
             number: warehouseAddressDto.phone,
             address_type: warehouseAddressDto.address_for,
             address_line_1: warehouseAddressDto.address_line_1,
-            address_line_2: warehouseAddressDto.address_line_2,
+
             street: warehouseAddressDto.street,
             city: warehouseAddressDto.city,
             state: warehouseAddressDto.state,
@@ -92,9 +92,12 @@ export class WarehouseService {
       if (error instanceof HttpException) {
         throw error;
       }
-      throw new InternalServerErrorException(WarehouseErrorKeyEnum.FAILED_TO_CREATE_WAREHOUSE, {
-        cause: error,
-      });
+      throw new InternalServerErrorException(
+        WarehouseErrorKeyEnum.FAILED_TO_CREATE_WAREHOUSE,
+        {
+          cause: error,
+        },
+      );
     }
   }
 
@@ -116,15 +119,21 @@ export class WarehouseService {
           return warehouses;
         })
         .catch((error) => {
-          throw new InternalServerErrorException(WarehouseErrorKeyEnum.FAILED_TO_FIND_WAREHOUSES, {
-            cause: error,
-          });
+          throw new InternalServerErrorException(
+            WarehouseErrorKeyEnum.FAILED_TO_FIND_WAREHOUSES,
+            {
+              cause: error,
+            },
+          );
         });
       return warehouses;
     } catch (error) {
-      throw new InternalServerErrorException(WarehouseErrorKeyEnum.FAILED_TO_FIND_WAREHOUSES, {
-        cause: error,
-      });
+      throw new InternalServerErrorException(
+        WarehouseErrorKeyEnum.FAILED_TO_FIND_WAREHOUSES,
+        {
+          cause: error,
+        },
+      );
     }
   }
   async findOptions(domain: string) {
@@ -142,15 +151,21 @@ export class WarehouseService {
           return warehouses;
         })
         .catch((error) => {
-          throw new InternalServerErrorException(WarehouseErrorKeyEnum.FAILED_TO_FIND_WAREHOUSES, {
-            cause: error,
-          });
+          throw new InternalServerErrorException(
+            WarehouseErrorKeyEnum.FAILED_TO_FIND_WAREHOUSES,
+            {
+              cause: error,
+            },
+          );
         });
       return warehouses;
     } catch (error) {
-      throw new InternalServerErrorException(WarehouseErrorKeyEnum.FAILED_TO_FIND_WAREHOUSES, {
-        cause: error,
-      });
+      throw new InternalServerErrorException(
+        WarehouseErrorKeyEnum.FAILED_TO_FIND_WAREHOUSES,
+        {
+          cause: error,
+        },
+      );
     }
   }
   async findOne(id: string, domain: string) {
@@ -168,9 +183,12 @@ export class WarehouseService {
           },
         })
         .catch((error) => {
-          throw new InternalServerErrorException(WarehouseErrorKeyEnum.FAILED_TO_FIND_WAREHOUSE, {
-            cause: error,
-          });
+          throw new InternalServerErrorException(
+            WarehouseErrorKeyEnum.FAILED_TO_FIND_WAREHOUSE,
+            {
+              cause: error,
+            },
+          );
         });
       return warehouseRecord;
     } catch (error) {
@@ -180,9 +198,12 @@ export class WarehouseService {
       ) {
         throw error;
       }
-      throw new InternalServerErrorException(WarehouseErrorKeyEnum.FAILED_TO_FIND_WAREHOUSE, {
-        cause: error,
-      });
+      throw new InternalServerErrorException(
+        WarehouseErrorKeyEnum.FAILED_TO_FIND_WAREHOUSE,
+        {
+          cause: error,
+        },
+      );
     }
   }
   async update(
@@ -198,7 +219,10 @@ export class WarehouseService {
         .from(warehouse)
         .where(and(eq(warehouse.company_id, companyId), eq(warehouse.id, id)));
       if (!existingWarehouse?.id) {
-        throw new HttpException(WarehouseErrorKeyEnum.WAREHOUSE_NOT_FOUND, HttpStatus.NOT_FOUND);
+        throw new HttpException(
+          WarehouseErrorKeyEnum.WAREHOUSE_NOT_FOUND,
+          HttpStatus.NOT_FOUND,
+        );
       }
       await this.db.transaction(async (tx) => {
         if (updateWarehouseDto.is_default) {
@@ -224,7 +248,7 @@ export class WarehouseService {
             number: updateWarehouseDto.phone,
             address_type: updateWarehouseDto.address_for,
             address_line_1: updateWarehouseDto.address_line_1,
-            address_line_2: updateWarehouseDto.address_line_2,
+
             street: updateWarehouseDto.street,
             city: updateWarehouseDto.city,
             state: updateWarehouseDto.state,
@@ -235,9 +259,12 @@ export class WarehouseService {
           .where(eq(address.id, existingWarehouse.address_id))
           .returning({ id: address.id })
           .catch((error) => {
-            throw new InternalServerErrorException(WarehouseErrorKeyEnum.FAILED_TO_UPDATE_ADDRESS, {
-              cause: error,
-            });
+            throw new InternalServerErrorException(
+              WarehouseErrorKeyEnum.FAILED_TO_UPDATE_ADDRESS,
+              {
+                cause: error,
+              },
+            );
           });
         const updatedWarehouse = await tx
           .update(warehouse)
@@ -270,9 +297,12 @@ export class WarehouseService {
       ) {
         throw error;
       }
-      throw new InternalServerErrorException(WarehouseErrorKeyEnum.FAILED_TO_UPDATE_WAREHOUSE, {
-        cause: error,
-      });
+      throw new InternalServerErrorException(
+        WarehouseErrorKeyEnum.FAILED_TO_UPDATE_WAREHOUSE,
+        {
+          cause: error,
+        },
+      );
     }
   }
 
@@ -283,9 +313,12 @@ export class WarehouseService {
         .delete(warehouse)
         .where(and(eq(warehouse.id, id), eq(warehouse.company_id, companyId)))
         .catch((error) => {
-          throw new InternalServerErrorException(WarehouseErrorKeyEnum.FAILED_TO_DELETE_WAREHOUSE, {
-            cause: error,
-          });
+          throw new InternalServerErrorException(
+            WarehouseErrorKeyEnum.FAILED_TO_DELETE_WAREHOUSE,
+            {
+              cause: error,
+            },
+          );
         });
       return deleted;
     } catch (error) {
@@ -295,9 +328,12 @@ export class WarehouseService {
       ) {
         throw error;
       }
-      throw new InternalServerErrorException(WarehouseErrorKeyEnum.FAILED_TO_DELETE_WAREHOUSE, {
-        cause: error,
-      });
+      throw new InternalServerErrorException(
+        WarehouseErrorKeyEnum.FAILED_TO_DELETE_WAREHOUSE,
+        {
+          cause: error,
+        },
+      );
     }
   }
 }

@@ -513,8 +513,12 @@ export class VendorsService {
         password_change_required: user.password_change_required,
       };
 
+      const expiresIn: any = process.env.JWT_EXPIRES_IN
+        ? (isNaN(Number(process.env.JWT_EXPIRES_IN)) ? process.env.JWT_EXPIRES_IN : parseInt(process.env.JWT_EXPIRES_IN, 10))
+        : '7d';
+
       const accessToken = await this.jwtService.signAsync(payload, {
-        expiresIn: '1h',
+        expiresIn,
         secret: process.env.JWT_SECRET,
       });
       const refreshToken = await this.jwtService.signAsync(payload, {
@@ -1133,7 +1137,7 @@ export class VendorsService {
         number: addressData.phone,
         address_type: AddressType.BUSINESS,
         address_line_1: addressData.address_line_1,
-        address_line_2: addressData.address_line_2,
+   
         street: addressData.street,
         city: addressData.city,
         state: addressData.state,

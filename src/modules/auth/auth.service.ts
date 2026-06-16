@@ -323,9 +323,15 @@ export class AuthService {
           role: roleRecord.role_name,
         };
 
+        const expiresIn: any = process.env.JWT_EXPIRES_IN
+          ? isNaN(Number(process.env.JWT_EXPIRES_IN))
+            ? process.env.JWT_EXPIRES_IN
+            : parseInt(process.env.JWT_EXPIRES_IN, 10)
+          : '7d';
+
         const accessToken = this.jwtService.sign(access_payload, {
           secret: process.env.JWT_SECRET,
-          expiresIn: '1d',
+          expiresIn,
         });
         const refreshToken = this.jwtService.sign(refresh_payload, {
           secret: process.env.JWT_REFRESH_SECRET,
@@ -395,9 +401,15 @@ export class AuthService {
         role: roleRecord.role_name,
       };
 
+      const expiresIn: any = process.env.JWT_EXPIRES_IN
+        ? isNaN(Number(process.env.JWT_EXPIRES_IN))
+          ? process.env.JWT_EXPIRES_IN
+          : parseInt(process.env.JWT_EXPIRES_IN, 10)
+        : '7d';
+
       const accessToken = this.jwtService.sign(payload, {
         secret: process.env.JWT_SECRET,
-        expiresIn: '1d',
+        expiresIn,
       });
       const refreshToken = this.jwtService.sign(payload, {
         secret: process.env.JWT_REFRESH_SECRET,

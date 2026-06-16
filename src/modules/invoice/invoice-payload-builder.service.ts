@@ -168,7 +168,7 @@ function formatDbAddress(
   return {
     recipientName: recipientName ?? addr.name ?? '',
     addressLine1: addr.address_line_1,
-    addressLine2: addr.address_line_2 || undefined,
+
     street: addr.street || undefined,
     city: addr.city,
     state: addr.state,
@@ -203,7 +203,7 @@ export class InvoicePayloadBuilderService {
         with: {
           customer: true,
           address: true,
-          promotionUsage: true, 
+          promotionUsage: true,
           promotionAnalyticsEvents: {
             columns: {
               promotion_id: true,
@@ -389,7 +389,10 @@ export class InvoicePayloadBuilderService {
         .filter(Boolean)
         .join(' ') || 'Customer';
     const discountAmount = Array.isArray(order.promotionUsage)
-      ? order.promotionUsage.reduce((sum, usage) => sum + Number(usage.discount_amount ?? 0), 0)
+      ? order.promotionUsage.reduce(
+          (sum, usage) => sum + Number(usage.discount_amount ?? 0),
+          0,
+        )
       : 0;
 
     const addr = order.address;
@@ -403,7 +406,7 @@ export class InvoicePayloadBuilderService {
       shippingAddress: {
         recipientName: customerName,
         addressLine1: addr.address_line_1,
-        addressLine2: addr.address_line_2 || undefined,
+
         street: addr.street || undefined,
         city: addr.city,
         state: addr.state.toUpperCase(),
@@ -584,7 +587,8 @@ export class InvoicePayloadBuilderService {
 
       // Keep 2 decimal places so the taxable base doesn't lose fractional paise.
       // Rounding to an integer here was the primary cause of grand-total drift.
-      const netAmount = Math.round((lineTaxableAmount - lineDiscount) * 100) / 100;
+      const netAmount =
+        Math.round((lineTaxableAmount - lineDiscount) * 100) / 100;
 
       runningSubTotal += netAmount;
 
@@ -593,7 +597,8 @@ export class InvoicePayloadBuilderService {
         sku: item.variant?.sku ?? undefined,
         quantity: qty,
         // GST-exclusive unit price = inclusive price / (1 + rate/100)
-        unitPrice: Math.round((unitPriceInclusive / (1 + taxRate / 100)) * 100) / 100,
+        unitPrice:
+          Math.round((unitPriceInclusive / (1 + taxRate / 100)) * 100) / 100,
         discount: lineDiscount,
         netAmount,
         taxRate,
@@ -624,7 +629,8 @@ export class InvoicePayloadBuilderService {
         if (!isInterStateSupply && gstData.totalCgst > 0) {
           // CGST+SGST: combined rate = CGST% + SGST% = 2 × (totalCgst / exclusiveBase)
           items[i].taxRate =
-            Math.round((gstData.totalCgst / runningSubTotal) * 2 * 100 * 100) / 100;
+            Math.round((gstData.totalCgst / runningSubTotal) * 2 * 100 * 100) /
+            100;
         } else if (isInterStateSupply && gstData.totalIgst > 0) {
           // IGST: rate = totalIgst / exclusiveBase
           items[i].taxRate =
@@ -646,7 +652,8 @@ export class InvoicePayloadBuilderService {
     const grandTotal = Math.round((runningSubTotal + totalTax) * 100) / 100;
 
     const totals: InvoiceTotals = {
-      subTotal: Math.round((runningSubTotal + orderInfo.discountAmount) * 100) / 100,
+      subTotal:
+        Math.round((runningSubTotal + orderInfo.discountAmount) * 100) / 100,
       totalDiscount: orderInfo.discountAmount,
       netAmount: Math.round(runningSubTotal * 100) / 100,
       totalCgst: gstData?.totalCgst ?? 0,
@@ -678,7 +685,7 @@ export class InvoicePayloadBuilderService {
       ? {
           recipientName: legal?.legal_name ?? vendorInfo.companyName,
           addressLine1: warehouseAddr.address_line_1,
-          addressLine2: warehouseAddr.address_line_2 || undefined,
+
           street: warehouseAddr.street || undefined,
           city: warehouseAddr.city,
           state: warehouseAddr.state,
@@ -710,7 +717,7 @@ export class InvoicePayloadBuilderService {
     const shippingAddress: InvoiceAddress = {
       recipientName: sa.recipientName,
       addressLine1: sa.addressLine1,
-      addressLine2: sa.addressLine2,
+
       street: sa.street,
       city: sa.city,
       state: sa.state,

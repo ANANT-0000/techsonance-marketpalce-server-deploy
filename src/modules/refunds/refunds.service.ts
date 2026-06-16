@@ -42,18 +42,21 @@ export class RefundsService {
     orderItemId,
     reason,
     domain,
+    tx,
   }: {
     orderId: string;
     orderItemId?: string;
     reason: string;
     domain: string;
+    tx?: DrizzleService;
   }) {
     try {
+      const db = tx ?? this.db;
       // domain can be a domain string OR a company UUID (called internally from returns.service)
       const companyId = await this.resolveCompanyId(domain);
 
       // ── 1. Validate order belongs to company ─────────────────────────
-      const [order] = await this.db
+      const [order] = await db
         .select({
           id: orders.id,
           total_amount: orders.total_amount,
@@ -74,7 +77,7 @@ export class RefundsService {
 
       if (isSingleItem) {
         // Fetch the specific order item to calculate its refund amount
-        const [orderItem] = await this.db
+        const [orderItem] = await db
           .select({
             id: order_items.id,
             price: order_items.price,
@@ -98,7 +101,7 @@ export class RefundsService {
         }
 
         // ── Guard: no duplicate refund for this specific item ────────────
-        const [existingItemRefund] = await this.db
+        const [existingItemRefund] = await db
           .select({ id: refunds.id, refund_status: refunds.refund_status })
           .from(refunds)
           .where(
@@ -124,7 +127,7 @@ export class RefundsService {
       } else {
         // Whole-order refund — guard against duplicate order-level refund
         // (allow if only item-level refunds exist for other items)
-        const [existingOrderRefund] = await this.db
+        const [existingOrderRefund] = await db
           .select({ id: refunds.id, refund_status: refunds.refund_status })
           .from(refunds)
           .where(
@@ -139,7 +142,7 @@ export class RefundsService {
         // Filter in JS: only block if an ORDER-LEVEL refund already exists
         // (item-level refunds on the same order are fine to coexist)
         const orderLevelExists = existingOrderRefund
-          ? await this.db
+          ? await db
             .select({
               id: refunds.id,
               order_items_id: refunds.order_items_id,
@@ -162,7 +165,7 @@ export class RefundsService {
       }
 
       // ── 3. Fetch payment record ───────────────────────────────────────
-      const [paymentRecord] = await this.db
+      const [paymentRecord] = await db
         .select({ id: payments.id })
         .from(payments)
         .where(eq(payments.order_id, orderId))
@@ -176,7 +179,7 @@ export class RefundsService {
       }
 
       // ── 4. Create the refund record ───────────────────────────────────
-      const [newRefund] = await this.db
+      const [newRefund] = await db
         .insert(refunds)
         .values({
           refund_amount: refundAmount,
@@ -191,7 +194,7 @@ export class RefundsService {
 
       // ── 5. Notify customer ────────────────────────────────────────────
       if (order.user_id) {
-        const [customerRecord] = await this.db
+        const [customerRecord] = await db
           .select({ email: user.email })
           .from(user)
           .where(eq(user.id, order.user_id))

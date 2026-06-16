@@ -28,7 +28,10 @@ export class AddressService {
     filters?: { limit: number; offset: number },
   ) {
     if (!userId) {
-      return new HttpException(AddressErrorKeyEnum.USER_ID_REQUIRED, HttpStatus.BAD_REQUEST);
+      return new HttpException(
+        AddressErrorKeyEnum.USER_ID_REQUIRED,
+        HttpStatus.BAD_REQUEST,
+      );
     }
     try {
       const addressRecords = await this.db
@@ -48,14 +51,20 @@ export class AddressService {
       if (error instanceof HttpException) {
         throw error;
       }
-      throw new InternalServerErrorException(AddressErrorKeyEnum.FAILED_TO_FIND, {
-        cause: error,
-      });
+      throw new InternalServerErrorException(
+        AddressErrorKeyEnum.FAILED_TO_FIND,
+        {
+          cause: error,
+        },
+      );
     }
   }
   async checkAddressByUserId(userId: string) {
     if (!userId) {
-      return new HttpException(AddressErrorKeyEnum.USER_ID_REQUIRED, HttpStatus.BAD_REQUEST);
+      return new HttpException(
+        AddressErrorKeyEnum.USER_ID_REQUIRED,
+        HttpStatus.BAD_REQUEST,
+      );
     }
     try {
       const [result] = await this.db
@@ -69,9 +78,12 @@ export class AddressService {
       if (error instanceof HttpException) {
         throw error;
       }
-      throw new InternalServerErrorException(AddressErrorKeyEnum.FAILED_TO_FIND, {
-        cause: error,
-      });
+      throw new InternalServerErrorException(
+        AddressErrorKeyEnum.FAILED_TO_FIND,
+        {
+          cause: error,
+        },
+      );
     }
   }
   // find a address by address id
@@ -92,14 +104,20 @@ export class AddressService {
       if (error instanceof HttpException) {
         throw error;
       }
-      throw new InternalServerErrorException(AddressErrorKeyEnum.FAILED_TO_FIND, {
-        cause: error,
-      });
+      throw new InternalServerErrorException(
+        AddressErrorKeyEnum.FAILED_TO_FIND,
+        {
+          cause: error,
+        },
+      );
     }
   }
   async findCompanyAddress(domain: string) {
     if (!domain) {
-      return new HttpException(AddressErrorKeyEnum.DOMAIN_REQUIRED, HttpStatus.BAD_REQUEST);
+      return new HttpException(
+        AddressErrorKeyEnum.DOMAIN_REQUIRED,
+        HttpStatus.BAD_REQUEST,
+      );
     }
 
     try {
@@ -133,9 +151,12 @@ export class AddressService {
       if (error instanceof HttpException) {
         throw error;
       }
-      throw new InternalServerErrorException(AddressErrorKeyEnum.FAILED_TO_FIND, {
-        cause: error,
-      });
+      throw new InternalServerErrorException(
+        AddressErrorKeyEnum.FAILED_TO_FIND,
+        {
+          cause: error,
+        },
+      );
     }
   }
   async createCompanyAddress(domain: string, addressData: CreateAddressDto) {
@@ -176,7 +197,7 @@ export class AddressService {
             name: vendorRecord.company.company_name,
             number: vendorRecord.user.phone_number || '',
             address_line_1: addressData.address_line_1,
-            address_line_2: addressData.address_line_2,
+
             street: addressData.street,
             city: addressData.city,
             state: addressData.state,
@@ -188,17 +209,23 @@ export class AddressService {
           })
           .returning()
           .catch((error) => {
-            throw new InternalServerErrorException(AddressErrorKeyEnum.FAILED_TO_CREATE, {
-              cause: error,
-            });
+            throw new InternalServerErrorException(
+              AddressErrorKeyEnum.FAILED_TO_CREATE,
+              {
+                cause: error,
+              },
+            );
           });
         return insertedAddress;
       });
       return newAddress;
     } catch (error) {
-      throw new InternalServerErrorException(AddressErrorKeyEnum.FAILED_TO_FIND, {
-        cause: error,
-      });
+      throw new InternalServerErrorException(
+        AddressErrorKeyEnum.FAILED_TO_FIND,
+        {
+          cause: error,
+        },
+      );
     }
   }
   // create address for user
@@ -226,7 +253,7 @@ export class AddressService {
             name: addressData.name,
             number: addressData.phone,
             address_line_1: addressData.address_line_1,
-            address_line_2: addressData.address_line_2,
+
             street: addressData.street,
             city: addressData.city,
             state: addressData.state,
@@ -237,17 +264,23 @@ export class AddressService {
           })
           .returning()
           .catch((error) => {
-            throw new InternalServerErrorException(AddressErrorKeyEnum.FAILED_TO_CREATE, {
-              cause: error,
-            });
+            throw new InternalServerErrorException(
+              AddressErrorKeyEnum.FAILED_TO_CREATE,
+              {
+                cause: error,
+              },
+            );
           });
         return insertedAddress;
       });
       return newAddress;
     } catch (error) {
-      throw new InternalServerErrorException(AddressErrorKeyEnum.FAILED_TO_FIND, {
-        cause: error,
-      });
+      throw new InternalServerErrorException(
+        AddressErrorKeyEnum.FAILED_TO_FIND,
+        {
+          cause: error,
+        },
+      );
     }
   }
   // update address by address id
@@ -284,7 +317,7 @@ export class AddressService {
             name: addressData.name,
             number: addressData.phone,
             address_line_1: addressData.address_line_1,
-            address_line_2: addressData.address_line_2,
+
             street: addressData.street,
             city: addressData.city,
             state: addressData.state,
@@ -296,16 +329,22 @@ export class AddressService {
           .where(eq(address.id, addressId))
           .returning()
           .catch((error) => {
-            throw new InternalServerErrorException(AddressErrorKeyEnum.FAILED_TO_UPDATE, {
-              cause: error,
-            });
+            throw new InternalServerErrorException(
+              AddressErrorKeyEnum.FAILED_TO_UPDATE,
+              {
+                cause: error,
+              },
+            );
           });
         return updatedAddress;
       });
     } catch (error) {
-      throw new InternalServerErrorException(AddressErrorKeyEnum.FAILED_TO_FIND, {
-        cause: error,
-      });
+      throw new InternalServerErrorException(
+        AddressErrorKeyEnum.FAILED_TO_FIND,
+        {
+          cause: error,
+        },
+      );
     }
   }
   // delete address by address id
@@ -321,18 +360,24 @@ export class AddressService {
         .delete(address)
         .where(and(eq(address.id, addressId), eq(address.user_id, customerId)))
         .catch((error) => {
-          throw new InternalServerErrorException(AddressErrorKeyEnum.FAILED_TO_DELETE, {
-            cause: error,
-          });
+          throw new InternalServerErrorException(
+            AddressErrorKeyEnum.FAILED_TO_DELETE,
+            {
+              cause: error,
+            },
+          );
         });
       return { message: 'Address deleted successfully', status: HttpStatus.OK };
     } catch (error) {
       if (error instanceof HttpException) {
         throw error;
       }
-      throw new InternalServerErrorException(AddressErrorKeyEnum.FAILED_TO_FIND, {
-        cause: error,
-      });
+      throw new InternalServerErrorException(
+        AddressErrorKeyEnum.FAILED_TO_FIND,
+        {
+          cause: error,
+        },
+      );
     }
   }
   async setDefaultAddress(customerId: string, addressId: string) {
@@ -369,9 +414,12 @@ export class AddressService {
         return updatedAddress;
       });
     } catch (error) {
-      throw new InternalServerErrorException(AddressErrorKeyEnum.FAILED_TO_SET_DEFAULT, {
-        cause: error,
-      });
+      throw new InternalServerErrorException(
+        AddressErrorKeyEnum.FAILED_TO_SET_DEFAULT,
+        {
+          cause: error,
+        },
+      );
     }
   }
 }

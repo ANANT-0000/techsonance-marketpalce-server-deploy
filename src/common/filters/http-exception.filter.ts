@@ -39,16 +39,54 @@ export class HttpExceptionFilter implements ExceptionFilter {
   }
 
   private resolveMessage(exception: unknown): string | string[] {
+    let resolved: string | string[];
+
     if (exception instanceof HttpException) {
       const res = exception.getResponse();
-      if (typeof res === 'string') return res;
-      const obj = res as { message?: string | string[] };
-      return obj.message ?? exception.message;
+      if (typeof res === 'string') {
+        resolved = res;
+      } else {
+        const obj = res as { message?: string | string[] };
+        resolved = obj.message ?? exception.message;
+      }
+    } else if (process.env.NODE_ENV !== 'production' && exception instanceof Error) {
+      resolved = exception.message;
+    } else {
+      resolved = 'Internal server error';
     }
-    // Never leak internal error details to clients in production
-    if (process.env.NODE_ENV !== 'production' && exception instanceof Error) {
-      return exception.message;
+
+    if (Array.isArray(resolved)) {
+      return resolved.map((msg) => this.sanitizeMessage(msg));
     }
-    return 'Internal server error';
+    return this.sanitizeMessage(resolved);
+  }
+
+  private sanitizeMessage(message: string): string {
+    const sensitivePatterns = [
+      /\bselect\b/i,
+      /\binsert\b/i,
+      /\bupdate\b/i,
+      /\bdelete\b/i,
+      /\bfrom\b/i,
+      /\bwhere\b/i,
+      /\btruncate\b/i,
+      /\bdrop\b/i,
+      /\bcreate\s+table\b/i,
+      /\balter\s+table\b/i,
+      /relation\s+"[^"]+"/i,
+      /column\s+"[^"]+"/i,
+      /table\s+"[^"]+"/i,
+      /violates\s+unique\s+constraint/i,
+      /violates\s+foreign\s+key\s+constraint/i,
+      /syntax\s+error\s+at\s+or\s+near/i,
+      /query\s+failed/i,
+      /drizzle/i,
+    ];
+
+    const isSensitive = sensitivePatterns.some((pattern) => pattern.test(message));
+    if (isSensitive) {
+      return 'An internal database error occurred.';
+    }
+    return message;
   }
 }

@@ -8,7 +8,7 @@ import { Buffer } from 'buffer';
 
 export interface DbAddress {
   address_line_1: string;
-  address_line_2: string;
+
   street: string;
   city: string;
   state: string;
@@ -97,7 +97,7 @@ export interface MappedOrderInfo {
   shippingAddress: {
     recipientName: string;
     addressLine1: string;
-    addressLine2?: string;
+
     street?: string;
     city: string;
     state: string;
@@ -234,7 +234,7 @@ export interface InvoiceAddress {
   recipientName: string;
   companyName?: string;
   addressLine1: string;
-  addressLine2?: string;
+
   street?: string;
   city: string;
   state: string;
