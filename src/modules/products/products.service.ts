@@ -887,7 +887,7 @@ export class ProductsService {
           }
           if (finalResults.length > 0 && product.variant_id) {
             const imageInserts = finalResults.map((image, index) => {
-              console.table(image);
+            
               return {
                 variant_id: product.variant_id,
                 product_id: productId,
@@ -897,7 +897,7 @@ export class ProductsService {
                 imgType: image.type,
               };
             });
-            console.table(imageInserts);
+         
             const createdImages = await tx
               .insert(product_images)
               .values(imageInserts)

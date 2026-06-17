@@ -157,7 +157,7 @@ export class CheckoutService {
           isSuccess,
           companyId,
         );
-      if (verificationResult.success) {
+      if (verificationResult.success && !verificationResult.wasAlreadyVerified) {
         if (productVariantId) {
           await verificationResult.tx
             .delete(cart_items)

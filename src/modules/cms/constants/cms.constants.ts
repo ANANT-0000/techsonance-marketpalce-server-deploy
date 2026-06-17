@@ -21,6 +21,9 @@ export const CMS_MESSAGES = {
   IMAGE_UPLOAD_FAILED: 'Failed to upload image',
   IMAGE_UPLOAD_SUCCESS: 'Image uploaded successfully',
   IMAGE_UPLOAD_MISSING_URL: 'No secure URL returned',
+  IMAGE_DELETE_SUCCESS: 'Image deleted successfully',
+  IMAGE_DELETE_FAILED: 'Failed to delete image',
+  INVALID_IMAGE_URL: 'Invalid image URL',
 } as const;
 
 export const CMS_THEME_COLOR_KEYS = [

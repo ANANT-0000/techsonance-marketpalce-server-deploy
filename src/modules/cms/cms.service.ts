@@ -20,6 +20,7 @@ import {
   CMS_THEME_COLOR_KEYS,
 } from './constants/cms.constants';
 import { CmsLanguageEnum, CmsPageContentTypeEnum } from './constants/cms.enums';
+import { extractCloudinaryPublicId } from 'src/common/filters/extractCloudinaryPublicId.filter';
 
 function isValidHexColor(color: unknown): boolean {
   if (typeof color !== 'string') return false;
@@ -226,6 +227,21 @@ export class CmsService {
       message: CMS_MESSAGES.IMAGE_UPLOAD_SUCCESS,
       status: HttpStatus.OK,
       secure_url: result.secure_url,
+    };
+  }
+  async deleteCloudinaryImage(url: string) {
+    const publicId = extractCloudinaryPublicId(url);
+    if (!publicId) {
+      throw new BadRequestException(CMS_MESSAGES.INVALID_IMAGE_URL);
+    }
+    await this.uploadService.deleteFile(publicId, undefined).catch((error) => {
+      throw new InternalServerErrorException(CMS_MESSAGES.IMAGE_DELETE_FAILED, {
+        cause: error,
+      });
+    });
+    return {
+      message: CMS_MESSAGES.IMAGE_DELETE_SUCCESS,
+      status: HttpStatus.OK,
     };
   }
 }

@@ -75,6 +75,7 @@ export class CartService {
               },
             })
             .returning();
+
           return {
             cart_id: isExitingCart.id,
             cart_item_id: createCartItem.id,
@@ -454,6 +455,7 @@ export class CartService {
       });
     } catch (error) {
       if (
+        error instanceof HttpException ||
         error instanceof NotFoundException ||
         error instanceof InternalServerErrorException
       ) {

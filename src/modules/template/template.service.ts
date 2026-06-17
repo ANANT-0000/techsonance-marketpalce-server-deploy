@@ -28,7 +28,7 @@ export class TemplateService {
       //   .from(templates)
       //   .where(eq(templates.template_name, dto.template_name))
       //   .catch((error) => {
-      //     console.error('Error checking existing template:', error);
+      //
       //     throw new InternalServerErrorException(
       //       'Database error while checking existing template',
       //       {

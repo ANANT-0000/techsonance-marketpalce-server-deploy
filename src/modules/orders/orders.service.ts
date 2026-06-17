@@ -499,6 +499,7 @@ export class OrdersService {
     success: boolean;
     orderId: string;
     message: string;
+    wasAlreadyVerified?: boolean;
   }> {
     if (!orderId) {
       throw new HttpException(
@@ -520,29 +521,6 @@ export class OrdersService {
         );
       }
 
-      // Enforce idempotency: if the order is already verified (not PENDING), return early.
-      const [orderRecord] = await this.db
-        .select({ order_status: orders.order_status })
-        .from(orders)
-        .where(eq(orders.id, orderId))
-        .limit(1);
-
-      if (!orderRecord) {
-        throw new HttpException(
-          OrdersErrorKeyEnum.ORDER_NOT_FOUND,
-          HttpStatus.NOT_FOUND,
-        );
-      }
-
-      if (orderRecord.order_status !== OrderStatus.PENDING) {
-        return {
-          tx: this.db as unknown as DrizzleService,
-          success: orderRecord.order_status !== OrderStatus.CANCELLED,
-          orderId,
-          message: `Order verification already completed with status: ${orderRecord.order_status}`,
-        };
-      }
-
       const orderLines = await this.db
         .select({
           variantId: order_items.product_variant_id,
@@ -550,7 +528,32 @@ export class OrdersService {
         })
         .from(order_items)
         .where(eq(order_items.order_id, orderId));
+
       return this.db.transaction(async (tx) => {
+        // Enforce idempotency inside transaction to prevent race conditions (SELECT FOR UPDATE)
+        const [orderRecord] = await tx
+          .select({ order_status: orders.order_status })
+          .from(orders)
+          .where(eq(orders.id, orderId))
+          .limit(1)
+          .for('update');
+
+        if (!orderRecord) {
+          throw new HttpException(
+            OrdersErrorKeyEnum.ORDER_NOT_FOUND,
+            HttpStatus.NOT_FOUND,
+          );
+        }
+
+        if (orderRecord.order_status !== OrderStatus.PENDING) {
+          return {
+            tx: tx as DrizzleService,
+            success: orderRecord.order_status !== OrderStatus.CANCELLED,
+            orderId,
+            message: `Order verification already completed with status: ${orderRecord.order_status}`,
+            wasAlreadyVerified: true,
+          };
+        }
         if (isSuccess) {
           const orderItemsRecord = await tx
             .select({ id: order_items.id })

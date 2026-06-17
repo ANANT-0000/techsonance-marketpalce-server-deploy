@@ -382,7 +382,8 @@ export class InventoryService {
     tx: DrizzleService, // transaction context
   ) {
     try {
-      for (const line of orderLines) {
+      const lines = orderLines.filter(l => l.variantId && l.variantId.trim() !== '');
+      for (const line of lines) {
         const [updated] = await tx
           .update(inventory)
           .set({
@@ -451,7 +452,8 @@ export class InventoryService {
     tx: DrizzleService,
   ) {
     try {
-      const lines = Array.isArray(orderLines) ? orderLines : [orderLines];
+      const rawLines = Array.isArray(orderLines) ? orderLines : [orderLines];
+      const lines = rawLines.filter(l => l.variantId && l.variantId.trim() !== '');
       for (const line of lines) {
         const [updated] = await tx
           .update(inventory)

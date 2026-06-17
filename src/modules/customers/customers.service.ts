@@ -19,7 +19,7 @@ import {
 import { eq, and, count } from 'drizzle-orm';
 import { formatCompanyDomain } from '../../common/filters/formatDomain.filter';
 import { UserStatus } from '../../drizzle/types/types';
-import { error } from 'console';
+
 import { domainExtractor } from 'src/common/filters/domainExtractor.filter';
 import { CompanyService } from '../company/company.service';
 import { ComplianceErrorKeyEnum } from '../compliance/constants/compliance.enums';

@@ -8,6 +8,8 @@ import {
   Headers,
   UseInterceptors,
   UploadedFile,
+  Delete,
+  UseGuards,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { CmsService } from './cms.service';
@@ -17,6 +19,9 @@ import {
   IS_PUBLIC_KEY,
   Public,
 } from '../../common/decorators/public.decorator';
+import { Roles } from 'src/common/decorators/roles.decorator';
+import { Role } from 'src/enums/role.enum';
+import { RoleGuard } from 'src/guards/role.guard';
 
 @Controller({ version: '1', path: 'cms' })
 export class CmsController {
@@ -47,5 +52,11 @@ export class CmsController {
     @Body() dto: CreateCmsDto,
   ) {
     return this.cmsService.upsertPage(domain, dto);
+  }
+  @Delete('delete-cloudinary-image')
+  @UseGuards(RoleGuard)
+  @Roles(Role.ADMIN, Role.VENDOR)
+  async deleteCloudinaryImage(@Query() query: { url: string }) {
+    return this.cmsService.deleteCloudinaryImage(query.url);
   }
 }
