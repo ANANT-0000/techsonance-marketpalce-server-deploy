@@ -54,8 +54,8 @@ export enum NavItemColType {
   SUBCATEGORIES = 'subcategories',
   BRANDS = 'brands',
   PROMOTION = 'promotion',
+  PRODUCTS = 'products',
 }
-
 export enum NavMenuPosition {
   STICKY = 'sticky',
   RELATIVE = 'relative',
@@ -67,11 +67,6 @@ export enum NavMenuLogoAlignment {
 export enum NavMenuType {
   SIMPLE = 'simple',
   MEGA = 'mega',
-}
-export enum ColType {
-  SUBCATEGORIES = 'subcategories',
-  BRANDS = 'brands',
-  PROMOTION = 'promotion',
 }
 
 export const NavItemTypeEnum = pg.pgEnum('nav_item_type_enum', [
@@ -150,7 +145,7 @@ export interface NavItemMeta {
 
   // ── L2 column config ──────────────────────────────────────────────────────
   /** Visual rendering type for this mega-menu column. */
-  col_type?: ColType;
+  col_type?: NavItemColType;
 
   /** Column section heading text. Empty = no heading rendered. */
   col_title?: string;
@@ -164,6 +159,7 @@ export interface NavItemMeta {
   // ── Per-item icon (L2 SUBCATEGORIES / BRANDS) ─────────────────────────────
   /** Icon thumbnail URL shown alongside the link label. */
   icon_url?: string;
+  product_ids?: string[];
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

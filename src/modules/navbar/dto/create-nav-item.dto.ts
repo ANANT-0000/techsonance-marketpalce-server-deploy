@@ -1,4 +1,5 @@
 import {
+  IsArray,
   IsBoolean,
   IsEnum,
   IsIn,
@@ -87,6 +88,10 @@ export class NavItemMetaDto {
   @IsOptional()
   @IsString()
   icon_url?: string;
+  @IsOptional()
+  @IsArray()
+  @IsUUID('4', { each: true })
+  product_ids?: string[];
 }
 
 export class CreateNavItemDto {

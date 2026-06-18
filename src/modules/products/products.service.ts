@@ -456,13 +456,9 @@ export class ProductsService {
     try {
       const companyId = await this.resolveCompanyId(domain);
 
-      const isUuid =
-        /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
-          productId,
-        );
       let condition: SQL[];
 
-      if (isUuid) {
+      if (productId) {
         condition = [eq(products.id, productId)];
       } else {
         // Try matching by SKU first

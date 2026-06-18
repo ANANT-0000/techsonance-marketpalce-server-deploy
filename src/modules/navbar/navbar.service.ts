@@ -9,13 +9,21 @@ import {
 } from '@nestjs/common';
 import { and, asc, eq, inArray } from 'drizzle-orm';
 import { DRIZZLE, type DrizzleService } from '../../drizzle/drizzle.module';
-import { categories, nav_items, nav_menus } from '../../drizzle/schema';
+import {
+  categories,
+  nav_items,
+  nav_menus,
+  products,
+} from '../../drizzle/schema';
 import { CompanyService } from '../company/company.service';
 import { domainExtractor } from '../../common/filters/domainExtractor.filter';
 import { NavbarErrorKeyEnum } from './constants/navbar.enums';
 import { UpsertNavMenuDto } from './dto/upsert-nav-menu.dto';
 import { CreateNavItemDto } from './dto/create-nav-item.dto';
-import { UpdateNavItemDto, ReorderNavItemsDto } from './dto/update-nav-item.dto';
+import {
+  UpdateNavItemDto,
+  ReorderNavItemsDto,
+} from './dto/update-nav-item.dto';
 import {
   NavMenuSettings,
   NavMenuLogoAlignment,
@@ -59,7 +67,20 @@ export class NavbarService {
       );
     }
   }
-
+  private resolveProductIds(
+    ids: string[] | undefined,
+    productMap: Map<string, { id: string; name: string }>,
+  ) {
+    return (ids ?? [])
+      .map((id) => productMap.get(id))
+      .filter((p): p is { id: string; name: string } => !!p)
+      .map((p) => ({
+        id: p.id,
+        label: p.name,
+        href: `/store/product/${p.id}`,
+        item_type: 'product',
+      }));
+  }
   /**
    * Returns the nav_menus row for a company, or null if it has never been
    * saved. Public GET uses null → defaults; admin PUT upserts the row.
@@ -80,7 +101,9 @@ export class NavbarService {
   }
 
   /** Merge stored settings with defaults so the client always gets a full object. */
-  private mergeDefaults(stored: NavMenuSettings = {}): Required<NavMenuSettings> {
+  private mergeDefaults(
+    stored: NavMenuSettings = {},
+  ): Required<NavMenuSettings> {
     return { ...SETTINGS_DEFAULTS, ...stored };
   }
 
@@ -111,9 +134,7 @@ export class NavbarService {
         .from(nav_items)
         .where(eq(nav_items.menu_id, menuRow?.id ?? ''))
         .orderBy(asc(nav_items.sort_order))
-        .catch(
-          (): typeof nav_items.$inferSelect[] => [],
-        );
+        .catch((): (typeof nav_items.$inferSelect)[] => []);
 
       const settings = this.mergeDefaults(menuRow?.settings as NavMenuSettings);
 
@@ -126,9 +147,22 @@ export class NavbarService {
             .catch(() => [])
         : [];
 
+      // Fetch all products for this company to resolve manual product-range columns
+      const dbProducts = menuRow
+        ? await this.db
+            .select({ id: products.id, name: products.name })
+            .from(products)
+            .where(eq(products.company_id, companyId))
+            .catch(() => [])
+        : [];
+      const productMap = new Map(dbProducts.map((p) => [p.id, p]));
+
       // Build category hierarchy lookup maps in memory
       const categoryMap = new Map<string, typeof categories.$inferSelect>();
-      const categoryChildrenMap = new Map<string, typeof categories.$inferSelect[]>();
+      const categoryChildrenMap = new Map<
+        string,
+        (typeof categories.$inferSelect)[]
+      >();
 
       dbCategories.forEach((cat) => {
         categoryMap.set(cat.id, cat);
@@ -191,9 +225,13 @@ export class NavbarService {
           if (l1.has_mega_menu) {
             const displayType = l1.meta?.display_type;
 
-            if (displayType === 'dynamic_subcategories' && l1.meta?.parent_category_id) {
+            if (
+              displayType === 'dynamic_subcategories' &&
+              l1.meta?.parent_category_id
+            ) {
               const parentCatId = l1.meta.parent_category_id;
-              const childCategories = categoryChildrenMap.get(parentCatId) ?? [];
+              const childCategories =
+                categoryChildrenMap.get(parentCatId) ?? [];
               columns = childCategories.slice(0, 4).map((childCat, idx) => {
                 const subCats = categoryChildrenMap.get(childCat.id) ?? [];
                 return {
@@ -277,7 +315,10 @@ export class NavbarService {
                   const maxCols = Math.min(4, rootCats.length);
                   const colSize = Math.ceil(rootCats.length / maxCols);
                   for (let i = 0; i < maxCols; i++) {
-                    const chunk = rootCats.slice(i * colSize, (i + 1) * colSize);
+                    const chunk = rootCats.slice(
+                      i * colSize,
+                      (i + 1) * colSize,
+                    );
                     columns.push({
                       id: `fallback-col-${i}`,
                       label: i === 0 ? 'Categories' : '',
@@ -310,27 +351,33 @@ export class NavbarService {
                   l2.label,
                   l2.href,
                 );
-                
-                // Fetch manual L3 child items
-                const subItems = (l2ByParent[l2.id] ?? []).map((l3) => {
-                  const { label: rL3Label, href: rL3Href } = resolveCategory(
-                    l3.id,
-                    l3.item_type,
-                    l3.category_id,
-                    l3.label,
-                    l3.href,
-                  );
-                  return {
-                    id: l3.id,
-                    label: rL3Label,
-                    href: rL3Href,
-                    item_type: l3.item_type,
-                    category_id: l3.category_id,
-                    sort_order: l3.sort_order,
-                    meta: l3.meta,
-                  };
-                });
 
+                // Fetch manual L3 child items
+                const subItems =
+                  l2.meta?.col_type === 'products'
+                    ? this.resolveProductIds(
+                        (l2.meta as any)?.product_ids,
+                        productMap,
+                      )
+                    : (l2ByParent[l2.id] ?? []).map((l3) => {
+                        const { label: rL3Label, href: rL3Href } =
+                          resolveCategory(
+                            l3.id,
+                            l3.item_type,
+                            l3.category_id,
+                            l3.label,
+                            l3.href,
+                          );
+                        return {
+                          id: l3.id,
+                          label: rL3Label,
+                          href: rL3Href,
+                          item_type: l3.item_type,
+                          category_id: l3.category_id,
+                          sort_order: l3.sort_order,
+                          meta: l3.meta,
+                        };
+                      });
                 return {
                   id: l2.id,
                   label: rLabel,
@@ -381,7 +428,9 @@ export class NavbarService {
       const existing = await this.findMenuRow(companyId);
 
       // Merge: existing stored settings → dto fields (only defined keys)
-      const patch: NavMenuSettings = { ...(existing?.settings as NavMenuSettings ?? {}) };
+      const patch: NavMenuSettings = {
+        ...((existing?.settings as NavMenuSettings) ?? {}),
+      };
       (Object.keys(dto) as (keyof UpsertNavMenuDto)[]).forEach((key) => {
         if (dto[key] !== undefined) (patch as any)[key] = dto[key];
       });
@@ -397,7 +446,11 @@ export class NavbarService {
               { cause: err },
             );
           });
-        return { success: true, status: HttpStatus.OK, message: 'Navbar settings updated.' };
+        return {
+          success: true,
+          status: HttpStatus.OK,
+          message: 'Navbar settings updated.',
+        };
       }
 
       await this.db
@@ -409,7 +462,11 @@ export class NavbarService {
             { cause: err },
           );
         });
-      return { success: true, status: HttpStatus.CREATED, message: 'Navbar settings created.' };
+      return {
+        success: true,
+        status: HttpStatus.CREATED,
+        message: 'Navbar settings created.',
+      };
     } catch (err) {
       if (err instanceof HttpException) throw err;
       throw new InternalServerErrorException(
@@ -450,11 +507,18 @@ export class NavbarService {
           .where(eq(nav_items.id, dto.parent_id))
           .limit(1);
 
-        if (!parent) throw new NotFoundException(NavbarErrorKeyEnum.ITEM_NOT_FOUND);
+        if (!parent)
+          throw new NotFoundException(NavbarErrorKeyEnum.ITEM_NOT_FOUND);
         // Parent must itself be an L1 item
-        if (parent.parent_id) throw new BadRequestException(NavbarErrorKeyEnum.INVALID_PARENT_DEPTH);
+        if (parent.parent_id)
+          throw new BadRequestException(
+            NavbarErrorKeyEnum.INVALID_PARENT_DEPTH,
+          );
         // L2 items cannot open a mega menu
-        if (dto.has_mega_menu) throw new BadRequestException(NavbarErrorKeyEnum.MEGA_MENU_ON_CHILD_ITEM);
+        if (dto.has_mega_menu)
+          throw new BadRequestException(
+            NavbarErrorKeyEnum.MEGA_MENU_ON_CHILD_ITEM,
+          );
       }
 
       const [created] = await this.db
@@ -502,29 +566,40 @@ export class NavbarService {
 
       const companyId = await this.resolveCompanyId(domain);
       const menuRow = await this.findMenuRow(companyId);
-      if (!menuRow) throw new NotFoundException(NavbarErrorKeyEnum.MENU_NOT_FOUND);
+      if (!menuRow)
+        throw new NotFoundException(NavbarErrorKeyEnum.MENU_NOT_FOUND);
 
       // Confirm item belongs to this company's menu
       const [existing] = await this.db
-        .select({ id: nav_items.id, parent_id: nav_items.parent_id, meta: nav_items.meta })
+        .select({
+          id: nav_items.id,
+          parent_id: nav_items.parent_id,
+          meta: nav_items.meta,
+        })
         .from(nav_items)
         .where(and(eq(nav_items.id, itemId), eq(nav_items.menu_id, menuRow.id)))
         .limit(1);
 
-      if (!existing) throw new NotFoundException(NavbarErrorKeyEnum.ITEM_NOT_FOUND);
+      if (!existing)
+        throw new NotFoundException(NavbarErrorKeyEnum.ITEM_NOT_FOUND);
 
       // Build patch — only set fields that were provided
       const patch: Partial<typeof nav_items.$inferInsert> = {};
       if (dto.label !== undefined) patch.label = dto.label;
       if (dto.href !== undefined) patch.href = dto.href;
       if (dto.item_type !== undefined) patch.item_type = dto.item_type as any;
-      if (dto.category_id !== undefined) patch.category_id = dto.category_id ?? null;
-      if (dto.has_mega_menu !== undefined) patch.has_mega_menu = dto.has_mega_menu;
+      if (dto.category_id !== undefined)
+        patch.category_id = dto.category_id ?? null;
+      if (dto.has_mega_menu !== undefined)
+        patch.has_mega_menu = dto.has_mega_menu;
       if (dto.sort_order !== undefined) patch.sort_order = dto.sort_order;
 
       // Merge meta JSONB — don't overwrite entire blob with partial update
       if (dto.meta !== undefined) {
-        patch.meta = { ...(existing.meta as NavItemMeta ?? {}), ...dto.meta } as NavItemMeta;
+        patch.meta = {
+          ...((existing.meta as NavItemMeta) ?? {}),
+          ...dto.meta,
+        } as NavItemMeta;
       }
 
       patch.updated_at = new Date();
@@ -565,7 +640,8 @@ export class NavbarService {
 
       const companyId = await this.resolveCompanyId(domain);
       const menuRow = await this.findMenuRow(companyId);
-      if (!menuRow) throw new NotFoundException(NavbarErrorKeyEnum.MENU_NOT_FOUND);
+      if (!menuRow)
+        throw new NotFoundException(NavbarErrorKeyEnum.MENU_NOT_FOUND);
 
       const deleted = await this.db
         .delete(nav_items)
@@ -578,7 +654,8 @@ export class NavbarService {
           );
         });
 
-      if (!deleted.length) throw new NotFoundException(NavbarErrorKeyEnum.ITEM_NOT_FOUND);
+      if (!deleted.length)
+        throw new NotFoundException(NavbarErrorKeyEnum.ITEM_NOT_FOUND);
       return { success: true, message: 'Item deleted.' };
     } catch (err) {
       if (err instanceof HttpException) throw err;
@@ -601,7 +678,8 @@ export class NavbarService {
     try {
       const companyId = await this.resolveCompanyId(domain);
       const menuRow = await this.findMenuRow(companyId);
-      if (!menuRow) throw new NotFoundException(NavbarErrorKeyEnum.MENU_NOT_FOUND);
+      if (!menuRow)
+        throw new NotFoundException(NavbarErrorKeyEnum.MENU_NOT_FOUND);
 
       const ids = dto.items.map((i) => i.id);
 
@@ -609,7 +687,9 @@ export class NavbarService {
       const owned = await this.db
         .select({ id: nav_items.id })
         .from(nav_items)
-        .where(and(eq(nav_items.menu_id, menuRow.id), inArray(nav_items.id, ids)))
+        .where(
+          and(eq(nav_items.menu_id, menuRow.id), inArray(nav_items.id, ids)),
+        )
         .catch((err) => {
           throw new InternalServerErrorException(
             NavbarErrorKeyEnum.FAILED_TO_REORDER_ITEMS,
