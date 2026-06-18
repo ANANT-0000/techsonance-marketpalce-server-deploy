@@ -6,4 +6,10 @@ export enum CategoryErrorKeyEnum {
   FAILED_TO_CREATE_CATEGORIES = 'FAILED TO CREATE CATEGORIES',
   FAILED_TO_UPDATE_CATEGORY = 'FAILED TO UPDATE CATEGORY',
   FAILED_TO_DELETE_CATEGORY = 'FAILED TO DELETE CATEGORY',
+  PARENT_CATEGORY_NOT_FOUND = 'Parent category not found or belongs to a different company',
+  NESTING_DEPTH_EXCEEDED = 'Multi-level deep nesting is not supported. Hierarchy must be Parent -> Subcategory',
+  PARENT_CANNOT_BE_SELF = 'A category cannot be its own parent',
+  PARENT_HAS_SUB_CATEGORIES = 'Cannot nest this category because the parent category is already a subcategory',
+  CATEGORY_HAS_SUB_CATEGORIES = 'Cannot assign a parent to this category because it already has subcategories of its own',
+  CATEGORY_HAS_PRODUCTS = 'Cannot delete category because it contains active product listings. Reassign or delete those products first',
 }

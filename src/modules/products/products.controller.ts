@@ -57,7 +57,6 @@ export class ProductsController {
       files,
     );
   }
-  @Public()
   @Get('vendor-products')
   async getVendorProducts(
     @Headers('company-domain') domain: string,

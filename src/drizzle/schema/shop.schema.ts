@@ -17,21 +17,28 @@ import {
 import { AnyPgColumn } from 'drizzle-orm/pg-core';
 import { unique } from 'drizzle-orm/pg-core';
 
-export const categories = pg.pgTable('categories', {
-  id: pg.uuid('id').primaryKey().defaultRandom(),
-  name: pg.text('name').notNull(),
-  description: pg.text('description'),
-  parent_id: pg
-    .uuid('parent_id')
-    .references((): AnyPgColumn => categories.id, { onDelete: 'cascade' }),
-  created_at: pg.timestamp('created_at').notNull().defaultNow(),
-  updated_at: pg
-    .timestamp('updated_at')
-    .notNull()
-    .defaultNow()
-    .$onUpdate(() => new Date()),
-  company_id: pg.uuid('company_id').references(() => company.id),
-});
+export const categories = pg.pgTable(
+  'categories',
+  {
+    id: pg.uuid('id').primaryKey().defaultRandom(),
+    name: pg.text('name').notNull(),
+    description: pg.text('description'),
+    parent_id: pg
+      .uuid('parent_id')
+      .references((): AnyPgColumn => categories.id, { onDelete: 'cascade' }),
+    created_at: pg.timestamp('created_at').notNull().defaultNow(),
+    updated_at: pg
+      .timestamp('updated_at')
+      .notNull()
+      .defaultNow()
+      .$onUpdate(() => new Date()),
+    company_id: pg.uuid('company_id').references(() => company.id),
+  },
+  (t) => [
+    pg.index('idx_categories_name').on(t.name),
+    pg.index('idx_categories_parent_id').on(t.parent_id),
+  ],
+);
 export const coupons = pg.pgTable('coupons', {
   id: pg.uuid('id').primaryKey().defaultRandom(),
   company_id: pg
@@ -122,7 +129,9 @@ export const products = pg.pgTable(
       .notNull()
       .defaultNow()
       .$onUpdate(() => new Date()),
-    record_status: EntityStatusEnum('record_status').default(EntityStatus.ACTIVE),
+    record_status: EntityStatusEnum('record_status').default(
+      EntityStatus.ACTIVE,
+    ),
     deleted_at: pg.timestamp('deleted_at'),
     company_id: pg
       .uuid('company_id')
@@ -138,6 +147,7 @@ export const products = pg.pgTable(
     pg.index('idx_products_company_id').on(table.company_id),
     pg.index('idx_products_vendor_id').on(table.vendor_id),
     pg.index('idx_products_category_id').on(table.category_id),
+    pg.index('idx_products_name').on(table.name),
     pg.index('idx_products_status').on(table.status),
   ],
 );
@@ -161,13 +171,13 @@ export const orders = pg.pgTable(
     address_id: pg
       .uuid('address_id')
       .references(() => address.id, { onDelete: 'cascade' }),
-    company_id: pg
-      .uuid('company_id')
-      .references(() => company.id),
+    company_id: pg.uuid('company_id').references(() => company.id),
     order_status: order_status_enum('order_status')
       .notNull()
       .default(OrderStatus.PENDING),
-    record_status: EntityStatusEnum('record_status').default(EntityStatus.ACTIVE),
+    record_status: EntityStatusEnum('record_status').default(
+      EntityStatus.ACTIVE,
+    ),
     deleted_at: pg.timestamp('deleted_at'),
   },
   (table) => [
@@ -181,15 +191,11 @@ export const order_items = pg.pgTable(
   'order_items',
   {
     id: pg.uuid('id').primaryKey().defaultRandom(),
-    order_id: pg
-      .uuid('order_id')
-      .references(() => orders.id),
+    order_id: pg.uuid('order_id').references(() => orders.id),
     product_variant_id: pg
       .uuid('product_variant_id')
       .references(() => product_variants.id),
-    company_id: pg
-      .uuid('company_id')
-      .references(() => company.id),
+    company_id: pg.uuid('company_id').references(() => company.id),
     quantity: pg.integer('quantity').notNull(),
     price: pg.decimal('price', { precision: 10, scale: 2 }).notNull(),
     order_status: order_status_enum('order_status').notNull(),
@@ -199,7 +205,9 @@ export const order_items = pg.pgTable(
       .notNull()
       .defaultNow()
       .$onUpdate(() => new Date()),
-    record_status: EntityStatusEnum('record_status').default(EntityStatus.ACTIVE),
+    record_status: EntityStatusEnum('record_status').default(
+      EntityStatus.ACTIVE,
+    ),
     deleted_at: pg.timestamp('deleted_at'),
   },
   (table) => [pg.index('idx_order_items_order_id').on(table.order_id)],
@@ -250,7 +258,9 @@ export const product_variants = pg.pgTable(
       .notNull()
       .defaultNow()
       .$onUpdate(() => new Date()),
-    record_status: EntityStatusEnum('record_status').default(EntityStatus.ACTIVE),
+    record_status: EntityStatusEnum('record_status').default(
+      EntityStatus.ACTIVE,
+    ),
     deleted_at: pg.timestamp('deleted_at'),
     product_id: pg
       .uuid('product_id')
@@ -258,6 +268,7 @@ export const product_variants = pg.pgTable(
   },
   (table) => [
     pg.index('idx_product_variants_product_id').on(table.product_id),
+    pg.index('idx_product_variants_variant_name').on(table.variant_name),
     pg.index('idx_product_variants_sku').on(table.sku),
     pg.index('idx_product_variants_status').on(table.status),
   ],
@@ -371,11 +382,11 @@ export const payments = pg.pgTable(
       .notNull()
       .defaultNow()
       .$onUpdate(() => new Date()),
-    record_status: EntityStatusEnum('record_status').default(EntityStatus.ACTIVE),
+    record_status: EntityStatusEnum('record_status').default(
+      EntityStatus.ACTIVE,
+    ),
     deleted_at: pg.timestamp('deleted_at'),
-    order_id: pg
-      .uuid('order_id')
-      .references(() => orders.id),
+    order_id: pg.uuid('order_id').references(() => orders.id),
     company_id: pg.uuid('company_id').references(() => company.id),
   },
   (table) => [
@@ -422,17 +433,13 @@ export const refunds = pg.pgTable(
       .timestamp('created_at')
       .$default(() => new Date())
       .notNull(),
-    record_status: EntityStatusEnum('record_status').default(EntityStatus.ACTIVE),
+    record_status: EntityStatusEnum('record_status').default(
+      EntityStatus.ACTIVE,
+    ),
     deleted_at: pg.timestamp('deleted_at'),
-    order_id: pg
-      .uuid('order_id')
-      .references(() => orders.id),
-    order_items_id: pg
-      .uuid('order_items_id')
-      .references(() => order_items.id),
-    payment_id: pg
-      .uuid('payment_id')
-      .references(() => payments.id),
+    order_id: pg.uuid('order_id').references(() => orders.id),
+    order_items_id: pg.uuid('order_items_id').references(() => order_items.id),
+    payment_id: pg.uuid('payment_id').references(() => payments.id),
     company_id: pg
       .uuid('company_id')
       .references(() => company.id, { onDelete: 'cascade' }),
@@ -513,4 +520,3 @@ export const invoices = pg.pgTable('invoices', {
   status: EntityStatusEnum('status').default(EntityStatus.ACTIVE),
   deleted_at: pg.timestamp('deleted_at'),
 });
-

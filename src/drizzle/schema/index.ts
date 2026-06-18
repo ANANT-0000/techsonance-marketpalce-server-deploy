@@ -9,8 +9,10 @@ export * from './product_policy.schema';
 export * from './company_identity.schema';
 export * from './subscription.schema';
 export * from './vendor_storefront.schema';
+export * from './nav_storefront.schema';
 import { address, user, vendor } from './users.schema';
 import { vendor_storefront_sections } from './vendor_storefront.schema';
+import { nav_menus, nav_items } from './nav_storefront.schema';
 import {
   cart_items,
   carts,
@@ -717,3 +719,51 @@ export const vendorStorefrontSectionsRelations = relations(
   }),
 );
 
+// ─── Navbar Relational Relations ──────────────────────────────────────────────
+
+export const navMenusRelations = relations(nav_menus, ({ one, many }) => ({
+  /** The company that owns this navbar configuration. */
+  company: one(company, {
+    fields: [nav_menus.company_id],
+    references: [company.id],
+  }),
+  /**
+   * All nav items (L1 + L2) belonging to this menu.
+   * The service filters by parent_id to separate levels at query time.
+   */
+  items: many(nav_items),
+}));
+
+export const navItemsRelations = relations(nav_items, ({ one, many }) => ({
+  /** The navbar this item belongs to. */
+  menu: one(nav_menus, {
+    fields: [nav_items.menu_id],
+    references: [nav_menus.id],
+  }),
+  /**
+   * The L1 parent of this L2 column row.
+   * NULL when this item is itself an L1 link.
+   */
+  parent: one(nav_items, {
+    fields: [nav_items.parent_id],
+    references: [nav_items.id],
+    relationName: 'navItemChildren',
+  }),
+  /**
+   * L2 mega-menu column rows that belong to this L1 item.
+   * Only populated when has_mega_menu = true.
+   */
+  children: many(nav_items, {
+    relationName: 'navItemChildren',
+  }),
+  /**
+   * Category linked when item_type = 'category'.
+   * Used to JOIN category name/href on reads instead of storing stale copies.
+   */
+  category: one(categories, {
+    fields: [nav_items.category_id],
+    references: [categories.id],
+  }),
+  // NOTE: parent_category_id for DYNAMIC_SUBCATEGORIES display mode is stored
+  // inside meta JSONB (not a FK column) — resolved at service layer.
+}));

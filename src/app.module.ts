@@ -46,6 +46,7 @@ import { ComplianceModule } from './modules/compliance/compliance.module';
 import { SubscriptionModule } from './modules/subscription/subscription.module';
 import { CmsModule } from './modules/cms/cms.module';
 import { HelpArticlesModule } from './modules/help-articles/help-articles.module';
+import { NavbarModule } from './modules/navbar/navbar.module';
 import { FeedbackModule } from './modules/feedback/feedback.module';
 import { NotificationSettingsModule } from './modules/notification-settings/notification-settings.module';
 import { APP_GUARD } from '@nestjs/core';
@@ -107,11 +108,13 @@ export enum RATTELIMIT {
     ComplianceModule,
     SubscriptionModule,
     CmsModule,
+    NavbarModule,
     HelpArticlesModule,
     FeedbackModule,
     NotificationSettingsModule,
     ...(process.env.NODE_ENV !== 'production' ? [TraceModule] : []),
     CustomersModule,
+    NavbarModule,
   ],
   controllers: [AppController, UsersController],
   providers: [

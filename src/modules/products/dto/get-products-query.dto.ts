@@ -45,7 +45,7 @@ export class GetProductsQueryDto {
   // --- Filters ---
   @IsOptional()
   @IsString()
-  category_id?: string;
+  category?: string;
 
   @IsOptional()
   @Type(() => Number)

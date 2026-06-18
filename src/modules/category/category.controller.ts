@@ -14,7 +14,8 @@ import {
 } from '@nestjs/common';
 import { CategoryService } from './category.service';
 import { CreateCategoryDto } from './dto/CreateCategory.dto';
-import { JwtAuthGuard } from '../auth/jwt-auth.guard';
+import { UpdateCategoryDto } from './dto/UpdateCategory.dto';
+import { GetCategoriesQueryDto } from './dto/GetCategoriesQuery.dto';
 import { RoleGuard } from '../../guards/role.guard';
 import { Role } from '../../enums/role.enum';
 import { Roles } from '../../common/decorators/roles.decorator';
@@ -36,6 +37,7 @@ export class CategoryController {
   ) {
     return this.categoryService.createMany(createCategoryDtos, domain);
   }
+
   @Public()
   @Get('homepage')
   getHomepageCategories(
@@ -52,47 +54,46 @@ export class CategoryController {
   @Get()
   findAll(
     @Headers('company-domain') domain: string,
-    @Query('search') search?: string,
-    @Query('offset') offset?: number,
-    @Query('limit') limit?: number,
-    @Query('status') status?: string,
-    @Query('date') date?: string,
-    @Query('sortby') sortby?: 'asc' | 'desc',
+    @Query() query: GetCategoriesQueryDto,
   ) {
     return this.categoryService.findAll(domain, {
-      search: search ?? '',
-      limit: Number(limit) || 10,
-      offset: Number(offset) || 0,
-      status,
-      date: date ?? '',
-      sortby: sortby ?? 'desc',
+      search: query.search ?? '',
+      limit: query.limit ?? 10,
+      offset: query.offset ?? 0,
+      status: query.status,
+      date: query.date ?? '',
+      sortby: query.sortby ?? 'desc',
     });
   }
+
   @Post()
   @HttpCode(HttpStatus.CREATED)
   @UseGuards(RoleGuard)
   @Roles(Role.ADMIN, Role.VENDOR)
   create(
     @Headers('company-domain') domain: string,
-    @Body('category') createCategoryDto: any,
+    @Body('category') createCategoryDto: CreateCategoryDto,
   ) {
     return this.categoryService.create(createCategoryDto, domain);
   }
+
   @Public()
   @Get(':id')
   findOne(@Headers('company-domain') domain: string, @Param('id') id: string) {
     return this.categoryService.findOne(id, domain);
   }
+
   @Patch(':id')
   @UseGuards(RoleGuard)
   @Roles(Role.ADMIN, Role.VENDOR)
   update(
     @Headers('company-domain') domain: string,
     @Param('id') id: string,
-    @Body('category') updateCategoryDto: CreateCategoryDto,
+    @Body('category') updateCategoryDto: UpdateCategoryDto,
   ) {
     return this.categoryService.update(id, domain, updateCategoryDto);
   }
+
   @Delete(':id')
   @UseGuards(RoleGuard)
   @Roles(Role.ADMIN, Role.VENDOR)
