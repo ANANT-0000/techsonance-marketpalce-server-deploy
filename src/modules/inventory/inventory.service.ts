@@ -274,7 +274,6 @@ export class InventoryService {
         and(
           eq(inventory.product_variant_id, productVariantId),
           eq(inventory.warehouse_id, warehouseId),
-          eq(inventory.company_id, companyId),
         ),
       )
       .limit(1)
@@ -287,7 +286,7 @@ export class InventoryService {
     if (existing) {
       const updateResult = await db
         .update(inventory)
-        .set({ stock_quantity: newQuantity })
+        .set({ stock_quantity: newQuantity, company_id: companyId })
         .where(eq(inventory.id, existing.id))
         .returning()
         .catch((error) => {

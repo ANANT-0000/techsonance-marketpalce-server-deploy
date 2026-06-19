@@ -12,4 +12,5 @@ export enum CategoryErrorKeyEnum {
   PARENT_HAS_SUB_CATEGORIES = 'Cannot nest this category because the parent category is already a subcategory',
   CATEGORY_HAS_SUB_CATEGORIES = 'Cannot assign a parent to this category because it already has subcategories of its own',
   CATEGORY_HAS_PRODUCTS = 'Cannot delete category because it contains active product listings. Reassign or delete those products first',
+  CIRCULAR_REFERENCE = 'Circular reference detected in category hierarchy',
 }

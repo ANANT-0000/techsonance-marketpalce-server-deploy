@@ -29,6 +29,8 @@ export class CategoryService {
     return this.CompanyService.find(filterDomain);
   }
 
+  // Replace validateParentCategory entirely — drop the depth restriction,
+  // keep a cycle guard so reparenting can't create a loop in an n-level tree.
   private async validateParentCategory(
     parentId: string,
     companyId: string,
@@ -38,7 +40,7 @@ export class CategoryService {
       throw new BadRequestException(CategoryErrorKeyEnum.PARENT_CANNOT_BE_SELF);
     }
 
-    const parent = await this.db
+    const [parent] = await this.db
       .select()
       .from(categories)
       .where(
@@ -46,17 +48,66 @@ export class CategoryService {
       )
       .limit(1);
 
-    if (parent.length === 0) {
+    if (!parent) {
       throw new BadRequestException(
         CategoryErrorKeyEnum.PARENT_CATEGORY_NOT_FOUND,
       );
     }
 
-    // Rule: Parent category cannot itself be a subcategory (no multi-level nesting)
-    if (parent[0].parent_id) {
-      throw new BadRequestException(
-        CategoryErrorKeyEnum.PARENT_HAS_SUB_CATEGORIES,
-      );
+    // n-level nesting is allowed now. Only guard against cycles when reparenting
+    // an existing node (creation can never cycle, so categoryIdToExclude gates this).
+    if (categoryIdToExclude) {
+      let currentId: string | null = parentId;
+      const seen = new Set<string>();
+      while (currentId) {
+        if (currentId === categoryIdToExclude) {
+          throw new BadRequestException(
+            CategoryErrorKeyEnum.CIRCULAR_REFERENCE,
+          );
+        }
+        if (seen.has(currentId)) break;
+        seen.add(currentId);
+        const [row] = await this.db
+          .select({ parent_id: categories.parent_id })
+          .from(categories)
+          .where(
+            and(
+              eq(categories.id, currentId),
+              eq(categories.company_id, companyId),
+            ),
+          )
+          .limit(1);
+        currentId = row?.parent_id ?? null;
+      }
+    }
+  }
+
+  private slugify(name: string): string {
+    return name
+      .toLowerCase()
+      .trim()
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/^-+|-+$/g, '');
+  }
+
+  private async generateUniqueSlug(
+    name: string,
+    companyId: string,
+    excludeId?: string,
+  ): Promise<string> {
+    const base = this.slugify(name) || 'category';
+    let slug = base;
+    let suffix = 1;
+    while (true) {
+      const [conflict] = await this.db
+        .select({ id: categories.id })
+        .from(categories)
+        .where(
+          and(eq(categories.slug, slug), eq(categories.company_id, companyId)),
+        )
+        .limit(1);
+      if (!conflict || conflict.id === excludeId) return slug;
+      slug = `${base}-${++suffix}`;
     }
   }
 
@@ -120,6 +171,7 @@ export class CategoryService {
         return {
           id: category.id,
           name: category.name,
+          slug: category.slug,
           description: category.description,
           parent_id: category.parent_id,
           company_id: category.company_id,
@@ -199,11 +251,16 @@ export class CategoryService {
     }
 
     try {
+      const slug = await this.generateUniqueSlug(
+        createCategoryDto.name,
+        companyId,
+      );
       await this.db.insert(categories).values({
         name: createCategoryDto.name,
+        slug,
         description: createCategoryDto.description,
         parent_id: createCategoryDto.parent_id || null,
-        company_id: companyId || null,
+        company_id: companyId,
       });
       return {
         message: 'Category created successfully',
@@ -218,49 +275,6 @@ export class CategoryService {
       }
       throw new InternalServerErrorException(
         CategoryErrorKeyEnum.FAILED_TO_CREATE_CATEGORY,
-        {
-          cause: error,
-        },
-      );
-    }
-  }
-
-  async createMany(createCategoryDto: CreateCategoryDto[], domain: string) {
-    const companyId = await this.resolveCompanyId(domain);
-    if (!companyId) {
-      throw new InternalServerErrorException(
-        `Company not found for domain: ${domain}`,
-      );
-    }
-
-    // Validate parent category for each DTO in batch
-    for (const dto of createCategoryDto) {
-      if (dto.parent_id) {
-        await this.validateParentCategory(dto.parent_id, companyId);
-      }
-    }
-
-    try {
-      const categoryValues = createCategoryDto.map((dto) => ({
-        name: dto.name,
-        description: dto.description,
-        parent_id: dto.parent_id || null,
-        company_id: companyId || null,
-      }));
-      await this.db.insert(categories).values(categoryValues);
-      return {
-        message: 'Categories created successfully',
-        status: HttpStatus.CREATED,
-      };
-    } catch (error) {
-      if (
-        error instanceof BadRequestException ||
-        error instanceof ConflictException
-      ) {
-        throw error;
-      }
-      throw new InternalServerErrorException(
-        CategoryErrorKeyEnum.FAILED_TO_CREATE_CATEGORIES,
         {
           cause: error,
         },
@@ -369,26 +383,36 @@ export class CategoryService {
       );
     }
   }
+  private async collectDescendantIds(
+    rootId: string,
+    companyId: string,
+  ): Promise<string[]> {
+    const all: string[] = [];
+    let frontier = [rootId];
+    while (frontier.length) {
+      const children = await this.db
+        .select({ id: categories.id })
+        .from(categories)
+        .where(
+          and(
+            inArray(categories.parent_id, frontier),
+            eq(categories.company_id, companyId),
+          ),
+        );
+      if (children.length === 0) break;
+      const ids = children.map((c) => c.id);
+      all.push(...ids);
+      frontier = ids;
+    }
+    return all;
+  }
 
   async delete(id: string, domain: string) {
     const companyId = await this.resolveCompanyId(domain);
-    if (!companyId) {
-      throw new InternalServerErrorException(
-        `Company not found for domain: ${domain}`,
-      );
-    }
 
-    // 1. Fetch subcategories to verify cascade safety
-    const subs = await this.db
-      .select({ id: categories.id })
-      .from(categories)
-      .where(
-        and(eq(categories.parent_id, id), eq(categories.company_id, companyId)),
-      );
+    const descendantIds = await this.collectDescendantIds(id, companyId);
+    const allCategoryIds = [id, ...descendantIds];
 
-    const allCategoryIds = [id, ...subs.map((s) => s.id)];
-
-    // 2. Cascade Prevention Check: If products are linked to any category in the chain, prevent deletion
     const linkedProducts = await this.db
       .select({ count: sql<number>`count(*)` })
       .from(products)
@@ -398,7 +422,6 @@ export class CategoryService {
           eq(products.company_id, companyId),
         ),
       );
-
     if (linkedProducts[0] && Number(linkedProducts[0].count) > 0) {
       throw new ConflictException(CategoryErrorKeyEnum.CATEGORY_HAS_PRODUCTS);
     }

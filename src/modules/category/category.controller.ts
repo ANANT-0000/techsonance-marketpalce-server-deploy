@@ -28,16 +28,6 @@ import { Public } from '../../common/decorators/public.decorator';
 export class CategoryController {
   constructor(private readonly categoryService: CategoryService) {}
 
-  @Post('create-many-categories')
-  @UseGuards(RoleGuard)
-  @Roles(Role.ADMIN, Role.VENDOR)
-  createMany(
-    @Headers('company-domain') domain: string,
-    @Body('categories') createCategoryDtos: CreateCategoryDto[],
-  ) {
-    return this.categoryService.createMany(createCategoryDtos, domain);
-  }
-
   @Public()
   @Get('homepage')
   getHomepageCategories(
@@ -58,7 +48,7 @@ export class CategoryController {
   ) {
     return this.categoryService.findAll(domain, {
       search: query.search ?? '',
-      limit: query.limit ?? 10,
+      limit: query.limit ?? 50,
       offset: query.offset ?? 0,
       status: query.status,
       date: query.date ?? '',

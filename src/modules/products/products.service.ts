@@ -96,12 +96,28 @@ export class ProductsService {
       }
 
       if (category && category.trim() !== '' && category !== 'null') {
-        const [{ id: categoryId }] = await this.db
-          .select({ id: categories.id })
-          .from(categories)
-          .where(eq(categories.name, category));
-        if (categoryId) {
-          conditions.push(eq(products.category_id, categoryId));
+        const isUuid = /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/.test(category);
+        if (isUuid) {
+          conditions.push(eq(products.category_id, category));
+        } else {
+          const categoryRows = await this.db
+            .select({ id: categories.id })
+            .from(categories)
+            .where(
+              or(
+                eq(categories.name, category),
+                eq(categories.slug, category),
+              )
+            )
+            .catch(() => []);
+          if (categoryRows.length > 0) {
+            conditions.push(
+              inArray(
+                products.category_id,
+                categoryRows.map((c) => c.id),
+              )
+            );
+          }
         }
       }
 
@@ -247,25 +263,36 @@ export class ProductsService {
       }
 
       if (category && category.trim() !== '' && category !== 'null') {
-        const categoryIds = await this.db
-          .select({ id: categories.id })
-          .from(categories)
-          .where(eq(categories.name, category))
-          .catch((error) => {
-            throw new InternalServerErrorException(
-              ProductsErrorKeyEnum.FAILED_TO_FETCH_CATEGORY,
-              {
-                cause: error,
-              },
+        const isUuid = /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/.test(category);
+        if (isUuid) {
+          conditions.push(eq(products.category_id, category));
+        } else {
+          const categoryRows = await this.db
+            .select({ id: categories.id })
+            .from(categories)
+            .where(
+              or(
+                eq(categories.name, category),
+                eq(categories.slug, category),
+              )
+            )
+            .catch((error) => {
+              throw new InternalServerErrorException(
+                ProductsErrorKeyEnum.FAILED_TO_FETCH_CATEGORY,
+                {
+                  cause: error,
+                },
+              );
+            });
+          if (categoryRows.length > 0) {
+            conditions.push(
+              inArray(
+                products.category_id,
+                categoryRows.map((c) => c.id),
+              )
             );
-          });
-
-        conditions.push(
-          inArray(
-            products.category_id,
-            categoryIds.map((id) => id.id),
-          ),
-        );
+          }
+        }
       }
 
       if (min_price !== undefined) {
@@ -542,6 +569,7 @@ export class ProductsService {
   }
   async getProductDetailsById(productVariantId: string, domain: string) {
     try {
+      let resolvedVariantId = productVariantId;
       const isProductVariantExist = await this.db
         .select({ id: product_variants.id })
         .from(product_variants)
@@ -552,19 +580,33 @@ export class ProductsService {
           );
         });
 
+      if (isProductVariantExist.length === 0) {
+        const fallbackVariants = await this.db
+          .select({ id: product_variants.id })
+          .from(product_variants)
+          .where(eq(product_variants.product_id, productVariantId))
+          .limit(1)
+          .catch(() => []);
+        if (fallbackVariants.length > 0) {
+          resolvedVariantId = fallbackVariants[0].id;
+        }
+      }
+
       const productVariant = await this.db.query.product_variants
         .findFirst({
-          where: eq(product_variants.id, productVariantId),
+          where: eq(product_variants.id, resolvedVariantId),
           with: {
             images: true,
             product: {
               columns: {
+                id: true,
                 name: true,
                 description: true,
                 features: true,
                 base_price: true,
                 discount_percent: true,
                 status: true,
+                category_id: true,
               },
             },
             inventory: {
@@ -583,7 +625,18 @@ export class ProductsService {
             },
           },
         })
-        .then((res) => {
+        .then(async (res) => {
+          if (res && res.product_id) {
+            const taxMapping = await this.db
+              .select({ tax_slab_id: product_tax.tax_slab_id })
+              .from(product_tax)
+              .where(eq(product_tax.product_id, res.product_id))
+              .limit(1)
+              .catch(() => []);
+            if (res.product) {
+              (res.product as any).tax_slab_id = taxMapping[0]?.tax_slab_id || '';
+            }
+          }
           return res;
         })
         .catch((error) => {
@@ -881,43 +934,63 @@ export class ProductsService {
       toDeleteUrl: string | undefined;
       url: string | undefined;
     }[] = [];
+
     if (!productVariantId) {
-      return new HttpException(
+      throw new HttpException(
         ProductsErrorKeyEnum.PRODUCT_VARIANT_ID_IS_REQUIRED,
         HttpStatus.BAD_REQUEST,
       );
     }
     const companyId = await this.resolveCompanyId(domain);
-    const [productId] = await this.db
-      .select({
-        product_id: product_variants.product_id,
-      })
+    let resolvedProductId: string | undefined;
+    let resolvedVariantId: string | undefined;
+
+    const variantRow = await this.db
+      .select({ product_id: product_variants.product_id, id: product_variants.id })
       .from(product_variants)
       .where(eq(product_variants.id, productVariantId))
-      .then((res) => {
-        return res.map((item) => item.product_id);
-      })
-      .catch((error) => {
-        throw new InternalServerErrorException(
-          ProductsErrorKeyEnum.FAILED_TO_FETCH_PRODUCT_VARIANT,
-          {
-            cause: error,
-          },
-        );
-      });
-    if (!productId && productId === null) {
+      .limit(1)
+      .catch(() => []);
+
+    if (variantRow.length > 0) {
+      resolvedProductId = variantRow[0].product_id ?? undefined;
+      resolvedVariantId = variantRow[0].id;
+    } else {
+      const productRow = await this.db
+        .select({ id: products.id })
+        .from(products)
+        .where(eq(products.id, productVariantId))
+        .limit(1)
+        .catch(() => []);
+
+      if (productRow.length > 0) {
+        resolvedProductId = productRow[0].id;
+        const firstVariant = await this.db
+          .select({ id: product_variants.id })
+          .from(product_variants)
+          .where(eq(product_variants.product_id, resolvedProductId))
+          .limit(1)
+          .catch(() => []);
+        if (firstVariant.length > 0) {
+          resolvedVariantId = firstVariant[0].id;
+        }
+      }
+    }
+
+    if (!resolvedProductId) {
       throw new HttpException(
         ProductsErrorKeyEnum.PRODUCT_ID_NOT_FOUND_FOR_THE_GIVEN_VARIANT,
         HttpStatus.NOT_FOUND,
       );
     }
+
     const productUpdatedData = {
       name: product.name,
       description: product.description,
       features: product.features,
       base_price: product.base_price,
       discount_percent: product.discount_percent,
-
+      category_id: product.category_id,
       status: product.status,
     };
     try {
@@ -932,7 +1005,7 @@ export class ProductsService {
           const updatedProductResult = await tx
             .update(products)
             .set(productUpdatedData)
-            .where(eq(products.id, productVariantId))
+            .where(eq(products.id, resolvedProductId))
             .catch((error) => {
               throw new InternalServerErrorException(
                 ProductsErrorKeyEnum.FAILED_TO_UPDATE_PRODUCT,
@@ -941,6 +1014,72 @@ export class ProductsService {
                 },
               );
             });
+
+          if (product.tax_slab_id) {
+            await tx
+              .insert(product_tax)
+              .values({
+                product_id: resolvedProductId,
+                tax_slab_id: product.tax_slab_id,
+              })
+              .onConflictDoUpdate({
+                target: product_tax.product_id,
+                set: {
+                  tax_slab_id: product.tax_slab_id,
+                  updated_at: new Date(),
+                },
+              })
+              .catch((error) => {
+                throw new InternalServerErrorException(
+                  ProductsErrorKeyEnum.FAILED_TO_CREATE_PRODUCT_TAX_MAPPING,
+                  {
+                    cause: error,
+                  },
+                );
+              });
+          }
+
+          const imagesToDeleteIds = imagesToDelete;
+          if (imagesToDeleteIds && imagesToDeleteIds.length > 0) {
+            const urls = await tx
+              .select({ image_url: product_images.image_url })
+              .from(product_images)
+              .where(inArray(product_images.id, imagesToDeleteIds))
+              .then((res) => {
+                return res.map((item) => item.image_url);
+              })
+              .catch((error) => {
+                throw new InternalServerErrorException(
+                  ProductsErrorKeyEnum.FAILED_TO_FETCH_IMAGE_URLS_FOR_DELETION,
+                  {
+                    cause: error,
+                  },
+                );
+              });
+            if (urls && urls.length > 0) {
+              for (const url of urls) {
+                const publicId = extractCloudinaryPublicId(url);
+                if (publicId) {
+                  await this.uploadToCloudService
+                    .deleteFile(publicId, 'image')
+                    .then(() => {})
+                    .catch((error) => {});
+                }
+              }
+            }
+            await tx
+              .delete(product_images)
+              .where(inArray(product_images.id, imagesToDeleteIds))
+              .catch((error) => {
+                throw new InternalServerErrorException(
+                  ProductsErrorKeyEnum.FAILED_TO_DELETE_PRODUCT_IMAGE,
+                  {
+                    cause: error,
+                  },
+                );
+              });
+          }
+
           const finalResults: { url: string; type: productImageType }[] = [];
 
           if (files?.product?.[0]) {
@@ -970,11 +1109,14 @@ export class ProductsService {
               })),
             );
           }
-          if (finalResults.length > 0 && product.variant_id) {
+
+          const targetVariantId = product.variant_id || resolvedVariantId;
+
+          if (finalResults.length > 0 && targetVariantId) {
             const imageInserts = finalResults.map((image, index) => {
               return {
-                variant_id: product.variant_id,
-                product_id: productId,
+                variant_id: targetVariantId,
+                product_id: resolvedProductId,
                 image_url: image.url,
                 alt_text: `${image.type} Image ${index + 1}`,
                 is_primary: image.type === productImageType.MAIN,
@@ -993,58 +1135,9 @@ export class ProductsService {
                   },
                 );
               });
-            const imagesToDeleteIds = imagesToDelete?.map((id) => id);
-            if (imagesToDeleteIds && imagesToDeleteIds.length > 0) {
-              const urls = await tx
-                .select({ image_url: product_images.image_url })
-                .from(product_images)
-                .where(inArray(product_images.id, imagesToDeleteIds))
-                .then((res) => {
-                  return res.map((item) => item.image_url);
-                })
-                .catch((error) => {
-                  throw new InternalServerErrorException(
-                    ProductsErrorKeyEnum.FAILED_TO_FETCH_IMAGE_URLS_FOR_DELETION,
-                    {
-                      cause: error,
-                    },
-                  );
-                });
-              if (urls && urls.length > 0) {
-                for (const url of urls) {
-                  const publicId = extractCloudinaryPublicId(url);
-                  await this.uploadToCloudService
-                    .deleteFile(publicId!, 'image')
-                    .then(() => {})
-                    .catch((error) => {});
-                }
-              }
-            }
-            if (imagesToDelete) {
-              const deletePromises = imagesToDelete.map(
-                async (id) =>
-                  await tx
-                    .delete(product_images)
-                    .where(
-                      or(
-                        eq(product_images.id, id),
-                        eq(product_images.product_id, id),
-                      ),
-                    )
-                    .then(() => {
-                      return id;
-                    })
-                    .catch((error) => {
-                      throw new InternalServerErrorException(
-                        ProductsErrorKeyEnum.FAILED_TO_DELETE_PRODUCT_IMAGE,
-                        {
-                          cause: error,
-                        },
-                      );
-                    }),
-              );
-              const deletedImages = await Promise.all(deletePromises);
-            }
+          }
+
+          if (targetVariantId) {
             const updateProductVariantData = {
               variant_name: product.variant_name,
               sku: product.sku,
@@ -1058,8 +1151,8 @@ export class ProductsService {
               .set(updateProductVariantData)
               .where(
                 and(
-                  eq(product_variants.product_id, productId),
-                  eq(product_variants.id, productVariantId),
+                  eq(product_variants.product_id, resolvedProductId),
+                  eq(product_variants.id, targetVariantId),
                 ),
               )
               .catch((error) => {
@@ -1071,9 +1164,10 @@ export class ProductsService {
                 );
               });
           }
-          if (product.warehouse_id && productVariantId) {
+
+          if (product.warehouse_id && targetVariantId) {
             await this.inventoryService.setStock(
-              productVariantId,
+              targetVariantId,
               product.warehouse_id,
               product.stock_quantity ?? 0,
               companyId,

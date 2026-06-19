@@ -132,3 +132,42 @@ export const refresh_tokens = pg.pgTable('refresh_tokens', {
     .$default(() => new Date())
     .notNull(),
 });
+
+export const site_maps = pg.pgTable(
+  'site_maps',
+  {
+    id: pg.uuid('id').primaryKey().defaultRandom(),
+    company_id: pg
+      .uuid('company_id')
+      .notNull()
+      .references(() => company.id, { onDelete: 'cascade' }),
+
+    /** Stable identifier the rest of the system references — e.g.
+     *  'store', 'blog', 'customer_support'. Vendor-defined, not an enum,
+     *  so new page types never require a migration. */
+    key: pg.varchar('key', { length: 60 }).notNull(),
+
+    /** Admin-facing name shown in selectors, e.g. "Store / Shop", "Blog". */
+    label: pg.varchar('label', { length: 120 }).notNull(),
+
+    /** The actual route prefix. This is the one thing allowed to change
+     *  freely — e.g. '/store' → '/shop' — without touching nav_items. */
+    base_path: pg.text('base_path').notNull(),
+
+    /** searchParams key appended for dynamic targets (category slug,
+     *  product id, etc). Null for static pages like /customer/support. */
+    default_query_param: pg.varchar('default_query_param', { length: 60 }),
+
+    /** Seeded purposes (store, support) — key can't be deleted, only
+     *  base_path edited, so a broken nav item is never possible. */
+    is_system: pg.boolean('is_system').notNull().default(false),
+
+    created_at: pg.timestamp('created_at').notNull().defaultNow(),
+    updated_at: pg
+      .timestamp('updated_at')
+      .notNull()
+      .defaultNow()
+      .$onUpdate(() => new Date()),
+  },
+  (t) => [pg.uniqueIndex('uq_site_maps_company_key').on(t.company_id, t.key)],
+);

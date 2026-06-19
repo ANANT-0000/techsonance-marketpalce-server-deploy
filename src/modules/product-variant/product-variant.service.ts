@@ -112,21 +112,61 @@ export class ProductVariantService {
           );
         }
 
+        const copySpecImages: { image_url: string; alt_text: string | null }[] = [];
+        if (!files?.product_spec || files.product_spec.length === 0) {
+          const existingSpecImages = await tx
+            .select({
+              image_url: product_images.image_url,
+              alt_text: product_images.alt_text,
+            })
+            .from(product_images)
+            .where(
+              and(
+                eq(product_images.product_id, productId.id),
+                eq(product_images.imgType, productImageType.GALLERY),
+              ),
+            );
+          const uniqueUrls = new Set<string>();
+          for (const img of existingSpecImages) {
+            if (img.image_url && !uniqueUrls.has(img.image_url)) {
+              uniqueUrls.add(img.image_url);
+              copySpecImages.push({
+                image_url: img.image_url,
+                alt_text: img.alt_text,
+              });
+            }
+          }
+        }
+
         if (!variantRecord.id) {
           throw new InternalServerErrorException(ProductVariantErrorKeyEnum.FAILED_VARIANT_RECORD);
         }
-        if (finalResults.length > 0) {
-          const imageInserts = finalResults.map((image, index) => {
-            return {
+
+        const imageInserts = finalResults.map((image, index) => {
+          return {
+            product_id: productId.id,
+            variant_id: variantRecord.id,
+            image_url: `${image.url}`,
+            alt_text: `${image.type} Image ${index + 1}`,
+            is_primary: image.type === productImageType.MAIN,
+            imgType: image.type,
+          };
+        });
+
+        if (copySpecImages.length > 0) {
+          copySpecImages.forEach((img, index) => {
+            imageInserts.push({
               product_id: productId.id,
               variant_id: variantRecord.id,
-              image_url: `${image.url}`,
-              alt_text: `${image.type} Image ${index + 1}`,
-              is_primary: image.type === productImageType.MAIN,
-              imgType: image.type,
-            };
+              image_url: img.image_url,
+              alt_text: img.alt_text || `GALLERY Image Copy ${index + 1}`,
+              is_primary: false,
+              imgType: productImageType.GALLERY,
+            });
           });
+        }
 
+        if (imageInserts.length > 0) {
           const variantImgsResult = await tx
             .insert(product_images)
             .values(imageInserts)

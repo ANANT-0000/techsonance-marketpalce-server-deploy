@@ -42,6 +42,7 @@ import {
   permissions,
   refresh_tokens,
   role_permissions,
+  site_maps,
   user_and_company,
   user_roles,
 } from './main.schema';
@@ -106,6 +107,7 @@ export const companyRelations = relations(company, ({ one, many }) => ({
   payments: many(payments),
   shipping_details: many(shipping_details),
   refunds: many(refunds),
+  siteMappings: many(site_maps),
   invoices: many(invoices),
   audit_logs: many(audit_logs),
   inventory: many(inventory),
@@ -634,36 +636,42 @@ export const templateRelations = relations(templates, ({ one }) => ({
   }),
 }));
 
-export const supportTicketsRelations = relations(support_tickets, ({ one, many }) => ({
-  user: one(user, {
-    fields: [support_tickets.user_id],
-    references: [user.id],
+export const supportTicketsRelations = relations(
+  support_tickets,
+  ({ one, many }) => ({
+    user: one(user, {
+      fields: [support_tickets.user_id],
+      references: [user.id],
+    }),
+    company: one(company, {
+      fields: [support_tickets.company_id],
+      references: [company.id],
+    }),
+    order: one(orders, {
+      fields: [support_tickets.order_id],
+      references: [orders.id],
+    }),
+    comments: many(ticket_comments),
+    rating: one(ticket_ratings, {
+      fields: [support_tickets.id],
+      references: [ticket_ratings.ticket_id],
+    }),
   }),
-  company: one(company, {
-    fields: [support_tickets.company_id],
-    references: [company.id],
-  }),
-  order: one(orders, {
-    fields: [support_tickets.order_id],
-    references: [orders.id],
-  }),
-  comments: many(ticket_comments),
-  rating: one(ticket_ratings, {
-    fields: [support_tickets.id],
-    references: [ticket_ratings.ticket_id],
-  }),
-}));
+);
 
-export const ticketCommentsRelations = relations(ticket_comments, ({ one }) => ({
-  ticket: one(support_tickets, {
-    fields: [ticket_comments.ticket_id],
-    references: [support_tickets.id],
+export const ticketCommentsRelations = relations(
+  ticket_comments,
+  ({ one }) => ({
+    ticket: one(support_tickets, {
+      fields: [ticket_comments.ticket_id],
+      references: [support_tickets.id],
+    }),
+    user: one(user, {
+      fields: [ticket_comments.user_id],
+      references: [user.id],
+    }),
   }),
-  user: one(user, {
-    fields: [ticket_comments.user_id],
-    references: [user.id],
-  }),
-}));
+);
 
 export const ticketRatingsRelations = relations(ticket_ratings, ({ one }) => ({
   ticket: one(support_tickets, {
@@ -676,24 +684,27 @@ export const ticketRatingsRelations = relations(ticket_ratings, ({ one }) => ({
   }),
 }));
 
-export const customerFeedbackRelations = relations(customer_feedback, ({ one }) => ({
-  user: one(user, {
-    fields: [customer_feedback.user_id],
-    references: [user.id],
+export const customerFeedbackRelations = relations(
+  customer_feedback,
+  ({ one }) => ({
+    user: one(user, {
+      fields: [customer_feedback.user_id],
+      references: [user.id],
+    }),
+    order: one(orders, {
+      fields: [customer_feedback.order_id],
+      references: [orders.id],
+    }),
+    ticket: one(support_tickets, {
+      fields: [customer_feedback.ticket_id],
+      references: [support_tickets.id],
+    }),
+    company: one(company, {
+      fields: [customer_feedback.company_id],
+      references: [company.id],
+    }),
   }),
-  order: one(orders, {
-    fields: [customer_feedback.order_id],
-    references: [orders.id],
-  }),
-  ticket: one(support_tickets, {
-    fields: [customer_feedback.ticket_id],
-    references: [support_tickets.id],
-  }),
-  company: one(company, {
-    fields: [customer_feedback.company_id],
-    references: [company.id],
-  }),
-}));
+);
 
 export const helpArticlesRelations = relations(help_articles, ({ one }) => ({
   company: one(company, {
@@ -702,12 +713,15 @@ export const helpArticlesRelations = relations(help_articles, ({ one }) => ({
   }),
 }));
 
-export const notificationSettingsRelations = relations(notification_settings, ({ one }) => ({
-  user: one(user, {
-    fields: [notification_settings.user_id],
-    references: [user.id],
+export const notificationSettingsRelations = relations(
+  notification_settings,
+  ({ one }) => ({
+    user: one(user, {
+      fields: [notification_settings.user_id],
+      references: [user.id],
+    }),
   }),
-}));
+);
 
 export const vendorStorefrontSectionsRelations = relations(
   vendor_storefront_sections,
@@ -722,48 +736,39 @@ export const vendorStorefrontSectionsRelations = relations(
 // ─── Navbar Relational Relations ──────────────────────────────────────────────
 
 export const navMenusRelations = relations(nav_menus, ({ one, many }) => ({
-  /** The company that owns this navbar configuration. */
   company: one(company, {
     fields: [nav_menus.company_id],
     references: [company.id],
   }),
-  /**
-   * All nav items (L1 + L2) belonging to this menu.
-   * The service filters by parent_id to separate levels at query time.
-   */
+
   items: many(nav_items),
 }));
 
 export const navItemsRelations = relations(nav_items, ({ one, many }) => ({
-  /** The navbar this item belongs to. */
   menu: one(nav_menus, {
     fields: [nav_items.menu_id],
     references: [nav_menus.id],
   }),
-  /**
-   * The L1 parent of this L2 column row.
-   * NULL when this item is itself an L1 link.
-   */
+
   parent: one(nav_items, {
     fields: [nav_items.parent_id],
     references: [nav_items.id],
     relationName: 'navItemChildren',
   }),
-  /**
-   * L2 mega-menu column rows that belong to this L1 item.
-   * Only populated when has_mega_menu = true.
-   */
+
   children: many(nav_items, {
     relationName: 'navItemChildren',
   }),
-  /**
-   * Category linked when item_type = 'category'.
-   * Used to JOIN category name/href on reads instead of storing stale copies.
-   */
+
   category: one(categories, {
     fields: [nav_items.category_id],
     references: [categories.id],
   }),
-  // NOTE: parent_category_id for DYNAMIC_SUBCATEGORIES display mode is stored
-  // inside meta JSONB (not a FK column) — resolved at service layer.
+}));
+
+export const siteMappingsRelations = relations(site_maps, ({ one }) => ({
+  company: one(company, {
+    fields: [site_maps.company_id],
+    references: [company.id],
+  }),
 }));

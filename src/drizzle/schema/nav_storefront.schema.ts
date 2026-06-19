@@ -49,6 +49,7 @@ export enum NavItemDisplayType {
   CATEGORY_LISTING = 'category_listing',
   DYNAMIC_SUBCATEGORIES = 'dynamic_subcategories',
   PRODUCT_RANGES = 'product_ranges',
+  CATEGORY_DIRECTORY = 'category_directory',
 }
 export enum NavItemColType {
   SUBCATEGORIES = 'subcategories',
@@ -129,7 +130,7 @@ export interface NavItemMeta {
    * Only meaningful when has_mega_menu = true.
    */
   display_type?: NavItemDisplayType;
-
+  route_key?: string;
   /**
    * Show thumbnail icons beside each category label.
    * Only used when display_type = 'CATEGORY_LISTING'.

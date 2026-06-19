@@ -22,6 +22,7 @@ export const categories = pg.pgTable(
   {
     id: pg.uuid('id').primaryKey().defaultRandom(),
     name: pg.text('name').notNull(),
+    slug: pg.varchar('slug', { length: 160 }).notNull(),
     description: pg.text('description'),
     parent_id: pg
       .uuid('parent_id')
@@ -37,6 +38,7 @@ export const categories = pg.pgTable(
   (t) => [
     pg.index('idx_categories_name').on(t.name),
     pg.index('idx_categories_parent_id').on(t.parent_id),
+    pg.uniqueIndex('uq_categories_company_slug').on(t.company_id, t.slug),
   ],
 );
 export const coupons = pg.pgTable('coupons', {
@@ -141,7 +143,7 @@ export const products = pg.pgTable(
       .references(() => vendor.id, { onDelete: 'cascade' }),
     category_id: pg
       .uuid('category_id')
-      .references(() => categories.id, { onDelete: 'cascade' }),
+      .references(() => categories.id, { onDelete: 'no action' }),
   },
   (table) => [
     pg.index('idx_products_company_id').on(table.company_id),

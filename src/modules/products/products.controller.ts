@@ -143,14 +143,26 @@ export class ProductsController {
     @Param('id') id: string,
     @Body('product_data', ParseJsonPipe) product: any,
     @Headers('company-domain') domain: string,
-    @Body('imagesToDelete') imagesToDelete?: string[],
+    @Body('imagesToDelete') imagesToDelete?: string | string[],
     @UploadedFiles() files?: ProductFiles,
   ) {
+    let parsedImagesToDelete: string[] | undefined;
+    if (imagesToDelete) {
+      if (typeof imagesToDelete === 'string') {
+        try {
+          parsedImagesToDelete = JSON.parse(imagesToDelete);
+        } catch {
+          parsedImagesToDelete = undefined;
+        }
+      } else if (Array.isArray(imagesToDelete)) {
+        parsedImagesToDelete = imagesToDelete;
+      }
+    }
     return await this.productsService.updateProduct(
       domain,
       id,
       product,
-      imagesToDelete,
+      parsedImagesToDelete,
       files,
     );
   }

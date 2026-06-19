@@ -10,6 +10,7 @@ import {
   HttpStatus,
   HttpCode,
   Headers,
+  UseGuards,
 } from '@nestjs/common';
 import { ProductVariantService } from './product-variant.service';
 import { UploadToCloud } from '../../common/decorators/upload.decorator';
@@ -17,6 +18,9 @@ import { ParseJsonPipe } from '../../common/pipes/parseJsonPipe';
 import { type ProductFiles } from '../../common/Types/index.type';
 import { ProductStatus } from '../../drizzle/types/types';
 import { Public } from '../../common/decorators/public.decorator';
+import { RoleGuard } from 'src/guards/role.guard';
+import { Role } from 'src/enums/role.enum';
+import { Roles } from 'src/common/decorators/roles.decorator';
 
 @Controller({
   version: '1',
@@ -31,6 +35,8 @@ export class ProductVariantController {
     { name: 'product_spec', maxCount: 10 },
   ])
   @HttpCode(HttpStatus.CREATED)
+  @UseGuards(RoleGuard)
+  @Roles(Role.ADMIN, Role.VENDOR)
   create(
     @Body('variant_data', ParseJsonPipe) createProductVariantDto: any,
     @Headers('company-domain') domain: string,
@@ -46,11 +52,15 @@ export class ProductVariantController {
   // Add this new route
   @Get('stock-manager')
   @HttpCode(HttpStatus.OK)
+  @UseGuards(RoleGuard)
+  @Roles(Role.ADMIN, Role.VENDOR)
   getStockManagerVariants(@Headers('company-domain') domain: string) {
     return this.productVariantService.getVariantsForStockManager(domain);
   }
   @Get('vendor-products-variants/:vendorId')
   @HttpCode(HttpStatus.OK)
+  @UseGuards(RoleGuard)
+  @Roles(Role.ADMIN, Role.VENDOR)
   findAll(@Param('vendorId') vendorId: string) {
     return this.productVariantService.findAll(vendorId);
   }
@@ -79,6 +89,8 @@ export class ProductVariantController {
     { name: 'product_spec', maxCount: 10 },
   ])
   @HttpCode(HttpStatus.OK)
+  @UseGuards(RoleGuard)
+  @Roles(Role.ADMIN, Role.VENDOR)
   async update(
     @Param('id') id: string,
     // @Body() body: any,
@@ -97,6 +109,8 @@ export class ProductVariantController {
     );
   }
   @Patch('update-status/:id')
+  @UseGuards(RoleGuard)
+  @Roles(Role.ADMIN, Role.VENDOR)
   async updateProductStatus(
     @Param('id') id: string,
     @Body('status') status: ProductStatus,
@@ -108,6 +122,8 @@ export class ProductVariantController {
     );
   }
   @Delete(':id')
+  @UseGuards(RoleGuard)
+  @Roles(Role.ADMIN, Role.VENDOR)
   async delete(@Param('id') id: string) {
     return await this.productVariantService.delete(id);
   }
