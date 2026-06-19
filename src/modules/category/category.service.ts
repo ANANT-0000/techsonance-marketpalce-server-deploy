@@ -268,7 +268,7 @@ export class CategoryService {
     }
   }
 
-  async findOne(id: string, domain: string) {
+  async findOne(categoryName: string, domain: string) {
     const companyId = await this.resolveCompanyId(domain);
     if (!companyId) {
       throw new InternalServerErrorException(
@@ -279,7 +279,20 @@ export class CategoryService {
     const category = await this.db
       .select()
       .from(categories)
-      .where(and(eq(categories.id, id), eq(categories.company_id, companyId)));
+      .where(
+        and(
+          eq(categories.name, categoryName),
+          eq(categories.company_id, companyId),
+        ),
+      )
+      .catch((error) => {
+        throw new InternalServerErrorException(
+          CategoryErrorKeyEnum.FAILED_TO_FETCH_CATEGORIES,
+          {
+            cause: error,
+          },
+        );
+      });
     return category;
   }
 

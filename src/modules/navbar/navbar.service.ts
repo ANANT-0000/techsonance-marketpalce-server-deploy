@@ -391,7 +391,6 @@ export class NavbarService {
               });
             }
           }
-
           return {
             id: l1.id,
             label: resolvedLabel,

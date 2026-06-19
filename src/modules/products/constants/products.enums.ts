@@ -3,10 +3,12 @@ export enum ProductsErrorKeyEnum {
   FAILED_TO_FETCH_PRODUCTS = 'Failed to fetch products',
   FAILED_TO_FETCH_SUGGESTIONS = 'Failed to fetch suggestions',
   FAILED_TO_FETCH_PRODUCT = 'Failed to fetch product',
+  FAILED_TO_FETCH_CATEGORY = 'Failed to fetch category',
   PRODUCT_NOT_FOUND = 'Product not found',
   FAILED_TO_CHECK_PRODUCT_VARIANT_EXISTENCE = 'Failed to check product variant existence',
   PRODUCT_VARIANT_NOT_FOUND = 'Product variant not found',
   FAILED_TO_FETCH_ACTIVE_PRODUCTS = 'Failed to fetch active products',
+
   FAILED_TO_FETCH_HOMEPAGE_PRODUCTS = 'Failed to fetch homepage products',
   FAILED_TO_CREATE_PRODUCT_VARIANT = 'Failed to create product variant',
   FAILED_TO_CREATE_PRODUCT_TAX_MAPPING = 'Failed to create product tax mapping',

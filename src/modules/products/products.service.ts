@@ -247,11 +247,25 @@ export class ProductsService {
       }
 
       if (category && category.trim() !== '' && category !== 'null') {
-        const [{ id: categoryId }] = await this.db
+        const categoryIds = await this.db
           .select({ id: categories.id })
           .from(categories)
-          .where(eq(categories.name, category));
-        conditions.push(eq(products.category_id, categoryId));
+          .where(eq(categories.name, category))
+          .catch((error) => {
+            throw new InternalServerErrorException(
+              ProductsErrorKeyEnum.FAILED_TO_FETCH_CATEGORY,
+              {
+                cause: error,
+              },
+            );
+          });
+
+        conditions.push(
+          inArray(
+            products.category_id,
+            categoryIds.map((id) => id.id),
+          ),
+        );
       }
 
       if (min_price !== undefined) {

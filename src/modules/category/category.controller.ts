@@ -78,9 +78,12 @@ export class CategoryController {
   }
 
   @Public()
-  @Get(':id')
-  findOne(@Headers('company-domain') domain: string, @Param('id') id: string) {
-    return this.categoryService.findOne(id, domain);
+  @Get(':category')
+  findOne(
+    @Headers('company-domain') domain: string,
+    @Param('category') category: string,
+  ) {
+    return this.categoryService.findOne(category, domain);
   }
 
   @Patch(':id')
