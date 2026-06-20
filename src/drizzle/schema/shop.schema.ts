@@ -33,6 +33,7 @@ export const categories = pg.pgTable(
       .notNull()
       .defaultNow()
       .$onUpdate(() => new Date()),
+    icon_url: pg.text('icon_url'),
     company_id: pg.uuid('company_id').references(() => company.id),
   },
   (t) => [

@@ -18,4 +18,8 @@ export class CreateCategoryDto {
   @IsOptional()
   @IsUUID('4', { message: 'Parent ID must be a valid UUID' })
   parent_id?: string | null;
+
+  @IsOptional()
+  @IsString()
+  icon_url?: string | null;
 }

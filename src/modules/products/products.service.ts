@@ -54,6 +54,56 @@ export class ProductsService {
     const filterDomain = domainExtractor(domain);
     return this.companyService.find(filterDomain);
   }
+  private async getCategoryAndDescendantIds(
+    companyId: string,
+    categoryIdentifier: string,
+  ): Promise<string[]> {
+    const dbCategories = await this.db
+      .select({
+        id: categories.id,
+        parent_id: categories.parent_id,
+        slug: categories.slug,
+        name: categories.name,
+      })
+      .from(categories)
+      .where(eq(categories.company_id, companyId))
+      .catch((): any[] => []);
+
+    if (dbCategories.length === 0) return [];
+
+    const isUuid = /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/.test(categoryIdentifier);
+    const target = dbCategories.find((c) =>
+      isUuid
+        ? c.id === categoryIdentifier
+        : c.slug === categoryIdentifier || c.name === categoryIdentifier,
+    );
+
+    if (!target) return [];
+
+    const childrenMap = new Map<string, string[]>();
+    dbCategories.forEach((c) => {
+      if (c.parent_id) {
+        const children = childrenMap.get(c.parent_id) || [];
+        children.push(c.id);
+        childrenMap.set(c.parent_id, children);
+      }
+    });
+
+    const resultIds: string[] = [target.id];
+    const queue = [target.id];
+    while (queue.length > 0) {
+      const currentId = queue.shift()!;
+      const children = childrenMap.get(currentId) || [];
+      for (const childId of children) {
+        if (!resultIds.includes(childId)) {
+          resultIds.push(childId);
+          queue.push(childId);
+        }
+      }
+    }
+
+    return resultIds;
+  }
   async getVendorProducts(domain: string, query: GetProductsQueryDto = {}) {
     try {
       const companyId = await this.resolveCompanyId(domain);
@@ -62,6 +112,7 @@ export class ProductsService {
         limit = 10,
         search,
         category,
+        status,
         min_price,
         max_price,
         sort_by = SortBy.NEWEST,
@@ -70,7 +121,11 @@ export class ProductsService {
       // ── Build WHERE conditions ──────────────────────────────────────────────
       const conditions: SQL[] = [eq(products.company_id, companyId)];
 
-      if (search && search.trim()) {
+      if (status && status.trim() !== '' && status !== 'all' && status !== 'null' && status !== 'undefined') {
+        conditions.push(eq(products.status, status as any));
+      }
+
+      if (search && search.trim() !== '' && search !== 'null' && search !== 'undefined') {
         const term: string = `%${search.trim()}%`;
         const matchingVariants = await this.db
           .select({ product_id: product_variants.product_id })
@@ -95,29 +150,13 @@ export class ProductsService {
         }
       }
 
-      if (category && category.trim() !== '' && category !== 'null') {
-        const isUuid = /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/.test(category);
-        if (isUuid) {
-          conditions.push(eq(products.category_id, category));
+      if (category && category.trim() !== '' && category !== 'null' && category !== 'undefined') {
+        const targetCategoryIds = await this.getCategoryAndDescendantIds(companyId, category);
+        if (targetCategoryIds.length > 0) {
+          conditions.push(inArray(products.category_id, targetCategoryIds));
         } else {
-          const categoryRows = await this.db
-            .select({ id: categories.id })
-            .from(categories)
-            .where(
-              or(
-                eq(categories.name, category),
-                eq(categories.slug, category),
-              )
-            )
-            .catch(() => []);
-          if (categoryRows.length > 0) {
-            conditions.push(
-              inArray(
-                products.category_id,
-                categoryRows.map((c) => c.id),
-              )
-            );
-          }
+          // If category is selected but not found, we ensure the query matches nothing
+          conditions.push(eq(products.category_id, '00000000-0000-0000-0000-000000000000'));
         }
       }
 
@@ -152,7 +191,7 @@ export class ProductsService {
       const [{ total }] = await this.db
         .select({ total: count() })
         .from(products)
-        .where(eq(products.company_id, companyId))
+        .where(whereCause)
         .catch((error) => {
           throw new InternalServerErrorException(
             ProductsErrorKeyEnum.FAILED_TO_COUNT_PRODUCTS,
@@ -237,7 +276,7 @@ export class ProductsService {
       // ── Build WHERE conditions ──────────────────────────────────────────────
       const conditions: SQL[] = [eq(products.company_id, companyId)];
 
-      if (search && search.trim()) {
+      if (search && search.trim() !== '' && search !== 'null' && search !== 'undefined') {
         const term: string = `%${search.trim()}%`;
         const matchingVariants = await this.db
           .select({ product_id: product_variants.product_id })
@@ -262,36 +301,13 @@ export class ProductsService {
         }
       }
 
-      if (category && category.trim() !== '' && category !== 'null') {
-        const isUuid = /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/.test(category);
-        if (isUuid) {
-          conditions.push(eq(products.category_id, category));
+      if (category && category.trim() !== '' && category !== 'null' && category !== 'undefined') {
+        const targetCategoryIds = await this.getCategoryAndDescendantIds(companyId, category);
+        if (targetCategoryIds.length > 0) {
+          conditions.push(inArray(products.category_id, targetCategoryIds));
         } else {
-          const categoryRows = await this.db
-            .select({ id: categories.id })
-            .from(categories)
-            .where(
-              or(
-                eq(categories.name, category),
-                eq(categories.slug, category),
-              )
-            )
-            .catch((error) => {
-              throw new InternalServerErrorException(
-                ProductsErrorKeyEnum.FAILED_TO_FETCH_CATEGORY,
-                {
-                  cause: error,
-                },
-              );
-            });
-          if (categoryRows.length > 0) {
-            conditions.push(
-              inArray(
-                products.category_id,
-                categoryRows.map((c) => c.id),
-              )
-            );
-          }
+          // If category is selected but not found, we ensure the query matches nothing
+          conditions.push(eq(products.category_id, '00000000-0000-0000-0000-000000000000'));
         }
       }
 
@@ -329,7 +345,7 @@ export class ProductsService {
       const [{ total }] = await this.db
         .select({ total: count() })
         .from(products)
-        .where(eq(products.company_id, companyId))
+        .where(whereCause)
         .catch((error) => {
           throw new InternalServerErrorException(
             ProductsErrorKeyEnum.FAILED_TO_COUNT_PRODUCTS,

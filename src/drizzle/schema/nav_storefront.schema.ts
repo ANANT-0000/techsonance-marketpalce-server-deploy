@@ -50,6 +50,7 @@ export enum NavItemDisplayType {
   DYNAMIC_SUBCATEGORIES = 'dynamic_subcategories',
   PRODUCT_RANGES = 'product_ranges',
   CATEGORY_DIRECTORY = 'category_directory',
+  CATEGORY_LISTING_VISUAL = 'category_listing_visual',
 }
 export enum NavItemColType {
   SUBCATEGORIES = 'subcategories',

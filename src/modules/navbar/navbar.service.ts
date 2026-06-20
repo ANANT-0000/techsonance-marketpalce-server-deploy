@@ -111,6 +111,7 @@ export class NavbarService {
       href: this.buildCategoryHref(routeKey, sub.slug, routeMap), // ← was hardcoded /store
       item_type: 'category',
       category_id: sub.id,
+      icon_url: sub.icon_url || undefined,
       children: this.resolveCategorySubtree(
         sub.id,
         categoryChildrenMap,
@@ -200,12 +201,18 @@ export class NavbarService {
             .catch(() => [])
         : [];
 
-      // Fetch all products for this company to resolve manual product-range columns
-      const dbProducts = menuRow
+      // Extract target product IDs explicitly referenced in the menu items (e.g. meta.product_ids)
+      const productIds = items
+        .map((item) => (item.meta as NavItemMeta)?.product_ids)
+        .filter((ids): ids is string[] => Array.isArray(ids))
+        .flat();
+
+      // Fetch only products explicitly referenced in the menu items to avoid unconstrained DB reads
+      const dbProducts = menuRow && productIds.length > 0
         ? await this.db
             .select({ id: products.id, name: products.name })
             .from(products)
-            .where(eq(products.company_id, companyId))
+            .where(inArray(products.id, productIds))
             .catch(() => [])
         : [];
       const productMap = new Map(dbProducts.map((p) => [p.id, p]));
@@ -242,6 +249,7 @@ export class NavbarService {
             return {
               label: label || cat.name,
               href: this.buildCategoryHref(routeKey, cat.slug, routeMap),
+              icon_url: cat.icon_url || undefined,
             };
           }
         }
@@ -305,6 +313,7 @@ export class NavbarService {
                   meta: {
                     col_type: NavItemColType.SUBCATEGORIES,
                     col_title: childCat.name,
+                    icon_url: childCat.icon_url || undefined,
                   },
                   items: this.resolveCategorySubtree(
                     childCat.id,
@@ -333,14 +342,22 @@ export class NavbarService {
               columns = [...manualColumns, ...autoColumns].sort(
                 (a, b) => a.sort_order - b.sort_order,
               );
-            } else if (displayType === NavItemDisplayType.CATEGORY_LISTING) {
+            } else if (
+              displayType === NavItemDisplayType.CATEGORY_LISTING ||
+              (displayType as string) === 'category_listing_visual'
+            ) {
               const curatedCols = (l2ByParent[l1.id] ?? []).map((l2) => {
-                const { label: rLabel, href: rHref } = resolveCategory(
+                const {
+                  label: rLabel,
+                  href: rHref,
+                  icon_url: rIconUrl,
+                } = resolveCategory(
                   l2.id,
                   l2.item_type,
                   l2.category_id,
                   l2.label,
                   l2.href,
+                  routeKey,
                 );
                 let resolvedSubItems: any[] = [];
                 if (l2.item_type === NavItemType.CATEGORY && l2.category_id) {
@@ -348,19 +365,29 @@ export class NavbarService {
                   resolvedSubItems = subCats.map((sub) => ({
                     id: sub.id,
                     label: sub.name,
-                    href: `/store?category=${encodeURIComponent(sub.name)}`,
+                    href: this.buildCategoryHref(
+                      l1.meta?.route_key || routeKey,
+                      sub.slug,
+                      routeMap,
+                    ),
                     item_type: NavItemType.CATEGORY,
                     category_id: sub.id,
+                    icon_url: sub.icon_url || undefined,
                   }));
                 } else {
                   // Fall back to manual L3 child items for custom columns
                   resolvedSubItems = (l2ByParent[l2.id] ?? []).map((l3) => {
-                    const { label: rL3Label, href: rL3Href } = resolveCategory(
+                    const {
+                      label: rL3Label,
+                      href: rL3Href,
+                      icon_url: rL3IconUrl,
+                    } = resolveCategory(
                       l3.id,
                       l3.item_type,
                       l3.category_id,
                       l3.label,
                       l3.href,
+                      routeKey,
                     );
                     return {
                       id: l3.id,
@@ -369,7 +396,10 @@ export class NavbarService {
                       item_type: l3.item_type,
                       category_id: l3.category_id,
                       sort_order: l3.sort_order,
-                      meta: l3.meta,
+                      meta: {
+                        ...l3.meta,
+                        icon_url: rL3IconUrl || l3.meta?.icon_url || undefined,
+                      },
                     };
                   });
                 }
@@ -380,7 +410,10 @@ export class NavbarService {
                   item_type: l2.item_type,
                   category_id: l2.category_id,
                   sort_order: l2.sort_order,
-                  meta: (l2.meta ?? {}) as NavItemMeta,
+                  meta: {
+                    ...((l2.meta ?? {}) as NavItemMeta),
+                    icon_url: rIconUrl || l2.meta?.icon_url || undefined,
+                  },
                   items: resolvedSubItems,
                 };
               });
@@ -401,7 +434,11 @@ export class NavbarService {
                     columns.push({
                       id: `fallback-col-${i}`,
                       label: i === 0 ? 'Categories' : '',
-                      href: '/store',
+                      href: this.buildCategoryHref(
+                        l1.meta?.route_key || routeKey,
+                        '',
+                        routeMap,
+                      ),
                       item_type: NavItemType.CATEGORY,
                       category_id: null,
                       sort_order: i,
@@ -412,9 +449,14 @@ export class NavbarService {
                       items: chunk.map((cat) => ({
                         id: cat.id,
                         label: cat.name,
-                        href: `/store?category=${encodeURIComponent(cat.name)}`,
+                        href: this.buildCategoryHref(
+                          l1.meta?.route_key || routeKey,
+                          cat.slug,
+                          routeMap,
+                        ),
                         item_type: NavItemType.CATEGORY,
                         category_id: cat.id,
+                        icon_url: cat.icon_url || undefined,
                       })),
                     });
                   }
@@ -435,7 +477,11 @@ export class NavbarService {
                   item_type: NavItemType.CATEGORY,
                   category_id: root.id,
                   sort_order: idx,
-                  meta: { col_type: 'subcategories', col_title: root.name },
+                  meta: {
+                    col_type: 'subcategories',
+                    col_title: root.name,
+                    icon_url: root.icon_url || undefined,
+                  },
                   items: this.resolveCategorySubtree(
                     root.id,
                     categoryChildrenMap,

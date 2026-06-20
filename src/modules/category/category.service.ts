@@ -178,6 +178,7 @@ export class CategoryService {
           created_at: category.created_at,
           updated_at: category.updated_at,
           product_image: imageUrl,
+          icon_url: category.icon_url,
         };
       });
     } catch (error) {
@@ -202,7 +203,6 @@ export class CategoryService {
     try {
       const allCategories = await this.db.query.categories.findMany({
         where: eq(categories.company_id, companyId),
-        limit: limit,
         with: {
           products: {
             limit: 1,
@@ -221,15 +221,22 @@ export class CategoryService {
         },
       });
 
-      return allCategories.map((category: any) => {
+      const mapped = allCategories.map((category: any) => {
         const imageUrl =
-          category.products?.[0]?.variants?.[0]?.images?.[0]?.image_url || null;
+          category.icon_url ||
+          category.products?.[0]?.variants?.[0]?.images?.[0]?.image_url ||
+          null;
         return {
           id: category.id,
           name: category.name,
           product_image: imageUrl,
         };
       });
+
+      // Filter out categories that do not have any image (icon_url or product image)
+      const filtered = mapped.filter((cat) => cat.product_image !== null && cat.product_image !== "");
+
+      return filtered.slice(0, limit);
     } catch (error) {
       throw new InternalServerErrorException(
         CategoryErrorKeyEnum.FAILED_TO_FETCH_HOMEPAGE_CATEGORIES,
@@ -261,6 +268,7 @@ export class CategoryService {
         description: createCategoryDto.description,
         parent_id: createCategoryDto.parent_id || null,
         company_id: companyId,
+        icon_url: createCategoryDto.icon_url || null,
       });
       return {
         message: 'Category created successfully',
@@ -360,6 +368,10 @@ export class CategoryService {
             updateCategoryDto.parent_id === undefined
               ? undefined
               : updateCategoryDto.parent_id || null,
+          icon_url:
+            updateCategoryDto.icon_url === undefined
+              ? undefined
+              : updateCategoryDto.icon_url || null,
         })
         .where(
           and(eq(categories.id, id), eq(categories.company_id, companyId)),
