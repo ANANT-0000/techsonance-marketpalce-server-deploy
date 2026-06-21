@@ -394,7 +394,7 @@ export const nav_items = pg.pgTable(
      */
     pg.check(
       'layout_root_check',
-      sql.raw(`(layout_type IN ('${NavLayoutType.DIRECTORY}', '${NavLayoutType.GRID}') AND root_category_id IS NOT NULL) OR (layout_type = '${NavLayoutType.NONE}' AND root_category_id IS NULL)`),
+      sql.raw(`(layout_type = '${NavLayoutType.NONE}' AND root_category_id IS NULL) OR (layout_type IN ('${NavLayoutType.DIRECTORY}', '${NavLayoutType.GRID}'))`),
     ),
   ],
 );

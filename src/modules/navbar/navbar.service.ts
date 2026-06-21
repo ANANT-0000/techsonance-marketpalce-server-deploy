@@ -386,8 +386,39 @@ export class NavbarService {
           let isEmptyTree = false;
           if (layoutType !== NavLayoutType.NONE) {
             if (l1.root_category_id && validCategoryMap.has(l1.root_category_id)) {
-              categoriesPayload = buildCategoryTree(l1.root_category_id);
+              const rootCat = validCategoryMap.get(l1.root_category_id);
+              if (rootCat) {
+                const directChildren = buildCategoryTree(l1.root_category_id);
+                const hasAnyChildrenOfChildren = directChildren.some(
+                  (c) => c.children && c.children.length > 0
+                );
+                if (!hasAnyChildrenOfChildren) {
+                  categoriesPayload = [
+                    {
+                      id: rootCat.id,
+                      name: rootCat.name,
+                      slug: rootCat.slug,
+                      image: rootCat.icon_url || undefined,
+                      children: directChildren,
+                    },
+                  ];
+                } else {
+                  categoriesPayload = directChildren;
+                }
+              }
+            } else {
+              // No root category selected: map all top-level categories in nav as columns
+              const topLevelCategories = validCategories.filter((c) => !c.parent_id);
+              topLevelCategories.sort(sortCategories);
+              categoriesPayload = topLevelCategories.map((c) => ({
+                id: c.id,
+                name: c.name,
+                slug: c.slug,
+                image: c.icon_url || undefined,
+                children: buildCategoryTree(c.id),
+              }));
             }
+
             if (categoriesPayload.length === 0) {
               isEmptyTree = true;
             }
@@ -808,13 +839,6 @@ export class NavbarService {
 
       // ── Service-layer conditional validation: root_category_id ──────────────
       const layoutType = dto.layout_type || NavLayoutType.NONE;
-      if (
-        (layoutType === NavLayoutType.DIRECTORY ||
-          layoutType === NavLayoutType.GRID) &&
-        !dto.root_category_id
-      ) {
-        throw new BadRequestException(NavbarErrorCode.NAVBAR_ROOT_REQUIRED);
-      }
       if (layoutType === NavLayoutType.NONE && dto.root_category_id) {
         throw new BadRequestException(NavbarErrorCode.NAVBAR_ROOT_FORBIDDEN);
       }
@@ -931,13 +955,6 @@ export class NavbarService {
           ? dto.root_category_id
           : existing.root_category_id;
 
-      if (
-        (effectiveLayoutType === NavLayoutType.DIRECTORY ||
-          effectiveLayoutType === NavLayoutType.GRID) &&
-        !effectiveRootCatId
-      ) {
-        throw new BadRequestException(NavbarErrorCode.NAVBAR_ROOT_REQUIRED);
-      }
       if (effectiveLayoutType === NavLayoutType.NONE && effectiveRootCatId) {
         throw new BadRequestException(NavbarErrorCode.NAVBAR_ROOT_FORBIDDEN);
       }
