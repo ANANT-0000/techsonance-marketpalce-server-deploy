@@ -17,6 +17,7 @@ import {
   NavItemDisplayType,
   NavItemColType,
 } from '../../../drizzle/schema/nav_storefront.schema';
+import { NavLayoutType } from '../../../drizzle/types/types';
 
 /** Promo block — only required when col_type = PROMOTION */
 export class NavItemPromoDto {
@@ -127,6 +128,18 @@ export class CreateNavItemDto {
 
   @IsBoolean()
   has_mega_menu: boolean;
+
+  @IsOptional()
+  @IsEnum(NavLayoutType)
+  layout_type?: NavLayoutType;
+
+  @IsOptional()
+  @IsString()
+  target_route?: string;
+
+  @IsOptional()
+  @IsUUID()
+  root_category_id?: string | null;
 
   @IsOptional()
   sort_order?: number;

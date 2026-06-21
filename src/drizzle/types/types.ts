@@ -1,5 +1,10 @@
 import { Role } from '../../enums/role.enum';
 
+export enum NavLayoutType {
+  NONE = 'none',
+  DIRECTORY = 'directory',
+  GRID = 'grid',
+}
 export enum UserRole {
   ADMIN = 'admin',
   VENDOR = 'vendor',
@@ -296,4 +301,33 @@ export interface VendorType {
   last_name: string;
   hash_password: string;
   country_code: string;
+}
+
+export enum NavbarErrorCode {
+  NAVBAR_TENANT_MISMATCH = 'NAVBAR_TENANT_MISMATCH',
+  NAVBAR_INVALID_ROUTE = 'NAVBAR_INVALID_ROUTE',
+  NAVBAR_ROOT_REQUIRED = 'NAVBAR_ROOT_REQUIRED',
+  NAVBAR_ROOT_FORBIDDEN = 'NAVBAR_ROOT_FORBIDDEN',
+  NAVBAR_ROOT_NOT_FOUND = 'NAVBAR_ROOT_NOT_FOUND',
+  NAVBAR_CATEGORY_CYCLE = 'NAVBAR_CATEGORY_CYCLE',
+  NAVBAR_INVALID_LAYOUT = 'NAVBAR_INVALID_LAYOUT',
+}
+
+export interface CategoryNode {
+  id: string;
+  name: string;
+  slug: string;
+  href: string;
+  displayImage?: string;
+  children?: CategoryNode[];
+}
+
+export interface NavItemPayload {
+  id: string;
+  label: string;
+  href: string;
+  layout_type: NavLayoutType;
+  root_category_id?: string | null;
+  categories?: CategoryNode[];
+  isEmptyTree?: boolean;
 }

@@ -34,6 +34,7 @@ import {
   NavItemType,
 } from '../../drizzle/schema/nav_storefront.schema';
 import { SiteMapsService } from '../site-maps/site-maps.service';
+import { NavLayoutType, NavbarErrorCode, EntityStatus } from '../../drizzle/types/types';
 
 // ─── Default settings applied when a field is absent from the JSONB blob ────
 const SETTINGS_DEFAULTS: Required<NavMenuSettings> = {
@@ -96,7 +97,7 @@ export class NavbarService {
   }
   private resolveCategorySubtree(
     categoryId: string,
-    categoryChildrenMap: Map<string, (typeof categories.$inferSelect)[]>,
+    categoryChildrenMap: Map<string, any[]>,
     routeMap: Map<
       string,
       { base_path: string; default_query_param: string | null }
@@ -167,15 +168,12 @@ export class NavbarService {
    * GET /v1/navbar
    *
    * Returns the complete navbar config and ordered item tree.
-   * Response shape is consumed directly by useNavbarData.ts on the frontend.
-   */
-  /**
-   * GET /v1/navbar
-   *
-   * Returns the complete navbar config and ordered item tree.
-   * Response shape is consumed directly by useNavbarData.ts on the frontend.
    */
   async getNavbar(domain: string) {
+    const startTime = performance.now();
+    let totalCategoryCount = 0;
+    let maxTreeDepth = 0;
+
     try {
       const companyId = await this.resolveCompanyId(domain);
       const routeMap = await this.siteMapsService.getRouteMap(domain);
@@ -183,21 +181,38 @@ export class NavbarService {
       const menuRow = await this.findMenuRow(companyId);
 
       // Fetch all items for this menu ordered for rendering
-      const items = await this.db
-        .select()
-        .from(nav_items)
-        .where(eq(nav_items.menu_id, menuRow?.id ?? ''))
-        .orderBy(asc(nav_items.sort_order))
-        .catch((): (typeof nav_items.$inferSelect)[] => []);
+      const items = menuRow
+        ? await this.db
+            .select()
+            .from(nav_items)
+            .where(eq(nav_items.menu_id, menuRow.id))
+            .orderBy(asc(nav_items.sort_order))
+            .catch((): (typeof nav_items.$inferSelect)[] => [])
+        : [];
 
       const settings = this.mergeDefaults(menuRow?.settings as NavMenuSettings);
 
-      // Fetch all categories for this company to resolve details without N+1 queries
+      // Fetch all categories for this company sorted by nav_order ASC, name ASC (Single-Pass Fetch)
       const dbCategories = menuRow
         ? await this.db
-            .select()
+            .select({
+              id: categories.id,
+              name: categories.name,
+              slug: categories.slug,
+              icon_url: categories.icon_url,
+              parent_id: categories.parent_id,
+              nav_order: categories.nav_order,
+              record_status: categories.record_status,
+              deleted_at: categories.deleted_at,
+            })
             .from(categories)
-            .where(eq(categories.company_id, companyId))
+            .where(
+              and(
+                eq(categories.company_id, companyId),
+                eq(categories.show_in_nav, true),
+              ),
+            )
+            .orderBy(asc(categories.nav_order), asc(categories.name))
             .catch(() => [])
         : [];
 
@@ -208,24 +223,49 @@ export class NavbarService {
         .flat();
 
       // Fetch only products explicitly referenced in the menu items to avoid unconstrained DB reads
-      const dbProducts = menuRow && productIds.length > 0
-        ? await this.db
-            .select({ id: products.id, name: products.name })
-            .from(products)
-            .where(inArray(products.id, productIds))
-            .catch(() => [])
-        : [];
+      const dbProducts =
+        menuRow && productIds.length > 0
+          ? await this.db
+              .select({ id: products.id, name: products.name })
+              .from(products)
+              .where(inArray(products.id, productIds))
+              .catch(() => [])
+          : [];
       const productMap = new Map(dbProducts.map((p) => [p.id, p]));
 
-      // Build category hierarchy lookup maps in memory
-      const categoryMap = new Map<string, typeof categories.$inferSelect>();
-      const categoryChildrenMap = new Map<
-        string,
-        (typeof categories.$inferSelect)[]
-      >();
+      // Filter out soft deleted categories in-memory
+      const activeDbCategories = dbCategories.filter((cat) => {
+        return cat.record_status === EntityStatus.ACTIVE && cat.deleted_at === null;
+      });
 
-      dbCategories.forEach((cat) => {
+      // Cascading Hide Filter: Drop and orphan children if their parent is missing from show_in_nav=true fetch
+      const categoryMap = new Map<string, (typeof activeDbCategories)[number]>();
+      activeDbCategories.forEach((cat) => {
         categoryMap.set(cat.id, cat);
+      });
+
+      const validityCache = new Map<string, boolean>();
+      const checkValidity = (catId: string): boolean => {
+        if (validityCache.has(catId)) return validityCache.get(catId)!;
+        const cat = categoryMap.get(catId);
+        if (!cat) {
+          validityCache.set(catId, false);
+          return false;
+        }
+        if (cat.parent_id === null) {
+          validityCache.set(catId, true);
+          return true;
+        }
+        const parentValid = checkValidity(cat.parent_id);
+        validityCache.set(catId, parentValid);
+        return parentValid;
+      };
+
+      const validCategories = activeDbCategories.filter((c) => checkValidity(c.id));
+      const validCategoryMap = new Map(validCategories.map((c) => [c.id, c]));
+
+      const categoryChildrenMap = new Map<string, typeof validCategories>();
+      validCategories.forEach((cat) => {
         if (cat.parent_id) {
           if (!categoryChildrenMap.has(cat.parent_id)) {
             categoryChildrenMap.set(cat.parent_id, []);
@@ -234,17 +274,32 @@ export class NavbarService {
         }
       });
 
+      // Deterministic Sorting Comparator: nav_order ASC, then name ASC (case-insensitive)
+      const sortCategories = (a: any, b: any) => {
+        const orderA = a.nav_order ?? 0;
+        const orderB = b.nav_order ?? 0;
+        if (orderA !== orderB) {
+          return orderA - orderB;
+        }
+        return a.name.toLowerCase().localeCompare(b.name.toLowerCase());
+      };
+
+      // Sort all children lists in the map
+      categoryChildrenMap.forEach((children) => {
+        children.sort(sortCategories);
+      });
+
       // Helper to dynamically resolve labels/hrefs for category-type items
       const resolveCategory = (
-        itemId,
-        itemType,
-        categoryId,
-        label,
-        href,
+        itemId: string,
+        itemType: string,
+        categoryId: string | null,
+        label: string,
+        href: string,
         routeKey?: string,
       ) => {
         if (itemType === NavItemType.CATEGORY && categoryId) {
-          const cat = categoryMap.get(categoryId);
+          const cat = validCategoryMap.get(categoryId);
           if (cat) {
             return {
               label: label || cat.name,
@@ -254,6 +309,39 @@ export class NavbarService {
           }
         }
         return { label, href };
+      };
+
+      // Recursive builder for unlimited depth mobile drill-down with cycle prevention
+      const visitedCategoryIds = new Set<string>();
+      const buildCategoryTree = (parentId: string, currentDepth = 1): any[] => {
+        if (currentDepth > 10) {
+          console.warn(`[NavbarService] Category tree exceeded maximum mobile depth of 10 at parent ID "${parentId}". Truncating branch.`);
+          return [];
+        }
+        if (visitedCategoryIds.has(parentId)) {
+          console.warn(`[NavbarService] Circular reference detected for category ID "${parentId}". Aborting branch traversal.`);
+          return [];
+        }
+        visitedCategoryIds.add(parentId);
+
+        const children = (categoryChildrenMap.get(parentId) ?? []).filter(c => validCategoryMap.has(c.id));
+        children.sort(sortCategories);
+
+        totalCategoryCount += children.length;
+        if (currentDepth > maxTreeDepth) {
+          maxTreeDepth = currentDepth;
+        }
+
+        const result = children.map((c) => ({
+          id: c.id,
+          name: c.name,
+          slug: c.slug,
+          image: c.icon_url || undefined,
+          children: buildCategoryTree(c.id, currentDepth + 1),
+        }));
+
+        visitedCategoryIds.delete(parentId);
+        return result;
       };
 
       // Separate L1 and L2 items
@@ -271,12 +359,9 @@ export class NavbarService {
         {},
       );
 
-      return {
-        settings,
-        menu_id: menuRow?.id ?? null,
-        navigationItems: l1Items.map((l1) => {
-          const routeKey = l1.meta?.route_key;
-          const { label: resolvedLabel, href: resolvedHref } = resolveCategory(
+      const navigationItems = l1Items.map((l1) => {
+          const routeKey = l1.target_route || l1.meta?.route_key;
+          let { label: resolvedLabel, href: resolvedHref } = resolveCategory(
             l1.id,
             l1.item_type,
             l1.category_id,
@@ -285,8 +370,57 @@ export class NavbarService {
             routeKey,
           );
 
+          if (l1.target_route) {
+            const route = routeMap.get(l1.target_route);
+            if (route) {
+              resolvedHref = route.base_path;
+            } else {
+              console.warn(`[NavbarService] Target route "${l1.target_route}" does not exist in sitemaps for domain "${domain}". Falling back to "#".`);
+              resolvedHref = '#';
+            }
+          }
+
+          let layoutType = (l1.layout_type || NavLayoutType.NONE) as NavLayoutType;
+          
+          let categoriesPayload: any[] = [];
+          let isEmptyTree = false;
+          if (layoutType !== NavLayoutType.NONE) {
+            if (l1.root_category_id && validCategoryMap.has(l1.root_category_id)) {
+              categoriesPayload = buildCategoryTree(l1.root_category_id);
+            }
+            if (categoriesPayload.length === 0) {
+              isEmptyTree = true;
+            }
+          }
+
+          const hasMegaMenu = layoutType !== NavLayoutType.NONE || l1.has_mega_menu;
+
           let columns: any[] = [];
-          if (l1.has_mega_menu) {
+          if (layoutType !== NavLayoutType.NONE) {
+            columns = categoriesPayload.map((l2) => ({
+              id: l2.id,
+              label: l2.name,
+              title: l2.name,
+              href: this.buildCategoryHref(l1.target_route || 'store', l2.slug, routeMap),
+              icon_url: l2.image || null,
+              iconUrl: l2.image || null,
+              category_id: l2.id,
+              item_type: 'category',
+              sort_order: 0,
+              children: l2.children || [],
+              items: (l2.children || []).map((l3: any) => ({
+                id: l3.id,
+                label: l3.name,
+                title: l3.name,
+                href: this.buildCategoryHref(l1.target_route || 'store', l3.slug, routeMap),
+                category_id: l3.id,
+                icon_url: l3.image || null,
+                iconUrl: l3.image || null,
+                children: [],
+                items: [],
+              })),
+            }));
+          } else if (l1.has_mega_menu) {
             const displayType = l1.meta?.display_type;
 
             if (
@@ -422,7 +556,7 @@ export class NavbarService {
                 columns = curatedCols;
               } else {
                 // Fallback to all root categories chunked
-                const rootCats = dbCategories.filter((c) => !c.parent_id);
+                const rootCats = validCategories.filter((c) => !c.parent_id);
                 if (rootCats.length > 0) {
                   const maxCols = Math.min(4, rootCats.length);
                   const colSize = Math.ceil(rootCats.length / maxCols);
@@ -466,7 +600,7 @@ export class NavbarService {
               l1.meta?.display_type === NavItemDisplayType.CATEGORY_DIRECTORY
             ) {
               const routeKey = l1.meta?.route_key;
-              const rootCats = dbCategories.filter((c) => !c.parent_id);
+              const rootCats = validCategories.filter((c) => !c.parent_id);
 
               columns = rootCats
                 .slice(0, MEGA_MENU_MAX_AUTO_COLUMNS)
@@ -541,19 +675,43 @@ export class NavbarService {
               });
             }
           }
+
           return {
             id: l1.id,
             label: resolvedLabel,
             href: resolvedHref,
             item_type: l1.item_type,
             category_id: l1.category_id,
-            has_mega_menu: l1.has_mega_menu,
+            has_mega_menu: hasMegaMenu,
+            layout_type: layoutType,
+            root_category_id: l1.root_category_id || null,
+            target_route: l1.target_route || null,
             sort_order: l1.sort_order,
             meta: (l1.meta ?? {}) as NavItemMeta,
+            categories: categoriesPayload,
+            isEmptyTree: isEmptyTree,
+            columns: columns,
             megaMenuColumns: columns,
           };
-        }),
+      });
+
+      const resultPayload = {
+        settings,
+        menu_id: menuRow?.id ?? null,
+        navigationItems,
       };
+
+      const generationTimeMs = performance.now() - startTime;
+      const payloadStr = JSON.stringify(resultPayload);
+      const payloadSizeKb = payloadStr.length / 1024;
+
+      if (generationTimeMs > 200 || payloadSizeKb > 250) {
+        console.warn(
+          `[NavbarService] Performance warning: Navbar payload generated in ${generationTimeMs.toFixed(2)}ms (Limit: 200ms), size ${payloadSizeKb.toFixed(2)}KB (Limit: 250KB), total categories: ${totalCategoryCount}, max depth: ${maxTreeDepth}.`
+        );
+      }
+
+      return resultPayload;
     } catch (err) {
       if (err instanceof HttpException) throw err;
       throw new InternalServerErrorException(
@@ -648,6 +806,27 @@ export class NavbarService {
         throw new NotFoundException(NavbarErrorKeyEnum.MENU_NOT_FOUND);
       }
 
+      // ── Service-layer conditional validation: root_category_id ──────────────
+      const layoutType = dto.layout_type || NavLayoutType.NONE;
+      if (
+        (layoutType === NavLayoutType.DIRECTORY ||
+          layoutType === NavLayoutType.GRID) &&
+        !dto.root_category_id
+      ) {
+        throw new BadRequestException(NavbarErrorCode.NAVBAR_ROOT_REQUIRED);
+      }
+      if (layoutType === NavLayoutType.NONE && dto.root_category_id) {
+        throw new BadRequestException(NavbarErrorCode.NAVBAR_ROOT_FORBIDDEN);
+      }
+
+      // ── Service-layer target_route existence check ───────────────────────────
+      if (dto.target_route) {
+        const routeMap = await this.siteMapsService.getRouteMap(domain);
+        if (!routeMap.has(dto.target_route)) {
+          throw new BadRequestException(NavbarErrorCode.NAVBAR_INVALID_ROUTE);
+        }
+      }
+
       // If creating an L2 item, validate parent depth
       if (dto.parent_id) {
         const [parent] = await this.db
@@ -680,6 +859,9 @@ export class NavbarService {
           item_type: dto.item_type as any,
           category_id: dto.category_id ?? null,
           has_mega_menu: dto.has_mega_menu,
+          layout_type: layoutType,
+          root_category_id: dto.root_category_id ?? null,
+          target_route: dto.target_route ?? null,
           sort_order: dto.sort_order ?? 0,
           meta: (dto.meta ?? {}) as NavItemMeta,
         })
@@ -690,6 +872,13 @@ export class NavbarService {
             { cause: err },
           );
         });
+
+      // Touch nav_menus.updated_at to drive cache invalidation
+      await this.db
+        .update(nav_menus)
+        .set({ updated_at: new Date() })
+        .where(eq(nav_menus.id, menuRow.id))
+        .catch(() => {});
 
       return { success: true, data: created };
     } catch (err) {
@@ -723,6 +912,8 @@ export class NavbarService {
         .select({
           id: nav_items.id,
           parent_id: nav_items.parent_id,
+          layout_type: nav_items.layout_type,
+          root_category_id: nav_items.root_category_id,
           meta: nav_items.meta,
         })
         .from(nav_items)
@@ -731,6 +922,33 @@ export class NavbarService {
 
       if (!existing)
         throw new NotFoundException(NavbarErrorKeyEnum.ITEM_NOT_FOUND);
+
+      // ── Service-layer conditional validation: root_category_id ──────────────
+      // Resolve the effective layout_type (dto takes precedence over existing)
+      const effectiveLayoutType = (dto.layout_type ?? existing.layout_type ?? NavLayoutType.NONE) as NavLayoutType;
+      const effectiveRootCatId =
+        dto.root_category_id !== undefined
+          ? dto.root_category_id
+          : existing.root_category_id;
+
+      if (
+        (effectiveLayoutType === NavLayoutType.DIRECTORY ||
+          effectiveLayoutType === NavLayoutType.GRID) &&
+        !effectiveRootCatId
+      ) {
+        throw new BadRequestException(NavbarErrorCode.NAVBAR_ROOT_REQUIRED);
+      }
+      if (effectiveLayoutType === NavLayoutType.NONE && effectiveRootCatId) {
+        throw new BadRequestException(NavbarErrorCode.NAVBAR_ROOT_FORBIDDEN);
+      }
+
+      // ── Service-layer target_route existence check ───────────────────────────
+      if (dto.target_route !== undefined && dto.target_route !== null) {
+        const routeMap = await this.siteMapsService.getRouteMap(domain);
+        if (!routeMap.has(dto.target_route)) {
+          throw new BadRequestException(NavbarErrorCode.NAVBAR_INVALID_ROUTE);
+        }
+      }
 
       // Build patch — only set fields that were provided
       const patch: Partial<typeof nav_items.$inferInsert> = {};
@@ -741,6 +959,12 @@ export class NavbarService {
         patch.category_id = dto.category_id ?? null;
       if (dto.has_mega_menu !== undefined)
         patch.has_mega_menu = dto.has_mega_menu;
+      if (dto.layout_type !== undefined)
+        patch.layout_type = dto.layout_type || NavLayoutType.NONE;
+      if (dto.root_category_id !== undefined)
+        patch.root_category_id = dto.root_category_id ?? null;
+      if (dto.target_route !== undefined)
+        patch.target_route = dto.target_route ?? null;
       if (dto.sort_order !== undefined) patch.sort_order = dto.sort_order;
 
       // Merge meta JSONB — don't overwrite entire blob with partial update
@@ -764,6 +988,13 @@ export class NavbarService {
             { cause: err },
           );
         });
+
+      // Touch nav_menus.updated_at to drive cache invalidation
+      await this.db
+        .update(nav_menus)
+        .set({ updated_at: new Date() })
+        .where(eq(nav_menus.id, menuRow.id))
+        .catch(() => {});
 
       return { success: true, data: updated };
     } catch (err) {
@@ -805,6 +1036,14 @@ export class NavbarService {
 
       if (!deleted.length)
         throw new NotFoundException(NavbarErrorKeyEnum.ITEM_NOT_FOUND);
+
+      // Touch nav_menus.updated_at to drive cache invalidation
+      await this.db
+        .update(nav_menus)
+        .set({ updated_at: new Date() })
+        .where(eq(nav_menus.id, menuRow.id))
+        .catch(() => {});
+
       return { success: true, message: 'Item deleted.' };
     } catch (err) {
       if (err instanceof HttpException) throw err;

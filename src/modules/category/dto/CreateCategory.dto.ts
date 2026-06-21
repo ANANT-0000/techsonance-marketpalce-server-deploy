@@ -1,4 +1,4 @@
-import { IsOptional, IsString, IsNotEmpty, MinLength, MaxLength, IsUUID } from 'class-validator';
+import { IsOptional, IsString, IsNotEmpty, MinLength, MaxLength, IsUUID, IsBoolean } from 'class-validator';
 import { Transform } from 'class-transformer';
 
 export class CreateCategoryDto {
@@ -22,4 +22,8 @@ export class CreateCategoryDto {
   @IsOptional()
   @IsString()
   icon_url?: string | null;
+
+  @IsOptional()
+  @IsBoolean()
+  show_in_nav?: boolean;
 }

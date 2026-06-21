@@ -35,6 +35,12 @@ export const categories = pg.pgTable(
       .$onUpdate(() => new Date()),
     icon_url: pg.text('icon_url'),
     company_id: pg.uuid('company_id').references(() => company.id),
+    show_in_nav: pg.boolean('show_in_nav').notNull().default(true),
+    nav_order: pg.integer('nav_order').notNull().default(0),
+    record_status: EntityStatusEnum('record_status').default(
+      EntityStatus.ACTIVE,
+    ),
+    deleted_at: pg.timestamp('deleted_at'),
   },
   (t) => [
     pg.index('idx_categories_name').on(t.name),

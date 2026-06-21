@@ -16,6 +16,7 @@ import { CompanyService } from '../company/company.service';
 import { domainExtractor } from '../../common/filters/domainExtractor.filter';
 import { CategoryErrorKeyEnum } from './constants/category.enums';
 import { HttpExceptionFilter } from 'src/common/filters/http-exception.filter';
+import { EntityStatus } from 'src/drizzle/types/types';
 
 @Injectable()
 export class CategoryService {
@@ -44,7 +45,12 @@ export class CategoryService {
       .select()
       .from(categories)
       .where(
-        and(eq(categories.id, parentId), eq(categories.company_id, companyId)),
+        and(
+          eq(categories.id, parentId),
+          eq(categories.company_id, companyId),
+          // Soft-delete guard: treat deleted/inactive parents as non-existent
+          eq(categories.record_status, EntityStatus.ACTIVE),
+        ),
       )
       .limit(1);
 
@@ -124,7 +130,11 @@ export class CategoryService {
   ) {
     const companyId = await this.resolveCompanyId(domain);
     try {
-      const conditions: SQL[] = [eq(categories.company_id, companyId)];
+      const conditions: SQL[] = [
+        eq(categories.company_id, companyId),
+        // Soft-delete filter: only return active, non-deleted categories
+        eq(categories.record_status, EntityStatus.ACTIVE),
+      ];
 
       if (filters?.search) {
         const searchPattern = `%${filters.search.toLowerCase()}%`;
@@ -179,6 +189,7 @@ export class CategoryService {
           updated_at: category.updated_at,
           product_image: imageUrl,
           icon_url: category.icon_url,
+          show_in_nav: category.show_in_nav,
         };
       });
     } catch (error) {
@@ -234,7 +245,9 @@ export class CategoryService {
       });
 
       // Filter out categories that do not have any image (icon_url or product image)
-      const filtered = mapped.filter((cat) => cat.product_image !== null && cat.product_image !== "");
+      const filtered = mapped.filter(
+        (cat) => cat.product_image !== null && cat.product_image !== '',
+      );
 
       return filtered.slice(0, limit);
     } catch (error) {
@@ -269,6 +282,7 @@ export class CategoryService {
         parent_id: createCategoryDto.parent_id || null,
         company_id: companyId,
         icon_url: createCategoryDto.icon_url || null,
+        show_in_nav: createCategoryDto.show_in_nav ?? true,
       });
       return {
         message: 'Category created successfully',
@@ -332,30 +346,12 @@ export class CategoryService {
 
     // 1. Verify target parent if parent_id is updated
     if (updateCategoryDto.parent_id) {
+      // validateParentCategory walks the full ancestor chain — this covers cycle prevention
       await this.validateParentCategory(
         updateCategoryDto.parent_id,
         companyId,
         id,
       );
-
-      // Demotion Check: If we are turning this category into a subcategory,
-      // it must not contain any subcategories itself (preventing multi-level depth).
-      const children = await this.db
-        .select()
-        .from(categories)
-        .where(
-          and(
-            eq(categories.parent_id, id),
-            eq(categories.company_id, companyId),
-          ),
-        )
-        .limit(1);
-
-      if (children.length > 0) {
-        throw new BadRequestException(
-          CategoryErrorKeyEnum.CATEGORY_HAS_SUB_CATEGORIES,
-        );
-      }
     }
 
     try {
@@ -372,6 +368,10 @@ export class CategoryService {
             updateCategoryDto.icon_url === undefined
               ? undefined
               : updateCategoryDto.icon_url || null,
+          show_in_nav:
+            updateCategoryDto.show_in_nav === undefined
+              ? undefined
+              : updateCategoryDto.show_in_nav,
         })
         .where(
           and(eq(categories.id, id), eq(categories.company_id, companyId)),
@@ -425,18 +425,15 @@ export class CategoryService {
     const descendantIds = await this.collectDescendantIds(id, companyId);
     const allCategoryIds = [id, ...descendantIds];
 
-    const linkedProducts = await this.db
-      .select({ count: sql<number>`count(*)` })
-      .from(products)
+    await this.db
+      .update(products)
+      .set({ category_id: null })
       .where(
         and(
           inArray(products.category_id, allCategoryIds),
           eq(products.company_id, companyId),
         ),
       );
-    if (linkedProducts[0] && Number(linkedProducts[0].count) > 0) {
-      throw new ConflictException(CategoryErrorKeyEnum.CATEGORY_HAS_PRODUCTS);
-    }
 
     try {
       await this.db

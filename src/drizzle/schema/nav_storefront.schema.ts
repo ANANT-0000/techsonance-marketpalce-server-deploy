@@ -1,8 +1,9 @@
 import * as pg from 'drizzle-orm/pg-core';
 import { AnyPgColumn } from 'drizzle-orm/pg-core';
-import { company } from './main.schema';
+import { company, site_maps } from './main.schema';
 import { categories } from './shop.schema';
 import { sql } from 'drizzle-orm';
+import { NavLayoutType } from '../types/types';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // DESIGN PHILOSOPHY — Lean Hybrid Schema
@@ -72,8 +73,8 @@ export enum NavMenuType {
 }
 
 export const NavItemTypeEnum = pg.pgEnum('nav_item_type_enum', [
-  'custom_link',
-  'category',
+  NavItemType.CUSTOM_LINK,
+  NavItemType.CATEGORY,
 ]);
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -228,6 +229,13 @@ export const nav_menus = pg.pgTable(
 // Everything else (column headings, promo blocks, display modes) lives in
 // the `meta` JSONB so it stays future-proof without migrations.
 // ─────────────────────────────────────────────────────────────────────────────
+
+export const NavLayoutTypeEnum = pg.pgEnum('nav_layout_type_enum', [
+  NavLayoutType.NONE,
+  NavLayoutType.DIRECTORY,
+  NavLayoutType.GRID,
+]);
+
 export const nav_items = pg.pgTable(
   'nav_items',
   {
@@ -274,7 +282,9 @@ export const nav_items = pg.pgTable(
      * Used in the admin UI to filter and display the correct form fields.
      * Native pg enum → DB-level validation, fast equality comparisons.
      */
-    item_type: NavItemTypeEnum('item_type').notNull().default('custom_link'),
+    item_type: NavItemTypeEnum('item_type')
+      .notNull()
+      .default(NavItemType.CUSTOM_LINK),
 
     /**
      * FK to categories.
@@ -315,6 +325,25 @@ export const nav_items = pg.pgTable(
      */
     meta: pg.jsonb('meta').$type<NavItemMeta>().notNull().default({}),
 
+    /**
+     * Root category FK — required when layout_type is DIRECTORY or GRID.
+     * NULL when layout_type is NONE (standard link / legacy mega-menu).
+     *
+     * SET NULL on category deletion: the nav item gracefully degrades and
+     * the CMS shows a warning to the vendor. No backend warning is logged
+     * because ON DELETE SET NULL is an intentional, valid business state.
+     * Indexed for fast reverse-lookup when categories are renamed/deleted.
+     */
+    root_category_id: pg
+      .uuid('root_category_id')
+      .references(() => categories.id, { onDelete: 'set null' }),
+
+    layout_type: NavLayoutTypeEnum('layout_type')
+      .notNull()
+      .default(NavLayoutType.NONE),
+
+    target_route: pg.varchar('target_route', { length: 60 }),
+
     created_at: pg.timestamp('created_at').notNull().defaultNow(),
     updated_at: pg
       .timestamp('updated_at')
@@ -352,5 +381,20 @@ export const nav_items = pg.pgTable(
      * deleted so the service can locate and update/nullify affected items.
      */
     pg.index('idx_nav_items_category_id').on(t.category_id),
+
+    /**
+     * ROOT CATEGORY FK INDEX — fast reverse-lookup when the root category
+     * of a DIRECTORY/GRID layout is deleted (ON DELETE SET NULL fires here).
+     */
+    pg.index('idx_nav_items_root_category_id').on(t.root_category_id),
+
+    /**
+     * Database-level CHECK constraint enforcing root_category_id requirements
+     * based on layout_type selection.
+     */
+    pg.check(
+      'layout_root_check',
+      sql.raw(`(layout_type IN ('${NavLayoutType.DIRECTORY}', '${NavLayoutType.GRID}') AND root_category_id IS NOT NULL) OR (layout_type = '${NavLayoutType.NONE}' AND root_category_id IS NULL)`),
+    ),
   ],
 );
