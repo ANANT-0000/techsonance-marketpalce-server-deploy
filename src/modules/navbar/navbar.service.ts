@@ -34,7 +34,11 @@ import {
   NavItemType,
 } from '../../drizzle/schema/nav_storefront.schema';
 import { SiteMapsService } from '../site-maps/site-maps.service';
-import { NavLayoutType, NavbarErrorCode, EntityStatus } from '../../drizzle/types/types';
+import {
+  NavLayoutType,
+  NavbarErrorCode,
+  EntityStatus,
+} from '../../drizzle/types/types';
 
 // ─── Default settings applied when a field is absent from the JSONB blob ────
 const SETTINGS_DEFAULTS: Required<NavMenuSettings> = {
@@ -235,11 +239,16 @@ export class NavbarService {
 
       // Filter out soft deleted categories in-memory
       const activeDbCategories = dbCategories.filter((cat) => {
-        return cat.record_status === EntityStatus.ACTIVE && cat.deleted_at === null;
+        return (
+          cat.record_status === EntityStatus.ACTIVE && cat.deleted_at === null
+        );
       });
 
       // Cascading Hide Filter: Drop and orphan children if their parent is missing from show_in_nav=true fetch
-      const categoryMap = new Map<string, (typeof activeDbCategories)[number]>();
+      const categoryMap = new Map<
+        string,
+        (typeof activeDbCategories)[number]
+      >();
       activeDbCategories.forEach((cat) => {
         categoryMap.set(cat.id, cat);
       });
@@ -261,7 +270,9 @@ export class NavbarService {
         return parentValid;
       };
 
-      const validCategories = activeDbCategories.filter((c) => checkValidity(c.id));
+      const validCategories = activeDbCategories.filter((c) =>
+        checkValidity(c.id),
+      );
       const validCategoryMap = new Map(validCategories.map((c) => [c.id, c]));
 
       const categoryChildrenMap = new Map<string, typeof validCategories>();
@@ -315,16 +326,16 @@ export class NavbarService {
       const visitedCategoryIds = new Set<string>();
       const buildCategoryTree = (parentId: string, currentDepth = 1): any[] => {
         if (currentDepth > 10) {
-          console.warn(`[NavbarService] Category tree exceeded maximum mobile depth of 10 at parent ID "${parentId}". Truncating branch.`);
           return [];
         }
         if (visitedCategoryIds.has(parentId)) {
-          console.warn(`[NavbarService] Circular reference detected for category ID "${parentId}". Aborting branch traversal.`);
           return [];
         }
         visitedCategoryIds.add(parentId);
 
-        const children = (categoryChildrenMap.get(parentId) ?? []).filter(c => validCategoryMap.has(c.id));
+        const children = (categoryChildrenMap.get(parentId) ?? []).filter((c) =>
+          validCategoryMap.has(c.id),
+        );
         children.sort(sortCategories);
 
         totalCategoryCount += children.length;
@@ -360,370 +371,381 @@ export class NavbarService {
       );
 
       const navigationItems = l1Items.map((l1) => {
-          const routeKey = l1.target_route || l1.meta?.route_key;
-          let { label: resolvedLabel, href: resolvedHref } = resolveCategory(
-            l1.id,
-            l1.item_type,
-            l1.category_id,
-            l1.label,
-            l1.href,
-            routeKey,
-          );
+        const routeKey = l1.target_route || l1.meta?.route_key;
+        let { label: resolvedLabel, href: resolvedHref } = resolveCategory(
+          l1.id,
+          l1.item_type,
+          l1.category_id,
+          l1.label,
+          l1.href,
+          routeKey,
+        );
 
-          if (l1.target_route) {
-            const route = routeMap.get(l1.target_route);
-            if (route) {
-              resolvedHref = route.base_path;
-            } else {
-              console.warn(`[NavbarService] Target route "${l1.target_route}" does not exist in sitemaps for domain "${domain}". Falling back to "#".`);
-              resolvedHref = '#';
-            }
+        if (l1.target_route) {
+          const route = routeMap.get(l1.target_route);
+          if (route) {
+            resolvedHref = route.base_path;
+          } else {
+            resolvedHref = '#';
           }
+        }
 
-          let layoutType = (l1.layout_type || NavLayoutType.NONE) as NavLayoutType;
-          
-          let categoriesPayload: any[] = [];
-          let isEmptyTree = false;
-          if (layoutType !== NavLayoutType.NONE) {
-            if (l1.root_category_id && validCategoryMap.has(l1.root_category_id)) {
-              const rootCat = validCategoryMap.get(l1.root_category_id);
-              if (rootCat) {
-                const directChildren = buildCategoryTree(l1.root_category_id);
-                const hasAnyChildrenOfChildren = directChildren.some(
-                  (c) => c.children && c.children.length > 0
-                );
-                if (!hasAnyChildrenOfChildren) {
-                  categoriesPayload = [
-                    {
-                      id: rootCat.id,
-                      name: rootCat.name,
-                      slug: rootCat.slug,
-                      image: rootCat.icon_url || undefined,
-                      children: directChildren,
-                    },
-                  ];
-                } else {
-                  categoriesPayload = directChildren;
-                }
+        let layoutType = (l1.layout_type ||
+          NavLayoutType.NONE) as NavLayoutType;
+
+        let categoriesPayload: any[] = [];
+        let isEmptyTree = false;
+        if (layoutType !== NavLayoutType.NONE) {
+          if (
+            l1.root_category_id &&
+            validCategoryMap.has(l1.root_category_id)
+          ) {
+            const rootCat = validCategoryMap.get(l1.root_category_id);
+            if (rootCat) {
+              const directChildren = buildCategoryTree(l1.root_category_id);
+              const hasAnyChildrenOfChildren = directChildren.some(
+                (c) => c.children && c.children.length > 0,
+              );
+              if (!hasAnyChildrenOfChildren) {
+                categoriesPayload = [
+                  {
+                    id: rootCat.id,
+                    name: rootCat.name,
+                    slug: rootCat.slug,
+                    image: rootCat.icon_url || undefined,
+                    children: directChildren,
+                  },
+                ];
+              } else {
+                categoriesPayload = directChildren;
               }
-            } else {
-              // No root category selected: map all top-level categories in nav as columns
-              const topLevelCategories = validCategories.filter((c) => !c.parent_id);
-              topLevelCategories.sort(sortCategories);
-              categoriesPayload = topLevelCategories.map((c) => ({
-                id: c.id,
-                name: c.name,
-                slug: c.slug,
-                image: c.icon_url || undefined,
-                children: buildCategoryTree(c.id),
-              }));
             }
-
-            if (categoriesPayload.length === 0) {
-              isEmptyTree = true;
-            }
+          } else {
+            // No root category selected: map all top-level categories in nav as columns
+            const topLevelCategories = validCategories.filter(
+              (c) => !c.parent_id,
+            );
+            topLevelCategories.sort(sortCategories);
+            categoriesPayload = topLevelCategories.map((c) => ({
+              id: c.id,
+              name: c.name,
+              slug: c.slug,
+              image: c.icon_url || undefined,
+              children: buildCategoryTree(c.id),
+            }));
           }
 
-          const hasMegaMenu = layoutType !== NavLayoutType.NONE || l1.has_mega_menu;
+          if (categoriesPayload.length === 0) {
+            isEmptyTree = true;
+          }
+        }
 
-          let columns: any[] = [];
-          if (layoutType !== NavLayoutType.NONE) {
-            columns = categoriesPayload.map((l2) => ({
+        const hasMegaMenu =
+          layoutType !== NavLayoutType.NONE || l1.has_mega_menu;
+
+        let columns: any[] = [];
+        if (layoutType !== NavLayoutType.NONE) {
+          columns = categoriesPayload.map((l2) => ({
+            id: l2.id,
+            label: l2.name,
+            title: l2.name,
+            href: this.buildCategoryHref(
+              l1.target_route || 'store',
+              l2.slug,
+              routeMap,
+            ),
+            icon_url: l2.image || null,
+            iconUrl: l2.image || null,
+            category_id: l2.id,
+            item_type: 'category',
+            sort_order: 0,
+            children: l2.children || [],
+            items: (l2.children || []).map((l3: any) => ({
+              id: l3.id,
+              label: l3.name,
+              title: l3.name,
+              href: this.buildCategoryHref(
+                l1.target_route || 'store',
+                l3.slug,
+                routeMap,
+              ),
+              category_id: l3.id,
+              icon_url: l3.image || null,
+              iconUrl: l3.image || null,
+              children: [],
+              items: [],
+            })),
+          }));
+        } else if (l1.has_mega_menu) {
+          const displayType = l1.meta?.display_type;
+
+          if (
+            l1.has_mega_menu &&
+            l1.meta?.display_type ===
+              NavItemDisplayType.DYNAMIC_SUBCATEGORIES &&
+            l1.meta?.parent_category_id
+          ) {
+            const autoColumns = (
+              categoryChildrenMap.get(l1.meta.parent_category_id) ?? []
+            )
+              .slice(0, MEGA_MENU_MAX_AUTO_COLUMNS)
+              .map((childCat, idx) => ({
+                id: childCat.id,
+                label: childCat.name,
+                href: this.buildCategoryHref(
+                  l1.meta?.route_key,
+                  childCat.slug,
+                  routeMap,
+                ),
+                item_type: NavItemType.CATEGORY,
+                category_id: childCat.id,
+                sort_order: 1000 + idx,
+                meta: {
+                  col_type: NavItemColType.SUBCATEGORIES,
+                  col_title: childCat.name,
+                  icon_url: childCat.icon_url || undefined,
+                },
+                items: this.resolveCategorySubtree(
+                  childCat.id,
+                  categoryChildrenMap,
+                  routeMap,
+                  l1.meta?.route_key,
+                ),
+              }));
+            const manualColumns = (l2ByParent[l1.id] ?? []).map((l2) => ({
               id: l2.id,
-              label: l2.name,
-              title: l2.name,
-              href: this.buildCategoryHref(l1.target_route || 'store', l2.slug, routeMap),
-              icon_url: l2.image || null,
-              iconUrl: l2.image || null,
-              category_id: l2.id,
-              item_type: 'category',
-              sort_order: 0,
-              children: l2.children || [],
-              items: (l2.children || []).map((l3: any) => ({
-                id: l3.id,
-                label: l3.name,
-                title: l3.name,
-                href: this.buildCategoryHref(l1.target_route || 'store', l3.slug, routeMap),
-                category_id: l3.id,
-                icon_url: l3.image || null,
-                iconUrl: l3.image || null,
-                children: [],
-                items: [],
-              })),
+              label: l2.label,
+              href: l2.href,
+              item_type: l2.item_type,
+              category_id: l2.category_id,
+              sort_order: l2.sort_order,
+              meta: (l2.meta ?? {}) as NavItemMeta,
+              items:
+                l2.meta?.col_type === NavItemColType.PRODUCTS
+                  ? this.resolveProductIds(
+                      (l2.meta as any)?.product_ids,
+                      productMap,
+                    )
+                  : [],
             }));
-          } else if (l1.has_mega_menu) {
-            const displayType = l1.meta?.display_type;
 
-            if (
-              l1.has_mega_menu &&
-              l1.meta?.display_type ===
-                NavItemDisplayType.DYNAMIC_SUBCATEGORIES &&
-              l1.meta?.parent_category_id
-            ) {
-              const autoColumns = (
-                categoryChildrenMap.get(l1.meta.parent_category_id) ?? []
-              )
-                .slice(0, MEGA_MENU_MAX_AUTO_COLUMNS)
-                .map((childCat, idx) => ({
-                  id: childCat.id,
-                  label: childCat.name,
+            columns = [...manualColumns, ...autoColumns].sort(
+              (a, b) => a.sort_order - b.sort_order,
+            );
+          } else if (
+            displayType === NavItemDisplayType.CATEGORY_LISTING ||
+            (displayType as string) === 'category_listing_visual'
+          ) {
+            const curatedCols = (l2ByParent[l1.id] ?? []).map((l2) => {
+              const {
+                label: rLabel,
+                href: rHref,
+                icon_url: rIconUrl,
+              } = resolveCategory(
+                l2.id,
+                l2.item_type,
+                l2.category_id,
+                l2.label,
+                l2.href,
+                routeKey,
+              );
+              let resolvedSubItems: any[] = [];
+              if (l2.item_type === NavItemType.CATEGORY && l2.category_id) {
+                const subCats = categoryChildrenMap.get(l2.category_id) ?? [];
+                resolvedSubItems = subCats.map((sub) => ({
+                  id: sub.id,
+                  label: sub.name,
                   href: this.buildCategoryHref(
-                    l1.meta?.route_key,
-                    childCat.slug,
+                    l1.meta?.route_key || routeKey,
+                    sub.slug,
                     routeMap,
                   ),
                   item_type: NavItemType.CATEGORY,
-                  category_id: childCat.id,
-                  sort_order: 1000 + idx,
-                  meta: {
-                    col_type: NavItemColType.SUBCATEGORIES,
-                    col_title: childCat.name,
-                    icon_url: childCat.icon_url || undefined,
-                  },
-                  items: this.resolveCategorySubtree(
-                    childCat.id,
-                    categoryChildrenMap,
-                    routeMap,
-                    l1.meta?.route_key,
-                  ),
+                  category_id: sub.id,
+                  icon_url: sub.icon_url || undefined,
                 }));
-              const manualColumns = (l2ByParent[l1.id] ?? []).map((l2) => ({
+              } else {
+                // Fall back to manual L3 child items for custom columns
+                resolvedSubItems = (l2ByParent[l2.id] ?? []).map((l3) => {
+                  const {
+                    label: rL3Label,
+                    href: rL3Href,
+                    icon_url: rL3IconUrl,
+                  } = resolveCategory(
+                    l3.id,
+                    l3.item_type,
+                    l3.category_id,
+                    l3.label,
+                    l3.href,
+                    routeKey,
+                  );
+                  return {
+                    id: l3.id,
+                    label: rL3Label,
+                    href: rL3Href,
+                    item_type: l3.item_type,
+                    category_id: l3.category_id,
+                    sort_order: l3.sort_order,
+                    meta: {
+                      ...l3.meta,
+                      icon_url: rL3IconUrl || l3.meta?.icon_url || undefined,
+                    },
+                  };
+                });
+              }
+              return {
                 id: l2.id,
-                label: l2.label,
-                href: l2.href,
+                label: rLabel,
+                href: rHref,
+                item_type: l2.item_type,
+                category_id: l2.category_id,
+                sort_order: l2.sort_order,
+                meta: {
+                  ...((l2.meta ?? {}) as NavItemMeta),
+                  icon_url: rIconUrl || l2.meta?.icon_url || undefined,
+                },
+                items: resolvedSubItems,
+              };
+            });
+
+            if (curatedCols.length > 0) {
+              columns = curatedCols;
+            } else {
+              // Fallback to all root categories chunked
+              const rootCats = validCategories.filter((c) => !c.parent_id);
+              if (rootCats.length > 0) {
+                const maxCols = Math.min(4, rootCats.length);
+                const colSize = Math.ceil(rootCats.length / maxCols);
+                for (let i = 0; i < maxCols; i++) {
+                  const chunk = rootCats.slice(i * colSize, (i + 1) * colSize);
+                  columns.push({
+                    id: `fallback-col-${i}`,
+                    label: i === 0 ? 'Categories' : '',
+                    href: this.buildCategoryHref(
+                      l1.meta?.route_key || routeKey,
+                      '',
+                      routeMap,
+                    ),
+                    item_type: NavItemType.CATEGORY,
+                    category_id: null,
+                    sort_order: i,
+                    meta: {
+                      col_type: 'subcategories',
+                      col_title: i === 0 ? 'Categories' : '',
+                    },
+                    items: chunk.map((cat) => ({
+                      id: cat.id,
+                      label: cat.name,
+                      href: this.buildCategoryHref(
+                        l1.meta?.route_key || routeKey,
+                        cat.slug,
+                        routeMap,
+                      ),
+                      item_type: NavItemType.CATEGORY,
+                      category_id: cat.id,
+                      icon_url: cat.icon_url || undefined,
+                    })),
+                  });
+                }
+              }
+            }
+          } else if (
+            l1.meta?.display_type === NavItemDisplayType.CATEGORY_DIRECTORY
+          ) {
+            const routeKey = l1.meta?.route_key;
+            const rootCats = validCategories.filter((c) => !c.parent_id);
+
+            columns = rootCats
+              .slice(0, MEGA_MENU_MAX_AUTO_COLUMNS)
+              .map((root, idx) => ({
+                id: root.id,
+                label: root.name,
+                href: this.buildCategoryHref(routeKey, root.slug, routeMap),
+                item_type: NavItemType.CATEGORY,
+                category_id: root.id,
+                sort_order: idx,
+                meta: {
+                  col_type: 'subcategories',
+                  col_title: root.name,
+                  icon_url: root.icon_url || undefined,
+                },
+                items: this.resolveCategorySubtree(
+                  root.id,
+                  categoryChildrenMap,
+                  routeMap,
+                  routeKey,
+                ),
+              }));
+          } else {
+            // Default or custom/manual columns (such as manual product ranges)
+            columns = (l2ByParent[l1.id] ?? []).map((l2) => {
+              const { label: rLabel, href: rHref } = resolveCategory(
+                l2.id,
+                l2.item_type,
+                l2.category_id,
+                l2.label,
+                l2.href,
+                routeKey,
+              );
+
+              // Fetch manual L3 child items
+              const subItems =
+                l2.meta?.col_type === NavItemColType.PRODUCTS
+                  ? this.resolveProductIds(
+                      (l2.meta as any)?.product_ids,
+                      productMap,
+                    )
+                  : (l2ByParent[l2.id] ?? []).map((l3) => {
+                      const { label: rL3Label, href: rL3Href } =
+                        resolveCategory(
+                          l3.id,
+                          l3.item_type,
+                          l3.category_id,
+                          l3.label,
+                          l3.href,
+                          routeKey,
+                        );
+                      return {
+                        id: l3.id,
+                        label: rL3Label,
+                        href: rL3Href,
+                        item_type: l3.item_type,
+                        category_id: l3.category_id,
+                        sort_order: l3.sort_order,
+                        meta: l3.meta,
+                      };
+                    });
+              return {
+                id: l2.id,
+                label: rLabel,
+                href: rHref,
                 item_type: l2.item_type,
                 category_id: l2.category_id,
                 sort_order: l2.sort_order,
                 meta: (l2.meta ?? {}) as NavItemMeta,
-                items:
-                  l2.meta?.col_type === NavItemColType.PRODUCTS
-                    ? this.resolveProductIds(
-                        (l2.meta as any)?.product_ids,
-                        productMap,
-                      )
-                    : [],
-              }));
-
-              columns = [...manualColumns, ...autoColumns].sort(
-                (a, b) => a.sort_order - b.sort_order,
-              );
-            } else if (
-              displayType === NavItemDisplayType.CATEGORY_LISTING ||
-              (displayType as string) === 'category_listing_visual'
-            ) {
-              const curatedCols = (l2ByParent[l1.id] ?? []).map((l2) => {
-                const {
-                  label: rLabel,
-                  href: rHref,
-                  icon_url: rIconUrl,
-                } = resolveCategory(
-                  l2.id,
-                  l2.item_type,
-                  l2.category_id,
-                  l2.label,
-                  l2.href,
-                  routeKey,
-                );
-                let resolvedSubItems: any[] = [];
-                if (l2.item_type === NavItemType.CATEGORY && l2.category_id) {
-                  const subCats = categoryChildrenMap.get(l2.category_id) ?? [];
-                  resolvedSubItems = subCats.map((sub) => ({
-                    id: sub.id,
-                    label: sub.name,
-                    href: this.buildCategoryHref(
-                      l1.meta?.route_key || routeKey,
-                      sub.slug,
-                      routeMap,
-                    ),
-                    item_type: NavItemType.CATEGORY,
-                    category_id: sub.id,
-                    icon_url: sub.icon_url || undefined,
-                  }));
-                } else {
-                  // Fall back to manual L3 child items for custom columns
-                  resolvedSubItems = (l2ByParent[l2.id] ?? []).map((l3) => {
-                    const {
-                      label: rL3Label,
-                      href: rL3Href,
-                      icon_url: rL3IconUrl,
-                    } = resolveCategory(
-                      l3.id,
-                      l3.item_type,
-                      l3.category_id,
-                      l3.label,
-                      l3.href,
-                      routeKey,
-                    );
-                    return {
-                      id: l3.id,
-                      label: rL3Label,
-                      href: rL3Href,
-                      item_type: l3.item_type,
-                      category_id: l3.category_id,
-                      sort_order: l3.sort_order,
-                      meta: {
-                        ...l3.meta,
-                        icon_url: rL3IconUrl || l3.meta?.icon_url || undefined,
-                      },
-                    };
-                  });
-                }
-                return {
-                  id: l2.id,
-                  label: rLabel,
-                  href: rHref,
-                  item_type: l2.item_type,
-                  category_id: l2.category_id,
-                  sort_order: l2.sort_order,
-                  meta: {
-                    ...((l2.meta ?? {}) as NavItemMeta),
-                    icon_url: rIconUrl || l2.meta?.icon_url || undefined,
-                  },
-                  items: resolvedSubItems,
-                };
-              });
-
-              if (curatedCols.length > 0) {
-                columns = curatedCols;
-              } else {
-                // Fallback to all root categories chunked
-                const rootCats = validCategories.filter((c) => !c.parent_id);
-                if (rootCats.length > 0) {
-                  const maxCols = Math.min(4, rootCats.length);
-                  const colSize = Math.ceil(rootCats.length / maxCols);
-                  for (let i = 0; i < maxCols; i++) {
-                    const chunk = rootCats.slice(
-                      i * colSize,
-                      (i + 1) * colSize,
-                    );
-                    columns.push({
-                      id: `fallback-col-${i}`,
-                      label: i === 0 ? 'Categories' : '',
-                      href: this.buildCategoryHref(
-                        l1.meta?.route_key || routeKey,
-                        '',
-                        routeMap,
-                      ),
-                      item_type: NavItemType.CATEGORY,
-                      category_id: null,
-                      sort_order: i,
-                      meta: {
-                        col_type: 'subcategories',
-                        col_title: i === 0 ? 'Categories' : '',
-                      },
-                      items: chunk.map((cat) => ({
-                        id: cat.id,
-                        label: cat.name,
-                        href: this.buildCategoryHref(
-                          l1.meta?.route_key || routeKey,
-                          cat.slug,
-                          routeMap,
-                        ),
-                        item_type: NavItemType.CATEGORY,
-                        category_id: cat.id,
-                        icon_url: cat.icon_url || undefined,
-                      })),
-                    });
-                  }
-                }
-              }
-            } else if (
-              l1.meta?.display_type === NavItemDisplayType.CATEGORY_DIRECTORY
-            ) {
-              const routeKey = l1.meta?.route_key;
-              const rootCats = validCategories.filter((c) => !c.parent_id);
-
-              columns = rootCats
-                .slice(0, MEGA_MENU_MAX_AUTO_COLUMNS)
-                .map((root, idx) => ({
-                  id: root.id,
-                  label: root.name,
-                  href: this.buildCategoryHref(routeKey, root.slug, routeMap),
-                  item_type: NavItemType.CATEGORY,
-                  category_id: root.id,
-                  sort_order: idx,
-                  meta: {
-                    col_type: 'subcategories',
-                    col_title: root.name,
-                    icon_url: root.icon_url || undefined,
-                  },
-                  items: this.resolveCategorySubtree(
-                    root.id,
-                    categoryChildrenMap,
-                    routeMap,
-                    routeKey,
-                  ),
-                }));
-            } else {
-              // Default or custom/manual columns (such as manual product ranges)
-              columns = (l2ByParent[l1.id] ?? []).map((l2) => {
-                const { label: rLabel, href: rHref } = resolveCategory(
-                  l2.id,
-                  l2.item_type,
-                  l2.category_id,
-                  l2.label,
-                  l2.href,
-                  routeKey,
-                );
-
-                // Fetch manual L3 child items
-                const subItems =
-                  l2.meta?.col_type === NavItemColType.PRODUCTS
-                    ? this.resolveProductIds(
-                        (l2.meta as any)?.product_ids,
-                        productMap,
-                      )
-                    : (l2ByParent[l2.id] ?? []).map((l3) => {
-                        const { label: rL3Label, href: rL3Href } =
-                          resolveCategory(
-                            l3.id,
-                            l3.item_type,
-                            l3.category_id,
-                            l3.label,
-                            l3.href,
-                            routeKey,
-                          );
-                        return {
-                          id: l3.id,
-                          label: rL3Label,
-                          href: rL3Href,
-                          item_type: l3.item_type,
-                          category_id: l3.category_id,
-                          sort_order: l3.sort_order,
-                          meta: l3.meta,
-                        };
-                      });
-                return {
-                  id: l2.id,
-                  label: rLabel,
-                  href: rHref,
-                  item_type: l2.item_type,
-                  category_id: l2.category_id,
-                  sort_order: l2.sort_order,
-                  meta: (l2.meta ?? {}) as NavItemMeta,
-                  items: subItems,
-                };
-              });
-            }
+                items: subItems,
+              };
+            });
           }
+        }
 
-          return {
-            id: l1.id,
-            label: resolvedLabel,
-            href: resolvedHref,
-            item_type: l1.item_type,
-            category_id: l1.category_id,
-            has_mega_menu: hasMegaMenu,
-            layout_type: layoutType,
-            root_category_id: l1.root_category_id || null,
-            target_route: l1.target_route || null,
-            sort_order: l1.sort_order,
-            meta: (l1.meta ?? {}) as NavItemMeta,
-            categories: categoriesPayload,
-            isEmptyTree: isEmptyTree,
-            columns: columns,
-            megaMenuColumns: columns,
-          };
+        return {
+          id: l1.id,
+          label: resolvedLabel,
+          href: resolvedHref,
+          item_type: l1.item_type,
+          category_id: l1.category_id,
+          has_mega_menu: hasMegaMenu,
+          layout_type: layoutType,
+          root_category_id: l1.root_category_id || null,
+          target_route: l1.target_route || null,
+          sort_order: l1.sort_order,
+          meta: (l1.meta ?? {}) as NavItemMeta,
+          categories: categoriesPayload,
+          isEmptyTree: isEmptyTree,
+          columns: columns,
+          megaMenuColumns: columns,
+        };
       });
 
       const resultPayload = {
@@ -731,16 +753,6 @@ export class NavbarService {
         menu_id: menuRow?.id ?? null,
         navigationItems,
       };
-
-      const generationTimeMs = performance.now() - startTime;
-      const payloadStr = JSON.stringify(resultPayload);
-      const payloadSizeKb = payloadStr.length / 1024;
-
-      if (generationTimeMs > 200 || payloadSizeKb > 250) {
-        console.warn(
-          `[NavbarService] Performance warning: Navbar payload generated in ${generationTimeMs.toFixed(2)}ms (Limit: 200ms), size ${payloadSizeKb.toFixed(2)}KB (Limit: 250KB), total categories: ${totalCategoryCount}, max depth: ${maxTreeDepth}.`
-        );
-      }
 
       return resultPayload;
     } catch (err) {
@@ -949,7 +961,9 @@ export class NavbarService {
 
       // ── Service-layer conditional validation: root_category_id ──────────────
       // Resolve the effective layout_type (dto takes precedence over existing)
-      const effectiveLayoutType = (dto.layout_type ?? existing.layout_type ?? NavLayoutType.NONE) as NavLayoutType;
+      const effectiveLayoutType = (dto.layout_type ??
+        existing.layout_type ??
+        NavLayoutType.NONE) as NavLayoutType;
       const effectiveRootCatId =
         dto.root_category_id !== undefined
           ? dto.root_category_id

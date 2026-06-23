@@ -18,9 +18,9 @@ import { ParseJsonPipe } from '../../common/pipes/parseJsonPipe';
 import { type ProductFiles } from '../../common/Types/index.type';
 import { ProductStatus } from '../../drizzle/types/types';
 import { Public } from '../../common/decorators/public.decorator';
-import { RoleGuard } from 'src/guards/role.guard';
-import { Role } from 'src/enums/role.enum';
-import { Roles } from 'src/common/decorators/roles.decorator';
+import { RoleGuard } from '../../guards/role.guard';
+import { Role } from '../../enums/role.enum';
+import { Roles } from '../../common/decorators/roles.decorator';
 
 @Controller({
   version: '1',

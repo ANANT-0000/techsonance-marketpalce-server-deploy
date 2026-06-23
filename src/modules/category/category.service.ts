@@ -15,8 +15,8 @@ import { type DrizzleService } from '../../drizzle/drizzle.module';
 import { CompanyService } from '../company/company.service';
 import { domainExtractor } from '../../common/filters/domainExtractor.filter';
 import { CategoryErrorKeyEnum } from './constants/category.enums';
-import { HttpExceptionFilter } from 'src/common/filters/http-exception.filter';
-import { EntityStatus } from 'src/drizzle/types/types';
+import { HttpExceptionFilter } from '../../common/filters/http-exception.filter';
+import { EntityStatus } from '../../drizzle/types/types';
 
 @Injectable()
 export class CategoryService {

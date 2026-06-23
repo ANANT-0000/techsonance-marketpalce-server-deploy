@@ -10,7 +10,7 @@ import { ProductsModule } from './modules/products/products.module';
 import { OrdersModule } from './modules/orders/orders.module';
 import { VendorsModule } from './modules/vendors/vendors.module';
 import { TicketsModule } from './modules/tickets/tickets.module';
-import { ConfigModule } from '@nestjs/config';
+import { ConfigModule, ConfigService } from '@nestjs/config';
 import { AdminModule } from './modules/admin/admin.module';
 import { RolesModule } from './modules/roles/roles.module';
 import { MailModule } from './common/services/mail/mail.module';
@@ -56,16 +56,35 @@ import { JwtAuthGuard } from './modules/auth/jwt-auth.guard';
 import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
 import { CustomersModule } from './modules/customers/customers.module';
 import { SiteMapsModule } from './modules/site-maps/site-maps.module';
-export enum RATTELIMIT {
+import { ShipRocketModule } from './modules/ship-rocket/ship-rocket.module';
+import { CacheModule } from '@nestjs/cache-manager';
+import { redisStore } from 'cache-manager-redis-yet';
+export enum RATELIMIT_NAME {
   SHORT = 'short',
   MEDIUM = 'medium',
+}
+export enum RATELIMIT_TIME {
+  SHORT = 1000,
+  MEDIUM = 60_000,
+}
+export enum RATELIMIT_LIMIT {
+  SHORT = 10,
+  MEDIUM = 100,
 }
 @Module({
   imports: [
     AuthModule,
     ThrottlerModule.forRoot([
-      { name: RATTELIMIT.SHORT, ttl: 1000, limit: 10 },
-      { name: RATTELIMIT.MEDIUM, ttl: 60_000, limit: 100 },
+      {
+        name: RATELIMIT_NAME.SHORT,
+        ttl: RATELIMIT_TIME.SHORT,
+        limit: RATELIMIT_LIMIT.SHORT,
+      },
+      {
+        name: RATELIMIT_NAME.MEDIUM,
+        ttl: RATELIMIT_TIME.MEDIUM,
+        limit: RATELIMIT_LIMIT.MEDIUM,
+      },
     ]),
     DrizzleModule,
     UsersModule,
@@ -75,6 +94,32 @@ export enum RATTELIMIT {
     TicketsModule,
     ConfigModule.forRoot({
       isGlobal: true,
+    }),
+    CacheModule.registerAsync({
+      isGlobal: true,
+      imports: [ConfigModule],
+      inject: [ConfigService],
+      useFactory: async (config: ConfigService) => {
+        const store = await redisStore({
+          // socket: {
+          // host: config.get<string>('REDIS_HOST', 'localhost') as string,
+          // port: config.get<number>('REDIS_PORT', 6379) as number,
+          // tls: (
+          //   config.get<string>('REDIS_HOST', 'localhost') as string
+          // ).includes('localhost')
+          //   ? undefined
+          //   : true,
+          // },
+          // password: config.get<string>('REDIS_PASSWORD') as string,
+          url: config.get<string>('REDIS_URL'),
+        });
+
+        store.client.on('error', (err) => {
+          console.error('Redis Client Error:', err.message || err);
+        });
+
+        return { store };
+      },
     }),
     AdminModule,
     RolesModule,
@@ -117,6 +162,7 @@ export enum RATTELIMIT {
     CustomersModule,
     NavbarModule,
     SiteMapsModule,
+    ShipRocketModule,
   ],
   controllers: [AppController, UsersController],
   providers: [

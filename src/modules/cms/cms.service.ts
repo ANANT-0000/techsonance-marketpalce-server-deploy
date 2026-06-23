@@ -20,7 +20,7 @@ import {
   CMS_THEME_COLOR_KEYS,
 } from './constants/cms.constants';
 import { CmsLanguageEnum, CmsPageContentTypeEnum } from './constants/cms.enums';
-import { extractCloudinaryPublicId } from 'src/common/filters/extractCloudinaryPublicId.filter';
+import { extractCloudinaryPublicId } from '../../common/filters/extractCloudinaryPublicId.filter';
 
 function isValidHexColor(color: unknown): boolean {
   if (typeof color !== 'string') return false;

@@ -2,7 +2,7 @@ import { Inject, Injectable } from '@nestjs/common';
 import { DRIZZLE, type DrizzleService } from '../../drizzle/drizzle.module';
 import { CompanyService } from '../company/company.service';
 import { domainExtractor } from '../../common/filters/domainExtractor.filter';
-import { site_maps } from 'src/drizzle/schema';
+import { site_maps } from '../../drizzle/schema';
 import { eq } from 'drizzle-orm';
 const SYSTEM_DEFAULTS = [
   {

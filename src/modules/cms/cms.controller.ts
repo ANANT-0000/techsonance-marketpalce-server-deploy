@@ -19,9 +19,9 @@ import {
   IS_PUBLIC_KEY,
   Public,
 } from '../../common/decorators/public.decorator';
-import { Roles } from 'src/common/decorators/roles.decorator';
-import { Role } from 'src/enums/role.enum';
-import { RoleGuard } from 'src/guards/role.guard';
+import { Roles } from '../../common/decorators/roles.decorator';
+import { Role } from '../../enums/role.enum';
+import { RoleGuard } from '../../guards/role.guard';
 
 @Controller({ version: '1', path: 'cms' })
 export class CmsController {
