@@ -18,7 +18,7 @@ import {
   warehouse,
 } from '../../drizzle/schema';
 import { and, asc, desc, eq, ilike, or, SQL, sql } from 'drizzle-orm';
-import { productImageType } from '../../drizzle/types/types';
+import { ProductImageType } from '../../drizzle/types/types';
 import { domainExtractor } from '../../common/filters/domainExtractor.filter';
 import { InventoryErrorKeyEnum } from './constants/inventory.enums';
 export const LOW_STOCK_THRESHOLD = 5; // configurable
@@ -124,7 +124,7 @@ export class InventoryService {
                   },
                 },
                 images: {
-                  where: eq(product_images.imgType, productImageType.MAIN),
+                  where: eq(product_images.imgType, ProductImageType.MAIN),
                   columns: {
                     image_url: true,
                   },

@@ -1,14 +1,14 @@
 import * as pg from 'drizzle-orm/pg-core';
 import { company } from './main.schema';
-import { EntityStatusEnum } from './enums.schema';
+import { EntityStatusEnum, BillingAccountUsedEnum } from './enums.schema';
 import { address, user, vendor } from './users.schema';
 import {
-  CancelledByEnum,
+  CancelledBy,
   OrderStatus,
   PaymentStatus,
-  productImageType,
+  ProductImageType,
   ProductStatus,
-  RefundStatusEnum,
+  RefundStatus,
   ReturnStatus,
   ReturnType,
   ShippingStatus,
@@ -236,7 +236,7 @@ export const coupon_products = pg.pgTable(
   },
   (t) => [pg.uniqueIndex('unq_coupon_product').on(t.coupon_id, t.product_id)],
 );
-export const cancelled_by_enum = pg.pgEnum('canceled_by_enum', CancelledByEnum);
+export const cancelled_by_enum = pg.pgEnum('canceled_by_enum', CancelledBy);
 export const order_item_cancelled = pg.pgTable('order_item_canceled', {
   id: pg.uuid('id').primaryKey().defaultRandom(),
   order_item_id: pg
@@ -274,6 +274,10 @@ export const product_variants = pg.pgTable(
     product_id: pg
       .uuid('product_id')
       .references(() => products.id, { onDelete: 'cascade' }),
+    weight_kg: pg.decimal('weight_kg', { precision: 5, scale: 2 }).default('0.50').notNull(),
+    length_cm: pg.integer('length_cm'),
+    width_cm: pg.integer('width_cm'),
+    height_cm: pg.integer('height_cm'),
   },
   (table) => [
     pg.index('idx_product_variants_product_id').on(table.product_id),
@@ -284,7 +288,7 @@ export const product_variants = pg.pgTable(
 );
 export const productImageTypeEnum = pg.pgEnum(
   'product_image_type_enum',
-  productImageType,
+  ProductImageType,
 );
 export const product_images = pg.pgTable('product_images', {
   id: pg.uuid('id').primaryKey().defaultRandom(),
@@ -412,7 +416,7 @@ export const shipping_status_enum = pg.pgEnum(
 );
 export const shipping_details = pg.pgTable('shipping_details', {
   id: pg.uuid('id').primaryKey().defaultRandom(),
-  tracking_url: pg.text('tracking_url').notNull(),
+  tracking_url: pg.text('tracking_url'),
   created_at: pg.timestamp('created_at').notNull().defaultNow(),
   updated_at: pg
     .timestamp('updated_at')
@@ -423,11 +427,19 @@ export const shipping_details = pg.pgTable('shipping_details', {
     .uuid('order_id')
     .references(() => orders.id, { onDelete: 'cascade' }),
   company_id: pg.uuid('company_id').references(() => company.id),
+  logistics_provider: pg.varchar('logistics_provider', { length: 50 }).default('SHIPROCKET').notNull(),
+  billing_account_used: BillingAccountUsedEnum('billing_account_used'), // 'VENDOR_OWN' | 'PLATFORM_MASTER'
+  logistics_order_id: pg.varchar('logistics_order_id', { length: 100 }),
+  awb_number: pg.varchar('awb_number', { length: 100 }),
+  courier_name: pg.varchar('courier_name', { length: 100 }),
+  shipping_status: pg.varchar('shipping_status', { length: 50 }).default('PENDING').notNull(),
+  actual_shipping_cost: pg.decimal('actual_shipping_cost', { precision: 10, scale: 2 }),
+  weight_discrepancy_charge: pg.decimal('weight_discrepancy_charge', { precision: 10, scale: 2 }).default('0.00').notNull(),
 });
 
 export const refund_status_enum = pg.pgEnum(
   'refund_status_enum',
-  RefundStatusEnum,
+  RefundStatus,
 );
 export const refunds = pg.pgTable(
   'refunds',

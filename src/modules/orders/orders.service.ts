@@ -38,6 +38,7 @@ import {
   promotion_rules,
   user,
   promotion_analytics_events,
+  company,
   company_document_config,
 } from '../../drizzle/schema';
 import {
@@ -66,6 +67,7 @@ import {
 import { CouponService } from '../coupon/coupon.service';
 import { PromotionsService } from '../promotions/promotions.service';
 import { OrdersErrorKeyEnum } from './constants/orders.enums';
+import { ShippingManagerService } from '../shipping/shipping-manager.service';
 
 @Injectable()
 export class OrdersService {
@@ -81,6 +83,7 @@ export class OrdersService {
     private readonly policyResolutionService: PolicyResolutionService,
     private readonly promotionService: PromotionsService,
     private readonly couponService: CouponService,
+    private readonly shippingManagerService: ShippingManagerService,
   ) {}
   private async resolveCompanyId(domain: string): Promise<string> {
     const filteredDomain = domainExtractor(domain);
@@ -190,14 +193,37 @@ export class OrdersService {
           companyId,
         );
         const grandTotal = taxData.grandTotal;
-        // ── 3. Create the main Order (uses grandTotal after discount) ─────────────────
+
+        const [companyRecord] = await tx
+          .select({
+            is_free_shipping_enabled: company.is_free_shipping_enabled,
+            free_delivery_threshold: company.free_delivery_threshold,
+            standard_delivery_charge: company.standard_delivery_charge,
+          })
+          .from(company)
+          .where(eq(company.id, companyId))
+          .limit(1);
+
+        let shippingCost = 0;
+        if (companyRecord) {
+          const isFreeShipping =
+            companyRecord.is_free_shipping_enabled &&
+            totalAmount >= Number(companyRecord.free_delivery_threshold);
+          shippingCost = isFreeShipping
+            ? 0
+            : Number(companyRecord.standard_delivery_charge);
+        }
+
+        const finalGrandTotal = grandTotal + shippingCost;
+
+        // ── 3. Create the main Order (uses finalGrandTotal after discount and shipping) ─────────────────
         const [newOrder] = await tx
           .insert(orders)
           .values({
             company_id: companyId,
             user_id: userId,
             address_id: addressId,
-            total_amount: String(grandTotal), // ← discounted if promotion applied
+            total_amount: String(finalGrandTotal.toFixed(2)),
           })
           .returning({ id: orders.id })
           .catch((error) => {
@@ -529,7 +555,7 @@ export class OrdersService {
         .from(order_items)
         .where(eq(order_items.order_id, orderId));
 
-      return this.db.transaction(async (tx) => {
+      const verificationResult = await this.db.transaction(async (tx) => {
         // Enforce idempotency inside transaction to prevent race conditions (SELECT FOR UPDATE)
         const [orderRecord] = await tx
           .select({ order_status: orders.order_status })
@@ -694,6 +720,18 @@ export class OrdersService {
           };
         }
       });
+
+      if (
+        verificationResult.success &&
+        !verificationResult.wasAlreadyVerified &&
+        isSuccess
+      ) {
+        this.shippingManagerService
+          .createDraftOrderForOrder(orderId, companyId)
+          .catch((err) => {});
+      }
+
+      return verificationResult;
     } catch (error) {
       if (
         error instanceof HttpException ||
@@ -845,21 +883,18 @@ export class OrdersService {
   ) {
     try {
       const companyId = await this.resolveCompanyId(domain);
+      const joinConditions = [eq(order_items.order_id, orders.id)];
+      if (status && Object.values(OrderStatus).includes(status as OrderStatus)) {
+        joinConditions.push(eq(order_items.order_status, status));
+        joinConditions.push(gt(order_items.quantity, 0));
+      }
+
       const totalOrders = await this.db
         .selectDistinct({ id: orders.id })
         .from(orders)
         .innerJoin(
           order_items,
-          and(
-            eq(order_items.order_id, orders.id),
-            Object.values(OrderStatus).includes(status as OrderStatus)
-              ? and(
-                  // @ts-ignore
-                  eq(order_items.order_status, status),
-                  gt(order_items.quantity, 0),
-                )
-              : undefined,
-          ),
+          and(...joinConditions),
         )
         .where(eq(orders.company_id, companyId));
       const validOrderIds = (
@@ -868,23 +903,19 @@ export class OrdersService {
           .from(orders)
           .innerJoin(
             order_items,
-            and(
-              eq(order_items.order_id, orders.id),
-              Object.values(OrderStatus).includes(status as OrderStatus)
-                ? and(
-                    // @ts-ignore
-                    eq(order_items.order_status, status),
-                    gt(order_items.quantity, 0),
-                  )
-                : undefined,
-            ),
+            and(...joinConditions),
           )
           .where(eq(orders.company_id, companyId))
           .orderBy(desc(orders.created_at))
           .limit(limit)
           .offset(offset)
       ).map((o) => o.id);
-      if (validOrderIds.length === 0) return [];
+      if (validOrderIds.length === 0) return { orders: [], totalCount: 0 };
+      
+      const itemsWhere = (status && Object.values(OrderStatus).includes(status as OrderStatus))
+        ? and(eq(order_items.order_status, status), gt(order_items.quantity, 0))
+        : undefined;
+
       const ordersList = await this.db.query.orders.findMany({
         where: and(
           eq(orders.company_id, companyId),
@@ -894,13 +925,7 @@ export class OrdersService {
         columns: { id: true, total_amount: true, created_at: true },
         with: {
           items: {
-            where: Object.values(OrderStatus).includes(status as OrderStatus)
-              ? and(
-                  // @ts-ignore
-                  eq(order_items.order_status, status),
-                  gt(order_items.quantity, 0),
-                )
-              : undefined,
+            where: itemsWhere,
             columns: { order_status: true, quantity: true, price: true },
             with: {
               cancelledRecord: true,

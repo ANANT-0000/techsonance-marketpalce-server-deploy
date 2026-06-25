@@ -4,9 +4,11 @@ import {
   UserRole,
   UserStatus,
   EntityStatus,
+  LogisticsMode,
 } from '../types/types';
-import { EntityStatusEnum } from './enums.schema';
+import { EntityStatusEnum, LogisticsModeEnum } from './enums.schema';
 import { user } from './users.schema';
+import { sql } from 'drizzle-orm';
 export const companyEnum = pg.pgEnum('company_enum', UserStatus);
 export const company = pg.pgTable(
   'company',
@@ -24,6 +26,24 @@ export const company = pg.pgTable(
       .$onUpdate(() => new Date()),
     status: EntityStatusEnum('status').default(EntityStatus.ACTIVE),
     deleted_at: pg.timestamp('deleted_at'),
+    logistics_mode: LogisticsModeEnum('logistics_mode')
+      .default(LogisticsMode.PLATFORM_PROXY)
+      .notNull(),
+    encrypted_logistics_api_key: pg.text('encrypted_logistics_api_key'),
+    encrypted_logistics_api_secret: pg.text('encrypted_logistics_api_secret'),
+    logistics_pickup_id: pg.varchar('logistics_pickup_id', { length: 100 }),
+    is_free_shipping_enabled: pg
+      .boolean('is_free_shipping_enabled')
+      .default(false)
+      .notNull(),
+    free_delivery_threshold: pg
+      .decimal('free_delivery_threshold', { precision: 10, scale: 2 })
+      .default('0.00')
+      .notNull(),
+    standard_delivery_charge: pg
+      .decimal('standard_delivery_charge', { precision: 10, scale: 2 })
+      .default('50.00')
+      .notNull(),
   },
   (t) => [
     pg.uniqueIndex('uq_company_domain').on(t.company_domain),

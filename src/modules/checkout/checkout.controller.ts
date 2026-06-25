@@ -56,4 +56,14 @@ export class CheckoutController {
   ) {
     return this.couponService.verifyCoupon(couponCode, userId, domain);
   }
+
+  @Post('calculate-shipping/:userId')
+  @HttpCode(HttpStatus.OK)
+  async calculateShippingRate(
+    @Param('userId') userId: string,
+    @Body() dto: { addressId: string; cartId?: string; productVariantId?: string; qty?: number },
+    @Headers('company-domain') domain: string,
+  ) {
+    return this.checkoutService.calculateShippingRate(userId, dto, domain);
+  }
 }

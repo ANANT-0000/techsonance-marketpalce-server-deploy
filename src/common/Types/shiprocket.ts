@@ -634,6 +634,10 @@ export interface ShiprocketCreateOrderResponse {
   shipment_id: number;
   status: string;
   status_code: number;
+  onboarding_completed_now: 0 | 1;
+  awb_code: string | null;
+  courier_company_id: string | null;
+  courier_name: string | null;
 }
 /**
  * Shiprocket Order Details Response
@@ -1317,4 +1321,208 @@ export interface ShiprocketExchangeOrderResponse {
       courier_name: string;
     };
   };
+}
+/**
+ * Represents the date and time information with timezone details.
+ * Commonly used in Shiprocket API responses for timestamps.
+ */
+export interface DateTimeInfo {
+  /** The date and time in 'YYYY-MM-DD HH:mm:ss.ssssss' format. */
+  date: string;
+  /** The type of timezone (e.g., 3 for fixed offset). */
+  timezone_type: number;
+  /** The IANA timezone identifier (e.g., 'Asia/Kolkata'). */
+  timezone: string;
+}
+
+/**
+ * Represents the shipper and RTO (Return to Origin) details.
+ * Contains both the pickup (shipper) and delivery (customer) address information.
+ */
+export interface ShippedByDetails {
+  /** Name of the shipper or store. */
+  shipper_company_name: string;
+  /** First line of the shipper's address. */
+  shipper_address_1: string;
+  /** Second line of the shipper's address (optional). */
+  shipper_address_2: string;
+  /** City of the shipper. */
+  shipper_city: string;
+  /** State of the shipper. */
+  shipper_state: string;
+  /** Country of the shipper. */
+  shipper_country: string;
+  /** Postal code of the shipper. */
+  shipper_postcode: string;
+  /** 1 if first-mile activation is enabled, 0 otherwise. */
+  shipper_first_mile_activated: 0 | 1;
+  /** Phone number of the shipper. */
+  shipper_phone: string;
+  /** Latitude coordinate for the shipper's location. */
+  lat: string;
+  /** Longitude coordinate for the shipper's location. */
+  long: string;
+  /** Email address of the shipper. */
+  shipper_email: string;
+  /** Name of the courier handling RTO (Return to Origin). */
+  rto_company_name: string;
+  /** First line of the RTO address. */
+  rto_address_1: string;
+  /** Second line of the RTO address (optional). */
+  rto_address_2: string;
+  /** City of the RTO destination. */
+  rto_city: string;
+  /** State of the RTO destination. */
+  rto_state: string;
+  /** Country of the RTO destination. */
+  rto_country: string;
+  /** Postal code of the RTO destination. */
+  rto_postcode: string;
+  /** Phone number for the RTO contact. */
+  rto_phone: string;
+  /** Email for the RTO contact. */
+  rto_email: string;
+}
+
+/**
+ * Represents the core shipment data returned after assigning an AWB.
+ * Includes courier details, order IDs, and shipping metadata.
+ */
+export interface AWBAssignData {
+  /** Unique ID of the courier company. */
+  courier_company_id: number;
+  /** The Air Waybill (AWB) number assigned to the shipment. */
+  awb_code: string;
+  /** Cash on Delivery amount. 0 if no COD. */
+  cod: number;
+  /** The internal Shiprocket Order ID. */
+  order_id: number;
+  /** The internal Shiprocket Shipment ID. */
+  shipment_id: number;
+  /** Status of the AWB code assignment (1 for active/assigned). */
+  awb_code_status: number;
+  /** Timestamp when the AWB was assigned. */
+  assigned_date_time: DateTimeInfo;
+  /** Weight applied for shipping calculations (in kg). */
+  applied_weight: number;
+  /** Internal company ID associated with the shipment. */
+  company_id: number;
+  /** Name of the assigned courier service. */
+  courier_name: string;
+  /** Name of the specific child courier service (if applicable). */
+  child_courier_name: string | null;
+  /** Scheduled date and time for pickup. */
+  pickup_scheduled_date: string;
+  /** Routing code for the shipment (optional). */
+  routing_code: string;
+  /** Routing code specifically for RTO (optional). */
+  rto_routing_code: string;
+  /** Invoice number associated with the shipment. */
+  invoice_no: string;
+  /** Transporter ID (optional). */
+  transporter_id: string;
+  /** Transporter name (optional). */
+  transporter_name: string;
+  /** Detailed object containing shipper and RTO address information. */
+  shipped_by: ShippedByDetails;
+}
+
+/**
+ * The root response object for the Shiprocket "Generate AWB" API.
+ * Indicates the success status and contains the shipment data.
+ */
+export interface ShiprocketGenerateAWBforShipmentResponse {
+  /**
+   * Status of the AWB assignment request.
+   * 1 typically indicates success, 0 indicates failure.
+   */
+  awb_assign_status: number;
+  /** The payload containing the shipment details. */
+  response: {
+    data: AWBAssignData;
+  };
+}
+/**
+ * Represents a single tracking scan event in the shipment's journey.
+ */
+export interface ShipmentScan {
+  /** Timestamp of the scan event (format: YYYY-MM-DD HH:MM:SS). */
+  date: string;
+
+  /** Internal status code (e.g., 'X-UCI', 'X-PPOM'). */
+  status: string;
+
+  /** Human-readable description of the activity. */
+  activity: string;
+
+  /** Location where the scan occurred. */
+  location: string;
+
+  /** Shiprocket internal status ID code (e.g., '5', '18', 'NA'). */
+  'sr-status'?: string;
+
+  /** Human-readable Shiprocket status label (e.g., 'MANIFEST GENERATED'). */
+  'sr-status-label'?: string;
+}
+
+/**
+ * Represents the complete tracking response object from Shiprocket.
+ */
+export interface ShiprocketWebhookBody {
+  /** Air Waybill number assigned by the courier. */
+  awb: string;
+
+  /** Name of the courier service (e.g., 'Delhivery Surface'). */
+  courier_name: string;
+
+  /** Current high-level status string (e.g., 'IN TRANSIT'). */
+  current_status: string;
+
+  /** Numeric ID for the current status. */
+  current_status_id: number;
+
+  /** Alias for current_status. */
+  shipment_status: string;
+
+  /** Alias for current_status_id. */
+  shipment_status_id: number;
+
+  /** Latest update timestamp (format: DD MM YYYY HH:MM:SS). */
+  current_timestamp: string;
+
+  /** Merchant's reference order ID. */
+  order_id: string;
+
+  /** Unique Shiprocket Order ID. */
+  sr_order_id: number;
+
+  /** Date AWB was assigned (YYYY-MM-DD HH:MM:SS). */
+  awb_assigned_date: string;
+
+  /** Date pickup was scheduled (YYYY-MM-DD HH:MM:SS). */
+  pickup_scheduled_date: string;
+
+  /** Estimated Time of Departure/Arrival (YYYY-MM-DD HH:MM:SS). */
+  etd: string;
+
+  /** Chronological array of all scan events. */
+  scans: ShipmentScan[];
+
+  /** Flag indicating if the shipment is a return (1) or new (0). */
+  is_return: 0 | 1;
+
+  /** ID of the sales channel used. */
+  channel_id: number;
+
+  /** Proof of Delivery status type (e.g., 'OTP Based Delivery'). */
+  pod_status: string;
+
+  /** Proof of Delivery content (e.g., signature image URL or 'Not Available'). */
+  pod: string;
+
+  /** Quality Check image URL (if applicable). */
+  qc_image: string;
+
+  /** Reason for QC failure (if applicable). */
+  qc_failure_reason: string;
 }

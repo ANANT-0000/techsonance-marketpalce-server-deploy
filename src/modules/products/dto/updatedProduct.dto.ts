@@ -96,4 +96,19 @@ export class UpdateProductDto {
   @IsOptional()
   @IsArray()
   imagesToDelete!: string[];
+
+  @IsString()
+  weight_kg!: string;
+
+  @IsNumber()
+  @Type(() => Number)
+  length_cm!: number;
+
+  @IsNumber()
+  @Type(() => Number)
+  width_cm!: number;
+
+  @IsNumber()
+  @Type(() => Number)
+  height_cm!: number;
 }

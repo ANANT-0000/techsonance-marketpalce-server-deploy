@@ -1,5 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import { productImageType } from '../../drizzle/types/types';
+import { ProductImageType } from '../../drizzle/types/types';
 import { CloudinaryService } from '../cloudinary/cloudinary.service';
 import { v2 as cloudinary } from 'cloudinary';
 import streamifier from 'streamifier';
@@ -14,7 +14,7 @@ export class UploadToCloudService {
       .then((data) => {
         return {
           secure_url: data.secure_url,
-          type: productImageType.MAIN,
+          type: ProductImageType.MAIN,
           resource_type: data.resource_type,
         };
       })
@@ -31,7 +31,7 @@ export class UploadToCloudService {
         return data.map((item) => ({
           // @ts-ignore
           secure_url: item.secure_url,
-          type: productImageType.GALLERY,
+          type: ProductImageType.GALLERY,
           resource_type: item.resource_type,
         }));
       })

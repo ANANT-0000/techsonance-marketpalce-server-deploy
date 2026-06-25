@@ -6,13 +6,15 @@ import {
   InternalServerErrorException,
 } from '@nestjs/common';
 import { AddressErrorKeyEnum } from './constants/address.enums';
-import { and, count, eq } from 'drizzle-orm';
+import { and, count, eq, desc } from 'drizzle-orm';
 import { DRIZZLE, type DrizzleService } from '../../drizzle/drizzle.module';
 import { address, user, vendor } from '../../drizzle/schema';
 import { CreateAddressDto } from './dto/createAddress.dto';
 import { UpdateAddressDto } from './dto/updateAddress.dto';
 import { domainExtractor } from '../../common/filters/domainExtractor.filter';
 import { CompanyService } from '../company/company.service';
+import { EntityStatus } from '../../drizzle/types/types';
+
 @Injectable()
 export class AddressService {
   constructor(
@@ -37,7 +39,12 @@ export class AddressService {
       const addressRecords = await this.db
         .select()
         .from(address)
-        .where(eq(address.user_id, userId))
+        .where(
+          and(
+            eq(address.user_id, userId),
+            eq(address.status, EntityStatus.ACTIVE),
+          ),
+        )
         .limit(filters?.limit ?? 20)
         .offset(filters?.offset ?? 0);
       if (!addressRecords) {
@@ -70,7 +77,12 @@ export class AddressService {
       const [result] = await this.db
         .select({ value: count() })
         .from(address)
-        .where(eq(address.user_id, userId));
+        .where(
+          and(
+            eq(address.user_id, userId),
+            eq(address.status, EntityStatus.ACTIVE),
+          ),
+        );
 
       const addressCount = result.value;
       return { hasAddresses: addressCount > 0, count: addressCount };
@@ -98,7 +110,12 @@ export class AddressService {
       const [addressRecord] = await this.db
         .select()
         .from(address)
-        .where(eq(address.id, addressId));
+        .where(
+          and(
+            eq(address.id, addressId),
+            eq(address.status, EntityStatus.ACTIVE),
+          ),
+        );
       return addressRecord;
     } catch (error) {
       if (error instanceof HttpException) {
@@ -317,7 +334,6 @@ export class AddressService {
             name: addressData.name,
             number: addressData.phone,
             address_line_1: addressData.address_line_1,
-
             street: addressData.street,
             city: addressData.city,
             state: addressData.state,
@@ -356,17 +372,43 @@ export class AddressService {
       );
     }
     try {
-      await this.db
-        .delete(address)
-        .where(and(eq(address.id, addressId), eq(address.user_id, customerId)))
-        .catch((error) => {
-          throw new InternalServerErrorException(
-            AddressErrorKeyEnum.FAILED_TO_DELETE,
-            {
-              cause: error,
-            },
-          );
-        });
+      await this.db.transaction(async (tx) => {
+        const [deletedAddress] = await tx
+          .update(address)
+          .set({ status: EntityStatus.DELETED, deleted_at: new Date() })
+          .where(
+            and(eq(address.id, addressId), eq(address.user_id, customerId)),
+          )
+          .returning()
+          .catch((error) => {
+            throw new InternalServerErrorException(
+              AddressErrorKeyEnum.FAILED_TO_DELETE,
+              { cause: error },
+            );
+          });
+
+        // If the deleted address was the default, set the latest active address as the new default
+        if (deletedAddress && deletedAddress.is_default) {
+          const [latestActiveAddress] = await tx
+            .select({ id: address.id })
+            .from(address)
+            .where(
+              and(
+                eq(address.user_id, customerId),
+                eq(address.status, EntityStatus.ACTIVE),
+              ),
+            )
+            .orderBy(desc(address.created_at))
+            .limit(1);
+
+          if (latestActiveAddress.id) {
+            await tx
+              .update(address)
+              .set({ is_default: true })
+              .where(eq(address.id, latestActiveAddress.id));
+          }
+        }
+      });
       return { message: 'Address deleted successfully', status: HttpStatus.OK };
     } catch (error) {
       if (error instanceof HttpException) {

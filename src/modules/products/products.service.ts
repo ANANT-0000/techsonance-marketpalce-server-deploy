@@ -13,7 +13,7 @@ import {
   product_variants,
   products,
 } from '../../drizzle/schema/shop.schema';
-import { productImageType, ProductStatus } from '../../drizzle/types/types';
+import { ProductImageType, ProductStatus } from '../../drizzle/types/types';
 import {
   and,
   asc,
@@ -782,7 +782,7 @@ export class ProductsService {
   ) {
     const finalResults: {
       url: string;
-      type: productImageType;
+      type: ProductImageType;
       resource_type: string;
     }[] = [];
 
@@ -792,7 +792,7 @@ export class ProductsService {
       );
       finalResults.push({
         url: mainRes.secure_url,
-        type: productImageType.MAIN,
+        type: ProductImageType.MAIN,
         resource_type: mainRes.resource_type,
       });
     }
@@ -804,7 +804,7 @@ export class ProductsService {
       finalResults.push(
         ...galleryRes.map((res) => ({
           url: res.secure_url,
-          type: productImageType.GALLERY,
+          type: ProductImageType.GALLERY,
           resource_type: res.resource_type,
         })),
       );
@@ -844,6 +844,10 @@ export class ProductsService {
             attributes: productDto.attributes,
             status: productDto.status,
             product_id: createdProduct.id,
+            weight_kg: productDto.weight_kg,
+            length_cm: productDto.length_cm,
+            width_cm: productDto.width_cm,
+            height_cm: productDto.height_cm,
           })
           .returning({
             id: product_variants.id,
@@ -1096,7 +1100,7 @@ export class ProductsService {
               });
           }
 
-          const finalResults: { url: string; type: productImageType }[] = [];
+          const finalResults: { url: string; type: ProductImageType }[] = [];
 
           if (files?.product?.[0]) {
             const mainRes = await this.uploadToCloudService.uploadFile(
@@ -1104,7 +1108,7 @@ export class ProductsService {
             );
             finalResults.push({
               url: mainRes.secure_url,
-              type: productImageType.MAIN,
+              type: ProductImageType.MAIN,
             });
           }
 
@@ -1115,7 +1119,7 @@ export class ProductsService {
             finalResults.push(
               ...galleryRes.map((res) => ({
                 url: res.secure_url,
-                type: productImageType.GALLERY,
+                type: ProductImageType.GALLERY,
               })),
             );
             imageToDeleteUrl.push(
@@ -1135,7 +1139,7 @@ export class ProductsService {
                 product_id: resolvedProductId,
                 image_url: image.url,
                 alt_text: `${image.type} Image ${index + 1}`,
-                is_primary: image.type === productImageType.MAIN,
+                is_primary: image.type === ProductImageType.MAIN,
                 imgType: image.type,
               };
             });
@@ -1161,6 +1165,10 @@ export class ProductsService {
               attributes: product.attributes,
               status: product.status,
               seo_meta: null,
+              weight_kg: product.weight_kg,
+              length_cm: product.length_cm,
+              width_cm: product.width_cm,
+              height_cm: product.height_cm,
             };
             const updatedVariantResult = await tx
               .update(product_variants)

@@ -16,7 +16,7 @@ import {
   products,
   warehouse,
 } from '../../drizzle/schema';
-import { productImageType, ProductStatus } from '../../drizzle/types/types';
+import { ProductImageType, ProductStatus } from '../../drizzle/types/types';
 import { UploadToCloudService } from '../../utils/upload-to-cloud/upload-to-cloud.service';
 import { ProductFiles } from '../../common/Types/index.type';
 import { UpdateProductVariantDto } from './dto/update-product-variant.dto';
@@ -70,6 +70,10 @@ export class ProductVariantService {
       status: createProductVariantDto.status,
       seo_meta: createProductVariantDto.seo_meta ?? null,
       product_id: productId.id,
+      weight_kg: createProductVariantDto.weight_kg,
+      length_cm: createProductVariantDto.length_cm,
+      width_cm: createProductVariantDto.width_cm,
+      height_cm: createProductVariantDto.height_cm,
     };
 
     try {
@@ -88,7 +92,7 @@ export class ProductVariantService {
         if (!variantRecord) {
           throw new Error('Failed to create product variant');
         }
-        const finalResults: { url: string; type: productImageType }[] = [];
+        const finalResults: { url: string; type: ProductImageType }[] = [];
 
         if (files?.product?.[0]) {
           const mainRes = await this.uploadToCloudService.uploadFile(
@@ -96,7 +100,7 @@ export class ProductVariantService {
           );
           finalResults.push({
             url: mainRes.secure_url,
-            type: productImageType.MAIN,
+            type: ProductImageType.MAIN,
           });
         }
 
@@ -107,7 +111,7 @@ export class ProductVariantService {
           finalResults.push(
             ...galleryRes.map((res) => ({
               url: res.secure_url,
-              type: productImageType.GALLERY,
+              type: ProductImageType.GALLERY,
             })),
           );
         }
@@ -123,7 +127,7 @@ export class ProductVariantService {
             .where(
               and(
                 eq(product_images.product_id, productId.id),
-                eq(product_images.imgType, productImageType.GALLERY),
+                eq(product_images.imgType, ProductImageType.GALLERY),
               ),
             );
           const uniqueUrls = new Set<string>();
@@ -148,7 +152,7 @@ export class ProductVariantService {
             variant_id: variantRecord.id,
             image_url: `${image.url}`,
             alt_text: `${image.type} Image ${index + 1}`,
-            is_primary: image.type === productImageType.MAIN,
+            is_primary: image.type === ProductImageType.MAIN,
             imgType: image.type,
           };
         });
@@ -161,7 +165,7 @@ export class ProductVariantService {
               image_url: img.image_url,
               alt_text: img.alt_text || `GALLERY Image Copy ${index + 1}`,
               is_primary: false,
-              imgType: productImageType.GALLERY,
+              imgType: ProductImageType.GALLERY,
             });
           });
         }
@@ -322,13 +326,17 @@ export class ProductVariantService {
     files?: ProductFiles,
     domain?: string,
   ) {
-    const updateData: Partial<UpdateProductVariantDto> = {
+    const updateData: Partial<any> = {
       variant_name: updateProductVariantDto.variant_name,
       sku: updateProductVariantDto.sku,
       price: updateProductVariantDto.price,
       attributes: updateProductVariantDto.attributes,
       status: updateProductVariantDto.status,
       seo_meta: updateProductVariantDto.seo_meta ?? null,
+      weight_kg: updateProductVariantDto.weight_kg,
+      length_cm: updateProductVariantDto.length_cm,
+      width_cm: updateProductVariantDto.width_cm,
+      height_cm: updateProductVariantDto.height_cm,
     };
 
     try {
@@ -375,7 +383,7 @@ export class ProductVariantService {
               );
           }
 
-          const finalResults: { url: string; type: productImageType }[] = [];
+          const finalResults: { url: string; type: ProductImageType }[] = [];
 
           if (files?.product?.[0]) {
             const mainRes = await this.uploadToCloudService.uploadFile(
@@ -383,7 +391,7 @@ export class ProductVariantService {
             );
             finalResults.push({
               url: mainRes.secure_url,
-              type: productImageType.MAIN,
+              type: ProductImageType.MAIN,
             });
           }
 
@@ -394,7 +402,7 @@ export class ProductVariantService {
             finalResults.push(
               ...galleryRes.map((res) => ({
                 url: res.secure_url,
-                type: productImageType.GALLERY,
+                type: ProductImageType.GALLERY,
               })),
             );
           }
@@ -411,7 +419,7 @@ export class ProductVariantService {
                 product_id: existingVariant.product_id,
                 image_url: image.url,
                 alt_text: `${image.type} Image ${index + 1}`,
-                is_primary: image.type === productImageType.MAIN,
+                is_primary: image.type === ProductImageType.MAIN,
                 imgType: image.type,
               };
             });

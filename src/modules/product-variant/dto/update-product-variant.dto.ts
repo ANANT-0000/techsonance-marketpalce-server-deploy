@@ -49,4 +49,16 @@ export class UpdateProductVariantDto {
 
   @IsString()
   product_id!: string;
+
+  @IsString()
+  weight_kg!: string;
+
+  @IsNumber()
+  length_cm!: number;
+
+  @IsNumber()
+  width_cm!: number;
+
+  @IsNumber()
+  height_cm!: number;
 }

@@ -274,4 +274,60 @@ export class CheckoutService {
         );
       });
   }
+
+  async calculateShippingRate(
+    userId: string,
+    dto: { addressId: string; cartId?: string; productVariantId?: string; qty?: number },
+    domain: string,
+  ) {
+    if (!domain) {
+      throw new HttpException(
+        CheckoutErrorKeyEnum.COMPANY_DOMAIN_MUST_BE_PROVIDED_IN_HEADERS,
+        HttpStatus.BAD_REQUEST,
+      );
+    }
+    const companyId = await this.resolveCompanyId(domain);
+
+    const [companyRecord] = await this.db
+      .select()
+      .from(company)
+      .where(eq(company.id, companyId))
+      .limit(1);
+
+    if (!companyRecord) {
+      throw new HttpException(CheckoutErrorKeyEnum.COMPANY_NOT_FOUND, HttpStatus.NOT_FOUND);
+    }
+
+    const orderLines = await this._resolveOrderLines(
+      userId,
+      dto.cartId,
+      dto.productVariantId,
+      dto.qty,
+    );
+
+    if (!orderLines || orderLines.length === 0) {
+      throw new HttpException(
+        CheckoutErrorKeyEnum.NO_VALID_ORDER_LINES_FOUND_FOR_CHECKOUT,
+        HttpStatus.BAD_REQUEST,
+      );
+    }
+
+    const cartSubtotal = orderLines.reduce((acc, line) => acc + line.price * line.quantity, 0);
+
+    const isFreeShipping = companyRecord.is_free_shipping_enabled && cartSubtotal >= Number(companyRecord.free_delivery_threshold);
+    const shippingCost = isFreeShipping ? 0 : Number(companyRecord.standard_delivery_charge);
+
+    const threshold = Number(companyRecord.free_delivery_threshold);
+    const nudgeAmount = companyRecord.is_free_shipping_enabled && cartSubtotal < threshold
+      ? threshold - cartSubtotal
+      : 0;
+
+    return {
+      shippingCost,
+      isFreeShippingEnabled: companyRecord.is_free_shipping_enabled,
+      freeDeliveryThreshold: threshold,
+      isFreeShipping,
+      nudgeAmount,
+    };
+  }
 }

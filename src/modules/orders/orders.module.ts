@@ -10,6 +10,7 @@ import { FinancesModule } from '../finances/finances.module';
 import { ProductPoliciesModule } from '../product-policies/product-policies.module';
 import { CouponModule } from '../coupon/coupon.module';
 import { PromotionsModule } from '../promotions/promotions.module';
+import { ShippingModule } from '../shipping/shipping.module';
 
 @Module({
   imports: [
@@ -22,6 +23,7 @@ import { PromotionsModule } from '../promotions/promotions.module';
     ProductPoliciesModule,
     CouponModule,
     PromotionsModule,
+    ShippingModule,
   ],
   controllers: [OrdersController],
   providers: [OrdersService],

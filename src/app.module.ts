@@ -114,9 +114,7 @@ export enum RATELIMIT_LIMIT {
           url: config.get<string>('REDIS_URL'),
         });
 
-        store.client.on('error', (err) => {
-          console.error('Redis Client Error:', err.message || err);
-        });
+        store.client.on('error', () => {});
 
         return { store };
       },

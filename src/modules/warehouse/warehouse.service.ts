@@ -11,16 +11,26 @@ import {
   updateWarehouseAddressDto,
   warehouseAddressDto,
 } from './dto/warehouse.dto';
-import { address, warehouse } from '../../drizzle/schema';
+import {
+  address,
+  warehouse,
+  company,
+  user,
+  user_and_company,
+} from '../../drizzle/schema';
 import { and, eq } from 'drizzle-orm';
 import { domainExtractor } from '../../common/filters/domainExtractor.filter';
 import { WarehouseErrorKeyEnum } from './constants/warehouse.enums';
+import { ShipRocketService } from '../ship-rocket/ship-rocket.service';
+import { CryptoService } from '../shipping/crypto.service';
 
 @Injectable()
 export class WarehouseService {
   constructor(
     @Inject(DRIZZLE) private readonly db: DrizzleService,
     private readonly companyService: CompanyService,
+    private readonly shipRocketService: ShipRocketService,
+    private readonly cryptoService: CryptoService,
   ) {}
 
   private async resolveCompanyId(domain: string): Promise<string> {
@@ -84,6 +94,16 @@ export class WarehouseService {
           company_id: companyId,
           address_id: addressId,
         });
+
+        if (warehouseAddressDto.is_default) {
+          await this.registerWarehouseWithShiprocket(
+            companyId,
+            warehouseAddressDto.name,
+            warehouseAddressDto,
+            tx,
+          );
+        }
+
         return {
           message: 'Warehouse created successfully',
         };
@@ -215,7 +235,11 @@ export class WarehouseService {
     const companyId = await this.companyService.find(filteredDomain);
     try {
       const [existingWarehouse] = await this.db
-        .select({ id: warehouse.id, address_id: warehouse.address_id })
+        .select({
+          id: warehouse.id,
+          address_id: warehouse.address_id,
+          warehouse_name: warehouse.warehouse_name,
+        })
         .from(warehouse)
         .where(and(eq(warehouse.company_id, companyId), eq(warehouse.id, id)));
       if (!existingWarehouse?.id) {
@@ -286,6 +310,51 @@ export class WarehouseService {
               },
             );
           });
+
+        const isDefault =
+          updateWarehouseDto.is_default !== undefined
+            ? updateWarehouseDto.is_default
+            : await tx
+                .select({ is_default: address.is_default })
+                .from(address)
+                .where(eq(address.id, existingWarehouse.address_id))
+                .limit(1)
+                .then(([r]) => r?.is_default ?? false);
+
+        if (isDefault) {
+          const [currentAddress] = await tx
+            .select()
+            .from(address)
+            .where(eq(address.id, existingWarehouse.address_id))
+            .limit(1);
+
+          const mergedAddress = {
+            name: updateWarehouseDto.name ?? currentAddress.name ?? '',
+            phone: updateWarehouseDto.phone ?? currentAddress.number ?? '',
+            address_line_1:
+              updateWarehouseDto.address_line_1 ??
+              currentAddress.address_line_1 ??
+              '',
+            street: updateWarehouseDto.street ?? currentAddress.street ?? '',
+            city: updateWarehouseDto.city ?? currentAddress.city ?? '',
+            state: updateWarehouseDto.state ?? currentAddress.state ?? '',
+            country: updateWarehouseDto.country ?? currentAddress.country ?? '',
+            postal_code:
+              updateWarehouseDto.postal_code ??
+              currentAddress.postal_code ??
+              '',
+            landmark:
+              updateWarehouseDto.landmark ?? currentAddress.landmark ?? '',
+          };
+
+          await this.registerWarehouseWithShiprocket(
+            companyId,
+            updateWarehouseDto.name ?? existingWarehouse.warehouse_name,
+            mergedAddress,
+            tx,
+          );
+        }
+
         return {
           message: 'Warehouse updated successfully',
         };
@@ -333,6 +402,88 @@ export class WarehouseService {
         {
           cause: error,
         },
+      );
+    }
+  }
+
+  private async registerWarehouseWithShiprocket(
+    companyId: string,
+    warehouseName: string,
+    addressDetails: {
+      name: string;
+      phone: string;
+      address_line_1: string;
+      street: string;
+      city: string;
+      state: string;
+      country: string;
+      postal_code: string;
+      landmark?: string | null;
+    },
+    tx: DrizzleService,
+  ) {
+    const comp = await tx.query.company.findFirst({
+      where: eq(company.id, companyId),
+    });
+    if (!comp) return;
+
+    let credentials: { email?: string; password?: string } | undefined;
+    if (comp.logistics_mode === 'STANDALONE') {
+      if (
+        !comp.encrypted_logistics_api_key ||
+        !comp.encrypted_logistics_api_secret
+      ) {
+        await tx
+          .update(company)
+          .set({ logistics_pickup_id: warehouseName })
+          .where(eq(company.id, companyId));
+        return;
+      }
+      credentials = {
+        email: this.cryptoService.decrypt(comp.encrypted_logistics_api_key),
+        password: this.cryptoService.decrypt(
+          comp.encrypted_logistics_api_secret,
+        ),
+      };
+    }
+
+    const [vendorUser] = await tx
+      .select({ email: user.email })
+      .from(user)
+      .innerJoin(user_and_company, eq(user.id, user_and_company.user_id))
+      .where(eq(user_and_company.company_id, companyId))
+      .limit(1);
+
+    const email = vendorUser?.email || 'shipper@marketplace.com';
+
+    try {
+      await this.shipRocketService.addPickupLocation(
+        {
+          pickup_location: warehouseName.slice(0, 36),
+          name: addressDetails.name,
+          email,
+          phone: addressDetails.phone,
+          address: addressDetails.address_line_1,
+          address_2:
+            addressDetails.street +
+            (addressDetails.landmark ? ', ' + addressDetails.landmark : ''),
+          city: addressDetails.city,
+          state: addressDetails.state,
+          country: addressDetails.country,
+          pin_code: addressDetails.postal_code,
+        },
+        credentials,
+        companyId,
+      );
+
+      await tx
+        .update(company)
+        .set({ logistics_pickup_id: warehouseName })
+        .where(eq(company.id, companyId));
+    } catch (err: any) {
+      throw new HttpException(
+        `Failed to register warehouse with Shiprocket: ${err.message}`,
+        HttpStatus.BAD_REQUEST,
       );
     }
   }

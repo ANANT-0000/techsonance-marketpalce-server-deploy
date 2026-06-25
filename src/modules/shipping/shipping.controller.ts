@@ -25,6 +25,19 @@ export class ShippingController {
   ) {
     return this.shippingService.addTrackingUrl(orderId, trackingUrl, domain);
   }
+  @Get('settings')
+  async getShippingSettings(@Headers('company-domain') domain: string) {
+    return this.shippingService.getShippingSettings(domain);
+  }
+
+  @Patch('settings')
+  async updateShippingSettings(
+    @Headers('company-domain') domain: string,
+    @Body() payload: any,
+  ) {
+    return this.shippingService.updateShippingSettings(domain, payload);
+  }
+
   @Patch(':orderId')
   async updateTrackingUrl(
     @Param('orderId') orderId: string,

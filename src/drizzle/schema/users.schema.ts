@@ -84,4 +84,7 @@ export const address = pg.pgTable('address', {
   status: EntityStatusEnum('status').default(EntityStatus.ACTIVE),
   deleted_at: pg.timestamp('deleted_at'),
   company_id: pg.uuid('company_id').references(() => company.id),
-});
+}, (table) => [
+  pg.index('idx_address_user_id').on(table.user_id),
+  pg.index('idx_address_company_id').on(table.company_id),
+]);

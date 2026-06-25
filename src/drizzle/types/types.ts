@@ -64,12 +64,24 @@ export enum PaymentStatus {
   REFUNDED = 'refunded',
   CANCELLED = 'cancelled',
 }
+/**
+ * Represents the shipping status of an order.
+ *
+ * @enum {string}
+ *
+ * @remarks
+ * **Exception:** This enum deviates from the general codebase convention of using lowercase members.
+ * It is defined in UPPERCASE to ensure alignment with:
+ * 1. External logistics API payloads (such as Shiprocket webhooks) which return uppercase statuses.
+ * 2. Database constraints and defaults (`shipping_status` column in `shipping_details` table defaults to `'PENDING'`).
+ */
 export enum ShippingStatus {
-  PENDING = 'pending',
-  SHIPPED = 'shipped',
-  DELIVERED = 'delivered',
-  RETURNED = 'returned',
-  CANCELLED = 'cancelled',
+  PENDING = 'PENDING',
+  SHIPPED = 'SHIPPED',
+  DELIVERED = 'DELIVERED',
+  RETURNED = 'RETURNED',
+  RTO = 'RTO',
+  CANCELLED = 'CANCELLED',
 }
 export enum ReturnType {
   RETURN = 'return',
@@ -91,7 +103,7 @@ export type KeyValuePair = {
   value: string | number | boolean | null;
 };
 
-export enum productImageType {
+export enum ProductImageType {
   MAIN = 'main',
   GALLERY = 'gallery',
   THUMBNAIL = 'thumbnail',
@@ -106,12 +118,13 @@ export enum VendorDocumentType {
   VendorInformation = 'vendor_information',
   BusinessContinuityPlan = 'business_continuity_plan',
 }
-export enum CancelledByEnum {
+
+export enum CancelledBy {
   USER = 'customer',
   VENDOR = 'vendor',
   SYSTEM = 'system',
 }
-export enum RefundStatusEnum {
+export enum RefundStatus {
   PENDING = 'pending',
   PROCESSED = 'processed',
   REJECTED = 'rejected',
@@ -198,6 +211,50 @@ export enum SubscriptionStatus {
   EXPIRED = 'expired',
   CANCELLED = 'cancelled',
   GRACE_PERIOD = 'grace_period',
+}
+
+/**
+ * Represents the configuration modes for logistics management.
+ *
+ * @enum {string}
+ *
+ * @remarks
+ * **Exception:** This enum deviates from the general codebase convention of using lowercase members.
+ * It is defined in UPPERCASE to ensure alignment with:
+ * 1. Third-party logistics API integrations.
+ * 2. Database schemas and custom postgres enums where they are stored as 'STANDALONE' or 'PLATFORM_PROXY'.
+ */
+export enum LogisticsMode {
+  STANDALONE = 'STANDALONE',
+  PLATFORM_PROXY = 'PLATFORM_PROXY',
+}
+
+/**
+ * Represents which billing account is used for shipping label creation and charges.
+ *
+ * @enum {string}
+ *
+ * @remarks
+ * **Exception:** This enum deviates from the general codebase convention of using lowercase members.
+ * It is defined in UPPERCASE to ensure alignment with:
+ * 1. Database constraints where the column is restricted to 'VENDOR_OWN' or 'PLATFORM_MASTER'.
+ * 2. Third-party integrations requesting uppercase billing configurations.
+ */
+export enum BillingAccountUsed {
+  VENDOR_OWN = 'VENDOR_OWN',
+  PLATFORM_MASTER = 'PLATFORM_MASTER',
+}
+/**
+ * Represents the external logistics providers integrated with the system.
+ *
+ * @enum {string}
+ *
+ * @remarks
+ * **Exception:** This enum deviates from the general codebase convention of using lowercase members.
+ * It is defined in UPPERCASE to match external shipping APIs (e.g. Shiprocket) and database varchar limits/defaults.
+ */
+export enum LogisticsProvider {
+  SHIPROCKET = 'SHIPROCKET',
 }
 // ================================================================
 // DISCOUNT CONFIG TYPE HELPERS (add to ../../drizzle/types/promotions.ts)

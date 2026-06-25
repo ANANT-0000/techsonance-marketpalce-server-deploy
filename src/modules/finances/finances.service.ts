@@ -23,6 +23,7 @@ import {
 import { DRIZZLE, type DrizzleService } from '../../drizzle/drizzle.module';
 import {
   address,
+  company,
   company_compliance,
   gst_invoices,
   orders,
@@ -224,6 +225,12 @@ export class FinancesService {
             { cause: err },
           );
         });
+      const companyRecord = await this.db.query.company.findFirst({
+        where: eq(company.id, companyId),
+        columns: { logistics_mode: true },
+      });
+      const logisticsMode = companyRecord?.logistics_mode || 'PLATFORM_PROXY';
+
       const orderRecords = await this.db.query.orders
         .findMany({
           where: and(...whereConditions),
@@ -236,6 +243,12 @@ export class FinancesService {
                 id: true,
                 payment_status: true,
                 transaction_ref: true,
+              },
+            },
+            shipping: {
+              columns: {
+                actual_shipping_cost: true,
+                weight_discrepancy_charge: true,
               },
             },
           },
@@ -265,10 +278,25 @@ export class FinancesService {
           earningStatus = PaymentStatus.REFUNDED;
         }
 
+        let platformFeeVal = 0;
+        if (logisticsMode === 'PLATFORM_PROXY' && order.shipping) {
+          const actualShipping = Number(order.shipping.actual_shipping_cost || 0);
+          const discrepancy = Number(order.shipping.weight_discrepancy_charge || 0);
+          platformFeeVal = actualShipping + discrepancy;
+        }
+
+        let netEarningVal = grossAmount;
+        if (earningStatus !== PaymentStatus.REFUNDED) {
+          netEarningVal = grossAmount - platformFeeVal;
+        } else {
+          netEarningVal = 0;
+        }
+
         return {
           id: order.payment?.id,
           order_id: order.id,
-          net_earning: grossAmount.toFixed(2),
+          platform_fee: platformFeeVal.toFixed(2),
+          net_earning: netEarningVal.toFixed(2),
           status: earningStatus,
           created_at: order.created_at,
           transaction_ref: order.payment?.transaction_ref || 'N/A',
@@ -318,6 +346,12 @@ export class FinancesService {
         throw new NotFoundException(FinancesErrorKeyEnum.VENDOR_OR_ASSOCIATED_COMPANY_NOT_FOUND);
       }
 
+      const companyRecord = await this.db.query.company.findFirst({
+        where: eq(company.id, vendorRecord.company_id),
+        columns: { logistics_mode: true },
+      });
+      const logisticsMode = companyRecord?.logistics_mode || 'PLATFORM_PROXY';
+
       const orderRecords = await this.db.query.orders
         .findMany({
           where: eq(orders.company_id, vendorRecord.company_id),
@@ -327,6 +361,12 @@ export class FinancesService {
                 id: true,
                 payment_status: true,
                 transaction_ref: true,
+              },
+            },
+            shipping: {
+              columns: {
+                actual_shipping_cost: true,
+                weight_discrepancy_charge: true,
               },
             },
           },
@@ -350,15 +390,27 @@ export class FinancesService {
           else if (status === PaymentStatus.REFUNDED)
             earningStatus = PaymentStatus.REFUNDED;
         }
+
+        let platformFeeVal = 0;
+        if (logisticsMode === 'PLATFORM_PROXY' && order.shipping) {
+          const actualShipping = Number(order.shipping.actual_shipping_cost || 0);
+          const discrepancy = Number(order.shipping.weight_discrepancy_charge || 0);
+          platformFeeVal = actualShipping + discrepancy;
+        }
+
+        let netEarningVal = grossAmount;
+        if (earningStatus !== PaymentStatus.REFUNDED) {
+          netEarningVal = grossAmount - platformFeeVal;
+        } else {
+          netEarningVal = 0;
+        }
+
         return {
           id: order.payment?.id || `calc-${order.id}`,
           order_id: order.id,
           gross_amount: grossAmount.toFixed(2),
-          platform_fee: '0.00',
-          net_earning:
-            earningStatus === PaymentStatus.REFUNDED
-              ? '0.00'
-              : grossAmount.toFixed(2),
+          platform_fee: platformFeeVal.toFixed(2),
+          net_earning: netEarningVal.toFixed(2),
           status: earningStatus,
           created_at: order.created_at,
           transaction_ref: order.payment?.transaction_ref || 'N/A',

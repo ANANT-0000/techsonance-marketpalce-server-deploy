@@ -8,11 +8,11 @@ import {
 } from '@nestjs/common';
 import { DRIZZLE, type DrizzleService } from '../../drizzle/drizzle.module';
 import {
-  CancelledByEnum,
+  CancelledBy,
   OrderStatus,
   PaymentStatus,
-  productImageType,
-  RefundStatusEnum,
+  ProductImageType,
+  RefundStatus,
 } from '../../drizzle/types/types';
 import { CompanyService } from '../company/company.service';
 import { InventoryService } from '../inventory/inventory.service';
@@ -73,7 +73,7 @@ export class OrderItemsService {
               },
               with: {
                 images: {
-                  where: eq(product_images.imgType, productImageType.MAIN),
+                  where: eq(product_images.imgType, ProductImageType.MAIN),
                 },
               },
             },
@@ -513,7 +513,7 @@ export class OrderItemsService {
           .values({
             order_item_id: existingOrderItem.id,
             reason: cancelReason,
-            cancelled_by: RoleRecord.role_name as CancelledByEnum,
+            cancelled_by: RoleRecord.role_name as CancelledBy,
             user_id: userRecord.id,
             company_id: companyId,
           })
@@ -537,7 +537,7 @@ export class OrderItemsService {
             .values({
               refund_amount: String(refundAmount),
               refund_reason: cancelReason,
-              refund_status: RefundStatusEnum.PENDING,
+              refund_status: RefundStatus.PENDING,
               order_id: existingOrderItem.order_id,
               order_items_id: existingOrderItem.id,
               payment_id: paymentRecord.id,
@@ -612,7 +612,7 @@ export class OrderItemsService {
           orderItemId,
           cancelledQuantity: existingOrderItem.quantity,
           refundAmount: String(refundAmount),
-          refundStatus: RefundStatusEnum.PENDING,
+          refundStatus: RefundStatus.PENDING,
           newOrderTotal: String(newOrderTotal),
           orderFullyCancelled: allItemsNowCancelled,
         };
