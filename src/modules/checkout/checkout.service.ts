@@ -87,7 +87,10 @@ export class CheckoutService {
         );
       });
     if (!addressRecord || addressRecord.length === 0) {
-      throw new HttpException(CheckoutErrorKeyEnum.ADDRESS_NOT_FOUND, HttpStatus.NOT_FOUND);
+      throw new HttpException(
+        CheckoutErrorKeyEnum.ADDRESS_NOT_FOUND,
+        HttpStatus.NOT_FOUND,
+      );
     }
     const [resolvedAddress] = addressRecord;
 
@@ -121,13 +124,18 @@ export class CheckoutService {
         compRecord.encrypted_logistics_api_key &&
         compRecord.encrypted_logistics_api_secret
       ) {
-        const email = this.cryptoService.decrypt(compRecord.encrypted_logistics_api_key);
-        const password = this.cryptoService.decrypt(compRecord.encrypted_logistics_api_secret);
+        const email = this.cryptoService.decrypt(
+          compRecord.encrypted_logistics_api_key,
+        );
+        const password = this.cryptoService.decrypt(
+          compRecord.encrypted_logistics_api_secret,
+        );
         credentials = { email, password };
       }
     }
 
-    // Resolve originating warehouse pincodes dynamically from variant stock levels
+    /** Resolve originating warehouse pincodes dynamically from variant stock levels
+     */
     const originPincodes = new Set<string>();
     const variantIds = orderLines.map((line) => line.variantId);
 
@@ -144,8 +152,8 @@ export class CheckoutService {
         and(
           inArray(inventory.product_variant_id, variantIds),
           eq(inventory.company_id, companyId),
-          sql`${inventory.stock_quantity} > 0`
-        )
+          sql`${inventory.stock_quantity} > 0`,
+        ),
       );
 
     for (const line of orderLines) {
@@ -234,7 +242,10 @@ export class CheckoutService {
 
     const companyId = await this.resolveCompanyId(domain);
     if (!companyId) {
-      throw new HttpException(CheckoutErrorKeyEnum.COMPANY_NOT_FOUND, HttpStatus.NOT_FOUND);
+      throw new HttpException(
+        CheckoutErrorKeyEnum.COMPANY_NOT_FOUND,
+        HttpStatus.NOT_FOUND,
+      );
     }
 
     const [existingOrder] = await this.db
@@ -243,7 +254,10 @@ export class CheckoutService {
       .where(and(eq(orders.id, orderId), eq(orders.company_id, companyId)))
       .limit(1);
     if (!existingOrder.user_id) {
-      throw new HttpException(CheckoutErrorKeyEnum.USER_NOT_FOUND, HttpStatus.BAD_REQUEST);
+      throw new HttpException(
+        CheckoutErrorKeyEnum.USER_NOT_FOUND,
+        HttpStatus.BAD_REQUEST,
+      );
     }
     try {
       const [customerRecord] = await this.db
@@ -261,7 +275,10 @@ export class CheckoutService {
           !customerRecord.last_name &&
           !customerRecord.email)
       ) {
-        throw new HttpException(CheckoutErrorKeyEnum.CUSTOMER_NOT_FOUND, HttpStatus.NOT_FOUND);
+        throw new HttpException(
+          CheckoutErrorKeyEnum.CUSTOMER_NOT_FOUND,
+          HttpStatus.NOT_FOUND,
+        );
       }
       const customerDetails = {
         email: customerRecord.email,
@@ -290,9 +307,12 @@ export class CheckoutService {
       ) {
         throw error; // Re-throw known HTTP exceptions
       }
-      throw new InternalServerErrorException(CheckoutErrorKeyEnum.FAILED_TO_VERIFY_CHECKOUT, {
-        cause: error,
-      });
+      throw new InternalServerErrorException(
+        CheckoutErrorKeyEnum.FAILED_TO_VERIFY_CHECKOUT,
+        {
+          cause: error,
+        },
+      );
     }
   }
   // private helpers
@@ -334,7 +354,10 @@ export class CheckoutService {
         .where(eq(carts.id, cartId))
         .limit(1);
       if (!cartRecord) {
-        throw new HttpException(CheckoutErrorKeyEnum.CART_NOT_FOUND, HttpStatus.NOT_FOUND);
+        throw new HttpException(
+          CheckoutErrorKeyEnum.CART_NOT_FOUND,
+          HttpStatus.NOT_FOUND,
+        );
       }
       const cartItems = await this.db
         .select({
@@ -381,7 +404,12 @@ export class CheckoutService {
 
   async calculateShippingRate(
     userId: string,
-    dto: { addressId: string; cartId?: string; productVariantId?: string; qty?: number },
+    dto: {
+      addressId: string;
+      cartId?: string;
+      productVariantId?: string;
+      qty?: number;
+    },
     domain: string,
   ) {
     if (!domain) {
@@ -399,7 +427,10 @@ export class CheckoutService {
       .limit(1);
 
     if (!companyRecord) {
-      throw new HttpException(CheckoutErrorKeyEnum.COMPANY_NOT_FOUND, HttpStatus.NOT_FOUND);
+      throw new HttpException(
+        CheckoutErrorKeyEnum.COMPANY_NOT_FOUND,
+        HttpStatus.NOT_FOUND,
+      );
     }
 
     const orderLines = await this._resolveOrderLines(
@@ -416,15 +447,23 @@ export class CheckoutService {
       );
     }
 
-    const cartSubtotal = orderLines.reduce((acc, line) => acc + line.price * line.quantity, 0);
+    const cartSubtotal = orderLines.reduce(
+      (acc, line) => acc + line.price * line.quantity,
+      0,
+    );
 
-    const isFreeShipping = companyRecord.is_free_shipping_enabled && cartSubtotal >= Number(companyRecord.free_delivery_threshold);
-    const shippingCost = isFreeShipping ? 0 : Number(companyRecord.standard_delivery_charge);
+    const isFreeShipping =
+      companyRecord.is_free_shipping_enabled &&
+      cartSubtotal >= Number(companyRecord.free_delivery_threshold);
+    const shippingCost = isFreeShipping
+      ? 0
+      : Number(companyRecord.standard_delivery_charge);
 
     const threshold = Number(companyRecord.free_delivery_threshold);
-    const nudgeAmount = companyRecord.is_free_shipping_enabled && cartSubtotal < threshold
-      ? threshold - cartSubtotal
-      : 0;
+    const nudgeAmount =
+      companyRecord.is_free_shipping_enabled && cartSubtotal < threshold
+        ? threshold - cartSubtotal
+        : 0;
 
     return {
       shippingCost,

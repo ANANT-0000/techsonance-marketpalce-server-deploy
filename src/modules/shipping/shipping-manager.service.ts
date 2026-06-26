@@ -9,9 +9,13 @@ import {
   audit_logs,
   warehouse,
   address,
+  vendor,
+  order_items,
 } from '../../drizzle/schema';
 import { ShipRocketService } from '../ship-rocket/ship-rocket.service';
 import { CryptoService } from './crypto.service';
+import { MailService } from '../../common/services/mail/mail.service';
+import { InventoryService } from '../inventory/inventory.service';
 import {
   BillingAccountUsed,
   LogisticsMode,
@@ -24,6 +28,7 @@ import {
   SHIPROCKET_DRAFT_ORDER_SUCCESS_ACTION,
   SHIPROCKET_DRAFT_ORDER_FAILURE_ACTION,
   SHIPROCKET_WEBHOOK_RECEIVED_ACTION,
+  SHIPROCKET_NDR_EVENT_ACTION,
   SHIPPING_STATUS_AWB_ASSIGNED,
   SHIPPING_DEFAULT_PICKUP_LOCATION,
   LOGISTICS_PARTNER_FALLBACK_NAME,
@@ -61,6 +66,7 @@ export interface ValidatedShippingItem {
   length_cm: number;
   width_cm: number;
   height_cm: number;
+  hsn_code?: string | null;
 }
 
 export interface ValidatedShippingCustomer {
@@ -90,9 +96,10 @@ export interface ValidatedShippingOrder {
 }
 
 // ---------------------------------------------------------------------------
-// Status rank map — higher number = more advanced state.
-// Used to prevent webhook-driven state regressions (e.g. IN_TRANSIT arriving
-// after DELIVERED and overwriting it).
+/** Status rank map — higher number = more advanced state.
+ * Used to prevent webhook-driven state regressions (e.g. IN_TRANSIT arriving
+ * after DELIVERED and overwriting it).
+ */
 // ---------------------------------------------------------------------------
 const SHIPPING_STATUS_RANK: Record<string, number> = {
   PENDING: 1,
@@ -105,13 +112,23 @@ const SHIPPING_STATUS_RANK: Record<string, number> = {
   CANCELLED: 8,
   RETURNED: 9,
   RTO: 10,
-  FAILED: 0, // FAILED is a terminal error state, allow any real status to overwrite it
+  /**
+   * FAILED is a terminal error state, allow any real status to overwrite it
+   */
+  FAILED: 0,
 };
 
 // ---------------------------------------------------------------------------
 // Validation mapper
 // ---------------------------------------------------------------------------
 export class ShippingValidationMapper {
+  /**
+   * Validates and maps an order detail object to a validated shipping order.
+   * Throws HttpException if validation fails.
+   * @param orderDetail The order detail object to validate.
+   * @param pickupLocationId The pickup location ID to use.
+   * @returns A validated shipping order object.
+   */
   static validateAndMap(
     orderDetail: any,
     pickupLocationId: string,
@@ -248,6 +265,7 @@ export class ShippingValidationMapper {
           length_cm: length,
           width_cm: width,
           height_cm: height,
+          hsn_code: variant.hsn_code || null,
         };
       },
     );
@@ -283,23 +301,13 @@ export class ShippingValidationMapper {
 /**
  * Formats a Date in IST (Asia/Kolkata, UTC+5:30) as "YYYY-MM-DD HH:mm"
  * — the exact format Shiprocket's order_date field requires.
- * Using Intl.DateTimeFormat avoids adding a date-fns-tz dependency.
+ * Environment-independent offset calculation guarantees compatibility.
  */
 function toISTDateString(date: Date): string {
-  const parts = new Intl.DateTimeFormat('en-CA', {
-    timeZone: 'Asia/Kolkata',
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-    hour: '2-digit',
-    minute: '2-digit',
-    hour12: false,
-  }).formatToParts(date);
-
-  const get = (type: string) =>
-    parts.find((p) => p.type === type)?.value ?? '00';
-
-  return `${get('year')}-${get('month')}-${get('day')} ${get('hour')}:${get('minute')}`;
+  const utc = date.getTime() + date.getTimezoneOffset() * 60000;
+  const istDate = new Date(utc + 3600000 * 5.5);
+  const pad = (n: number) => n.toString().padStart(2, '0');
+  return `${istDate.getFullYear()}-${pad(istDate.getMonth() + 1)}-${pad(istDate.getDate())} ${pad(istDate.getHours())}:${pad(istDate.getMinutes())}`;
 }
 
 // ---------------------------------------------------------------------------
@@ -312,8 +320,15 @@ export class ShippingManagerService {
     @Inject(DRIZZLE) private readonly db: DrizzleService,
     private readonly cryptoService: CryptoService,
     private readonly shipRocketService: ShipRocketService,
+    private readonly mailService: MailService,
+    private readonly inventoryService: InventoryService,
   ) {}
 
+  /**
+   * Resolves the logistics strategy for a given company.
+   * @param companyId The ID of the company.
+   * @returns An object containing the logistics mode, credentials, and pickup location ID.
+   */
   async resolveStrategy(companyId: string): Promise<{
     logisticsMode: 'STANDALONE' | 'PLATFORM_PROXY';
     credentials?: { email?: string; password?: string };
@@ -330,6 +345,12 @@ export class ShippingManagerService {
     }
 
     if (comp.logistics_mode === 'STANDALONE') {
+      if (!comp.logistics_is_active) {
+        throw new HttpException(
+          'Standalone logistics deactivated due to invalid credentials. Please update settings.',
+          HttpStatus.BAD_REQUEST,
+        );
+      }
       if (
         !comp.encrypted_logistics_api_key ||
         !comp.encrypted_logistics_api_secret
@@ -358,6 +379,12 @@ export class ShippingManagerService {
     };
   }
 
+  /**
+   * Creates a draft order for a given order.
+   * @param orderId The ID of the order.
+   * @param companyId The ID of the company.
+   * @returns A promise that resolves to the created draft order.
+   */
   async createDraftOrderForOrder(
     orderId: string,
     companyId: string,
@@ -381,38 +408,51 @@ export class ShippingManagerService {
     const pickupLocation =
       strategy.pickupLocationId || SHIPPING_DEFAULT_PICKUP_LOCATION;
 
-    // 1. Validation boundary check (Fail-Fast)
+    /**
+     *  Validation boundary check (Fail-Fast)
+     */
     const validatedOrder = ShippingValidationMapper.validateAndMap(
       orderDetail,
       pickupLocation,
     );
 
-    // 2. Volumetric weight — cube-root of total packed volume.
-    //    Math.max approach drastically under-reports multi-item orders
-    //    and causes Shiprocket weight-discrepancy penalties.
+    /**
+     * Volumetric weight — cube-root of total packed volume.
+     * Math.max approach drastically under-reports multi-item orders
+     * and causes Shiprocket weight-discrepancy penalties.
+     */
     const totalVolumeCm3 = validatedOrder.items.reduce(
       (sum, item) =>
         sum + item.length_cm * item.width_cm * item.height_cm * item.units,
       0,
     );
-    // Estimate the smallest cube that holds all items; minimum 10 cm per side.
+    /**
+     * Estimate the smallest cube that holds all items; minimum 10 cm per side.
+     */
     const estimatedSideCm = Math.max(10, Math.ceil(Math.cbrt(totalVolumeCm3)));
 
+    /**
+     * Total weight — sum of item weights.
+     */
     const totalWeight = validatedOrder.items.reduce(
       (sum, item) => sum + item.weight_kg * item.units,
       0,
     );
 
-    // 3. IST-correct order date (Shiprocket expects YYYY-MM-DD HH:mm in IST)
+    /**
+     * IST-correct order date (Shiprocket expects YYYY-MM-DD HH:mm in IST)
+     */
     const orderDate = toISTDateString(validatedOrder.created_at);
 
-    // 4. Look up actual payment method from the payments table so COD orders
-    //    are not silently downgraded to Prepaid.
     const [paymentRecord] = await this.db
       .select({ payment_method: payments.payment_method })
       .from(payments)
       .where(eq(payments.order_id, orderId))
       .limit(1);
+    /**
+     * COD → COD
+     * other → PREPAID
+     */
     const resolvedPaymentMethod =
       paymentRecord?.payment_method?.toUpperCase() === PaymentMethod.COD
         ? PaymentMethod.COD
@@ -427,12 +467,16 @@ export class ShippingManagerService {
       billing_address: validatedOrder.address.address_line_1,
       billing_address_2: validatedOrder.address.street,
       billing_city: validatedOrder.address.city,
-      // Keep pincode as string — Number() strips leading zeros (e.g. 011001 → 11001)
+      /**
+       * Keep pincode as string — Number() strips leading zeros (e.g. 011001 → 11001)
+       */
       billing_pincode: validatedOrder.address.postal_code,
       billing_state: validatedOrder.address.state,
       billing_country: validatedOrder.address.country,
       billing_email: validatedOrder.customer.email,
-      // Keep phone as string — Number() can mangle international numbers
+      /**
+       * Keep phone as string — Number() can mangle international numbers
+       */
       billing_phone: validatedOrder.customer.phone,
       shipping_is_billing: true,
       shipping_customer_name: validatedOrder.customer.first_name,
@@ -450,6 +494,7 @@ export class ShippingManagerService {
         sku: item.sku,
         units: item.units,
         selling_price: item.selling_price,
+        ...(item.hsn_code ? { hsn: Number(item.hsn_code) } : {}),
       })),
       payment_method: resolvedPaymentMethod,
       sub_total: validatedOrder.total_amount,
@@ -565,7 +610,40 @@ export class ShippingManagerService {
         })
         .catch(() => {});
 
-      return null;
+      const isUnauthorized =
+        err?.status === HttpStatus.UNAUTHORIZED ||
+        err?.statusCode === HttpStatus.UNAUTHORIZED ||
+        err?.response?.statusCode === 401 ||
+        err?.cause?.response?.statusCode === 401;
+
+      if (isUnauthorized) {
+        // Circuit Breaker: deactivate standalone logistics for the company
+        await this.db
+          .update(company)
+          .set({ logistics_is_active: false })
+          .where(eq(company.id, companyId))
+          .catch(() => {});
+
+        // Fetch vendor email and notify them
+        const vendorUser = await this.db.query.vendor.findFirst({
+          where: eq(vendor.company_id, companyId),
+          with: { user: true },
+        });
+
+        if (vendorUser?.user?.email) {
+          await this.mailService
+            .sendEmail(
+              vendorUser.user.email,
+              'Action Required: Update Shiprocket Credentials',
+              `<p>Hello ${vendorUser.store_owner_first_name || 'Vendor'},</p>
+             <p>Your Shiprocket credentials on our platform are invalid. Standalone shipping has been temporarily deactivated for your store.</p>
+             <p>Please update your credentials under your store settings to reactivate shipping.</p>`,
+            )
+            .catch(() => {});
+        }
+      }
+
+      throw err;
     }
 
     return draftRes;
@@ -827,6 +905,28 @@ export class ShippingManagerService {
       })
       .catch(() => {});
 
+    // ── NDR Handling (Silent Exceptions) ──────────────────────────────────
+    // Catch status IDs 19 (OFE Exception) and 20 (Undelivered)
+    if (
+      (payload.current_status_id === 19 || payload.current_status_id === 20) &&
+      shipDetail.company_id
+    ) {
+      await this.db
+        .insert(audit_logs)
+        .values({
+          action: SHIPROCKET_NDR_EVENT_ACTION,
+          entity: SHIPPING_ENTITY_SHIPPING_DETAILS,
+          entity_id: shipDetail.id,
+          details: {
+            status_id: payload.current_status_id,
+            status_name: payload.current_status,
+            reason: payload.qc_failure_reason || 'Courier exception during delivery',
+          },
+          company_id: shipDetail.company_id,
+        })
+        .catch(() => {});
+    }
+
     // ─── State transition guard ───────────────────────────────────────────
     // Shiprocket webhooks can arrive out of order. Reject any update that
     // would regress the current status to an earlier state.
@@ -880,6 +980,36 @@ export class ShippingManagerService {
             .update(orders)
             .set({ order_status: newOrderStatus })
             .where(eq(orders.id, shipDetail.order_id));
+        }
+
+        // RTO / RETURNED stock increment logic (inside transaction!)
+        if (
+          status === ShippingStatus.RETURNED ||
+          status === ShippingStatus.RTO
+        ) {
+          const items = await tx
+            .select({
+              product_variant_id: order_items.product_variant_id,
+              quantity: order_items.quantity,
+            })
+            .from(order_items)
+            .where(eq(order_items.order_id, shipDetail.order_id));
+
+          if (items.length > 0) {
+            const rollbackLines = items
+              .filter((item) => item.product_variant_id !== null)
+              .map((item) => ({
+                variantId: item.product_variant_id!,
+                quantity: item.quantity,
+              }));
+            if (rollbackLines.length > 0) {
+              await this.inventoryService.rollbackStockForOrder(
+                rollbackLines,
+                shipDetail.company_id!,
+                tx,
+              );
+            }
+          }
         }
       });
 
