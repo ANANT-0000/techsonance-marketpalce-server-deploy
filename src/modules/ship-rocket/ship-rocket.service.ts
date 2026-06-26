@@ -11,7 +11,7 @@ import { type Cache } from 'cache-manager';
 import { CACHE_MANAGER } from '@nestjs/cache-manager';
 import got from 'got';
 import { IShippingProvider } from '../shipping/interfaces/shipping-provider.interface';
-import { SHIPROCKET_APIs } from './constants/ship-rocket.constants';
+import { SHIPROCKET_APIs, SHIPROCKET_MOCK_RESPONSES } from './constants/ship-rocket.constants';
 import {
   ShiprocketAddPickupAddress,
   ShiprocketAddPickupAddressResponse,
@@ -114,10 +114,13 @@ export class ShipRocketService implements IShippingProvider {
     credentials?: { email?: string; password?: string },
     companyId?: string,
   ) {
+    if (this.configService.get('SHIPROCKET_DUMMY_MODE') === 'true') {
+      return SHIPROCKET_MOCK_RESPONSES.getServiceability;
+    }
     const token = await this.getToken(credentials, companyId);
     const url = SHIPROCKET_APIs.SERVICEABILITY;
     const res = await got
-      .post(url, {
+      .get(url, {
         searchParams: {
           pickup_pincode: data.pickup_pincode,
           delivery_pincode: data.delivery_pincode,
@@ -150,6 +153,9 @@ export class ShipRocketService implements IShippingProvider {
     credentials?: { email?: string; password?: string },
     companyId?: string,
   ): Promise<ShiprocketCreateOrderResponse> {
+    if (this.configService.get('SHIPROCKET_DUMMY_MODE') === 'true') {
+      return SHIPROCKET_MOCK_RESPONSES.createDraftOrder as any;
+    }
     const cacheKey = this._buildCacheKey(credentials, companyId);
     const token = await this.getToken(credentials, companyId);
     const url = SHIPROCKET_APIs.CREATE_ORDER;
@@ -214,6 +220,9 @@ export class ShipRocketService implements IShippingProvider {
     credentials?: { email?: string; password?: string },
     companyId?: string,
   ): Promise<ShiprocketGenerateAWBforShipmentResponse> {
+    if (this.configService.get('SHIPROCKET_DUMMY_MODE') === 'true') {
+      return SHIPROCKET_MOCK_RESPONSES.generateAWB as any;
+    }
     const cacheKey = this._buildCacheKey(credentials, companyId);
     const token = await this.getToken(credentials, companyId);
     const url = SHIPROCKET_APIs.ASSIGN_AWB;
@@ -279,6 +288,9 @@ export class ShipRocketService implements IShippingProvider {
     credentials?: { email?: string; password?: string },
     companyId?: string,
   ): Promise<string> {
+    if (this.configService.get('SHIPROCKET_DUMMY_MODE') === 'true') {
+      return SHIPROCKET_MOCK_RESPONSES.getToken.token;
+    }
     const isStandalone = !!(
       credentials?.email &&
       credentials?.password &&
@@ -355,6 +367,9 @@ export class ShipRocketService implements IShippingProvider {
     last_name: string;
     token: string;
   }> {
+    if (this.configService.get('SHIPROCKET_DUMMY_MODE') === 'true') {
+      return SHIPROCKET_MOCK_RESPONSES.getToken;
+    }
     const loginEmail =
       email || this.configService.get<string>('SHIP_ROCKET_EMAIL');
     const loginPassword =
@@ -417,6 +432,9 @@ export class ShipRocketService implements IShippingProvider {
     credentials?: { email?: string; password?: string },
     companyId?: string,
   ): Promise<ShiprocketAddPickupAddressResponse> {
+    if (this.configService.get('SHIPROCKET_DUMMY_MODE') === 'true') {
+      return SHIPROCKET_MOCK_RESPONSES.addPickupLocation as any;
+    }
     const token = await this.getToken(credentials, companyId);
     const url = SHIPROCKET_APIs.ADD_PICKUP;
     try {
@@ -464,6 +482,9 @@ export class ShipRocketService implements IShippingProvider {
     credentials?: { email?: string; password?: string },
     companyId?: string,
   ): Promise<ShiprocketReturnOrderResponse> {
+    if (this.configService.get('SHIPROCKET_DUMMY_MODE') === 'true') {
+      return SHIPROCKET_MOCK_RESPONSES.createReturnOrder as any;
+    }
     const cacheKey = this._buildCacheKey(credentials, companyId);
     const token = await this.getToken(credentials, companyId);
     const url = SHIPROCKET_APIs.CREATE_RETURN_ORDER;
@@ -519,6 +540,9 @@ export class ShipRocketService implements IShippingProvider {
     credentials?: { email?: string; password?: string },
     companyId?: string,
   ): Promise<ShipRocketRequestForShipmentPickupResponse> {
+    if (this.configService.get('SHIPROCKET_DUMMY_MODE') === 'true') {
+      return SHIPROCKET_MOCK_RESPONSES.requestPickup as any;
+    }
     const cacheKey = this._buildCacheKey(credentials, companyId);
     const token = await this.getToken(credentials, companyId);
     const url = SHIPROCKET_APIs.REQUEST_FOR_SHIPMENT_PICKUP;
@@ -574,6 +598,9 @@ export class ShipRocketService implements IShippingProvider {
     credentials?: { email?: string; password?: string },
     companyId?: string,
   ): Promise<ShipRocketCancelShipmentResponse> {
+    if (this.configService.get('SHIPROCKET_DUMMY_MODE') === 'true') {
+      return SHIPROCKET_MOCK_RESPONSES.cancelShipment as any;
+    }
     const cacheKey = this._buildCacheKey(credentials, companyId);
     const token = await this.getToken(credentials, companyId);
     const url = SHIPROCKET_APIs.CANCEL_A_SHIPMENT;

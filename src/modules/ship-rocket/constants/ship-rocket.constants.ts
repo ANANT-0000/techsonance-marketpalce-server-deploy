@@ -118,3 +118,67 @@ export const SHIPROCKET_APIs = {
    */
   SHIP_ROCKET_ACTION_NDR: `${SHIPROCKET_BASE}/v1/external/ndr/`,
 } as const;
+
+export const SHIPROCKET_MOCK_RESPONSES = {
+  getToken: {
+    company_id: 12345,
+    created_at: new Date().toISOString(),
+    email: 'dummy@shiprocket.com',
+    first_name: 'Dummy',
+    id: 999,
+    last_name: 'User',
+    token: 'dummy-jwt-token-for-testing',
+  },
+  createDraftOrder: {
+    order_id: 99999,
+    shipment_id: 99999,
+    status: 1,
+    status_code: 1,
+    onboarding_completed_now: 0,
+    awb_code: 'DUMMYAWB99999',
+    courier_name: 'DummyCourier',
+  },
+  generateAWB: {
+    response: {
+      data: {
+        awb_code: 'DUMMYAWB99999',
+        courier_name: 'DummyCourier',
+        shipment_id: 99999,
+        awb_code_status: 1,
+      },
+    },
+  },
+  requestPickup: {
+    pickup_scheduled_date: '2026-06-27',
+    pickup_token: 'dummy-pickup-token',
+    status: 1,
+  },
+  cancelShipment: {
+    message: 'Order Cancelled',
+    status: 1,
+    status_code: 200,
+  },
+  createReturnOrder: {
+    return_shipment_id: 88888,
+    status: 1,
+    status_code: 200,
+  },
+  getServiceability: {
+    status: 200,
+    data: {
+      available_courier_companies: [
+        {
+          courier_company_id: 1,
+          courier_name: 'DummyCourier',
+          rate: '50.00',
+          cutoff_time: '18:00',
+        },
+      ],
+    },
+  },
+  addPickupLocation: {
+    pickup_id: 777,
+    status: 'success',
+  },
+};
+

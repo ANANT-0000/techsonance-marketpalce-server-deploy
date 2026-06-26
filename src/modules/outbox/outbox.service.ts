@@ -13,7 +13,7 @@ import {
   OutboxJobStatus,
 } from './constants/outbox.constants';
 import { outbox_jobs } from 'src/drizzle/schema';
-import { eq } from 'drizzle-orm';
+import { and, eq, lt } from 'drizzle-orm';
 import { DRIZZLE, type DrizzleService } from 'src/drizzle/drizzle.module';
 import type { Request } from 'express';
 import { ShippingManagerService } from '../shipping/shipping-manager.service';
@@ -97,7 +97,6 @@ export class OutboxService {
     if (!outboxId) {
       throw new UnauthorizedException('Missing outboxId in request body');
     }
-
     // Verify signature if receiver is configured
     if (this.receiver) {
       if (!signature) {
@@ -121,7 +120,6 @@ export class OutboxService {
           'Signature verification failed: raw body missing',
         );
       }
-
       const rawBodyString = rawBody.toString('utf-8');
 
       try {
@@ -302,5 +300,88 @@ export class OutboxService {
         err?.stack,
       );
     }
+  }
+  /**
+   * Sweeps stale outbox jobs and republishes them to QStash.
+   *
+   * This method is triggered by an internal cron job. It:
+   * - Validates the request using a configured secret.
+   * - Queries the database for PENDING outbox jobs older than the stale threshold.
+   * - Attempts to re-publish each stale job to QStash.
+   * - Aggregates and returns the number of jobs swept, successfully re-published, and failed.
+   *
+   * @param req - The incoming HTTP request containing the authorization header.
+   * @returns An object with:
+   *   - sweptCount: total number of stale jobs found
+   *   - successful: number of jobs successfully re-published
+   *   - failed: number of jobs that failed to re-publish
+   *
+   * @throws UnauthorizedException if the cron secret is missing or invalid.
+   */
+  async sweepOutbox(req: Request) {
+    const authHeader = req.headers[OUTBOX_CONSTANTS.HEADER_AUTHORIZATION];
+    const expectedSecret = this.configService.get<string>(
+      'INTERNAL_CRON_SECRET',
+    );
+
+    if (!expectedSecret) {
+      this.logger.error('INTERNAL_CRON_SECRET is not configured.');
+      throw new UnauthorizedException(
+        'Cron secret is not configured on server',
+      );
+    }
+
+    if (authHeader !== `Bearer ${expectedSecret}`) {
+      this.logger.warn('Unauthorized sweep attempt rejected.');
+      throw new UnauthorizedException('Invalid cron secret');
+    }
+
+    const oneMinuteAgo = new Date(
+      Date.now() - OUTBOX_CONSTANTS.STALE_JOB_THRESHOLD_MS,
+    );
+
+    // Fetch all stale PENDING outbox jobs
+    const pendingJobs = await this.db
+      .select({ id: outbox_jobs.id })
+      .from(outbox_jobs)
+      .where(
+        and(
+          eq(outbox_jobs.status, OutboxJobStatus.PENDING),
+          lt(outbox_jobs.created_at, oneMinuteAgo),
+        ),
+      )
+      .catch((err) => {
+        this.logger.error(
+          'Sweeper failed to query pending jobs from database',
+          err,
+        );
+        return [];
+      });
+
+    if (pendingJobs.length === 0) {
+      return { sweptCount: 0, message: 'No stale jobs found' };
+    }
+
+    this.logger.log(
+      `Sweeper found ${pendingJobs.length} stale PENDING jobs. Re-publishing...`,
+    );
+
+    // Re-publish each job to QStash
+    const results = await Promise.allSettled(
+      pendingJobs.map((job) => this.publishShiprocketJob(job.id)),
+    );
+
+    const successful = results.filter((r) => r.status === 'fulfilled').length;
+    const failed = results.filter((r) => r.status === 'rejected').length;
+
+    this.logger.log(
+      `Sweeper results: ${successful} succeeded, ${failed} failed.`,
+    );
+
+    return {
+      sweptCount: pendingJobs.length,
+      successful,
+      failed,
+    };
   }
 }

@@ -46,6 +46,7 @@ import {
   SHIPROCKET_PICKUP_RETRY_FAILED_ACTION,
   SHIPROCKET_ADDRESS_RECTIFICATION_ACTION,
   SHIPROCKET_ADDRESS_RECTIFICATION_FAILED_ACTION,
+  SHIPROCKET_TRACKING_URL,
 } from './constants/shipping.constants';
 import {
   ShiprocketCreateOrderResponse,
@@ -94,29 +95,122 @@ export interface ValidatedShippingOrder {
   items: ValidatedShippingItem[];
   pickup_location_id: string;
 }
-
-// ---------------------------------------------------------------------------
-/** Status rank map — higher number = more advanced state.
- * Used to prevent webhook-driven state regressions (e.g. IN_TRANSIT arriving
- * after DELIVERED and overwriting it).
+/**
+ * ShipRocket Status Ranking Configuration.
+ *
+ * CRITICAL LOGIC NOTE:
+ * This rank is used to determine if a new status is "newer" than the current one.
+ * Rule: if (newRank > oldRank) { updateStatus(); }
+ *
+ * ⚠️ WARNING: Terminal States (DELIVERED, RTO, CANCELLED, RETURNED) should NEVER be
+ * overwritten by intermediate states, even if the rank logic is bypassed.
+ * You must implement a guard clause: if (isTerminal(currentStatus)) return false;
  */
-// ---------------------------------------------------------------------------
-const SHIPPING_STATUS_RANK: Record<string, number> = {
-  PENDING: 1,
-  DRAFTING: 2,
-  AWB_ASSIGNED: 3,
-  SHIPPED: 4,
-  IN_TRANSIT: 5,
-  OUT_FOR_DELIVERY: 6,
-  DELIVERED: 7,
-  CANCELLED: 8,
-  RETURNED: 9,
-  RTO: 10,
+export const SHIPPING_STATUS_RANK: Record<string, number> = {
   /**
-   * FAILED is a terminal error state, allow any real status to overwrite it
+   * 0: FAILED
+   * A hard error state (e.g., API failure, invalid address detected before pickup).
+   * Ranked 0 to indicate it is an initial error state.
+   * ⚠️ CAUTION: If your logic is purely `newRank > oldRank`, a `PENDING` (1)
+   * could overwrite `FAILED` (0). Ensure `FAILED` is treated as a terminal state
+   * in your update logic if it stops the workflow.
    */
   FAILED: 0,
-};
+
+  /**
+   * 1: PENDING
+   * Order received in the system but not yet processed for shipment creation.
+   * Often the initial state before AWB generation.
+   */
+  PENDING: 1,
+
+  /**
+   * 2: DRAFTING
+   * Shipment details are being prepared.
+   * This is often an internal state before the actual API call to create the order.
+   * In some integrations, this might be skipped if the order is created directly.
+   */
+  DRAFTING: 2,
+
+  /**
+   * 3: AWB_ASSIGNED
+   * Air Waybill (AWB) number has been generated and assigned by the courier.
+   * The shipment is now "active" in the courier's system but not yet picked up.
+   */
+  AWB_ASSIGNED: 3,
+
+  /**
+   * 4: SHIPPED
+   * The courier has physically picked up the package from the seller.
+   * The shipment status changes from "Pending/Assigned" to "Shipped".
+   */
+  SHIPPED: 4,
+
+  /**
+   * 5: IN_TRANSIT
+   * The package is moving through the courier's network towards the destination.
+   * This is the longest phase of the lifecycle.
+   */
+  IN_TRANSIT: 5,
+
+  /**
+   * 6: OUT_FOR_DELIVERY
+   * The package has reached the final delivery hub and is on the vehicle for delivery.
+   * Expected to be delivered today or within a few hours.
+   */
+  OUT_FOR_DELIVERY: 6,
+
+  /**
+   * 6.5: OUT_FOR_DELIVERY_EXCEPTION
+   * An exception occurred while the package was out for delivery (e.g., customer not home,
+   * address issue, vehicle breakdown).
+   * This is higher than normal delivery to indicate the attempt happened but failed.
+   */
+  OUT_FOR_DELIVERY_EXCEPTION: 6.5,
+
+  /**
+   * 6.6: UNDELIVERED
+   * The delivery attempt was unsuccessful.
+   * Often a precursor to RTO (Return to Origin) or a re-attempt.
+   * Ranked higher than exceptions to show the finality of the failed attempt.
+   */
+  UNDELIVERED: 6.6,
+
+  /**
+   * 7: DELIVERED
+   * SUCCESS STATE. The package has been successfully delivered to the customer.
+   * ⚠️ CRITICAL: This is a TERMINAL STATE.
+   * No future status (including CANCELLED or RTO) should overwrite this.
+   * Ensure your update logic checks: if (current === 'DELIVERED') return false;
+   */
+  DELIVERED: 7,
+
+  /**
+   * 8: CANCELLED
+   * The order was cancelled by the customer or seller BEFORE shipment/in transit.
+   * ⚠️ LOGIC WARNING: If you rely solely on `rank > current`, a CANCELLED (8)
+   * would overwrite a DELIVERED (7).
+   * You MUST enforce: "Cannot cancel if status is SHIPPED or DELIVERED".
+   * This rank is high to allow it to overwrite PENDING/IN_TRANSIT states.
+   */
+  CANCELLED: 8,
+
+  /**
+   * 9: RETURNED
+   * The customer has returned the product (e.g., "Cash on Delivery" return or
+   * "No Questions Asked" return).
+   * Distinct from RTO (which is the logistics movement back).
+   */
+  RETURNED: 9,
+
+  /**
+   * 10: RTO (Return to Origin)
+   * The shipment has failed delivery and is officially being returned to the seller.
+   * Or the return process is complete and the package is back with the seller.
+   * This is the final terminal state for failed deliveries.
+   */
+  RTO: 10,
+} as const;
 
 // ---------------------------------------------------------------------------
 // Validation mapper
@@ -459,7 +553,10 @@ export class ShippingManagerService {
         : PaymentMethod.PREPAID;
 
     const shiprocketPayload = {
-      order_id: validatedOrder.order_id,
+      order_id: this.generatePrefixedOrderId(
+        validatedOrder.order_id,
+        companyId,
+      ),
       order_date: orderDate,
       pickup_location: validatedOrder.pickup_location_id,
       billing_customer_name: validatedOrder.customer.first_name,
@@ -703,7 +800,7 @@ export class ShippingManagerService {
             awb_number: awbCode,
             courier_name: courierName || LOGISTICS_PARTNER_FALLBACK_NAME,
             shipping_status: SHIPPING_STATUS_AWB_ASSIGNED,
-            tracking_url: `https://www.shiprocket.in/shipment-tracking/${awbCode}`,
+            tracking_url: SHIPROCKET_TRACKING_URL + '/' + awbCode,
           })
           .where(eq(shipping_details.id, shipDetail.id));
 
@@ -711,6 +808,11 @@ export class ShippingManagerService {
           .update(orders)
           .set({ order_status: OrderStatus.SHIPPED })
           .where(eq(orders.id, orderId));
+
+        await tx
+          .update(order_items)
+          .set({ order_status: OrderStatus.SHIPPED })
+          .where(eq(order_items.order_id, orderId));
       });
     }
 
@@ -721,6 +823,10 @@ export class ShippingManagerService {
     payload: ShiprocketWebhookBody,
     authHeader: string,
   ): Promise<any> {
+    if (payload?.order_id) {
+      payload.order_id = this.parsePrefixedOrderId(payload.order_id);
+    }
+
     const awb = payload?.awb;
     if (!awb) {
       throw new HttpException(
@@ -730,9 +836,10 @@ export class ShippingManagerService {
     }
 
     // ── Auth: validate Shiprocket's own JWT ──────────────────────────────
-    // Shiprocket sends its platform JWT (issued during /auth/login) as
-    // "Authorization: Bearer <token>" on every outbound webhook call.
-    // We compare it against our cached token (tenant-specific or platform master) — only Shiprocket knows it.
+    /** Shiprocket sends its platform JWT (issued during /auth/login) as
+     * "Authorization: Bearer <token>" on every outbound webhook call.
+     * We compare it against our cached token (tenant-specific or platform master) — only Shiprocket knows it.
+     */
     const incomingToken = authHeader?.startsWith('Bearer ')
       ? authHeader.slice(7).trim()
       : null;
@@ -920,7 +1027,8 @@ export class ShippingManagerService {
           details: {
             status_id: payload.current_status_id,
             status_name: payload.current_status,
-            reason: payload.qc_failure_reason || 'Courier exception during delivery',
+            reason:
+              payload.qc_failure_reason || 'Courier exception during delivery',
           },
           company_id: shipDetail.company_id,
         })
@@ -928,9 +1036,16 @@ export class ShippingManagerService {
     }
 
     // ─── State transition guard ───────────────────────────────────────────
-    // Shiprocket webhooks can arrive out of order. Reject any update that
-    // would regress the current status to an earlier state.
-    const status = payload.current_status;
+    /** Shiprocket webhooks can arrive out of order. Reject any update that
+    would regress the current status to an earlier state.
+    */
+    let status = payload.current_status.toUpperCase();
+    if (payload.current_status_id === 19) {
+      status = ShippingStatus.OUT_FOR_DELIVERY_EXCEPTION;
+    } else if (payload.current_status_id === 20) {
+      status = ShippingStatus.UNDELIVERED;
+    }
+
     if (!status) {
       return { success: true, action: 'NO_STATUS_UPDATE' };
     }
@@ -938,7 +1053,15 @@ export class ShippingManagerService {
     const currentRank = SHIPPING_STATUS_RANK[shipDetail.shipping_status] ?? 0;
     const incomingRank = SHIPPING_STATUS_RANK[status] ?? 0;
 
-    if (incomingRank <= currentRank) {
+    const isCurrentException =
+      ('shipping_status' in shipDetail &&
+        shipDetail.shipping_status.toUpperCase() ===
+          ShippingStatus.OUT_FOR_DELIVERY_EXCEPTION) ||
+      ('shipping_status' in shipDetail &&
+        shipDetail.shipping_status.toUpperCase() ===
+          ShippingStatus.UNDELIVERED);
+
+    if (incomingRank <= currentRank && !isCurrentException) {
       return {
         success: true,
         action: 'SKIPPED_REGRESSION',
@@ -964,15 +1087,46 @@ export class ShippingManagerService {
           .where(eq(shipping_details.id, shipDetail.id));
 
         let newOrderStatus: OrderStatus | null = null;
-        if (status === ShippingStatus.DELIVERED) {
-          newOrderStatus = OrderStatus.DELIVERED;
-        } else if (
-          status === ShippingStatus.RETURNED ||
-          status === ShippingStatus.RTO
-        ) {
-          newOrderStatus = OrderStatus.RETURNED;
-        } else if (status === ShippingStatus.CANCELLED) {
-          newOrderStatus = OrderStatus.CANCELLED;
+        switch (status) {
+          case ShippingStatus.PENDING:
+            newOrderStatus = OrderStatus.PENDING;
+            break;
+          case ShippingStatus.DRAFTING:
+            newOrderStatus = OrderStatus.DRAFTING;
+            break;
+          case ShippingStatus.AWB_ASSIGNED:
+            newOrderStatus = OrderStatus.AWB_ASSIGNED;
+            break;
+          case ShippingStatus.SHIPPED:
+            newOrderStatus = OrderStatus.SHIPPED;
+            break;
+          case ShippingStatus.IN_TRANSIT:
+            newOrderStatus = OrderStatus.IN_TRANSIT;
+            break;
+          case ShippingStatus.OUT_FOR_DELIVERY:
+            newOrderStatus = OrderStatus.OUT_FOR_DELIVERY;
+            break;
+          case ShippingStatus.OUT_FOR_DELIVERY_EXCEPTION:
+            newOrderStatus = OrderStatus.OUT_FOR_DELIVERY_EXCEPTION;
+            break;
+          case ShippingStatus.UNDELIVERED:
+            newOrderStatus = OrderStatus.UNDELIVERED;
+            break;
+          case ShippingStatus.DELIVERED:
+            newOrderStatus = OrderStatus.DELIVERED;
+            break;
+          case ShippingStatus.CANCELLED:
+            newOrderStatus = OrderStatus.CANCELLED;
+            break;
+          case ShippingStatus.RETURNED:
+            newOrderStatus = OrderStatus.RETURNED;
+            break;
+          case ShippingStatus.RTO:
+            newOrderStatus = OrderStatus.RTO;
+            break;
+          case ShippingStatus.FAILED:
+            newOrderStatus = OrderStatus.FAILED;
+            break;
         }
 
         if (newOrderStatus) {
@@ -980,6 +1134,11 @@ export class ShippingManagerService {
             .update(orders)
             .set({ order_status: newOrderStatus })
             .where(eq(orders.id, shipDetail.order_id));
+
+          await tx
+            .update(order_items)
+            .set({ order_status: newOrderStatus })
+            .where(eq(order_items.order_id, shipDetail.order_id));
         }
 
         // RTO / RETURNED stock increment logic (inside transaction!)
@@ -1688,5 +1847,28 @@ export class ShippingManagerService {
       result |= a.charCodeAt(i) ^ b.charCodeAt(i);
     }
     return result === 0;
+  }
+
+  /**
+   * Generates a compressed, prefixed order ID to prevent collisions in multi-tenant Shiprocket accounts.
+   * Format: <first-4-chars-of-companyId>_<compact-order-uuid> (under 40 chars)
+   */
+  private generatePrefixedOrderId(orderId: string, companyId: string): string {
+    const compactOrderId = orderId.replace(/-/g, '');
+    const prefix = companyId.substring(0, 4);
+    return `${prefix}_${compactOrderId}`;
+  }
+
+  /**
+   * Parses a compressed, prefixed order ID from webhooks back into a valid UUID.
+   */
+  private parsePrefixedOrderId(orderId: string): string {
+    if (!orderId) return orderId;
+    const parts = orderId.split('_');
+    const uuidPart = parts[parts.length - 1];
+    if (uuidPart.length === 32) {
+      return `${uuidPart.substring(0, 8)}-${uuidPart.substring(8, 12)}-${uuidPart.substring(12, 16)}-${uuidPart.substring(16, 20)}-${uuidPart.substring(20)}`;
+    }
+    return orderId;
   }
 }

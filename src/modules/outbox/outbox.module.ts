@@ -6,13 +6,16 @@ import { MailModule } from '../../common/services/mail/mail.module';
 import { OutboxService } from './outbox.service';
 import { OutboxProcessorController } from './processors/outbox-processor.controller';
 import { EmailProcessorController } from './processors/email-processor.controller';
-import { OutboxSweeperController } from './services/outbox-sweeper.controller';
+import { OutboxSweeperController } from './outbox-sweeper.controller';
 
 @Module({
   imports: [DrizzleModule, ShippingModule, MailModule, ConfigModule],
-  controllers: [OutboxProcessorController, EmailProcessorController, OutboxSweeperController],
+  controllers: [
+    OutboxProcessorController,
+    EmailProcessorController,
+    OutboxSweeperController,
+  ],
   providers: [OutboxService],
   exports: [OutboxService],
 })
 export class OutboxModule {}
-
