@@ -381,53 +381,65 @@ export class InventoryService {
     tx: DrizzleService, // transaction context
   ) {
     try {
-      const lines = orderLines.filter(l => l.variantId && l.variantId.trim() !== '');
+      const hasInvalidLine = orderLines.some(
+        (line) =>
+          !line.variantId?.trim() ||
+          !Number.isInteger(line.quantity) ||
+          line.quantity <= 0,
+      );
+      if (hasInvalidLine) {
+        throw new HttpException(
+          'Each order line must include a variantId and positive quantity',
+          HttpStatus.BAD_REQUEST,
+        );
+      }
+      const lines = orderLines;
       for (const line of lines) {
-        const [updated] = await tx
-          .update(inventory)
-          .set({
-            stock_quantity: sql`${inventory.stock_quantity} - ${line.quantity}`,
+        const inventoryRows = await tx
+          .select({
+            id: inventory.id,
+            stock_quantity: inventory.stock_quantity,
           })
+          .from(inventory)
           .where(
             and(
               eq(inventory.product_variant_id, line.variantId),
               eq(inventory.company_id, companyId),
-              sql`${inventory.stock_quantity} >= ${line.quantity}`,
             ),
           )
-          .returning({
-            id: inventory.id,
-            stock_quantity: inventory.stock_quantity,
-          });
+          .orderBy(desc(inventory.stock_quantity)); // Prioritize warehouses with more stock
 
-        if (!updated) {
-          // If no row was updated, it means either inventory doesn't exist OR stock is insufficient.
-          // Let's do a quick select to determine the exact error to throw.
-          const [idv] = await tx
-            .select({
-              id: inventory.id,
-              stock_quantity: inventory.stock_quantity,
-            })
-            .from(inventory)
-            .where(
-              and(
-                eq(inventory.product_variant_id, line.variantId),
-                eq(inventory.company_id, companyId),
-              ),
-            )
-            .limit(1);
+        if (inventoryRows.length === 0) {
+          throw new HttpException(
+            `Inventory not found for variant ${line.variantId}`,
+            HttpStatus.NOT_FOUND,
+          );
+        }
 
-          if (!idv) {
-            throw new HttpException(
-              `Inventory not found for variant ${line.variantId}`,
-              HttpStatus.NOT_FOUND,
-            );
-          } else {
-            throw new HttpException(
-              `Insufficient stock for variant ${line.variantId}. Available: ${idv.stock_quantity}, requested: ${line.quantity}`,
-              HttpStatus.BAD_REQUEST,
-            );
-          }
+        let remainingToDeduct = line.quantity;
+        for (const invRow of inventoryRows) {
+          if (remainingToDeduct <= 0) break;
+
+          const available = invRow.stock_quantity;
+          if (available <= 0) continue;
+
+          const toDeduct = Math.min(available, remainingToDeduct);
+          const newStock = available - toDeduct;
+
+          await tx
+            .update(inventory)
+            .set({ stock_quantity: newStock })
+            .where(eq(inventory.id, invRow.id));
+
+          remainingToDeduct -= toDeduct;
+        }
+
+        if (remainingToDeduct > 0) {
+          const totalAvailable = inventoryRows.reduce((sum, row) => sum + row.stock_quantity, 0);
+          throw new HttpException(
+            `Insufficient stock for variant ${line.variantId}. Available: ${totalAvailable}, requested: ${line.quantity}`,
+            HttpStatus.BAD_REQUEST,
+          );
         }
       }
     } catch (error) {
@@ -452,19 +464,44 @@ export class InventoryService {
   ) {
     try {
       const rawLines = Array.isArray(orderLines) ? orderLines : [orderLines];
-      const lines = rawLines.filter(l => l.variantId && l.variantId.trim() !== '');
+      const hasInvalidLine = rawLines.some(
+        (line) =>
+          !line.variantId?.trim() ||
+          !Number.isInteger(line.quantity) ||
+          line.quantity <= 0,
+      );
+      if (hasInvalidLine) {
+        throw new HttpException(
+          'Each order line must include a variantId and positive quantity',
+          HttpStatus.BAD_REQUEST,
+        );
+      }
+      const lines = rawLines;
       for (const line of lines) {
-        const [updated] = await tx
-          .update(inventory)
-          .set({
-            stock_quantity: sql`${inventory.stock_quantity} + ${line.quantity}`,
-          })
+        const [invRow] = await tx
+          .select({ id: inventory.id })
+          .from(inventory)
           .where(
             and(
               eq(inventory.product_variant_id, line.variantId),
               eq(inventory.company_id, companyId),
             ),
           )
+          .limit(1);
+
+        if (!invRow) {
+          throw new HttpException(
+            `Inventory not found for variant ${line.variantId}`,
+            HttpStatus.NOT_FOUND,
+          );
+        }
+
+        const [updated] = await tx
+          .update(inventory)
+          .set({
+            stock_quantity: sql`${inventory.stock_quantity} + ${line.quantity}`,
+          })
+          .where(eq(inventory.id, invRow.id))
           .returning({
             id: inventory.id,
           });

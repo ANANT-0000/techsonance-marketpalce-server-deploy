@@ -11,6 +11,8 @@ import { ProductPoliciesModule } from '../product-policies/product-policies.modu
 import { CouponModule } from '../coupon/coupon.module';
 import { PromotionsModule } from '../promotions/promotions.module';
 import { ShippingModule } from '../shipping/shipping.module';
+import { OutboxModule } from '../outbox/outbox.module';
+import { PolicyResolutionService } from '../product-policies/policy-resolution.service';
 
 @Module({
   imports: [
@@ -24,9 +26,10 @@ import { ShippingModule } from '../shipping/shipping.module';
     CouponModule,
     PromotionsModule,
     ShippingModule,
+    OutboxModule,
   ],
   controllers: [OrdersController],
-  providers: [OrdersService],
+  providers: [OrdersService, PolicyResolutionService],
   exports: [OrdersService],
 })
 export class OrdersModule {}

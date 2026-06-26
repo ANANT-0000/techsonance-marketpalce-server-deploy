@@ -12,17 +12,17 @@ import {
 } from '../../drizzle/types/types';
 import { domainExtractor } from '../../common/filters/domainExtractor.filter';
 import { CompanyService } from '../company/company.service';
-import { MailService } from '../../common/services/mail/mail.service';
 import { user } from '../../drizzle/schema/users.schema';
 import { TicketsErrorKeyEnum } from './constants/tickets.enums';
+import { OutboxService } from '../outbox/outbox.service';
+
 @Injectable()
 export class TicketsService {
   constructor(
     @Inject(DRIZZLE) private readonly db: DrizzleService,
     private readonly companyService: CompanyService,
-    private readonly mailService: MailService,
-  ) {
-  }
+    private readonly outboxService: OutboxService,
+  ) {}
 
   private async resolveCompanyId(domain: string): Promise<string> {
     const filterDomain = domainExtractor(domain);
@@ -56,7 +56,7 @@ export class TicketsService {
           attachment_url: ticketData.attachmentUrl || null,
         })
         .returning();
-      // Send confirmation email to the user (best-effort)
+      // Queue confirmation email via QStash so it survives Vercel's serverless timeout
       try {
         const [u] = await this.db
           .select({ email: user.email, first_name: user.first_name })
@@ -67,16 +67,14 @@ export class TicketsService {
           const html = `<p>Hi ${u.first_name || 'Customer'},</p>
             <p>Your support ticket <strong>#${newTicket.id}</strong> has been received. Subject: ${newTicket.subject}</p>
             <p>We will update you on the status. You can view your tickets at <a href="${process.env.APP_URL}/customer/support">your support page</a>.</p>`;
-          // fire-and-forget; don't fail ticket creation on email errors
-          this.mailService
-            .sendEmail(
-              u.email,
-              `Support ticket received: #${newTicket.id}`,
-              html,
-            )
-            .catch((err) => {});
+          await this.outboxService.publishEmailJob({
+            to: u.email,
+            subject: `Support ticket received: #${newTicket.id}`,
+            html,
+          });
         }
       } catch (err) {
+        // Non-fatal: email publication failure must not fail ticket creation
       }
       return newTicket;
     } catch (error) {
@@ -157,7 +155,7 @@ export class TicketsService {
             .where(eq(support_tickets.id, ticketId));
         }
 
-        // Send confirmation email (best-effort)
+        // Queue update notification email via QStash
         try {
           if (ticket.user_id) {
             const [u] = await this.db
@@ -171,17 +169,16 @@ export class TicketsService {
                 <p>There is a new update on your support ticket <strong>#${ticketId}</strong>.</p>
                 <p>Message: "${commentText}"</p>
                 <p>You can view and reply to this thread at <a href="${process.env.APP_URL}/customer/support">your support page</a>.</p>`;
-              
-              this.mailService
-                .sendEmail(
-                  u.email,
-                  `Ticket #${ticketId.slice(0, 8)} update`,
-                  html,
-                )
-                .catch((err) => {});
+
+              await this.outboxService.publishEmailJob({
+                to: u.email,
+                subject: `Ticket #${ticketId.slice(0, 8)} update`,
+                html,
+              });
             }
           }
         } catch (emailErr) {
+          // Non-fatal: email publication failure must not fail comment creation
         }
       }
 

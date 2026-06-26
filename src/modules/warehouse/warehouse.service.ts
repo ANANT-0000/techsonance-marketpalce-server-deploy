@@ -11,6 +11,7 @@ import {
   updateWarehouseAddressDto,
   warehouseAddressDto,
 } from './dto/warehouse.dto';
+import { ShiprocketAddPickupAddress } from '../../common/Types/shiprocket';
 import {
   address,
   warehouse,
@@ -78,7 +79,6 @@ export class WarehouseService {
             number: warehouseAddressDto.phone,
             address_type: warehouseAddressDto.address_for,
             address_line_1: warehouseAddressDto.address_line_1,
-
             street: warehouseAddressDto.street,
             city: warehouseAddressDto.city,
             state: warehouseAddressDto.state,
@@ -86,6 +86,7 @@ export class WarehouseService {
             country: warehouseAddressDto.country,
             landmark: warehouseAddressDto.landmark,
             company_id: companyId,
+            pickup_location: warehouseAddressDto.name.slice(0, 36),
           })
           .returning({ id: address.id });
         const addressId = addressResult.id;
@@ -96,10 +97,26 @@ export class WarehouseService {
         });
 
         if (warehouseAddressDto.is_default) {
+          const shiprocketPayload: ShiprocketAddPickupAddress = {
+            pickup_location: warehouseAddressDto.name.slice(0, 36),
+            name: warehouseAddressDto.name,
+            email: '', // will be resolved inside service
+            phone: Number(warehouseAddressDto.phone),
+            address: warehouseAddressDto.address_line_1,
+            address_2:
+              warehouseAddressDto.street +
+              (warehouseAddressDto.landmark
+                ? ', ' + warehouseAddressDto.landmark
+                : ''),
+            city: warehouseAddressDto.city,
+            state: warehouseAddressDto.state,
+            country: warehouseAddressDto.country,
+            pin_code: Number(warehouseAddressDto.postal_code),
+          };
           await this.registerWarehouseWithShiprocket(
             companyId,
             warehouseAddressDto.name,
-            warehouseAddressDto,
+            shiprocketPayload,
             tx,
           );
         }
@@ -279,6 +296,7 @@ export class WarehouseService {
             postal_code: updateWarehouseDto.postal_code,
             country: updateWarehouseDto.country,
             landmark: updateWarehouseDto.landmark,
+            pickup_location: updateWarehouseDto.name?.slice(0, 36),
           })
           .where(eq(address.id, existingWarehouse.address_id))
           .returning({ id: address.id })
@@ -347,12 +365,30 @@ export class WarehouseService {
               updateWarehouseDto.landmark ?? currentAddress.landmark ?? '',
           };
 
-          await this.registerWarehouseWithShiprocket(
-            companyId,
-            updateWarehouseDto.name ?? existingWarehouse.warehouse_name,
-            mergedAddress,
-            tx,
-          );
+          if (isDefault) {
+            const shiprocketPayload: ShiprocketAddPickupAddress = {
+              pickup_location: (
+                updateWarehouseDto.name ?? existingWarehouse.warehouse_name
+              ).slice(0, 36),
+              name: updateWarehouseDto.name ?? existingWarehouse.warehouse_name,
+              email: '', // resolved inside service
+              phone: Number(mergedAddress.phone),
+              address: mergedAddress.address_line_1,
+              address_2:
+                mergedAddress.street +
+                (mergedAddress.landmark ? ', ' + mergedAddress.landmark : ''),
+              city: mergedAddress.city,
+              state: mergedAddress.state,
+              country: mergedAddress.country,
+              pin_code: Number(mergedAddress.postal_code),
+            };
+            await this.registerWarehouseWithShiprocket(
+              companyId,
+              updateWarehouseDto.name ?? existingWarehouse.warehouse_name,
+              shiprocketPayload,
+              tx,
+            );
+          }
         }
 
         return {
@@ -409,17 +445,7 @@ export class WarehouseService {
   private async registerWarehouseWithShiprocket(
     companyId: string,
     warehouseName: string,
-    addressDetails: {
-      name: string;
-      phone: string;
-      address_line_1: string;
-      street: string;
-      city: string;
-      state: string;
-      country: string;
-      postal_code: string;
-      landmark?: string | null;
-    },
+    addressDetails: ShiprocketAddPickupAddress,
     tx: DrizzleService,
   ) {
     const comp = await tx.query.company.findFirst({
@@ -458,20 +484,7 @@ export class WarehouseService {
 
     try {
       await this.shipRocketService.addPickupLocation(
-        {
-          pickup_location: warehouseName.slice(0, 36),
-          name: addressDetails.name,
-          email,
-          phone: addressDetails.phone,
-          address: addressDetails.address_line_1,
-          address_2:
-            addressDetails.street +
-            (addressDetails.landmark ? ', ' + addressDetails.landmark : ''),
-          city: addressDetails.city,
-          state: addressDetails.state,
-          country: addressDetails.country,
-          pin_code: addressDetails.postal_code,
-        },
+        addressDetails,
         credentials,
         companyId,
       );

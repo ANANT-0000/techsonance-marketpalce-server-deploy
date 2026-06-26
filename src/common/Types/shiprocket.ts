@@ -277,6 +277,161 @@ interface CovidZones {
 }
 
 /**
+ * Request payload for the ShipRocket Check Serviceability API.
+ */
+export interface ShipRocketCheckServiceabilityRequest {
+  /**
+   * Pickup location postcode (PIN code).
+   *
+   * Required.
+   *
+   * Example: 110030
+   */
+  pickup_postcode: number;
+
+  /**
+   * Delivery destination postcode (PIN code).
+   *
+   * Required.
+   *
+   * Example: 122002
+   */
+  delivery_postcode: number;
+
+  /**
+   * Existing ShipRocket Order ID.
+   *
+   * Optional.
+   * If the order has already been created in the ShipRocket panel,
+   * this ID can be used instead of shipment details.
+   *
+   * Example: 123456
+   */
+  order_id?: number;
+
+  /**
+   * Cash on Delivery (COD) status.
+   *
+   * Conditionally required when order_id is not provided.
+   *
+   * - 1 = Cash on Delivery
+   * - 0 = Prepaid
+   *
+   * Example: 1
+   */
+  cod?: 0 | 1;
+
+  /**
+   * Total shipment weight in kilograms.
+   *
+   * Conditionally required when order_id is not provided.
+   *
+   * Example: "2"
+   */
+  weight: string;
+
+  /**
+   * Shipment length in centimeters.
+   *
+   * Optional.
+   *
+   * Example: 15
+   */
+  length?: number;
+
+  /**
+   * Shipment breadth (width) in centimeters.
+   *
+   * Optional.
+   *
+   * Example: 10
+   */
+  breadth?: number;
+
+  /**
+   * Shipment height in centimeters.
+   *
+   * Optional.
+   *
+   * Example: 5
+   */
+  height?: number;
+
+  /**
+   * Declared shipment value in INR.
+   *
+   * Optional.
+   * Required when `is_return` is set to 1.
+   *
+   * Example: 50
+   */
+  declared_value?: number;
+
+  /**
+   * Preferred transportation mode.
+   *
+   * Optional.
+   *
+   * Allowed values:
+   * - "Air"
+   * - "Surface"
+   *
+   * Example: "Air"
+   */
+  mode?: 'Air' | 'Surface';
+
+  /**
+   * Whether the shipment is a return shipment.
+   *
+   * Optional.
+   *
+   * - 1 = Return shipment
+   * - 0 = Forward shipment
+   *
+   * Note:
+   * If set to 1, `declared_value` becomes mandatory.
+   *
+   * Example: 0
+   */
+  is_return?: 0 | 1;
+
+  /**
+   * Filter to show only document couriers.
+   *
+   * Optional.
+   *
+   * Accepted value:
+   * - 1 = Enable document-only couriers
+   *
+   * Example: 1
+   */
+  couriers_type?: 1;
+
+  /**
+   * Filter to show only hyperlocal couriers.
+   *
+   * Optional.
+   *
+   * Accepted value:
+   * - 1 = Enable hyperlocal couriers
+   *
+   * Example: 1
+   */
+  only_local?: 1;
+
+  /**
+   * Filter to show only QC-enabled couriers.
+   *
+   * Conditionally required when `is_return` is 1.
+   *
+   * Accepted value:
+   * - 1 = QC-enabled couriers only
+   *
+   * Example: 1
+   */
+  qc_check?: 1;
+}
+/**
  * Main response interface for the courier rate and availability API.
  * Use Case: This is the top-level response you parse to display shipping options, check for blocked couriers, and apply insurance settings.
  */
@@ -403,7 +558,7 @@ interface PickupResponse {
  * Top-level interface for the pickup request response.
  * Use Case: Used to handle the API response after calling the "Request for Shipment Pickup" endpoint.
  */
-export interface PickupRequestResponse {
+export interface ShiprocketPickupRequestResponse {
   /** Status of the pickup request (1 = Success/Pending, 0 = Failed) */
   pickup_status: 0 | 1;
   /** Detailed object containing the pickup confirmation and metadata */
@@ -457,8 +612,8 @@ export interface ShiprocketCreateOrderPayload {
   /** Billing city */
   billing_city: string;
 
-  /** Billing pincode */
-  billing_pincode: number;
+  /** Billing pincode (string to preserve leading zeros, e.g. 011001) */
+  billing_pincode: number | string;
 
   /** Billing state */
   billing_state: string;
@@ -469,8 +624,8 @@ export interface ShiprocketCreateOrderPayload {
   /** Billing email */
   billing_email: string;
 
-  /** Billing phone number */
-  billing_phone: number;
+  /** Billing phone number (string to preserve international formatting) */
+  billing_phone: number | string;
 
   /** Alternate phone number */
   billing_alternate_phone?: number;
@@ -502,7 +657,7 @@ export interface ShiprocketCreateOrderPayload {
   shipping_city?: string;
 
   /** Required when shipping_is_billing = false */
-  shipping_pincode?: number;
+  shipping_pincode?: number | string;
 
   /** Required when shipping_is_billing = false */
   shipping_state?: string;
@@ -514,7 +669,7 @@ export interface ShiprocketCreateOrderPayload {
   shipping_email?: string;
 
   /** Required when shipping_is_billing = false */
-  shipping_phone?: number;
+  shipping_phone?: number | string;
 
   // ===== Geo Location =====
 
@@ -638,6 +793,14 @@ export interface ShiprocketCreateOrderResponse {
   awb_code: string | null;
   courier_company_id: string | null;
   courier_name: string | null;
+}
+export interface ShipRocketCancelShipmentRequest {
+  ids: number[];
+  status?: string;
+}
+export interface ShipRocketCancelShipmentResponse {
+  shipment_id: number | number[];
+  status?: string;
 }
 /**
  * Shiprocket Order Details Response
@@ -1426,7 +1589,42 @@ export interface AWBAssignData {
   /** Detailed object containing shipper and RTO address information. */
   shipped_by: ShippedByDetails;
 }
+export interface ShiprocketGenerateAWBforShipment {
+  /**
+   * Shipment ID for which the AWB needs to be generated.
+   *
+   * Required.
+   *
+   * Example: 16016920
+   */
+  shipment_id: number;
 
+  /**
+   * Courier company ID to assign for the shipment.
+   *
+   * Optional.
+   * If omitted, ShipRocket automatically assigns the default/recommended courier.
+   *
+   * Example: 10
+   */
+  courier_id?: number;
+
+  /**
+   * Reassign the courier for an existing shipment.
+   *
+   * Optional.
+   * Use this only when changing the assigned courier.
+   *
+   * Allowed value:
+   * - "reassign"
+   *
+   * Note:
+   * Courier reassignment is allowed only once within a 24-hour period.
+   *
+   * Example: "reassign"
+   */
+  status?: '' | 'reassign';
+}
 /**
  * The root response object for the Shiprocket "Generate AWB" API.
  * Indicates the success status and contains the shipment data.
@@ -1525,4 +1723,233 @@ export interface ShiprocketWebhookBody {
 
   /** Reason for QC failure (if applicable). */
   qc_failure_reason: string;
+}
+
+export interface ShiprocketAddPickupAddress {
+  /** Nickname of the pickup location (max 36 chars) */
+  pickup_location: string;
+
+  /** Shipper name */
+  name: string;
+
+  /** Shipper email address */
+  email: string;
+
+  /** Shipper phone number */
+  phone: number | string;
+
+  /** Primary address (max 80 chars) */
+  address: string;
+
+  /** Additional address details */
+  address_2?: string;
+
+  /** City name */
+  city: string;
+
+  /** State name */
+  state: string;
+
+  /** Country name */
+  country: string;
+
+  /** Postal/PIN code */
+  pin_code: number | string;
+
+  /** Latitude */
+  lat?: number | string;
+
+  /** Longitude */
+  long?: number | string;
+
+  /** Address type (e.g. vendor) */
+  address_type?: string;
+
+  /** Vendor name (required when address_type = 'vendor') */
+  vendor_name?: string;
+
+  /** GSTIN number */
+  gstin?: string;
+}
+export interface ShiprocketAddPickupAddressResponse {
+  success: boolean;
+  address: {
+    company_id: number;
+    pickup_code: string;
+    address: string;
+    address_2: string;
+    address_type: string | null;
+    city: string;
+    state: string;
+    country: string;
+    gstin: string | null;
+    pin_code: string;
+    phone: string;
+    email: string;
+    name: string;
+    alternate_phone: string | null;
+    lat: number | null;
+    long: number | null;
+    status: number;
+    phone_verified: number;
+    rto_address_id: number;
+    extra_info: string;
+    updated_at: string;
+    created_at: string;
+    id: number;
+  };
+  pickup_id: number;
+  company_name: string;
+  full_name: string;
+}
+export interface ShipRocketRequestForShipmentPickup {
+  /** Shipment IDs for which pickup needs to be scheduled */
+  shipment_id: number[];
+  /** Use this field to retry if the pickup request fails. Value: retry */
+  status?: string;
+  /** Pickup dates for the shipments */
+  pickup_date?: string[];
+}
+
+/**
+ * Response returned by the
+ * Request for Shipment Pickup API.
+ */
+export interface ShipRocketRequestForShipmentPickupResponse {
+  pickup_status: number;
+  response: ShipRocketRequestForShipmentPickupResponseData;
+}
+
+/**
+ * Response returned by the ShipRocket Request for Shipment Pickup API.
+ */
+export interface ShipRocketRequestForShipmentPickupResponse {
+  pickup_status: number;
+  response: ShipRocketRequestForShipmentPickupResponseData;
+}
+
+/**
+ * Main response payload.
+ */
+export interface ShipRocketRequestForShipmentPickupResponseData {
+  /**
+   * Scheduled pickup date & time.
+   * Format: YYYY-MM-DD HH:mm:ss
+   */
+  pickup_scheduled_date: string;
+
+  /**
+   * Pickup reference/token number.
+   */
+  pickup_token_number: string;
+
+  /**
+   * Pickup status code.
+   */
+  status: number;
+
+  /**
+   * JSON string.
+   * Parse into ShipRocketRequestForShipmentPickupParsedOthers.
+   */
+  others: ShipRocketRequestForShipmentPickupParsedOthers;
+
+  /**
+   * Pickup generation timestamp.
+   */
+  pickup_generated_date: ShipRocketRequestForShipmentPickupGeneratedDate;
+
+  /**
+   * Human-readable pickup confirmation message.
+   */
+  data: string;
+}
+
+/**
+ * Pickup generation timestamp.
+ */
+export interface ShipRocketRequestForShipmentPickupGeneratedDate {
+  date: string;
+  timezone_type: number;
+  timezone: string;
+}
+
+/**
+ * Parsed value of response.others.
+ */
+export interface ShipRocketRequestForShipmentPickupParsedOthers {
+  tier_id: number;
+
+  etd_zone: string;
+
+  /**
+   * JSON string.
+   * Parse into ShipRocketRequestForShipmentPickupParsedEtdHours.
+   */
+  etd_hours: string;
+
+  actual_etd: string;
+
+  routing_code: string;
+
+  addition_in_etd: string[];
+
+  shipment_metadata: ShipRocketRequestForShipmentPickupShipmentMetadata;
+
+  templatized_pricing: number;
+
+  selected_courier_type: string;
+
+  recommended_courier_data: ShipRocketRequestForShipmentPickupRecommendedCourier;
+
+  recommendation_advance_rule: null;
+
+  dynamic_weight: string;
+}
+
+/**
+ * Parsed value of parsedOthers.etd_hours.
+ */
+export interface ShipRocketRequestForShipmentPickupParsedEtdHours {
+  assign_to_pick: number;
+
+  pick_to_ship: number;
+
+  ship_to_deliver: number;
+
+  etd_zone: string;
+
+  pick_to_ship_table: string;
+
+  ship_to_deliver_table: string;
+}
+
+/**
+ * Shipment metadata.
+ */
+export interface ShipRocketRequestForShipmentPickupShipmentMetadata {
+  type: string;
+
+  device: string;
+
+  platform: string;
+
+  client_ip: string;
+
+  created_at: string;
+
+  request_type: string;
+}
+
+/**
+ * Recommended courier details.
+ */
+export interface ShipRocketRequestForShipmentPickupRecommendedCourier {
+  etd: string;
+
+  price: number;
+
+  rating: number;
+
+  courier_id: number;
 }

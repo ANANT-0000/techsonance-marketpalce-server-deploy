@@ -32,7 +32,7 @@ export const vendor_subscriptions = pg.pgTable(
       .uuid('company_id')
       .notNull()
       .unique()
-      .references(() => company.id, { onDelete: 'cascade' }),
+      .references(() => company.id, { onDelete: 'restrict' }),
     plan_id: pg
       .uuid('plan_id')
       .notNull()
@@ -67,7 +67,7 @@ export const subscription_events = pg.pgTable(
     company_id: pg
       .uuid('company_id')
       .notNull()
-      .references(() => company.id, { onDelete: 'cascade' }),
+      .references(() => company.id, { onDelete: 'restrict' }),
     subscription_id: pg
       .uuid('subscription_id')
       .references(() => vendor_subscriptions.id),

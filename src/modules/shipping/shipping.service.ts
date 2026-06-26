@@ -5,6 +5,8 @@ import {
   Injectable,
   InternalServerErrorException,
 } from '@nestjs/common';
+import { CACHE_MANAGER } from '@nestjs/cache-manager';
+import { type Cache } from 'cache-manager';
 import { DRIZZLE, type DrizzleService } from '../../drizzle/drizzle.module';
 import { CompanyService } from '../company/company.service';
 import { and, eq } from 'drizzle-orm';
@@ -22,8 +24,12 @@ import {
 
 @Injectable()
 export class ShippingService {
+  /** Must match ShipRocketService.SHIPROCKET_AUTH_CACHE_KEY */
+  private readonly SHIPROCKET_AUTH_CACHE_KEY = 'shiprocket_auth_cache';
+
   constructor(
     @Inject(DRIZZLE) private readonly db: DrizzleService,
+    @Inject(CACHE_MANAGER) private readonly cacheManager: Cache,
     private readonly companyService: CompanyService,
     private readonly mailService: MailService,
     private readonly cryptoService: CryptoService,
@@ -235,26 +241,39 @@ export class ShippingService {
       updateFields.standard_delivery_charge = payload.standard_delivery_charge;
     }
 
+    let credentialsChanged = false;
+
     if (payload.logistics_api_key) {
       if (payload.logistics_api_key !== SHIPPING_API_KEY_PLACEHOLDER) {
         updateFields.encrypted_logistics_api_key = this.cryptoService.encrypt(payload.logistics_api_key);
+        credentialsChanged = true;
       }
     } else if (payload.logistics_api_key === '') {
       updateFields.encrypted_logistics_api_key = null;
+      credentialsChanged = true;
     }
 
     if (payload.logistics_api_secret) {
       if (payload.logistics_api_secret !== SHIPPING_API_KEY_PLACEHOLDER) {
         updateFields.encrypted_logistics_api_secret = this.cryptoService.encrypt(payload.logistics_api_secret);
+        credentialsChanged = true;
       }
     } else if (payload.logistics_api_secret === '') {
       updateFields.encrypted_logistics_api_secret = null;
+      credentialsChanged = true;
     }
 
     await this.db
       .update(company)
       .set(updateFields)
       .where(eq(company.id, companyId));
+
+    // Invalidate the cached Shiprocket auth token immediately so the new
+    // credentials take effect on the next request instead of up to 7 days later.
+    if (credentialsChanged) {
+      const cacheKey = `${this.SHIPROCKET_AUTH_CACHE_KEY}:${companyId}`;
+      await this.cacheManager.del(cacheKey).catch(() => {});
+    }
 
     return { success: true, message: SHIPPING_SETTINGS_UPDATED_MSG };
   }

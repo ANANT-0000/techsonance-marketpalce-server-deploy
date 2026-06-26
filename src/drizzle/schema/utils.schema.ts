@@ -30,7 +30,7 @@ export const company_document = pg.pgTable('company_document', {
     .$onUpdate(() => new Date()),
   vendor_id: pg
     .uuid('vendor_id')
-    .references(() => vendor.id, { onDelete: 'cascade' }),
+    .references(() => vendor.id, { onDelete: 'restrict' }),
   company_id: pg
     .uuid('company_id')
     .references(() => company.id, { onDelete: 'cascade' }),
@@ -47,13 +47,13 @@ export const warehouse = pg.pgTable('warehouse', {
     .$onUpdate(() => new Date()),
   address_id: pg
     .uuid('address_id')
-    .references(() => address.id, { onDelete: 'cascade' })
+    .references(() => address.id, { onDelete: 'restrict' })
     .notNull(),
   status: EntityStatusEnum('status').default(EntityStatus.ACTIVE),
   deleted_at: pg.timestamp('deleted_at'),
   company_id: pg
     .uuid('company_id')
-    .references(() => company.id, { onDelete: 'cascade' })
+    .references(() => company.id, { onDelete: 'restrict' })
     .notNull(),
 });
 export const inventory = pg.pgTable(
@@ -72,15 +72,17 @@ export const inventory = pg.pgTable(
       .$onUpdate(() => new Date()),
     product_variant_id: pg
       .uuid('product_variant_id')
-      .references(() => product_variants.id, { onDelete: 'cascade' })
+      .references(() => product_variants.id, { onDelete: 'restrict' })
       .notNull(),
     warehouse_id: pg
       .uuid('warehouse_id')
-      .references(() => warehouse.id, { onDelete: 'cascade' })
+      .references(() => warehouse.id, { onDelete: 'restrict' })
       .notNull(),
     company_id: pg
       .uuid('company_id')
-      .references(() => company.id, { onDelete: 'cascade' }),
+      .references(() => company.id, { onDelete: 'restrict' }),
+    record_status: EntityStatusEnum('record_status').default(EntityStatus.ACTIVE),
+    deleted_at: pg.timestamp('deleted_at'),
   },
   (table) => [
     pg.index('idx_inventory_product_variant_id').on(table.product_variant_id),
@@ -107,10 +109,12 @@ export const support_tickets = pg.pgTable('support_tickets', {
     .$onUpdate(() => new Date()),
   user_id: pg
     .uuid('user_id')
-    .references(() => user.id, { onDelete: 'cascade' }),
+    .references(() => user.id, { onDelete: 'restrict' }),
   company_id: pg
     .uuid('company_id')
-    .references(() => company.id, { onDelete: 'cascade' }),
+    .references(() => company.id, { onDelete: 'restrict' }),
+  record_status: EntityStatusEnum('record_status').default(EntityStatus.ACTIVE),
+  deleted_at: pg.timestamp('deleted_at'),
 });
 export const notifications = pg.pgTable(
   'notifications',
@@ -208,6 +212,8 @@ export const help_articles = pg.pgTable('help_articles', {
     .notNull()
     .defaultNow()
     .$onUpdate(() => new Date()),
+  record_status: EntityStatusEnum('record_status').default(EntityStatus.ACTIVE),
+  deleted_at: pg.timestamp('deleted_at'),
 });
 
 export const customer_feedback = pg.pgTable('customer_feedback', {
@@ -228,13 +234,15 @@ export const customer_feedback = pg.pgTable('customer_feedback', {
   status: pg.text('status').default('NEW').notNull(),
   company_id: pg
     .uuid('company_id')
-    .references(() => company.id, { onDelete: 'cascade' }),
+    .references(() => company.id, { onDelete: 'restrict' }),
   created_at: pg.timestamp('created_at').notNull().defaultNow(),
   updated_at: pg
     .timestamp('updated_at')
     .notNull()
     .defaultNow()
     .$onUpdate(() => new Date()),
+  record_status: EntityStatusEnum('record_status').default(EntityStatus.ACTIVE),
+  deleted_at: pg.timestamp('deleted_at'),
 });
 
 export const ticket_comments = pg.pgTable('ticket_comments', {

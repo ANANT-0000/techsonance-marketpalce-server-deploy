@@ -1,4 +1,5 @@
 import {
+  HttpException,
   HttpStatus,
   Inject,
   Injectable,
@@ -194,7 +195,7 @@ export class CategoryService {
       });
     } catch (error) {
       if (
-        error instanceof HttpExceptionFilter ||
+        error instanceof HttpException ||
         error instanceof BadRequestException ||
         error instanceof ConflictException
       ) {

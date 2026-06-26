@@ -1,0 +1,23 @@
+export enum OutboxJobType {
+  CREATE_SHIPROCKET_DRAFT_ORDER = 'CREATE_SHIPROCKET_DRAFT_ORDER',
+}
+
+export enum OutboxJobStatus {
+  PENDING = 'PENDING',
+  PROCESSING = 'PROCESSING',
+  COMPLETED = 'COMPLETED',
+  FAILED = 'FAILED',
+}
+
+export const OUTBOX_CONSTANTS = {
+  INTERNAL_VERSION: '1',
+  INTERNAL_PATH: 'internal',
+  ROUTE_PROCESS_SHIPMENT: 'process-shipment',
+  ROUTE_PROCESS_EMAIL: 'process-email',
+  ROUTE_SWEEP_OUTBOX: 'sweep-outbox',
+  HEADER_UPSTASH_SIGNATURE: 'upstash-signature',
+  HEADER_AUTHORIZATION: 'authorization',
+  MAX_RETRY_COUNT: 3,
+  DEFAULT_RETRY_LIMIT: 3,
+  STALE_JOB_THRESHOLD_MS: 60_000, // 1 minute
+};

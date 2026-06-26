@@ -59,6 +59,7 @@ import { SiteMapsModule } from './modules/site-maps/site-maps.module';
 import { ShipRocketModule } from './modules/ship-rocket/ship-rocket.module';
 import { CacheModule } from '@nestjs/cache-manager';
 import { redisStore } from 'cache-manager-redis-yet';
+import { OutboxModule } from './modules/outbox/outbox.module';
 export enum RATELIMIT_NAME {
   SHORT = 'short',
   MEDIUM = 'medium',
@@ -158,9 +159,9 @@ export enum RATELIMIT_LIMIT {
     NotificationSettingsModule,
     ...(process.env.NODE_ENV !== 'production' ? [TraceModule] : []),
     CustomersModule,
-    NavbarModule,
     SiteMapsModule,
     ShipRocketModule,
+    OutboxModule,
   ],
   controllers: [AppController, UsersController],
   providers: [

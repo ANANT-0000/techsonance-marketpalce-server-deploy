@@ -26,7 +26,7 @@ export const categories = pg.pgTable(
     description: pg.text('description'),
     parent_id: pg
       .uuid('parent_id')
-      .references((): AnyPgColumn => categories.id, { onDelete: 'cascade' }),
+      .references((): AnyPgColumn => categories.id, { onDelete: 'no action' }),
     created_at: pg.timestamp('created_at').notNull().defaultNow(),
     updated_at: pg
       .timestamp('updated_at')
@@ -58,6 +58,8 @@ export const coupons = pg.pgTable('coupons', {
   description: pg.text('description'),
   is_active: pg.boolean('is_active').notNull().default(true),
   created_at: pg.timestamp('created_at').notNull().defaultNow(),
+  record_status: EntityStatusEnum('record_status').default(EntityStatus.ACTIVE),
+  deleted_at: pg.timestamp('deleted_at'),
 });
 
 export const carts = pg.pgTable('carts', {
@@ -114,6 +116,8 @@ export const coupon_usage = pg.pgTable('coupon_usage', {
     .notNull(),
 
   created_at: pg.timestamp('created_at').defaultNow().notNull(),
+  record_status: EntityStatusEnum('record_status').default(EntityStatus.ACTIVE),
+  deleted_at: pg.timestamp('deleted_at'),
 });
 
 export const ProductStatusEnum = pg.pgEnum(
@@ -176,11 +180,13 @@ export const orders = pg.pgTable(
       .$onUpdate(() => new Date()),
     user_id: pg
       .uuid('user_id')
-      .references(() => user.id, { onDelete: 'cascade' }),
+      .references(() => user.id, { onDelete: 'restrict' }),
     address_id: pg
       .uuid('address_id')
-      .references(() => address.id, { onDelete: 'cascade' }),
-    company_id: pg.uuid('company_id').references(() => company.id),
+      .references(() => address.id, { onDelete: 'restrict' }),
+    company_id: pg
+      .uuid('company_id')
+      .references(() => company.id, { onDelete: 'restrict' }),
     order_status: order_status_enum('order_status')
       .notNull()
       .default(OrderStatus.PENDING),
@@ -200,11 +206,11 @@ export const order_items = pg.pgTable(
   'order_items',
   {
     id: pg.uuid('id').primaryKey().defaultRandom(),
-    order_id: pg.uuid('order_id').references(() => orders.id),
+    order_id: pg.uuid('order_id').references(() => orders.id, { onDelete: 'restrict' }),
     product_variant_id: pg
       .uuid('product_variant_id')
-      .references(() => product_variants.id),
-    company_id: pg.uuid('company_id').references(() => company.id),
+      .references(() => product_variants.id, { onDelete: 'restrict' }),
+    company_id: pg.uuid('company_id').references(() => company.id, { onDelete: 'restrict' }),
     quantity: pg.integer('quantity').notNull(),
     price: pg.decimal('price', { precision: 10, scale: 2 }).notNull(),
     order_status: order_status_enum('order_status').notNull(),
@@ -273,8 +279,11 @@ export const product_variants = pg.pgTable(
     deleted_at: pg.timestamp('deleted_at'),
     product_id: pg
       .uuid('product_id')
-      .references(() => products.id, { onDelete: 'cascade' }),
-    weight_kg: pg.decimal('weight_kg', { precision: 5, scale: 2 }).default('0.50').notNull(),
+      .references(() => products.id, { onDelete: 'restrict' }),
+    weight_kg: pg
+      .decimal('weight_kg', { precision: 5, scale: 2 })
+      .default('0.50')
+      .notNull(),
     length_cm: pg.integer('length_cm'),
     width_cm: pg.integer('width_cm'),
     height_cm: pg.integer('height_cm'),
@@ -304,7 +313,7 @@ export const product_images = pg.pgTable('product_images', {
     .$onUpdate(() => new Date()),
   product_id: pg
     .uuid('product_id')
-    .references(() => products.id, { onDelete: 'cascade' })
+    .references(() => products.id, { onDelete: 'restrict' })
     .notNull(),
   variant_id: pg
     .uuid('variant_id')
@@ -344,7 +353,7 @@ export const product_reviews = pg.pgTable('product_reviews', {
     .$onUpdate(() => new Date()),
   product_variant_id: pg
     .uuid('product_variant_id')
-    .references(() => product_variants.id, { onDelete: 'cascade' }),
+    .references(() => product_variants.id, { onDelete: 'restrict' }),
   user_id: pg
     .uuid('user_id')
     .references(() => user.id, { onDelete: 'cascade' }),
@@ -399,8 +408,8 @@ export const payments = pg.pgTable(
       EntityStatus.ACTIVE,
     ),
     deleted_at: pg.timestamp('deleted_at'),
-    order_id: pg.uuid('order_id').references(() => orders.id),
-    company_id: pg.uuid('company_id').references(() => company.id),
+    order_id: pg.uuid('order_id').references(() => orders.id, { onDelete: 'restrict' }),
+    company_id: pg.uuid('company_id').references(() => company.id, { onDelete: 'restrict' }),
   },
   (table) => [
     pg.index('idx_payments_order_id').on(table.order_id),
@@ -425,22 +434,33 @@ export const shipping_details = pg.pgTable('shipping_details', {
     .$onUpdate(() => new Date()),
   order_id: pg
     .uuid('order_id')
-    .references(() => orders.id, { onDelete: 'cascade' }),
-  company_id: pg.uuid('company_id').references(() => company.id),
-  logistics_provider: pg.varchar('logistics_provider', { length: 50 }).default('SHIPROCKET').notNull(),
+    .references(() => orders.id, { onDelete: 'restrict' }),
+  company_id: pg.uuid('company_id').references(() => company.id, { onDelete: 'restrict' }),
+  logistics_provider: pg
+    .varchar('logistics_provider', { length: 50 })
+    .default('SHIPROCKET')
+    .notNull(),
   billing_account_used: BillingAccountUsedEnum('billing_account_used'), // 'VENDOR_OWN' | 'PLATFORM_MASTER'
   logistics_order_id: pg.varchar('logistics_order_id', { length: 100 }),
   awb_number: pg.varchar('awb_number', { length: 100 }),
   courier_name: pg.varchar('courier_name', { length: 100 }),
-  shipping_status: pg.varchar('shipping_status', { length: 50 }).default('PENDING').notNull(),
-  actual_shipping_cost: pg.decimal('actual_shipping_cost', { precision: 10, scale: 2 }),
-  weight_discrepancy_charge: pg.decimal('weight_discrepancy_charge', { precision: 10, scale: 2 }).default('0.00').notNull(),
+  shipping_status: pg
+    .varchar('shipping_status', { length: 50 })
+    .default('PENDING')
+    .notNull(),
+  actual_shipping_cost: pg.decimal('actual_shipping_cost', {
+    precision: 10,
+    scale: 2,
+  }),
+  weight_discrepancy_charge: pg
+    .decimal('weight_discrepancy_charge', { precision: 10, scale: 2 })
+    .default('0.00')
+    .notNull(),
+  record_status: EntityStatusEnum('record_status').default(EntityStatus.ACTIVE),
+  deleted_at: pg.timestamp('deleted_at'),
 });
 
-export const refund_status_enum = pg.pgEnum(
-  'refund_status_enum',
-  RefundStatus,
-);
+export const refund_status_enum = pg.pgEnum('refund_status_enum', RefundStatus);
 export const refunds = pg.pgTable(
   'refunds',
   {
@@ -458,12 +478,12 @@ export const refunds = pg.pgTable(
       EntityStatus.ACTIVE,
     ),
     deleted_at: pg.timestamp('deleted_at'),
-    order_id: pg.uuid('order_id').references(() => orders.id),
-    order_items_id: pg.uuid('order_items_id').references(() => order_items.id),
-    payment_id: pg.uuid('payment_id').references(() => payments.id),
+    order_id: pg.uuid('order_id').references(() => orders.id, { onDelete: 'restrict' }),
+    order_items_id: pg.uuid('order_items_id').references(() => order_items.id, { onDelete: 'restrict' }),
+    payment_id: pg.uuid('payment_id').references(() => payments.id, { onDelete: 'restrict' }),
     company_id: pg
       .uuid('company_id')
-      .references(() => company.id, { onDelete: 'cascade' }),
+      .references(() => company.id, { onDelete: 'restrict' }),
   },
   (table) => [
     pg.index('idx_refunds_order_id').on(table.order_id),
@@ -484,16 +504,16 @@ export const return_requests = pg.pgTable(
     id: pg.uuid('id').primaryKey().defaultRandom(),
     order_item_id: pg
       .uuid('order_item_id')
-      .references(() => order_items.id, { onDelete: 'cascade' })
+      .references(() => order_items.id, { onDelete: 'restrict' })
       .notNull()
       .unique(),
     user_id: pg
       .uuid('user_id')
-      .references(() => user.id, { onDelete: 'cascade' })
+      .references(() => user.id, { onDelete: 'restrict' })
       .notNull(),
     company_id: pg
       .uuid('company_id')
-      .references(() => company.id, { onDelete: 'cascade' })
+      .references(() => company.id, { onDelete: 'restrict' })
       .notNull(),
     type: returnTypeEnum('type').notNull(),
     status: returnStatusEnum('status').default(ReturnStatus.PENDING).notNull(),
@@ -511,6 +531,8 @@ export const return_requests = pg.pgTable(
       .notNull()
       .defaultNow()
       .$onUpdate(() => new Date()),
+    record_status: EntityStatusEnum('record_status').default(EntityStatus.ACTIVE),
+    deleted_at: pg.timestamp('deleted_at'),
   },
   (table) => [
     pg.index('idx_return_requests_company_id').on(table.company_id),
@@ -527,15 +549,15 @@ export const invoices = pg.pgTable('invoices', {
   invoice_url: pg.text('invoice_url').notNull(),
   order_id: pg
     .uuid('order_id')
-    .references(() => orders.id)
+    .references(() => orders.id, { onDelete: 'restrict' })
     .notNull(),
   order_item_id: pg
     .uuid('order_item_id')
-    .references(() => order_items.id)
+    .references(() => order_items.id, { onDelete: 'restrict' })
     .notNull(),
   company_id: pg
     .uuid('company_id')
-    .references(() => company.id, { onDelete: 'cascade' })
+    .references(() => company.id, { onDelete: 'restrict' })
     .notNull(),
   created_at: pg.timestamp('created_at').notNull().defaultNow(),
   status: EntityStatusEnum('status').default(EntityStatus.ACTIVE),

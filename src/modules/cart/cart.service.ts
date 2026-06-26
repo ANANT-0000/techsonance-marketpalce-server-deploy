@@ -469,22 +469,33 @@ export class CartService {
       );
     }
   }
-  async deleteItemFromCart(cartItemId: string) {
+  async deleteItemFromCart(
+    cartItemId: string,
+    customerId: string,
+    domain: string,
+  ) {
     try {
-      await this.db.transaction(async (tx) => {
+      const companyId = await this.resolveCompanyId(domain);
+      return await this.db.transaction(async (tx) => {
         const [cartItem] = await tx
-          .select({ id: cart_items.id, quantity: cart_items.quantity })
+          .select({ id: cart_items.id })
           .from(cart_items)
-          .where(eq(cart_items.id, cartItemId));
+          .innerJoin(carts, eq(cart_items.cart_id, carts.id))
+          .where(
+            and(
+              eq(cart_items.id, cartItemId),
+              eq(carts.user_id, customerId),
+              eq(carts.company_id, companyId),
+            ),
+          );
+
         if (!cartItem) {
           throw new NotFoundException(
             CartErrorKeyEnum.FAILED_TO_FETCH_CART_ITEM,
           );
         }
-        const deleteResponse = await tx
-          .delete(cart_items)
-          .where(eq(cart_items.id, cartItemId));
-        return deleteResponse;
+
+        return await tx.delete(cart_items).where(eq(cart_items.id, cartItemId));
       });
     } catch (error) {
       if (error instanceof NotFoundException) {

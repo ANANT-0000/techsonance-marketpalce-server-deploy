@@ -4,6 +4,7 @@ import {
   Inject,
   Injectable,
   InternalServerErrorException,
+  UnauthorizedException,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { type Cache } from 'cache-manager';
@@ -12,10 +13,66 @@ import got from 'got';
 import { IShippingProvider } from '../shipping/interfaces/shipping-provider.interface';
 import { SHIPROCKET_URLS } from './constants/ship-rocket.constants';
 import {
+  ShiprocketAddPickupAddress,
+  ShiprocketAddPickupAddressResponse,
   ShiprocketCreateOrderPayload,
   ShiprocketCreateOrderResponse,
   ShiprocketGenerateAWBforShipmentResponse,
-} from 'src/common/Types/shiprocket';
+  ShiprocketReturnOrderPayload,
+  ShiprocketReturnOrderResponse,
+  ShipRocketRequestForShipmentPickup,
+  ShipRocketRequestForShipmentPickupResponse,
+  ShipRocketCancelShipmentRequest,
+  ShipRocketCancelShipmentResponse,
+} from '../../common/Types/shiprocket';
+
+/** Hard cap on all outbound Shiprocket requests — prevents connection-pool exhaustion */
+
+/**
+ * Safely converts a `got` HTTP error response body into a short, log-safe string.
+ *
+ * Rationale: When Shiprocket's API gateway goes down (502/503), the response
+ * body is raw HTML from Cloudflare or AWS.  Blindly calling
+ * JSON.stringify(error.response.body) on that HTML:
+ *   1. Produces multi-kilobyte, unreadable stack traces in logs.
+ *   2. Can throw a secondary error if the body is an unexpected type.
+ *
+ * This helper checks the Content-Type header first:
+ *  - JSON responses  → JSON.stringify then slice to 500 chars
+ *  - Everything else → coerce to string and slice to 300 chars
+ */
+function safeErrorBody(error: any): string {
+  const body = error?.response?.body;
+  if (!body) return error?.message ?? 'Unknown error';
+
+  const contentType: string = error?.response?.headers?.['content-type'] ?? '';
+
+  if (contentType.includes('application/json')) {
+    try {
+      return JSON.stringify(body).slice(0, 500);
+    } catch {
+      // body might already be a string in some got versions
+    }
+  }
+
+  // Non-JSON body (HTML 502, plain text, etc.) — slice hard to keep logs clean
+  return String(body).slice(0, 300);
+}
+const SHIPROCKET_REQUEST_TIMEOUT_MS = 10_000;
+
+/**
+ * In-process promise cache to prevent cache stampede (thundering herd) on
+ * cold boot or after a 7-day token expiry.  Without this, 50 concurrent
+ * requests hitting an empty Redis cache would all fire parallel /auth/login
+ * calls and likely trigger Shiprocket's rate limiter.
+ *
+ * Key: the Redis cache key for that credential context.
+ * Value: the in-flight fetchToken() promise.
+ */
+const tokenFetchInFlight = new Map<
+  string,
+  Promise<{ token: string; [k: string]: any }>
+>();
 
 @Injectable()
 export class ShipRocketService implements IShippingProvider {
@@ -56,6 +113,7 @@ export class ShipRocketService implements IShippingProvider {
           cod: data.cod,
         },
         headers: { Authorization: `Bearer ${token}` },
+        timeout: { request: SHIPROCKET_REQUEST_TIMEOUT_MS },
       })
       .json();
     return res;
@@ -66,6 +124,7 @@ export class ShipRocketService implements IShippingProvider {
     credentials?: { email?: string; password?: string },
     companyId?: string,
   ): Promise<ShiprocketCreateOrderResponse> {
+    const cacheKey = this._buildCacheKey(credentials, companyId);
     const token = await this.getToken(credentials, companyId);
     const url = SHIPROCKET_URLS.CREATE_ORDER;
     try {
@@ -77,18 +136,37 @@ export class ShipRocketService implements IShippingProvider {
             Accept: 'application/json',
             Authorization: `Bearer ${token}`,
           },
+          timeout: { request: SHIPROCKET_REQUEST_TIMEOUT_MS },
         })
         .json();
       return res;
     } catch (error: any) {
-      const errorMsg = error?.response?.body
-        ? JSON.stringify(error.response.body)
-        : error.message;
+      // 401 recovery: bust the cached token and retry exactly once
+      if (error?.response?.statusCode === 401) {
+        await this.cacheManager.del(cacheKey);
+        const freshToken = await this.getToken(credentials, companyId);
+        try {
+          return await got
+            .post(url, {
+              json: payload,
+              headers: {
+                'content-type': 'application/json',
+                Accept: 'application/json',
+                Authorization: `Bearer ${freshToken}`,
+              },
+              timeout: { request: SHIPROCKET_REQUEST_TIMEOUT_MS },
+            })
+            .json<ShiprocketCreateOrderResponse>();
+        } catch (retryError: any) {
+          throw new UnauthorizedException(
+            'Shiprocket authentication failed after token refresh. Check your credentials.',
+          );
+        }
+      }
+      const errorMsg = safeErrorBody(error);
       throw new InternalServerErrorException(
         `Shiprocket draft order creation failed: ${errorMsg}`,
-        {
-          cause: error,
-        },
+        { cause: error },
       );
     }
   }
@@ -99,6 +177,7 @@ export class ShipRocketService implements IShippingProvider {
     credentials?: { email?: string; password?: string },
     companyId?: string,
   ): Promise<ShiprocketGenerateAWBforShipmentResponse> {
+    const cacheKey = this._buildCacheKey(credentials, companyId);
     const token = await this.getToken(credentials, companyId);
     const url = SHIPROCKET_URLS.ASSIGN_AWB;
     try {
@@ -113,18 +192,40 @@ export class ShipRocketService implements IShippingProvider {
             Accept: 'application/json',
             Authorization: `Bearer ${token}`,
           },
+          timeout: { request: SHIPROCKET_REQUEST_TIMEOUT_MS },
         })
         .json();
       return res;
     } catch (error: any) {
-      const errorMsg = error?.response?.body
-        ? JSON.stringify(error.response.body)
-        : error.message;
+      // 401 recovery: bust the cached token and retry exactly once
+      if (error?.response?.statusCode === 401) {
+        await this.cacheManager.del(cacheKey);
+        const freshToken = await this.getToken(credentials, companyId);
+        try {
+          return await got
+            .post(url, {
+              json: {
+                shipment_id: shipmentId,
+                ...(courierId && { courier_id: courierId }),
+              },
+              headers: {
+                'content-type': 'application/json',
+                Accept: 'application/json',
+                Authorization: `Bearer ${freshToken}`,
+              },
+              timeout: { request: SHIPROCKET_REQUEST_TIMEOUT_MS },
+            })
+            .json<ShiprocketGenerateAWBforShipmentResponse>();
+        } catch (retryError: any) {
+          throw new UnauthorizedException(
+            'Shiprocket authentication failed after token refresh. Check your credentials.',
+          );
+        }
+      }
+      const errorMsg = safeErrorBody(error);
       throw new InternalServerErrorException(
         `Shiprocket AWB generation failed: ${errorMsg}`,
-        {
-          cause: error,
-        },
+        { cause: error },
       );
     }
   }
@@ -142,18 +243,36 @@ export class ShipRocketService implements IShippingProvider {
       ? `${this.SHIPROCKET_AUTH_CACHE_KEY}:${companyId}`
       : this.SHIPROCKET_AUTH_CACHE_KEY;
 
-    let cachedToken: any = await this.cacheManager.get(cacheKey);
+    // 1. Fast path: token already in Redis cache
+    const cachedToken: any = await this.cacheManager.get(cacheKey);
     if (cachedToken) {
       return typeof cachedToken === 'string' ? cachedToken : cachedToken.token;
     }
 
-    const tokenResponse = await this.fetchToken(
+    // 2. Stampede guard: if another request is already fetching this token,
+    //    share its promise instead of firing a second /auth/login call.
+    const existing = tokenFetchInFlight.get(cacheKey);
+    if (existing) {
+      const tokenResponse = await existing;
+      return tokenResponse.token;
+    }
+
+    // 3. This request wins the race — fetch the token and share the promise.
+    const fetchPromise = this.fetchToken(
       credentials?.email,
       credentials?.password,
     );
-    const sevenDaysInMs = 7 * 24 * 60 * 60 * 1000;
-    await this.cacheManager.set(cacheKey, tokenResponse, sevenDaysInMs);
-    return tokenResponse.token;
+    tokenFetchInFlight.set(cacheKey, fetchPromise);
+
+    try {
+      const tokenResponse = await fetchPromise;
+      const sevenDaysInMs = 7 * 24 * 60 * 60 * 1000;
+      await this.cacheManager.set(cacheKey, tokenResponse, sevenDaysInMs);
+      return tokenResponse.token;
+    } finally {
+      // Always clean up the in-flight map so future requests use the cache
+      tokenFetchInFlight.delete(cacheKey);
+    }
   }
 
   async fetchToken(
@@ -196,49 +315,36 @@ export class ShipRocketService implements IShippingProvider {
             'content-type': 'application/json',
             Accept: 'application/json',
           },
+          timeout: { request: SHIPROCKET_REQUEST_TIMEOUT_MS },
         })
         .json();
 
       return res;
     } catch (error: any) {
-      const errorBody = error?.response?.body
-        ? JSON.stringify(error.response.body)
-        : error.message;
+      const errorBody = safeErrorBody(error);
       throw new InternalServerErrorException(
         `Shiprocket authentication failed: ${errorBody}`,
-        {
-          cause: error,
-        },
+        { cause: error },
       );
     }
   }
 
   async addPickupLocation(
-    data: {
-      pickup_location: string;
-      name: string;
-      email: string;
-      phone: string;
-      address: string;
-      address_2?: string;
-      city: string;
-      state: string;
-      country: string;
-      pin_code: string;
-    },
+    data: ShiprocketAddPickupAddress,
     credentials?: { email?: string; password?: string },
     companyId?: string,
-  ) {
+  ): Promise<ShiprocketAddPickupAddressResponse> {
     const token = await this.getToken(credentials, companyId);
-    const url = SHIPROCKET_URLS.ADD_PICKUP;
+    const url = SHIPROCKET_URLS.SHIP_ROCKET_ADD_PICKUP;
     try {
-      const res = await got
+      const res: ShiprocketAddPickupAddressResponse = await got
         .post(url, {
           json: {
             pickup_location: data.pickup_location,
             name: data.name,
             email: data.email,
-            phone: Number(data.phone.replace(/\D/g, '')),
+            // Keep as string — Number() strips leading zeros (09876543210 → 9876543210)
+            phone: data.phone.toString().replace(/\D/g, ''),
             address: data.address,
             address_2: data.address_2 || '',
             city: data.city,
@@ -251,17 +357,197 @@ export class ShipRocketService implements IShippingProvider {
             Accept: 'application/json',
             Authorization: `Bearer ${token}`,
           },
+          timeout: { request: SHIPROCKET_REQUEST_TIMEOUT_MS },
         })
         .json();
       return res;
     } catch (error: any) {
-      const errorMsg = error?.response?.body
-        ? JSON.stringify(error.response.body)
-        : error.message;
+      const errorMsg = safeErrorBody(error);
       throw new InternalServerErrorException(
         `Shiprocket pickup location addition failed: ${errorMsg}`,
         { cause: error },
       );
     }
+  }
+
+
+  /**
+   * Creates a reverse/return shipment in Shiprocket for an RTO scenario.
+   * Uses the official ShiprocketReturnOrderPayload type — no fields hallucinated.
+   */
+  async createReturnOrder(
+    payload: ShiprocketReturnOrderPayload,
+    credentials?: { email?: string; password?: string },
+    companyId?: string,
+  ): Promise<ShiprocketReturnOrderResponse> {
+    const cacheKey = this._buildCacheKey(credentials, companyId);
+    const token = await this.getToken(credentials, companyId);
+    const url = SHIPROCKET_URLS.CREATE_RETURN_ORDER;
+    try {
+      const res: ShiprocketReturnOrderResponse = await got
+        .post(url, {
+          json: payload,
+          headers: {
+            'content-type': 'application/json',
+            Accept: 'application/json',
+            Authorization: `Bearer ${token}`,
+          },
+          timeout: { request: SHIPROCKET_REQUEST_TIMEOUT_MS },
+        })
+        .json();
+      return res;
+    } catch (error: any) {
+      if (error?.response?.statusCode === 401) {
+        await this.cacheManager.del(cacheKey);
+        const freshToken = await this.getToken(credentials, companyId);
+        try {
+          return await got
+            .post(url, {
+              json: payload,
+              headers: {
+                'content-type': 'application/json',
+                Accept: 'application/json',
+                Authorization: `Bearer ${freshToken}`,
+              },
+              timeout: { request: SHIPROCKET_REQUEST_TIMEOUT_MS },
+            })
+            .json<ShiprocketReturnOrderResponse>();
+        } catch {
+          throw new UnauthorizedException(
+            'Shiprocket authentication failed after token refresh. Check your credentials.',
+          );
+        }
+      }
+      const errorMsg = safeErrorBody(error);
+      throw new InternalServerErrorException(
+        `Shiprocket return order creation failed: ${errorMsg}`,
+        { cause: error },
+      );
+    }
+  }
+
+  /**
+   * Schedules a pickup request for one or more shipment IDs.
+   * Should be called after AWB has been successfully assigned.
+   */
+  async requestPickup(
+    payload: ShipRocketRequestForShipmentPickup,
+    credentials?: { email?: string; password?: string },
+    companyId?: string,
+  ): Promise<ShipRocketRequestForShipmentPickupResponse> {
+    const cacheKey = this._buildCacheKey(credentials, companyId);
+    const token = await this.getToken(credentials, companyId);
+    const url = SHIPROCKET_URLS.SHIP_ROCKET_REQUEST_FOR_SHIPMENT_PICKUP;
+    try {
+      const res: ShipRocketRequestForShipmentPickupResponse = await got
+        .post(url, {
+          json: payload,
+          headers: {
+            'content-type': 'application/json',
+            Accept: 'application/json',
+            Authorization: `Bearer ${token}`,
+          },
+          timeout: { request: SHIPROCKET_REQUEST_TIMEOUT_MS },
+        })
+        .json();
+      return res;
+    } catch (error: any) {
+      if (error?.response?.statusCode === 401) {
+        await this.cacheManager.del(cacheKey);
+        const freshToken = await this.getToken(credentials, companyId);
+        try {
+          return await got
+            .post(url, {
+              json: payload,
+              headers: {
+                'content-type': 'application/json',
+                Accept: 'application/json',
+                Authorization: `Bearer ${freshToken}`,
+              },
+              timeout: { request: SHIPROCKET_REQUEST_TIMEOUT_MS },
+            })
+            .json<ShipRocketRequestForShipmentPickupResponse>();
+        } catch {
+          throw new UnauthorizedException(
+            'Shiprocket authentication failed after token refresh. Check your credentials.',
+          );
+        }
+      }
+      const errorMsg = safeErrorBody(error);
+      throw new InternalServerErrorException(
+        `Shiprocket pickup scheduling failed: ${errorMsg}`,
+        { cause: error },
+      );
+    }
+  }
+
+  /**
+   * Cancels one or more Shiprocket shipments by their Shiprocket order IDs.
+   * Note: Shiprocket's cancel endpoint takes order IDs (not shipment IDs) in the `ids` array.
+   */
+  async cancelShipment(
+    payload: ShipRocketCancelShipmentRequest,
+    credentials?: { email?: string; password?: string },
+    companyId?: string,
+  ): Promise<ShipRocketCancelShipmentResponse> {
+    const cacheKey = this._buildCacheKey(credentials, companyId);
+    const token = await this.getToken(credentials, companyId);
+    const url = SHIPROCKET_URLS.SHIP_ROCKET_CANCEL_A_SHIPMENT_API;
+    try {
+      const res: ShipRocketCancelShipmentResponse = await got
+        .post(url, {
+          json: payload,
+          headers: {
+            'content-type': 'application/json',
+            Accept: 'application/json',
+            Authorization: `Bearer ${token}`,
+          },
+          timeout: { request: SHIPROCKET_REQUEST_TIMEOUT_MS },
+        })
+        .json();
+      return res;
+    } catch (error: any) {
+      if (error?.response?.statusCode === 401) {
+        await this.cacheManager.del(cacheKey);
+        const freshToken = await this.getToken(credentials, companyId);
+        try {
+          return await got
+            .post(url, {
+              json: payload,
+              headers: {
+                'content-type': 'application/json',
+                Accept: 'application/json',
+                Authorization: `Bearer ${freshToken}`,
+              },
+              timeout: { request: SHIPROCKET_REQUEST_TIMEOUT_MS },
+            })
+            .json<ShipRocketCancelShipmentResponse>();
+        } catch {
+          throw new UnauthorizedException(
+            'Shiprocket authentication failed after token refresh. Check your credentials.',
+          );
+        }
+      }
+      const errorMsg = safeErrorBody(error);
+      throw new InternalServerErrorException(
+        `Shiprocket shipment cancellation failed: ${errorMsg}`,
+        { cause: error },
+      );
+    }
+  }
+
+  /** Derives the Redis cache key for a given credential context */
+  private _buildCacheKey(
+    credentials?: { email?: string; password?: string },
+    companyId?: string,
+  ): string {
+    const isStandalone = !!(
+      credentials?.email &&
+      credentials?.password &&
+      companyId
+    );
+    return isStandalone
+      ? `${this.SHIPROCKET_AUTH_CACHE_KEY}:${companyId}`
+      : this.SHIPROCKET_AUTH_CACHE_KEY;
   }
 }

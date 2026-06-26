@@ -5,6 +5,10 @@ export enum NavLayoutType {
   DIRECTORY = 'directory',
   GRID = 'grid',
 }
+export enum PaymentMethod {
+  COD = 'COD',
+  PREPAID = 'Prepaid',
+}
 export enum UserRole {
   ADMIN = 'admin',
   VENDOR = 'vendor',
@@ -82,6 +86,8 @@ export enum ShippingStatus {
   RETURNED = 'RETURNED',
   RTO = 'RTO',
   CANCELLED = 'CANCELLED',
+  DRAFTING = 'DRAFTING',
+  FAILED = 'FAILED',
 }
 export enum ReturnType {
   RETURN = 'return',

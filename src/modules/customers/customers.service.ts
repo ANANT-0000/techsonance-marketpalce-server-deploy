@@ -14,10 +14,8 @@ import {
   wishlist,
   wishlist_items,
   product_reviews,
-  company as companyTable,
 } from '../../drizzle/schema';
 import { eq, and, count } from 'drizzle-orm';
-import { formatCompanyDomain } from '../../common/filters/formatDomain.filter';
 import { UserStatus } from '../../drizzle/types/types';
 
 import { domainExtractor } from '../../common/filters/domainExtractor.filter';

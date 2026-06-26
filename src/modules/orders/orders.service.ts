@@ -1,10 +1,10 @@
-import { InvoiceTotals } from './../invoice/interfaces/invoice.interface';
 import {
   HttpException,
   HttpStatus,
   Inject,
   Injectable,
   InternalServerErrorException,
+  Logger,
 } from '@nestjs/common';
 import {
   and,
@@ -25,6 +25,7 @@ import {
   order_item_policy,
   order_items,
   orders,
+  outbox_jobs,
   payments,
   product_images,
   product_policy_override,
@@ -55,9 +56,9 @@ import { MailService } from '../../common/services/mail/mail.service';
 import { domainExtractor } from '../../common/filters/domainExtractor.filter';
 import { InvoiceService } from '../invoice/invoice.service';
 import { FinancesService } from '../finances/finances.service';
-import { PolicyDocumentService } from '../product-policies/policy-document.service';
+
 import { ProductPoliciesService } from '../product-policies/product-policies.service';
-import { PolicyResolutionService } from '../product-policies/policy-resolution.service'; // ← NEW
+import { PolicyResolutionService } from '../product-policies/policy-resolution.service';
 import { PolicySnapshot } from '../product-policies/interfaces/policy-document.interface';
 import {
   calculatePromotionDiscount,
@@ -68,6 +69,11 @@ import { CouponService } from '../coupon/coupon.service';
 import { PromotionsService } from '../promotions/promotions.service';
 import { OrdersErrorKeyEnum } from './constants/orders.enums';
 import { ShippingManagerService } from '../shipping/shipping-manager.service';
+import { OutboxService } from '../outbox/outbox.service';
+import {
+  OutboxJobType,
+  OutboxJobStatus,
+} from '../outbox/constants/outbox.constants';
 
 @Injectable()
 export class OrdersService {
@@ -76,15 +82,14 @@ export class OrdersService {
     private readonly companyService: CompanyService,
     private readonly inventoryService: InventoryService,
     private readonly mailService: MailService,
-    private readonly invoiceService: InvoiceService,
+
     private readonly financesService: FinancesService,
-    private readonly policyDocumentService: PolicyDocumentService,
+
     private readonly productPoliciesService: ProductPoliciesService,
     private readonly policyResolutionService: PolicyResolutionService,
-    private readonly promotionService: PromotionsService,
-    private readonly couponService: CouponService,
-    private readonly shippingManagerService: ShippingManagerService,
+    private readonly outboxService: OutboxService,
   ) {}
+  private readonly logger = new Logger(OrdersService.name);
   private async resolveCompanyId(domain: string): Promise<string> {
     const filteredDomain = domainExtractor(domain);
     const companyId = await this.companyService.find(filteredDomain);
@@ -520,8 +525,9 @@ export class OrdersService {
     orderId: string,
     isSuccess: boolean,
     companyId?: string,
+    cartId?: string,
+    productVariantId?: string,
   ): Promise<{
-    tx: DrizzleService;
     success: boolean;
     orderId: string;
     message: string;
@@ -573,7 +579,6 @@ export class OrdersService {
 
         if (orderRecord.order_status !== OrderStatus.PENDING) {
           return {
-            tx: tx as DrizzleService,
             success: orderRecord.order_status !== OrderStatus.CANCELLED,
             orderId,
             message: `Order verification already completed with status: ${orderRecord.order_status}`,
@@ -667,10 +672,55 @@ export class OrdersService {
               // }
             }
           }
+          // Cart cleanup happens inside the transaction so the connection
+          // is never used after commit (prevents Drizzle pool exhaustion).
+          if (productVariantId) {
+            await tx
+              .delete(cart_items)
+              .where(eq(cart_items.product_variant_id, productVariantId))
+              .catch((error) => {
+                throw new InternalServerErrorException(
+                  OrdersErrorKeyEnum.FAILED_TO_CLEAR_SINGLE_PRODUCT_VARIANT_CART,
+                  { cause: error },
+                );
+              });
+          }
+          if (cartId) {
+            await tx
+              .delete(cart_items)
+              .where(eq(cart_items.cart_id, cartId))
+              .catch((error) => {
+                throw new InternalServerErrorException(
+                  OrdersErrorKeyEnum.FAILED_TO_CLEAR_CART,
+                  { cause: error },
+                );
+              });
+          }
+          // ── Outbox write (atomic with order commit) ────────────────────────
+          // Writing the job record here guarantees it is never lost even if
+          // the process crashes before the Redis push below.
+          const [jobRecord] = await tx
+            .insert(outbox_jobs)
+            .values({
+              job_type: OutboxJobType.CREATE_SHIPROCKET_DRAFT_ORDER,
+              payload: { orderId, companyId },
+              status: OutboxJobStatus.PENDING,
+              company_id: companyId,
+            })
+            .returning({ id: outbox_jobs.id })
+            .catch((err) => {
+              // Non-fatal: log and continue — sweeper will catch PENDING rows
+              this.logger.warn(
+                `Failed to write outbox_jobs row for order ${orderId}`,
+                err,
+              );
+              return [];
+            });
+
           return {
-            tx: tx as DrizzleService,
             success: true,
             orderId,
+            jobId: jobRecord?.id,
             message: 'Order placed successfully',
           };
         } else {
@@ -713,7 +763,6 @@ export class OrdersService {
               );
             });
           return {
-            tx: tx as DrizzleService,
             success: false,
             orderId: existingOrder.id,
             message: 'Payment failed. Order has been cancelled.',
@@ -721,14 +770,24 @@ export class OrdersService {
         }
       });
 
+      // ── Fire-and-forget QStash push (Listen-to-Yourself pattern) ─────────
+      // The outbox row was already written inside the transaction above.
+      // This push is best-effort: if QStash is down the Sweeper Cron will
+      // re-enqueue on next sweep.
       if (
         verificationResult.success &&
         !verificationResult.wasAlreadyVerified &&
-        isSuccess
+        isSuccess &&
+        verificationResult.jobId
       ) {
-        this.shippingManagerService
-          .createDraftOrderForOrder(orderId, companyId)
-          .catch((err) => {});
+        this.outboxService
+          .publishShiprocketJob(verificationResult.jobId)
+          .catch((err) => {
+            this.logger.warn(
+              `Failed to push outbox job ${verificationResult.jobId} to QStash. Sweeper will process it.`,
+              err,
+            );
+          });
       }
 
       return verificationResult;
@@ -884,7 +943,10 @@ export class OrdersService {
     try {
       const companyId = await this.resolveCompanyId(domain);
       const joinConditions = [eq(order_items.order_id, orders.id)];
-      if (status && Object.values(OrderStatus).includes(status as OrderStatus)) {
+      if (
+        status &&
+        Object.values(OrderStatus).includes(status as OrderStatus)
+      ) {
         joinConditions.push(eq(order_items.order_status, status));
         joinConditions.push(gt(order_items.quantity, 0));
       }
@@ -892,29 +954,27 @@ export class OrdersService {
       const totalOrders = await this.db
         .selectDistinct({ id: orders.id })
         .from(orders)
-        .innerJoin(
-          order_items,
-          and(...joinConditions),
-        )
+        .innerJoin(order_items, and(...joinConditions))
         .where(eq(orders.company_id, companyId));
       const validOrderIds = (
         await this.db
           .selectDistinct({ id: orders.id, created_at: orders.created_at })
           .from(orders)
-          .innerJoin(
-            order_items,
-            and(...joinConditions),
-          )
+          .innerJoin(order_items, and(...joinConditions))
           .where(eq(orders.company_id, companyId))
           .orderBy(desc(orders.created_at))
           .limit(limit)
           .offset(offset)
       ).map((o) => o.id);
       if (validOrderIds.length === 0) return { orders: [], totalCount: 0 };
-      
-      const itemsWhere = (status && Object.values(OrderStatus).includes(status as OrderStatus))
-        ? and(eq(order_items.order_status, status), gt(order_items.quantity, 0))
-        : undefined;
+
+      const itemsWhere =
+        status && Object.values(OrderStatus).includes(status as OrderStatus)
+          ? and(
+              eq(order_items.order_status, status),
+              gt(order_items.quantity, 0),
+            )
+          : undefined;
 
       const ordersList = await this.db.query.orders.findMany({
         where: and(

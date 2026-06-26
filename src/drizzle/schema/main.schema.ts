@@ -83,7 +83,7 @@ export const user_and_company = pg.pgTable(
     role_id: pg
       .uuid('role_id')
       .notNull()
-      .references(() => user_roles.id),
+      .references(() => user_roles.id, { onDelete: 'restrict' }),
     access_status: AccessStatusEnum('access_status')
       .notNull()
       .default(AccessStatus.ACTIVE),
@@ -114,8 +114,8 @@ export const permissions = pg.pgTable('user_permissions', {
 });
 export const role_permissions = pg.pgTable('role_permissions', {
   id: pg.uuid('id').primaryKey().defaultRandom(),
-  role_id: pg.uuid('role_id').references(() => user_roles.id),
-  permission_id: pg.uuid('permission_id').references(() => permissions.id),
+  role_id: pg.uuid('role_id').references(() => user_roles.id, { onDelete: 'cascade' }),
+  permission_id: pg.uuid('permission_id').references(() => permissions.id, { onDelete: 'cascade' }),
   created_at: pg.timestamp('created_at').notNull().defaultNow(),
   updated_at: pg
     .timestamp('updated_at')
@@ -136,7 +136,9 @@ export const cms_pages = pg.pgTable('cms_pages', {
     .notNull()
     .defaultNow()
     .$onUpdate(() => new Date()),
-  company_id: pg.uuid('company_id').references(() => company.id),
+  company_id: pg.uuid('company_id').references(() => company.id, { onDelete: 'restrict' }),
+  record_status: EntityStatusEnum('record_status').default(EntityStatus.ACTIVE),
+  deleted_at: pg.timestamp('deleted_at'),
 });
 
 export const refresh_tokens = pg.pgTable('refresh_tokens', {
@@ -188,6 +190,8 @@ export const site_maps = pg.pgTable(
       .notNull()
       .defaultNow()
       .$onUpdate(() => new Date()),
+    record_status: EntityStatusEnum('record_status').default(EntityStatus.ACTIVE),
+    deleted_at: pg.timestamp('deleted_at'),
   },
   (t) => [pg.uniqueIndex('uq_site_maps_company_key').on(t.company_id, t.key)],
 );

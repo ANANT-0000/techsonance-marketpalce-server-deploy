@@ -5,6 +5,7 @@ import {
   Injectable,
   InternalServerErrorException,
 } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { InitiateCheckoutDto, VerifyCheckoutDto } from './dto/checkout.dto';
 import { type DrizzleDB } from '../../drizzle/types/drizzle';
 import { DRIZZLE, DrizzleService } from '../../drizzle/drizzle.module';
@@ -18,11 +19,15 @@ import {
   orders,
   product_variants,
   user,
+  inventory,
+  warehouse,
 } from '../../drizzle/schema';
-import { and, eq, isNull, or, sql } from 'drizzle-orm';
+import { and, eq, isNull, or, sql, inArray } from 'drizzle-orm';
 import { OrdersService } from '../orders/orders.service';
 import { CompanyService } from '../company/company.service';
 import { MailService } from '../../common/services/mail/mail.service';
+import { ShipRocketService } from '../ship-rocket/ship-rocket.service';
+import { CryptoService } from '../shipping/crypto.service';
 import { domainExtractor } from '../../common/filters/domainExtractor.filter';
 import {
   promotion_analytics_events,
@@ -39,6 +44,9 @@ export class CheckoutService {
     private readonly ordersService: OrdersService,
     private readonly companyService: CompanyService,
     private readonly mailService: MailService,
+    private readonly shipRocketService: ShipRocketService,
+    private readonly configService: ConfigService,
+    private readonly cryptoService: CryptoService,
   ) {}
 
   private async resolveCompanyId(domain: string): Promise<string> {
@@ -69,7 +77,7 @@ export class CheckoutService {
     const addressRecord = await this.db
       .select()
       .from(address)
-      .where(eq(address.user_id, userId))
+      .where(eq(address.id, addressId))
       .limit(1)
       .catch((error) => {
         throw new HttpException(
@@ -78,9 +86,11 @@ export class CheckoutService {
           { cause: error },
         );
       });
-    if (!addressRecord) {
+    if (!addressRecord || addressRecord.length === 0) {
       throw new HttpException(CheckoutErrorKeyEnum.ADDRESS_NOT_FOUND, HttpStatus.NOT_FOUND);
     }
+    const [resolvedAddress] = addressRecord;
+
     const orderLines = await this._resolveOrderLines(
       userId,
       cartId,
@@ -92,6 +102,115 @@ export class CheckoutService {
         CheckoutErrorKeyEnum.NO_VALID_ORDER_LINES_FOUND_FOR_CHECKOUT,
         HttpStatus.BAD_REQUEST,
       );
+    }
+
+    // Resolve logistics credentials strategy for dynamic serviceability check
+    const [compRecord] = await this.db
+      .select({
+        logistics_mode: company.logistics_mode,
+        encrypted_logistics_api_key: company.encrypted_logistics_api_key,
+        encrypted_logistics_api_secret: company.encrypted_logistics_api_secret,
+      })
+      .from(company)
+      .where(eq(company.id, companyId))
+      .limit(1);
+
+    let credentials: { email?: string; password?: string } | undefined;
+    if (compRecord?.logistics_mode === 'STANDALONE') {
+      if (
+        compRecord.encrypted_logistics_api_key &&
+        compRecord.encrypted_logistics_api_secret
+      ) {
+        const email = this.cryptoService.decrypt(compRecord.encrypted_logistics_api_key);
+        const password = this.cryptoService.decrypt(compRecord.encrypted_logistics_api_secret);
+        credentials = { email, password };
+      }
+    }
+
+    // Resolve originating warehouse pincodes dynamically from variant stock levels
+    const originPincodes = new Set<string>();
+    const variantIds = orderLines.map((line) => line.variantId);
+
+    const warehouseAddresses = await this.db
+      .select({
+        variantId: inventory.product_variant_id,
+        postalCode: address.postal_code,
+        stockQuantity: inventory.stock_quantity,
+      })
+      .from(inventory)
+      .innerJoin(warehouse, eq(inventory.warehouse_id, warehouse.id))
+      .innerJoin(address, eq(warehouse.address_id, address.id))
+      .where(
+        and(
+          inArray(inventory.product_variant_id, variantIds),
+          eq(inventory.company_id, companyId),
+          sql`${inventory.stock_quantity} > 0`
+        )
+      );
+
+    for (const line of orderLines) {
+      const matches = warehouseAddresses.filter(
+        (w) => w.variantId === line.variantId,
+      );
+      if (matches.length > 0) {
+        // Pick the warehouse with the highest stock quantity for the variant
+        matches.sort((a, b) => b.stockQuantity - a.stockQuantity);
+        if (matches[0].postalCode) {
+          originPincodes.add(matches[0].postalCode);
+        }
+      }
+    }
+
+    // Fallback to platform-default pickup pincode if no warehouse addresses could be resolved from inventory
+    if (originPincodes.size === 0) {
+      const fallbackPincode = this.configService.get<string>(
+        'SHIPROCKET_PICKUP_PINCODE',
+      );
+      if (fallbackPincode) {
+        originPincodes.add(fallbackPincode);
+      }
+    }
+
+    // ── Pincode serviceability check ──────────────────────────────────────
+    // Validate that at least one Shiprocket courier serves the delivery address
+    // from each active origin warehouse pincode BEFORE finalizing order creation.
+    if (originPincodes.size > 0 && resolvedAddress?.postal_code) {
+      for (const originPincode of originPincodes) {
+        try {
+          const serviceabilityRes: any =
+            await this.shipRocketService.getServiceability(
+              {
+                pickup_pincode: originPincode,
+                delivery_pincode: resolvedAddress.postal_code,
+                weight: 1,
+                breadth: 10,
+                height: 10,
+                qc_check: 0,
+                is_return: 0,
+                mode: 'Surface',
+                cod: initiateCheckoutDto.paymentMethod === 'COD' ? 1 : 0,
+              },
+              credentials,
+              companyId,
+            );
+
+          const availableCouriers =
+            serviceabilityRes?.data?.available_courier_companies ?? [];
+          if (availableCouriers.length === 0) {
+            throw new HttpException(
+              `Delivery to pincode ${resolvedAddress.postal_code} is not currently serviceable from our warehouse location (${originPincode}). Please use a different delivery address.`,
+              HttpStatus.UNPROCESSABLE_ENTITY,
+            );
+          }
+        } catch (err: any) {
+          // Only rethrow serviceability errors — network/API failures should
+          // not block checkout (Shiprocket may be temporarily unavailable).
+          if (err instanceof HttpException) throw err;
+          console.warn(
+            `[Checkout] Serviceability check skipped (Shiprocket API error): ${err?.message}`,
+          );
+        }
+      }
     }
     return await this.ordersService.createOrder({
       userId,
@@ -156,24 +275,9 @@ export class CheckoutService {
           orderId,
           isSuccess,
           companyId,
+          cartId,
+          productVariantId,
         );
-      if (verificationResult.success && !verificationResult.wasAlreadyVerified) {
-        if (productVariantId) {
-          await verificationResult.tx
-            .delete(cart_items)
-            .where(eq(cart_items.product_variant_id, productVariantId))
-            .catch((error) => {
-              throw new HttpException(
-                CheckoutErrorKeyEnum.FAILED_TO_CLEAR_SINGLE_PRODUCT_VARIANT_CHECKOUT_RECORD_AFTER_SUCCESSFUL_CHECKOUT,
-                HttpStatus.INTERNAL_SERVER_ERROR,
-                { cause: error },
-              );
-            });
-        }
-        if (cartId) {
-          await this._clearCart(verificationResult.tx, cartId, orderId);
-        }
-      }
       return {
         success: verificationResult.success,
         message: verificationResult.message,

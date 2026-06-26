@@ -10,6 +10,7 @@ export * from './company_identity.schema';
 export * from './subscription.schema';
 export * from './vendor_storefront.schema';
 export * from './nav_storefront.schema';
+export * from './outbox.schema';
 import { address, user, vendor } from './users.schema';
 import { vendor_storefront_sections } from './vendor_storefront.schema';
 import { nav_menus, nav_items } from './nav_storefront.schema';
@@ -81,6 +82,7 @@ import {
   vendor_subscriptions,
 } from './subscription.schema';
 import { gst_invoices } from './finance.schema';
+import { outbox_jobs } from './outbox.schema';
 
 export const companyRelations = relations(company, ({ one, many }) => ({
   roles: many(user_roles),
@@ -135,6 +137,14 @@ export const companyRelations = relations(company, ({ one, many }) => ({
   }),
   subscriptionEvents: many(subscription_events),
   subscriptionPlans: many(subscription_plans),
+  outbox_jobs: many(outbox_jobs),
+}));
+
+export const outboxJobsRelations = relations(outbox_jobs, ({ one }) => ({
+  company: one(company, {
+    fields: [outbox_jobs.company_id],
+    references: [company.id],
+  }),
 }));
 
 // --- User Relations ---

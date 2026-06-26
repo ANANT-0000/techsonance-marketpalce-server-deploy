@@ -5,7 +5,7 @@ import {
   Logger,
 } from '@nestjs/common';
 import { InvoicePayloadBuilderService } from './invoice-payload-builder.service';
-import { InvoiceTemplateRegistry } from './template.registry';
+
 import { UploadToCloudService } from '../../utils/upload-to-cloud/upload-to-cloud.service';
 import { CompanyService } from '../company/company.service';
 import { domainExtractor } from '../../common/filters/domainExtractor.filter';
@@ -21,8 +21,6 @@ export class InvoiceService {
   constructor(
     @Inject(DRIZZLE) private readonly db: DrizzleService,
     private readonly payloadBuilder: InvoicePayloadBuilderService,
-    private readonly templateRegistry: InvoiceTemplateRegistry,
-    private readonly uploadToCloudService: UploadToCloudService,
     private readonly companyService: CompanyService,
   ) {}
   // ══════════════════════════════════════════════════════════════════
@@ -134,7 +132,9 @@ export class InvoiceService {
       orderData.items,
     );
     if (assigned.size === 0)
-      throw new InternalServerErrorException(InvoiceErrorKeyEnum.NO_WAREHOUSES_FOUND);
+      throw new InternalServerErrorException(
+        InvoiceErrorKeyEnum.NO_WAREHOUSES_FOUND,
+      );
     const orderInfo = this.payloadBuilder.mapOrderInfo(orderData);
     const vendorInfo = this.payloadBuilder.mapVendorInfo(assigned, gstData);
     const templateId =

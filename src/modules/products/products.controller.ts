@@ -48,8 +48,7 @@ export class ProductsController {
     @Headers('company-domain') domain: string,
     @UploadedFiles() files?: ProductFiles,
   ) {
-    const dto = plainToInstance(CreateProductDto, productDto);
-    const errors = await validate(dto);
+
     return await this.productsService.createProduct(
       productDto,
       vendorId,

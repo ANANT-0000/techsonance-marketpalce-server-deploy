@@ -28,6 +28,8 @@ export const user = pg.pgTable(
       .notNull()
       .defaultNow()
       .$onUpdate(() => new Date()),
+    record_status: EntityStatusEnum('record_status').default(EntityStatus.ACTIVE),
+    deleted_at: pg.timestamp('deleted_at'),
   },
   (table) => [
     pg.index('idx_user_email').on(table.email),
@@ -53,10 +55,10 @@ export const vendor = pg.pgTable('vendor', {
     .$onUpdate(() => new Date()),
   record_status: EntityStatusEnum('record_status').default(EntityStatus.ACTIVE),
   deleted_at: pg.timestamp('deleted_at'),
-  company_id: pg.uuid('company_id').references(() => company.id),
+  company_id: pg.uuid('company_id').references(() => company.id, { onDelete: 'restrict' }),
   user_id: pg
     .uuid('user_id')
-    .references(() => user.id, { onDelete: 'cascade' }),
+    .references(() => user.id, { onDelete: 'restrict' }),
 });
 export const address = pg.pgTable('address', {
   id: pg.uuid('id').primaryKey().defaultRandom(),
@@ -71,6 +73,7 @@ export const address = pg.pgTable('address', {
   postal_code: pg.text('postal_code').notNull(),
   country: pg.text('country').notNull(),
   landmark: pg.text('landmark').notNull(),
+  pickup_location: pg.text('pickup_location'),
   is_default: pg.boolean('is_default').notNull().default(false),
   created_at: pg.timestamp('created_at').notNull().defaultNow(),
   updated_at: pg
@@ -80,10 +83,10 @@ export const address = pg.pgTable('address', {
     .$onUpdate(() => new Date()),
   user_id: pg
     .uuid('user_id')
-    .references(() => user.id, { onDelete: 'cascade' }),
+    .references(() => user.id, { onDelete: 'restrict' }),
   status: EntityStatusEnum('status').default(EntityStatus.ACTIVE),
   deleted_at: pg.timestamp('deleted_at'),
-  company_id: pg.uuid('company_id').references(() => company.id),
+  company_id: pg.uuid('company_id').references(() => company.id, { onDelete: 'restrict' }),
 }, (table) => [
   pg.index('idx_address_user_id').on(table.user_id),
   pg.index('idx_address_company_id').on(table.company_id),

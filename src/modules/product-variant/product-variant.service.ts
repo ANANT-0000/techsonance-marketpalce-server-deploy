@@ -1,5 +1,6 @@
 import {
   BadRequestException,
+  ForbiddenException,
   HttpException,
   HttpStatus,
   Inject,
@@ -31,7 +32,7 @@ export class ProductVariantService {
     private readonly uploadToCloudService: UploadToCloudService,
     private inventoryService: InventoryService,
     private readonly companyService: CompanyService,
-  ) { }
+  ) {}
 
   private async resolveCompanyId(domain: string): Promise<string> {
     const filteredDomain = domainExtractor(domain);
@@ -43,11 +44,13 @@ export class ProductVariantService {
     domain: string,
     files: ProductFiles,
   ) {
-
     if (!createProductVariantDto.product_id) {
-      throw new InternalServerErrorException(ProductVariantErrorKeyEnum.PRODUCT_ID_IS_REQUIRED, {
-        cause: new Error('Product ID is required'),
-      });
+      throw new InternalServerErrorException(
+        ProductVariantErrorKeyEnum.PRODUCT_ID_IS_REQUIRED,
+        {
+          cause: new Error('Product ID is required'),
+        },
+      );
     }
     const companyId = await this.resolveCompanyId(domain);
     const [productId] = await this.db
@@ -60,7 +63,9 @@ export class ProductVariantService {
         ),
       )
       .catch((error) => {
-        throw new InternalServerErrorException(ProductVariantErrorKeyEnum.FAILED_TO_FETCH_PRODUCT);
+        throw new InternalServerErrorException(
+          ProductVariantErrorKeyEnum.FAILED_TO_FETCH_PRODUCT,
+        );
       });
     const variantData = {
       variant_name: createProductVariantDto.variant_name,
@@ -116,7 +121,8 @@ export class ProductVariantService {
           );
         }
 
-        const copySpecImages: { image_url: string; alt_text: string | null }[] = [];
+        const copySpecImages: { image_url: string; alt_text: string | null }[] =
+          [];
         if (!files?.product_spec || files.product_spec.length === 0) {
           const existingSpecImages = await tx
             .select({
@@ -143,7 +149,9 @@ export class ProductVariantService {
         }
 
         if (!variantRecord.id) {
-          throw new InternalServerErrorException(ProductVariantErrorKeyEnum.FAILED_VARIANT_RECORD);
+          throw new InternalServerErrorException(
+            ProductVariantErrorKeyEnum.FAILED_VARIANT_RECORD,
+          );
         }
 
         const imageInserts = finalResults.map((image, index) => {
@@ -315,7 +323,9 @@ export class ProductVariantService {
       }
       return productVariant;
     } catch (error) {
-      throw new InternalServerErrorException(ProductVariantErrorKeyEnum.FAILED_TO_FETCH_PRODUCT_VARIANT);
+      throw new InternalServerErrorException(
+        ProductVariantErrorKeyEnum.FAILED_TO_FETCH_PRODUCT_VARIANT,
+      );
     }
   }
 
@@ -369,9 +379,10 @@ export class ProductVariantService {
             .update(product_variants)
             .set(updateData)
             .where(eq(product_variants.id, id));
-          const parsedImagesToDelete = typeof imagesToDelete === 'string'
-            ? JSON.parse(imagesToDelete)
-            : imagesToDelete;
+          const parsedImagesToDelete =
+            typeof imagesToDelete === 'string'
+              ? JSON.parse(imagesToDelete)
+              : imagesToDelete;
           if (parsedImagesToDelete && parsedImagesToDelete.length > 0) {
             await tx
               .delete(product_images)
@@ -493,11 +504,41 @@ export class ProductVariantService {
       );
     }
   }
-  async UpdateProductVariantStatus(status: ProductStatus, variantId: string) {
+  async UpdateProductVariantStatus(
+    status: ProductStatus,
+    variantId: string,
+    domain: string,
+  ) {
     if (!status) {
-      return new HttpException(
+      throw new HttpException(
         ProductVariantErrorKeyEnum.PRODUCT_STATUS_IS_REQUIRED,
         HttpStatus.BAD_REQUEST,
+      );
+    }
+
+    const companyId = await this.resolveCompanyId(domain);
+
+    // Verify the variant belongs to this company before mutating
+    const [owned] = await this.db
+      .select({ variantId: product_variants.id })
+      .from(product_variants)
+      .innerJoin(products, eq(product_variants.product_id, products.id))
+      .where(
+        and(
+          eq(product_variants.id, variantId),
+          eq(products.company_id, companyId),
+        ),
+      )
+      .limit(1)
+      .catch(() => {
+        throw new InternalServerErrorException(
+          ProductVariantErrorKeyEnum.FAILED_TO_FETCH_PRODUCT_VARIANT,
+        );
+      });
+
+    if (!owned) {
+      throw new ForbiddenException(
+        'You do not have permission to modify this product variant',
       );
     }
 
@@ -522,16 +563,28 @@ export class ProductVariantService {
           HttpStatus.NOT_FOUND,
         );
       }
-      const productVariant = await this.db.select().from(product_variants).where(and(eq(product_variants.product_id, result.product_id), eq(product_variants.status, ProductStatus.ACTIVE)))
-      if (productVariant.length == 0) {
-        await this.db.update(products).set({ status: ProductStatus.INACTIVE }).where(eq(products.id, result.product_id)).catch((err) => {
-          throw new InternalServerErrorException(
-            ProductVariantErrorKeyEnum.FAILED_TO_UPDATE_PRODUCT_STATUS,
-            {
-              cause: err,
-            },
-          );
-        })
+
+      const activeVariants = await this.db
+        .select()
+        .from(product_variants)
+        .where(
+          and(
+            eq(product_variants.product_id, result.product_id),
+            eq(product_variants.status, ProductStatus.ACTIVE),
+          ),
+        );
+
+      if (activeVariants.length === 0) {
+        await this.db
+          .update(products)
+          .set({ status: ProductStatus.INACTIVE })
+          .where(eq(products.id, result.product_id))
+          .catch((err) => {
+            throw new InternalServerErrorException(
+              ProductVariantErrorKeyEnum.FAILED_TO_UPDATE_PRODUCT_STATUS,
+              { cause: err },
+            );
+          });
       }
 
       return {
@@ -539,6 +592,7 @@ export class ProductVariantService {
         status: HttpStatus.OK,
       };
     } catch (error) {
+      if (error instanceof HttpException) throw error;
       throw new InternalServerErrorException(
         ProductVariantErrorKeyEnum.FAILED_TO_UPDATE_PRODUCT_STATUS,
         {
@@ -548,17 +602,44 @@ export class ProductVariantService {
     }
   }
 
-  async delete(id: string) {
+  async delete(id: string, domain: string) {
+    if (!id) {
+      throw new HttpException(
+        ProductVariantErrorKeyEnum.ID_REQUIRED,
+        HttpStatus.BAD_REQUEST,
+      );
+    }
+
+    const companyId = await this.resolveCompanyId(domain);
+
+    // Verify the variant belongs to this company before deleting
+    const [owned] = await this.db
+      .select({ variantId: product_variants.id })
+      .from(product_variants)
+      .innerJoin(products, eq(product_variants.product_id, products.id))
+      .where(
+        and(
+          eq(product_variants.id, id),
+          eq(products.company_id, companyId),
+        ),
+      )
+      .limit(1)
+      .catch(() => {
+        throw new InternalServerErrorException(
+          ProductVariantErrorKeyEnum.FAILED_TO_FETCH_PRODUCT_VARIANT,
+        );
+      });
+
+    if (!owned) {
+      throw new ForbiddenException(
+        'You do not have permission to delete this product variant',
+      );
+    }
+
     try {
-      if (!id) {
-        throw new HttpException(ProductVariantErrorKeyEnum.ID_REQUIRED, HttpStatus.BAD_REQUEST);
-      }
       const result = await this.db
         .delete(product_variants)
         .where(eq(product_variants.id, id));
-      if (!result) {
-        throw new Error(`Product variant with ID ${id} not found`);
-      }
       return result;
     } catch (error) {
       throw new InternalServerErrorException(

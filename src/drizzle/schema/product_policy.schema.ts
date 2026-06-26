@@ -154,11 +154,11 @@ export const order_item_policy = pg.pgTable(
     order_item_id: pg
       .uuid('order_item_id')
       .notNull()
-      .references(() => order_items.id, { onDelete: 'cascade' }),
+      .references(() => order_items.id, { onDelete: 'restrict' }),
     policy_id: pg
       .uuid('policy_id')
       .notNull()
-      .references(() => product_policies.id),
+      .references(() => product_policies.id, { onDelete: 'restrict' }),
     // Snapshot of policy at time of purchase — immutable after creation
     policy_snapshot: pg.jsonb('policy_snapshot').notNull(),
     // Stores the full resolved policy as JSON so future edits don't affect this order:
@@ -182,6 +182,8 @@ export const order_item_policy = pg.pgTable(
     document_url: pg.text('document_url'), // S3/CDN URL of the generated PDF
 
     created_at: pg.timestamp('created_at').notNull().defaultNow(),
+    record_status: EntityStatusEnum('record_status').default(EntityStatus.ACTIVE),
+    deleted_at: pg.timestamp('deleted_at'),
   },
   (table) => [
     pg.index('idx_oip_order_item').on(table.order_item_id),

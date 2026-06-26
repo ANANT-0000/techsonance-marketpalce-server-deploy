@@ -56,7 +56,10 @@ export class CmsController {
   @Delete('delete-cloudinary-image')
   @UseGuards(RoleGuard)
   @Roles(Role.ADMIN, Role.VENDOR)
-  async deleteCloudinaryImage(@Query() query: { url: string }) {
-    return this.cmsService.deleteCloudinaryImage(query.url);
+  async deleteCloudinaryImage(
+    @Headers('company-domain') domain: string,
+    @Query('url') url: string,
+  ) {
+    return this.cmsService.deleteCloudinaryImage(domain, url);
   }
 }

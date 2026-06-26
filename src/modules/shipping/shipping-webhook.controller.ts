@@ -1,4 +1,11 @@
-import { Controller, Post, Body, HttpCode, HttpStatus } from '@nestjs/common';
+import {
+  Controller,
+  Post,
+  Body,
+  HttpCode,
+  HttpStatus,
+  Headers,
+} from '@nestjs/common';
 import { Public } from '../../common/decorators/public.decorator';
 import { ShippingManagerService } from './shipping-manager.service';
 
@@ -8,11 +15,17 @@ export class ShippingWebhookController {
     private readonly shippingManagerService: ShippingManagerService,
   ) {}
 
+  /**
+   * @Public() bypasses the platform JwtAuthGuard — Shiprocket has no platform JWT.
+   * All authentication logic lives inside ShippingManagerService.handleWebhookUpdate.
+   */
   @Public()
   @Post('shipping-updates')
   @HttpCode(HttpStatus.OK)
-  async handleShippingUpdates(@Body() payload: any) {
-    console.log('web hook payload', payload);
-    return this.shippingManagerService.handleWebhookUpdate(payload);
+  async handleShippingUpdates(
+    @Body() payload: any,
+    @Headers('authorization') authHeader: string,
+  ) {
+    return this.shippingManagerService.handleWebhookUpdate(payload, authHeader);
   }
 }

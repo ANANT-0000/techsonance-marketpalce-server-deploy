@@ -6,6 +6,8 @@ import { DrizzleModule } from '../../drizzle/drizzle.module';
 import { OrdersModule } from '../orders/orders.module';
 import { CompanyModule } from '../company/company.module';
 import { MailModule } from '../../common/services/mail/mail.module';
+import { ShipRocketModule } from '../ship-rocket/ship-rocket.module';
+import { ShippingModule } from '../shipping/shipping.module';
 
 @Module({
   imports: [
@@ -14,8 +16,11 @@ import { MailModule } from '../../common/services/mail/mail.module';
     MailModule,
     OrdersModule,
     CompanyModule,
+    ShipRocketModule,
+    ShippingModule,
   ],
   controllers: [CheckoutController],
   providers: [CheckoutService],
 })
 export class CheckoutModule {}
+

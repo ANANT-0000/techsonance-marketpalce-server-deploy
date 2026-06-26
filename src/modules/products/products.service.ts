@@ -968,7 +968,13 @@ export class ProductsService {
     const variantRow = await this.db
       .select({ product_id: product_variants.product_id, id: product_variants.id })
       .from(product_variants)
-      .where(eq(product_variants.id, productVariantId))
+      .innerJoin(products, eq(product_variants.product_id, products.id))
+      .where(
+        and(
+          eq(product_variants.id, productVariantId),
+          eq(products.company_id, companyId),
+        ),
+      )
       .limit(1)
       .catch(() => []);
 
@@ -979,7 +985,12 @@ export class ProductsService {
       const productRow = await this.db
         .select({ id: products.id })
         .from(products)
-        .where(eq(products.id, productVariantId))
+        .where(
+          and(
+            eq(products.id, productVariantId),
+            eq(products.company_id, companyId),
+          ),
+        )
         .limit(1)
         .catch(() => []);
 
@@ -1025,7 +1036,12 @@ export class ProductsService {
           const updatedProductResult = await tx
             .update(products)
             .set(productUpdatedData)
-            .where(eq(products.id, resolvedProductId))
+            .where(
+              and(
+                eq(products.id, resolvedProductId),
+                eq(products.company_id, companyId),
+              ),
+            )
             .catch((error) => {
               throw new InternalServerErrorException(
                 ProductsErrorKeyEnum.FAILED_TO_UPDATE_PRODUCT,

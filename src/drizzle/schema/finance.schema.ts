@@ -16,7 +16,9 @@ export const tax_profiles = pg.pgTable('tax_profiles', {
     .notNull()
     .defaultNow()
     .$onUpdate(() => new Date()),
-  company_id: pg.uuid('company_id').references(() => company.id),
+  record_status: EntityStatusEnum('record_status').default(EntityStatus.ACTIVE),
+  deleted_at: pg.timestamp('deleted_at'),
+  company_id: pg.uuid('company_id').references(() => company.id, { onDelete: 'restrict' }),
 });
 export const tax_types = pg.pgTable('tax_types', {
   id: pg.uuid('id').primaryKey().defaultRandom(),
@@ -33,7 +35,9 @@ export const tax_types = pg.pgTable('tax_types', {
   tax_profile_id: pg
     .uuid('tax_profile_id')
     .references(() => tax_profiles.id, { onDelete: 'cascade' }),
-  company_id: pg.uuid('company_id').references(() => company.id),
+  record_status: EntityStatusEnum('record_status').default(EntityStatus.ACTIVE),
+  deleted_at: pg.timestamp('deleted_at'),
+  company_id: pg.uuid('company_id').references(() => company.id, { onDelete: 'restrict' }),
 });
 
 // finance.schema.ts — replace tax_types + tax_rates with tax_slabs
@@ -59,24 +63,28 @@ export const tax_slabs = pg.pgTable('tax_slabs', {
   tax_type_id: pg
     .uuid('tax_type_id')
     .references(() => tax_types.id, { onDelete: 'cascade' }),
-  company_id: pg.uuid('company_id').references(() => company.id),
+  record_status: EntityStatusEnum('record_status').default(EntityStatus.ACTIVE),
+  deleted_at: pg.timestamp('deleted_at'),
+  company_id: pg.uuid('company_id').references(() => company.id, { onDelete: 'restrict' }),
 });
 
 export const product_tax = pg.pgTable('product_tax', {
   id: pg.uuid('id').primaryKey().defaultRandom(),
   product_id: pg
     .uuid('product_id')
-    .references(() => products.id, { onDelete: 'cascade' })
+    .references(() => products.id, { onDelete: 'restrict' })
     .unique(),
   tax_slab_id: pg
     .uuid('tax_slab_id') // renamed from tax_rate_id
-    .references(() => tax_slabs.id, { onDelete: 'set null' }),
+    .references(() => tax_slabs.id, { onDelete: 'restrict' }),
   created_at: pg.timestamp('created_at').notNull().defaultNow(),
   updated_at: pg
     .timestamp('updated_at')
     .notNull()
     .defaultNow()
     .$onUpdate(() => new Date()),
+  record_status: EntityStatusEnum('record_status').default(EntityStatus.ACTIVE),
+  deleted_at: pg.timestamp('deleted_at'),
 });
 export const gst_invoices = pg.pgTable('gst_invoices', {
   id: pg.uuid('id').primaryKey().defaultRandom(),
@@ -93,8 +101,8 @@ export const gst_invoices = pg.pgTable('gst_invoices', {
     .notNull()
     .defaultNow()
     .$onUpdate(() => new Date()),
-  order_id: pg.uuid('order_id').references(() => orders.id).unique(),
-  company_id: pg.uuid('company_id').references(() => company.id),
+  order_id: pg.uuid('order_id').references(() => orders.id, { onDelete: 'restrict' }).unique(),
+  company_id: pg.uuid('company_id').references(() => company.id, { onDelete: 'restrict' }),
   status: EntityStatusEnum('status').default(EntityStatus.ACTIVE),
   deleted_at: pg.timestamp('deleted_at'),
 });

@@ -5,10 +5,11 @@ import {
   HttpStatus,
   NotFoundException,
   BadRequestException,
+  UnauthorizedException,
 } from '@nestjs/common';
-import { eq, and } from 'drizzle-orm';
+import { eq, and, or, like, ne, sql } from 'drizzle-orm';
 import { DRIZZLE, type DrizzleService } from '../../drizzle/drizzle.module';
-import { cms_pages } from '../../drizzle/schema';
+import { cms_pages, marketing_banners, product_images, products } from '../../drizzle/schema';
 import { CompanyService } from '../company/company.service';
 import { domainExtractor } from '../../common/filters/domainExtractor.filter';
 import { CreateCmsDto } from './dto/create-cms.dto';
@@ -229,11 +230,50 @@ export class CmsService {
       secure_url: result.secure_url,
     };
   }
-  async deleteCloudinaryImage(url: string) {
+  async deleteCloudinaryImage(domain: string, url: string) {
+    const companyId = await this.resolveCompanyId(domain);
+    if (!companyId) {
+      throw new BadRequestException(CMS_MESSAGES.COMPANY_NOT_FOUND(domain));
+    }
+
     const publicId = extractCloudinaryPublicId(url);
     if (!publicId) {
       throw new BadRequestException(CMS_MESSAGES.INVALID_IMAGE_URL);
     }
+
+    // 1. Check if the image is referenced by any company in cms_pages
+    const referencingPages = await this.db
+      .select({ company_id: cms_pages.company_id })
+      .from(cms_pages)
+      .where(like(cms_pages.content, `%${url}%`));
+
+    // 2. Check if referenced by any company in marketing_banners
+    const referencingBanners = await this.db
+      .select({ company_id: marketing_banners.company_id })
+      .from(marketing_banners)
+      .where(
+        or(
+          eq(marketing_banners.image_url, url),
+          eq(marketing_banners.image_url_mobile, url),
+        ),
+      );
+
+    // 3. Check if referenced by any company in product_images
+    const referencingProductImages = await this.db
+      .select({ company_id: products.company_id })
+      .from(product_images)
+      .innerJoin(products, eq(product_images.product_id, products.id))
+      .where(eq(product_images.image_url, url));
+
+    // 4. Validate ownership: reject if there's any reference that does NOT belong to this company
+    const pageConflict = referencingPages.some((p) => p.company_id !== companyId);
+    const bannerConflict = referencingBanners.some((b) => b.company_id !== companyId);
+    const productConflict = referencingProductImages.some((p) => p.company_id !== companyId);
+
+    if (pageConflict || bannerConflict || productConflict) {
+      throw new UnauthorizedException('Access denied: Image belongs to another tenant.');
+    }
+
     await this.uploadService.deleteFile(publicId, undefined).catch((error) => {
       throw new InternalServerErrorException(CMS_MESSAGES.IMAGE_DELETE_FAILED, {
         cause: error,

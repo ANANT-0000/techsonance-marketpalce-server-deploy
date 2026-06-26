@@ -119,12 +119,16 @@ export class ProductVariantController {
     return await this.productVariantService.UpdateProductVariantStatus(
       status,
       id,
+      domain,
     );
   }
   @Delete(':id')
   @UseGuards(RoleGuard)
   @Roles(Role.ADMIN, Role.VENDOR)
-  async delete(@Param('id') id: string) {
-    return await this.productVariantService.delete(id);
+  async delete(
+    @Param('id') id: string,
+    @Headers('company-domain') domain: string,
+  ) {
+    return await this.productVariantService.delete(id, domain);
   }
 }

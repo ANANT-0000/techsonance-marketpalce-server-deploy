@@ -301,6 +301,9 @@ export class AuthService {
         }
 
         const access_payload = {
+          sub: existingUser.user.id,
+          email: existingUser.user.email,
+          company_id: companyId,
           user: {
             id: existingUser.user.id,
             profile_picture_url: existingUser.user.profile_picture_url,
@@ -394,6 +397,9 @@ export class AuthService {
 
       // Generate JWT token for new user
       const payload = {
+        sub: newUser.id,
+        email: newUser.email,
+        company_id: companyId,
         user: {
           id: newUser.id,
           email: newUser.email,

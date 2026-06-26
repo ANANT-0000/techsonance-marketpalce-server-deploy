@@ -401,7 +401,7 @@ export class AddressService {
             .orderBy(desc(address.created_at))
             .limit(1);
 
-          if (latestActiveAddress.id) {
+          if (latestActiveAddress?.id) {
             await tx
               .update(address)
               .set({ is_default: true })
