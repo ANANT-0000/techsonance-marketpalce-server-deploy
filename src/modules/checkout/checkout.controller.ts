@@ -9,11 +9,12 @@ import {
   Headers,
   HttpCode,
   HttpStatus,
+  Req,
 } from '@nestjs/common';
 import { CheckoutService } from './checkout.service';
 import { InitiateCheckoutDto, VerifyCheckoutDto } from './dto/checkout.dto';
-
 import { CouponService } from '../coupon/coupon.service';
+import { Public } from '../../common/decorators/public.decorator';
 
 @Controller({
   version: '1',
@@ -45,6 +46,17 @@ export class CheckoutController {
     @Headers('company-domain') domain: string,
   ) {
     return this.checkoutService.verifyCheckout(verifyCheckoutDto, domain);
+  }
+
+  @Public()
+  @Post('razorpay-webhook')
+  @HttpCode(HttpStatus.OK)
+  async handleRazorpayWebhook(
+    @Req() req: any,
+    @Headers('x-razorpay-signature') signature: string,
+  ) {
+    const rawBody = req.rawBody ? req.rawBody.toString('utf8') : '';
+    return this.checkoutService.handleRazorpayWebhook(rawBody, signature);
   }
 
   @Post('apply-coupon/:userId')

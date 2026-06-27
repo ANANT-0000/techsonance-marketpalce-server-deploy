@@ -29,10 +29,6 @@ export const company = pg.pgTable(
     logistics_mode: LogisticsModeEnum('logistics_mode')
       .default(LogisticsMode.PLATFORM_PROXY)
       .notNull(),
-    logistics_is_active: pg
-      .boolean('logistics_is_active')
-      .default(true)
-      .notNull(),
     encrypted_logistics_api_key: pg.text('encrypted_logistics_api_key'),
     encrypted_logistics_api_secret: pg.text('encrypted_logistics_api_secret'),
     logistics_pickup_id: pg.varchar('logistics_pickup_id', { length: 100 }),

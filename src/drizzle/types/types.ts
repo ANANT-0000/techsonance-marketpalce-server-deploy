@@ -52,7 +52,6 @@ export enum ProductStatus {
   DRAFT = 'draft',
 }
 export enum OrderStatus {
-  // Existing e-commerce core states
   PENDING = 'pending',
   PROCESSING = 'processing',
   SHIPPED = 'shipped',
@@ -61,16 +60,6 @@ export enum OrderStatus {
   RETURNED = 'returned',
   REFUNDED = 'refunded',
   REPLACED = 'replaced',
-
-  // Granular logistics states
-  DRAFTING = 'drafting',
-  AWB_ASSIGNED = 'awb_assigned',
-  IN_TRANSIT = 'in_transit',
-  OUT_FOR_DELIVERY = 'out_for_delivery',
-  OUT_FOR_DELIVERY_EXCEPTION = 'out_for_delivery_exception',
-  UNDELIVERED = 'undelivered',
-  RTO = 'rto',
-  FAILED = 'failed',
 }
 export enum PaymentStatus {
   PENDING = 'pending',
@@ -92,18 +81,11 @@ export enum PaymentStatus {
  */
 export enum ShippingStatus {
   PENDING = 'PENDING',
-  DRAFTING = 'DRAFTING',
-  AWB_ASSIGNED = 'AWB_ASSIGNED',
   SHIPPED = 'SHIPPED',
-  IN_TRANSIT = 'IN_TRANSIT',
-  OUT_FOR_DELIVERY = 'OUT_FOR_DELIVERY',
-  OUT_FOR_DELIVERY_EXCEPTION = 'OUT_FOR_DELIVERY_EXCEPTION',
-  UNDELIVERED = 'UNDELIVERED',
   DELIVERED = 'DELIVERED',
   RETURNED = 'RETURNED',
   RTO = 'RTO',
   CANCELLED = 'CANCELLED',
-  FAILED = 'FAILED',
 }
 export enum ReturnType {
   RETURN = 'return',

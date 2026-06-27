@@ -287,7 +287,6 @@ export const product_variants = pg.pgTable(
     length_cm: pg.integer('length_cm'),
     width_cm: pg.integer('width_cm'),
     height_cm: pg.integer('height_cm'),
-    hsn_code: pg.text('hsn_code'),
   },
   (table) => [
     pg.index('idx_product_variants_product_id').on(table.product_id),

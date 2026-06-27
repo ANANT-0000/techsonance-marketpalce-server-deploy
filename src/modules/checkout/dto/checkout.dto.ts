@@ -59,4 +59,16 @@ export class VerifyCheckoutDto {
   @IsOptional()
   @IsString()
   productVariantId?: string;
+
+  @IsOptional()
+  @IsString()
+  razorpayPaymentId?: string;
+
+  @IsOptional()
+  @IsString()
+  razorpayOrderId?: string;
+
+  @IsOptional()
+  @IsString()
+  razorpaySignature?: string;
 }

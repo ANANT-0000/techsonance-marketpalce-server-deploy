@@ -916,14 +916,7 @@ export class OrdersService {
             },
           },
           payment: true,
-          shipping: {
-            columns: {
-              tracking_url: true,
-              shipping_status: true,
-              awb_number: true,
-              courier_name: true,
-            },
-          },
+          shipping: { columns: { tracking_url: true } },
           gstInvoice: true,
         },
       });

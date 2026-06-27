@@ -72,12 +72,9 @@ export class InventoryService {
       if (error instanceof HttpException) {
         throw error;
       }
-      throw new InternalServerErrorException(
-        InventoryErrorKeyEnum.FAILED_TO_CREATE_INVENTORY,
-        {
-          cause: error,
-        },
-      );
+      throw new InternalServerErrorException(InventoryErrorKeyEnum.FAILED_TO_CREATE_INVENTORY, {
+        cause: error,
+      });
     }
   }
 
@@ -147,7 +144,7 @@ export class InventoryService {
                     number: true,
                     address_type: true,
                     address_line_1: true,
-
+      
                     street: true,
                     city: true,
                     state: true,
@@ -163,12 +160,9 @@ export class InventoryService {
           },
         })
         .catch((error) => {
-          throw new InternalServerErrorException(
-            InventoryErrorKeyEnum.FAILED_TO_FETCH_INVENTORY,
-            {
-              cause: error,
-            },
-          );
+          throw new InternalServerErrorException(InventoryErrorKeyEnum.FAILED_TO_FETCH_INVENTORY, {
+            cause: error,
+          });
         });
       const LOW_STOCK_THRESHOLD = 10;
       type AddressRecord = {
@@ -177,7 +171,7 @@ export class InventoryService {
         number: string | null;
         address_type: string | null;
         address_line_1: string | null;
-
+    
         street: string | null;
         city: string | null;
         state: string | null;
@@ -259,12 +253,9 @@ export class InventoryService {
         error instanceof InternalServerErrorException
       )
         throw error;
-      throw new InternalServerErrorException(
-        InventoryErrorKeyEnum.FAILED_TO_FETCH_INVENTORY,
-        {
-          cause: error,
-        },
-      );
+      throw new InternalServerErrorException(InventoryErrorKeyEnum.FAILED_TO_FETCH_INVENTORY, {
+        cause: error,
+      });
     }
   }
 
@@ -287,12 +278,9 @@ export class InventoryService {
       )
       .limit(1)
       .catch((error) => {
-        throw new InternalServerErrorException(
-          InventoryErrorKeyEnum.FAILED_TO_SET_STOCK,
-          {
-            cause: error,
-          },
-        );
+        throw new InternalServerErrorException(InventoryErrorKeyEnum.FAILED_TO_SET_STOCK, {
+          cause: error,
+        });
       });
 
     if (existing) {
@@ -302,12 +290,9 @@ export class InventoryService {
         .where(eq(inventory.id, existing.id))
         .returning()
         .catch((error) => {
-          throw new InternalServerErrorException(
-            InventoryErrorKeyEnum.FAILED_TO_SET_STOCK,
-            {
-              cause: error,
-            },
-          );
+          throw new InternalServerErrorException(InventoryErrorKeyEnum.FAILED_TO_SET_STOCK, {
+            cause: error,
+          });
         });
       return updateResult;
     } else {
@@ -321,12 +306,9 @@ export class InventoryService {
         })
         .returning()
         .catch((error) => {
-          throw new InternalServerErrorException(
-            InventoryErrorKeyEnum.FAILED_TO_SET_STOCK,
-            {
-              cause: error,
-            },
-          );
+          throw new InternalServerErrorException(InventoryErrorKeyEnum.FAILED_TO_SET_STOCK, {
+            cause: error,
+          });
         });
       return insertResult;
     }
@@ -353,12 +335,9 @@ export class InventoryService {
         )
         .limit(1)
         .catch((error) => {
-          throw new InternalServerErrorException(
-            InventoryErrorKeyEnum.FAILED_TO_UPDATE_STOCK,
-            {
-              cause: error,
-            },
-          );
+          throw new InternalServerErrorException(InventoryErrorKeyEnum.FAILED_TO_UPDATE_STOCK, {
+            cause: error,
+          });
         });
 
       if (!inv) {
@@ -374,12 +353,9 @@ export class InventoryService {
         newQuantity,
         companyId,
       ).catch((error) => {
-        throw new InternalServerErrorException(
-          InventoryErrorKeyEnum.FAILED_TO_UPDATE_STOCK,
-          {
-            cause: error,
-          },
-        );
+        throw new InternalServerErrorException(InventoryErrorKeyEnum.FAILED_TO_UPDATE_STOCK, {
+          cause: error,
+        });
       });
 
       return {
@@ -394,32 +370,17 @@ export class InventoryService {
       ) {
         throw error;
       }
-      throw new InternalServerErrorException(
-        InventoryErrorKeyEnum.FAILED_TO_UPDATE_STOCK,
-        {
-          cause: error,
-        },
-      );
+      throw new InternalServerErrorException(InventoryErrorKeyEnum.FAILED_TO_UPDATE_STOCK, {
+        cause: error,
+      });
     }
   }
-  /**
-   * Deducts stock for an order.
-   * This is the central stock deduction logic used by the Order Service.
-   * @param orderLines Array of { variantId, quantity }
-   * @param companyId Company ID for multi-tenant isolation
-   * @param tx Optional transaction context
-   * @throws HttpException for validation errors or insufficient stock
-   * @throws InternalServerErrorException for database errors
-   */
   async deductStockForOrder(
     orderLines: { variantId: string; quantity: number }[],
     companyId: string,
     tx: DrizzleService, // transaction context
   ) {
     try {
-      /**
-       * Validate order lines for any invalid variantId or quantity
-       */
       const hasInvalidLine = orderLines.some(
         (line) =>
           !line.variantId?.trim() ||
@@ -432,14 +393,8 @@ export class InventoryService {
           HttpStatus.BAD_REQUEST,
         );
       }
-      /**
-       * Iterate over each order line to deduct stock
-       */
       const lines = orderLines;
       for (const line of lines) {
-        /**
-         * Select inventory rows for the current variant, ordered by stock quantity descending
-         */
         const inventoryRows = await tx
           .select({
             id: inventory.id,
@@ -452,8 +407,7 @@ export class InventoryService {
               eq(inventory.company_id, companyId),
             ),
           )
-          .orderBy(desc(inventory.stock_quantity))
-          .for('update'); // Prioritize warehouses with more stock and lock selected rows to prevent concurrency race conditions
+          .orderBy(desc(inventory.stock_quantity)); // Prioritize warehouses with more stock
 
         if (inventoryRows.length === 0) {
           throw new HttpException(
@@ -461,9 +415,7 @@ export class InventoryService {
             HttpStatus.NOT_FOUND,
           );
         }
-        /**
-         * Distribute deduction across inventory rows
-         */
+
         let remainingToDeduct = line.quantity;
         for (const invRow of inventoryRows) {
           if (remainingToDeduct <= 0) break;
@@ -483,13 +435,7 @@ export class InventoryService {
         }
 
         if (remainingToDeduct > 0) {
-          /**
-           * Calculate total available stock
-           */
-          const totalAvailable = inventoryRows.reduce(
-            (sum, row) => sum + row.stock_quantity,
-            0,
-          );
+          const totalAvailable = inventoryRows.reduce((sum, row) => sum + row.stock_quantity, 0);
           throw new HttpException(
             `Insufficient stock for variant ${line.variantId}. Available: ${totalAvailable}, requested: ${line.quantity}`,
             HttpStatus.BAD_REQUEST,
@@ -503,22 +449,12 @@ export class InventoryService {
       ) {
         throw error;
       }
-      throw new InternalServerErrorException(
-        InventoryErrorKeyEnum.FAILED_TO_CREATE_INVENTORY,
-        {
-          cause: error,
-        },
-      );
+      throw new InternalServerErrorException(InventoryErrorKeyEnum.FAILED_TO_CREATE_INVENTORY, {
+        cause: error,
+      });
     }
   }
-  /**
-   * Restores stock for cancelled/returned orders
-   * @param orderLines Array of { variantId, quantity }
-   * @param companyId Company ID for multi-tenant isolation
-   * @param tx Optional transaction context
-   * @throws HttpException for validation errors
-   * @throws InternalServerErrorException for database errors
-   */
+
   async rollbackStockForOrder(
     orderLines:
       | { variantId: string; quantity: number }[]
@@ -584,12 +520,9 @@ export class InventoryService {
       ) {
         throw error;
       }
-      throw new InternalServerErrorException(
-        InventoryErrorKeyEnum.FAILED_TO_CREATE_INVENTORY,
-        {
-          cause: error,
-        },
-      );
+      throw new InternalServerErrorException(InventoryErrorKeyEnum.FAILED_TO_CREATE_INVENTORY, {
+        cause: error,
+      });
     }
   }
   async remove(id: string, domain: string) {
@@ -610,12 +543,9 @@ export class InventoryService {
         .where(and(eq(inventory.id, id), eq(inventory.company_id, companyId)));
       return { message: 'Inventory record removed' };
     } catch (error) {
-      throw new InternalServerErrorException(
-        InventoryErrorKeyEnum.FAILED_TO_REMOVE_INVENTORY,
-        {
-          cause: error,
-        },
-      );
+      throw new InternalServerErrorException(InventoryErrorKeyEnum.FAILED_TO_REMOVE_INVENTORY, {
+        cause: error,
+      });
     }
   }
 
