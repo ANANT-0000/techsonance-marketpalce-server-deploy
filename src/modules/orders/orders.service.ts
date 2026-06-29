@@ -351,7 +351,7 @@ export class OrdersService {
           .values({
             order_id: newOrder.id,
             company_id: companyId,
-            amount: String(grandTotal), // ← discounted amount, not taxData.grandTotal
+            amount: String(finalGrandTotal.toFixed(2)), // ← includes shipping/delivery charges
             payment_status: PaymentStatus.PENDING,
             payment_method: paymentMethod,
             transaction_ref: `txn_${newOrder.id}_${Date.now()}`,
@@ -437,7 +437,7 @@ export class OrdersService {
         }
         return {
           orderId: newOrder.id,
-          totalAmount: String(grandTotal),
+          totalAmount: String(finalGrandTotal.toFixed(2)),
           discountAmount:
             discountAmount > 0 ? String(discountAmount) : undefined,
           itemCount: orderLines.length,
@@ -577,6 +577,14 @@ export class OrdersService {
           );
         }
 
+        const [paymentRecord] = await tx
+          .select({ payment_method: payments.payment_method })
+          .from(payments)
+          .where(eq(payments.order_id, orderId))
+          .limit(1);
+
+        const isCod = paymentRecord?.payment_method?.toLowerCase() === 'cod';
+
         if (orderRecord.order_status !== OrderStatus.PENDING) {
           return {
             success: orderRecord.order_status !== OrderStatus.CANCELLED,
@@ -616,7 +624,9 @@ export class OrdersService {
 
           await tx
             .update(payments)
-            .set({ payment_status: PaymentStatus.COMPLETED })
+            .set({
+              payment_status: isCod ? PaymentStatus.PENDING : PaymentStatus.COMPLETED,
+            })
             .where(eq(payments.order_id, orderId))
             .returning()
             .catch((error) => {

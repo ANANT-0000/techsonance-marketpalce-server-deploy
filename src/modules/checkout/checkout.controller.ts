@@ -15,6 +15,10 @@ import { CheckoutService } from './checkout.service';
 import { InitiateCheckoutDto, VerifyCheckoutDto } from './dto/checkout.dto';
 import { CouponService } from '../coupon/coupon.service';
 import { Public } from '../../common/decorators/public.decorator';
+import {
+  RazorpayOrderPaidWebhook,
+  RazorpayWebhookEvent,
+} from './constants/razorpay.webhook';
 
 @Controller({
   version: '1',
@@ -55,7 +59,9 @@ export class CheckoutController {
     @Req() req: any,
     @Headers('x-razorpay-signature') signature: string,
   ) {
-    const rawBody = req.rawBody ? req.rawBody.toString('utf8') : '';
+    const rawBody: string = req.rawBody
+      ? req.rawBody.toString('utf8')
+      : '';
     return this.checkoutService.handleRazorpayWebhook(rawBody, signature);
   }
 
@@ -73,7 +79,13 @@ export class CheckoutController {
   @HttpCode(HttpStatus.OK)
   async calculateShippingRate(
     @Param('userId') userId: string,
-    @Body() dto: { addressId: string; cartId?: string; productVariantId?: string; qty?: number },
+    @Body()
+    dto: {
+      addressId: string;
+      cartId?: string;
+      productVariantId?: string;
+      qty?: number;
+    },
     @Headers('company-domain') domain: string,
   ) {
     return this.checkoutService.calculateShippingRate(userId, dto, domain);

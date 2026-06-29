@@ -13,4 +13,5 @@ export enum CheckoutErrorKeyEnum {
   CART_NOT_FOUND = 'Cart not found',
   FAILED_TO_CLEAR_CART_AFTER_SUCCESSFUL_CHECKOUT = 'Failed to clear cart after successful checkout',
   FAILED_TO_CLEAR_CART_ITEMS_AFTER_SUCCESSFUL_CHECKOUT = 'Failed to clear cart items after successful checkout',
+  PAYMENT_NOT_FOUND = 'Payment not found',
 }

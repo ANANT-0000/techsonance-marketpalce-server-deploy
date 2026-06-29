@@ -14,8 +14,6 @@ import {
   cart_items,
   carts,
   company,
-  coupon_usage,
-  coupons,
   orders,
   product_variants,
   user,
@@ -29,13 +27,14 @@ import { CompanyService } from '../company/company.service';
 import { MailService } from '../../common/services/mail/mail.service';
 import { ShipRocketService } from '../ship-rocket/ship-rocket.service';
 import { domainExtractor } from '../../common/filters/domainExtractor.filter';
-import {
-  promotion_analytics_events,
-  promotion_usage,
-  promotions,
-} from '../../drizzle/schema/promotions.schema';
-import { PromoEventType, PromotionStatus } from '../../drizzle/types/types';
+
 import { CheckoutErrorKeyEnum } from './constants/checkout.enums';
+import {
+  RazorpayOrderPaidWebhook,
+  RazorpayWebhookEvent,
+  RazorpayPaymentCapturedWebhook,
+} from './constants/razorpay.webhook';
+import { Orders } from 'razorpay/dist/types/orders';
 
 @Injectable()
 export class CheckoutService {
@@ -57,10 +56,7 @@ export class CheckoutService {
         HttpStatus.INTERNAL_SERVER_ERROR,
       );
     }
-    return new Razorpay({
-      key_id: keyId,
-      key_secret: keySecret,
-    });
+    return new Razorpay({ key_id: keyId, key_secret: keySecret });
   }
 
   private async resolveCompanyId(domain: string): Promise<string> {
@@ -101,7 +97,10 @@ export class CheckoutService {
         );
       });
     if (!addressRecord || addressRecord.length === 0) {
-      throw new HttpException(CheckoutErrorKeyEnum.ADDRESS_NOT_FOUND, HttpStatus.NOT_FOUND);
+      throw new HttpException(
+        CheckoutErrorKeyEnum.ADDRESS_NOT_FOUND,
+        HttpStatus.NOT_FOUND,
+      );
     }
     const [resolvedAddress] = addressRecord;
 
@@ -179,11 +178,18 @@ export class CheckoutService {
     try {
       const razorpay = this.getRazorpayInstance();
       const amountInPaise = Math.round(Number(orderResult.totalAmount) * 100);
-      const razorpayOrder = await razorpay.orders.create({
+      const razorpayPayload: Orders.RazorpayOrderCreateRequestBody = {
         amount: amountInPaise,
         currency: 'INR',
         receipt: orderResult.orderId,
-      });
+        notes: {
+          userId: userId,
+          companyId: companyId,
+          orderId: orderResult.orderId,
+          paymentMethod: paymentMethod,
+        },
+      };
+      const razorpayOrder = await razorpay.orders.create(razorpayPayload);
 
       // Update payment record transaction reference with the Razorpay order ID
       await this.db
@@ -220,12 +226,23 @@ export class CheckoutService {
           cartId,
           productVariantId,
         );
-      } catch (rollbackErr) {
-        console.error('Failed to cancel order after Razorpay initialization error:', rollbackErr);
+      } catch (rollbackErr) {}
+
+      let errorMessage = '';
+      if (error && typeof error === 'object') {
+        errorMessage =
+          error.message ||
+          error.description ||
+          (error.error && typeof error.error === 'object'
+            ? error.error.description || JSON.stringify(error.error)
+            : '') ||
+          JSON.stringify(error);
+      } else {
+        errorMessage = String(error);
       }
 
       throw new HttpException(
-        `Failed to initialize payment gateway: ${error?.message || error}`,
+        `Failed to initialize payment gateway: ${errorMessage}`,
         HttpStatus.BAD_GATEWAY,
       );
     }
@@ -246,7 +263,10 @@ export class CheckoutService {
 
     const companyId = await this.resolveCompanyId(domain);
     if (!companyId) {
-      throw new HttpException(CheckoutErrorKeyEnum.COMPANY_NOT_FOUND, HttpStatus.NOT_FOUND);
+      throw new HttpException(
+        CheckoutErrorKeyEnum.COMPANY_NOT_FOUND,
+        HttpStatus.NOT_FOUND,
+      );
     }
 
     const [existingOrder] = await this.db
@@ -255,7 +275,10 @@ export class CheckoutService {
       .where(and(eq(orders.id, orderId), eq(orders.company_id, companyId)))
       .limit(1);
     if (!existingOrder || !existingOrder.user_id) {
-      throw new HttpException(CheckoutErrorKeyEnum.USER_NOT_FOUND, HttpStatus.BAD_REQUEST);
+      throw new HttpException(
+        CheckoutErrorKeyEnum.USER_NOT_FOUND,
+        HttpStatus.BAD_REQUEST,
+      );
     }
 
     const [paymentRecord] = await this.db
@@ -264,10 +287,14 @@ export class CheckoutService {
       .where(eq(payments.order_id, orderId))
       .limit(1);
     if (!paymentRecord) {
-      throw new HttpException('Payment record not found for verification.', HttpStatus.NOT_FOUND);
+      throw new HttpException(
+        'Payment record not found for verification.',
+        HttpStatus.NOT_FOUND,
+      );
     }
 
-    const isOnlinePayment = paymentRecord.payment_method.toLowerCase() !== 'cod';
+    const isOnlinePayment =
+      paymentRecord.payment_method.toLowerCase() !== 'cod';
     let isSuccessVerified = isSuccess;
 
     // Enforce Razorpay signature validation for online payments
@@ -311,16 +338,19 @@ export class CheckoutService {
         .limit(1);
       if (
         !customerRecord ||
-        (!customerRecord.first_name &&
-          !customerRecord.last_name &&
-          !customerRecord.email)
+        !customerRecord.email ||
+        !customerRecord.first_name ||
+        !customerRecord.last_name
       ) {
-        throw new HttpException(CheckoutErrorKeyEnum.CUSTOMER_NOT_FOUND, HttpStatus.NOT_FOUND);
+        throw new HttpException(
+          CheckoutErrorKeyEnum.CUSTOMER_NOT_FOUND,
+          HttpStatus.NOT_FOUND,
+        );
       }
       const customerDetails = {
         email: customerRecord.email,
-        first_name: customerRecord.first_name || '',
-        last_name: customerRecord.last_name || '',
+        first_name: customerRecord.first_name as string,
+        last_name: customerRecord.last_name as string,
       };
       const verificationResult =
         await this.ordersService.completeOrderVerification(
@@ -352,13 +382,21 @@ export class CheckoutService {
       ) {
         throw error; // Re-throw known HTTP exceptions
       }
-      throw new InternalServerErrorException(CheckoutErrorKeyEnum.FAILED_TO_VERIFY_CHECKOUT, {
-        cause: error,
-      });
+      throw new InternalServerErrorException(
+        CheckoutErrorKeyEnum.FAILED_TO_VERIFY_CHECKOUT,
+        {
+          cause: error,
+        },
+      );
     }
   }
-  async handleRazorpayWebhook(rawBody: string, signature: string) {
-    const webhookSecret = this.configService.get<string>('RAZORPAY_WEBHOOK_SECRET');
+  async handleRazorpayWebhook(
+    rawBody: string | RazorpayWebhookEvent,
+    signature: string,
+  ) {
+    const webhookSecret = this.configService.get<string>(
+      'RAZORPAY_WEBHOOK_SECRET',
+    );
     if (!webhookSecret) {
       throw new HttpException(
         'Webhook secret is not configured on server.',
@@ -366,57 +404,134 @@ export class CheckoutService {
       );
     }
 
+    const rawBodyString =
+      typeof rawBody === 'string' ? rawBody : JSON.stringify(rawBody);
+
+    let parsedBody: RazorpayWebhookEvent;
+    try {
+      parsedBody = typeof rawBody === 'string' ? JSON.parse(rawBody) : rawBody;
+    } catch (parseErr) {
+      throw new HttpException(
+        'Invalid JSON payload received.',
+        HttpStatus.BAD_REQUEST,
+      );
+    }
+
     const generatedSignature = crypto
       .createHmac('sha256', webhookSecret)
-      .update(rawBody)
+      .update(rawBodyString)
       .digest('hex');
 
     if (generatedSignature !== signature) {
-      throw new HttpException('Invalid webhook signature.', HttpStatus.BAD_REQUEST);
+      throw new HttpException(
+        'Invalid webhook signature.',
+        HttpStatus.BAD_REQUEST,
+      );
     }
 
-    const payload = JSON.parse(rawBody);
-    const event = payload.event;
+    const event: string = parsedBody.event;
 
-    if (event === 'order.paid') {
-      const orderEntity = payload.payload?.order?.entity;
-      const orderId = orderEntity?.receipt;
-
-      if (!orderId) {
-        return { success: false, message: 'No receipt order ID found in webhook payload' };
+    switch (event) {
+      case 'order.paid': {
+        return this.handleOrderPaidWebhook(
+          parsedBody as RazorpayOrderPaidWebhook,
+        );
       }
-
-      const [existingOrder] = await this.db
-        .select()
-        .from(orders)
-        .where(eq(orders.id, orderId))
-        .limit(1);
-
-      if (!existingOrder) {
-        return { success: false, message: 'Order not found in database' };
+      case 'payment.captured': {
+        return this.handlePaymentCapturedWebhook(
+          parsedBody as RazorpayPaymentCapturedWebhook,
+        );
       }
-
-      if (!existingOrder.user_id) {
-        return { success: false, message: 'No user associated with this order' };
+      default: {
+        return { success: true, message: `Ignored webhook event: ${event}` };
       }
+    }
+  }
 
-      const [customerRecord] = await this.db
-        .select({
-          email: user.email,
-          first_name: user.first_name,
-          last_name: user.last_name,
-        })
-        .from(user)
-        .where(eq(user.id, existingOrder.user_id))
-        .limit(1);
+  private async handlePaymentCapturedWebhook(
+    payload: RazorpayPaymentCapturedWebhook,
+  ) {
+    const paymentEntity = payload.payload?.payment?.entity;
+    let orderId = paymentEntity?.notes?.orderId;
 
-      const customerDetails = {
-        email: customerRecord?.email || '',
-        first_name: customerRecord?.first_name || '',
-        last_name: customerRecord?.last_name || '',
+    if (!orderId && paymentEntity?.order_id) {
+      // Fallback: lookup by Razorpay order ID in payments table
+      const [paymentRecord] = await this.db
+        .select({ order_id: payments.order_id })
+        .from(payments)
+        .where(eq(payments.transaction_ref, paymentEntity.order_id))
+        .limit(1)
+        .catch((err) => {
+          throw new InternalServerErrorException(
+            CheckoutErrorKeyEnum.PAYMENT_NOT_FOUND,
+            {
+              cause: err,
+            },
+          );
+        });
+      if (!paymentRecord.order_id) {
+        throw new HttpException(
+          CheckoutErrorKeyEnum.PAYMENT_NOT_FOUND,
+          HttpStatus.NOT_FOUND,
+        );
+      }
+      orderId = paymentRecord?.order_id;
+    }
+
+    if (!orderId) {
+      return {
+        success: false,
+        message: 'No associated merchant order ID found in webhook payload',
       };
+    }
 
-      const verificationResult = await this.ordersService.completeOrderVerification(
+    const [existingOrder] = await this.db
+      .select()
+      .from(orders)
+      .where(eq(orders.id, orderId))
+      .limit(1);
+
+    if (!existingOrder) {
+      return { success: false, message: 'Order not found in database' };
+    }
+
+    if (!existingOrder.user_id) {
+      return {
+        success: false,
+        message: 'No user associated with this order',
+      };
+    }
+
+    const [customerRecord] = await this.db
+      .select({
+        email: user.email,
+        first_name: user.first_name,
+        last_name: user.last_name,
+      })
+      .from(user)
+      .where(eq(user.id, existingOrder.user_id))
+      .limit(1);
+
+    if (
+      !customerRecord ||
+      !customerRecord.email ||
+      !customerRecord.first_name ||
+      !customerRecord.last_name
+    ) {
+      throw new HttpException(
+        CheckoutErrorKeyEnum.CUSTOMER_NOT_FOUND,
+        HttpStatus.NOT_FOUND,
+      );
+    }
+
+    const customerDetails = {
+      email: customerRecord.email,
+      first_name: customerRecord.first_name as string,
+      last_name: customerRecord.last_name as string,
+    };
+
+    const verificationResult =
+      await this.ordersService.completeOrderVerification(
         customerDetails,
         existingOrder,
         orderId,
@@ -424,15 +539,85 @@ export class CheckoutService {
         existingOrder.company_id ?? undefined,
       );
 
+    return {
+      success: true,
+      message: 'Payment captured verification completed via webhook',
+      orderId,
+      verified: verificationResult.success,
+    };
+  }
+
+  private async handleOrderPaidWebhook(payload: RazorpayOrderPaidWebhook) {
+    const orderEntity = payload.payload?.order?.entity;
+    const orderId = orderEntity?.receipt;
+
+    if (!orderId) {
       return {
-        success: true,
-        message: 'Order paid verification completed via webhook',
-        orderId,
-        verified: verificationResult.success,
+        success: false,
+        message: 'No receipt order ID found in webhook payload',
       };
     }
 
-    return { success: true, message: `Ignored webhook event: ${event}` };
+    const [existingOrder] = await this.db
+      .select()
+      .from(orders)
+      .where(eq(orders.id, orderId))
+      .limit(1);
+
+    if (!existingOrder) {
+      return { success: false, message: 'Order not found in database' };
+    }
+
+    if (!existingOrder.user_id) {
+      return {
+        success: false,
+        message: 'No user associated with this order',
+      };
+    }
+
+    const [customerRecord] = await this.db
+      .select({
+        email: user.email,
+        first_name: user.first_name,
+        last_name: user.last_name,
+      })
+      .from(user)
+      .where(eq(user.id, existingOrder.user_id))
+      .limit(1);
+
+    if (
+      !customerRecord ||
+      !customerRecord.email ||
+      !customerRecord.first_name ||
+      !customerRecord.last_name
+    ) {
+      throw new HttpException(
+        CheckoutErrorKeyEnum.CUSTOMER_NOT_FOUND,
+        HttpStatus.NOT_FOUND,
+      );
+    }
+
+    const customerDetails = {
+      email: customerRecord.email,
+      first_name: customerRecord.first_name as string,
+      last_name: customerRecord.last_name as string,
+    };
+
+    const verificationResult =
+      await this.ordersService.completeOrderVerification(
+        customerDetails,
+        existingOrder,
+        orderId,
+        true, // marks order paid and moves to processing
+        existingOrder.company_id ?? undefined,
+      );
+
+    return {
+      success: true,
+      message: 'Order paid verification completed via webhook',
+      orderId,
+      verified: verificationResult.success,
+    };
   }
 
   // private helpers
@@ -474,7 +659,10 @@ export class CheckoutService {
         .where(eq(carts.id, cartId))
         .limit(1);
       if (!cartRecord) {
-        throw new HttpException(CheckoutErrorKeyEnum.CART_NOT_FOUND, HttpStatus.NOT_FOUND);
+        throw new HttpException(
+          CheckoutErrorKeyEnum.CART_NOT_FOUND,
+          HttpStatus.NOT_FOUND,
+        );
       }
       const cartItems = await this.db
         .select({
@@ -521,7 +709,12 @@ export class CheckoutService {
 
   async calculateShippingRate(
     userId: string,
-    dto: { addressId: string; cartId?: string; productVariantId?: string; qty?: number },
+    dto: {
+      addressId: string;
+      cartId?: string;
+      productVariantId?: string;
+      qty?: number;
+    },
     domain: string,
   ) {
     if (!domain) {
@@ -539,7 +732,10 @@ export class CheckoutService {
       .limit(1);
 
     if (!companyRecord) {
-      throw new HttpException(CheckoutErrorKeyEnum.COMPANY_NOT_FOUND, HttpStatus.NOT_FOUND);
+      throw new HttpException(
+        CheckoutErrorKeyEnum.COMPANY_NOT_FOUND,
+        HttpStatus.NOT_FOUND,
+      );
     }
 
     const orderLines = await this._resolveOrderLines(
@@ -556,15 +752,23 @@ export class CheckoutService {
       );
     }
 
-    const cartSubtotal = orderLines.reduce((acc, line) => acc + line.price * line.quantity, 0);
+    const cartSubtotal = orderLines.reduce(
+      (acc, line) => acc + line.price * line.quantity,
+      0,
+    );
 
-    const isFreeShipping = companyRecord.is_free_shipping_enabled && cartSubtotal >= Number(companyRecord.free_delivery_threshold);
-    const shippingCost = isFreeShipping ? 0 : Number(companyRecord.standard_delivery_charge);
+    const isFreeShipping =
+      companyRecord.is_free_shipping_enabled &&
+      cartSubtotal >= Number(companyRecord.free_delivery_threshold);
+    const shippingCost = isFreeShipping
+      ? 0
+      : Number(companyRecord.standard_delivery_charge);
 
     const threshold = Number(companyRecord.free_delivery_threshold);
-    const nudgeAmount = companyRecord.is_free_shipping_enabled && cartSubtotal < threshold
-      ? threshold - cartSubtotal
-      : 0;
+    const nudgeAmount =
+      companyRecord.is_free_shipping_enabled && cartSubtotal < threshold
+        ? threshold - cartSubtotal
+        : 0;
 
     return {
       shippingCost,
