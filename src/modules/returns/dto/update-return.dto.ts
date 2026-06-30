@@ -4,7 +4,7 @@ import { ReturnStatus } from '../../../drizzle/types/types';
 export class UpdateReturnDto {
   @IsEnum(ReturnStatus)
   @IsNotEmpty()
-  status: ReturnStatus;
+  status!: ReturnStatus;
 
   @IsString()
   @IsOptional()
@@ -12,7 +12,7 @@ export class UpdateReturnDto {
 
   @IsString()
   @IsNotEmpty()
-  request_for: string;
+  request_for!: string;
 
   @IsString()
   @IsOptional()

@@ -11,6 +11,7 @@ export * from './subscription.schema';
 export * from './vendor_storefront.schema';
 export * from './nav_storefront.schema';
 export * from './outbox.schema';
+export * from './vendor-gateway.schema';
 import { address, user, vendor } from './users.schema';
 import { vendor_storefront_sections } from './vendor_storefront.schema';
 import { nav_menus, nav_items } from './nav_storefront.schema';
@@ -83,6 +84,7 @@ import {
 } from './subscription.schema';
 import { gst_invoices } from './finance.schema';
 import { outbox_jobs } from './outbox.schema';
+import { vendor_gateways } from './vendor-gateway.schema';
 
 export const companyRelations = relations(company, ({ one, many }) => ({
   roles: many(user_roles),
@@ -138,6 +140,10 @@ export const companyRelations = relations(company, ({ one, many }) => ({
   subscriptionEvents: many(subscription_events),
   subscriptionPlans: many(subscription_plans),
   outbox_jobs: many(outbox_jobs),
+  vendorGateway: one(vendor_gateways, {
+    fields: [company.id],
+    references: [vendor_gateways.company_id],
+  }),
 }));
 
 export const outboxJobsRelations = relations(outbox_jobs, ({ one }) => ({
@@ -222,7 +228,24 @@ export const vendorRelations = relations(vendor, ({ one, many }) => ({
   }),
   documents: many(company_document),
   storefrontSections: many(vendor_storefront_sections),
+  vendorGateway: one(vendor_gateways, {
+    fields: [vendor.id],
+    references: [vendor_gateways.vendor_id],
+  }),
 }));
+export const vendorGatewaysRelations = relations(
+  vendor_gateways,
+  ({ one }) => ({
+    vendor: one(vendor, {
+      fields: [vendor_gateways.vendor_id],
+      references: [vendor.id],
+    }),
+    company: one(company, {
+      fields: [vendor_gateways.company_id],
+      references: [company.id],
+    }),
+  }),
+);
 export const documentRelations = relations(company_document, ({ one }) => ({
   company: one(company, {
     fields: [company_document.company_id],

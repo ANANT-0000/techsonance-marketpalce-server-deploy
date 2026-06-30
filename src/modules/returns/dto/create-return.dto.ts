@@ -11,14 +11,11 @@ import { ReturnType } from '../../../drizzle/types/types';
 export class CreateReturnDto {
   @IsString()
   @IsNotEmpty()
-  order_item_id: string;
-  @IsEnum(ReturnType)
-  @IsNotEmpty()
-  type: ReturnType;
+  order_item_id!: ReturnType;
 
   @IsString()
   @IsNotEmpty()
-  reason: string;
+  reason!: string;
 
   @IsString()
   @IsOptional()

@@ -20,6 +20,7 @@ import {
   sql,
 } from 'drizzle-orm';
 import { DRIZZLE, type DrizzleService } from '../../drizzle/drizzle.module';
+import * as schema from '../../drizzle/schema';
 import {
   gst_invoices,
   order_item_policy,
@@ -74,6 +75,10 @@ import {
   OutboxJobType,
   OutboxJobStatus,
 } from '../outbox/constants/outbox.constants';
+import { PgTransaction } from 'drizzle-orm/pg-core';
+import { NodePgQueryResultHKT } from 'drizzle-orm/node-postgres';
+import { PgSchema } from 'drizzle-orm/pg-core';
+import { ExtractTablesWithRelations } from 'drizzle-orm';
 
 @Injectable()
 export class OrdersService {
@@ -95,21 +100,25 @@ export class OrdersService {
     const companyId = await this.companyService.find(filteredDomain);
     return companyId;
   }
-  async createOrder({
-    userId,
-    companyId,
-    addressId,
-    orderLines,
-    paymentMethod,
-    promotion_id,
-  }: {
-    userId: string;
-    companyId: string;
-    addressId: string;
-    orderLines: { variantId: string; quantity: number; price: number }[];
-    paymentMethod: string;
-    promotion_id?: string;
-  }) {
+  async createOrder(
+    dto: {
+      userId: string;
+      companyId: string;
+      addressId: string;
+      orderLines: { variantId: string; quantity: number; price: number }[];
+      paymentMethod: string;
+      promotion_id?: string;
+    },
+    txContext?: any,
+  ) {
+    const {
+      userId,
+      companyId,
+      addressId,
+      orderLines,
+      paymentMethod,
+      promotion_id,
+    } = dto;
     try {
       const totalAmount = orderLines.reduce(
         (acc, line) => acc + line.price * line.quantity,
@@ -118,14 +127,15 @@ export class OrdersService {
       if (totalAmount <= 0) {
         throw new Error('Total amount must be greater than zero');
       }
-      const orderResult = await this.db.transaction(async (tx) => {
+      const db = txContext ?? this.db;
+      const orderResult = await db.transaction(async (tx: DrizzleService) => {
         await this.inventoryService.deductStockForOrder(
           orderLines.map((l) => ({
             variantId: l.variantId,
             quantity: l.quantity,
           })),
           companyId,
-          tx as DrizzleService,
+          tx,
         );
         // STEP 2: Apply promotion discount on base total BEFORE tax
         let discountAmount = 0;
@@ -345,18 +355,18 @@ export class OrdersService {
           }
         }
         // 8. Create payment record (PENDING — confirmed later via verifyCheckout)
-        // ── 8. Payment record ─────────────────────────────────────────────────────────
+        // ─────────────────────────────────────────────────────────
         await tx
           .insert(payments)
           .values({
             order_id: newOrder.id,
             company_id: companyId,
-            amount: String(finalGrandTotal.toFixed(2)), // ← includes shipping/delivery charges
+            amount: String(finalGrandTotal.toFixed(2)),
             payment_status: PaymentStatus.PENDING,
             payment_method: paymentMethod,
             transaction_ref: `txn_${newOrder.id}_${Date.now()}`,
           })
-          .catch((error) => {
+          .catch((error: any) => {
             throw new InternalServerErrorException(
               OrdersErrorKeyEnum.FAILED_TO_CREATE_PAYMENT_RECORD,
               {
@@ -525,13 +535,17 @@ export class OrdersService {
     orderId: string,
     isSuccess: boolean,
     companyId?: string,
-    cartId?: string,
-    productVariantId?: string,
+    txContext?: PgTransaction<
+      NodePgQueryResultHKT,
+      typeof schema,
+      ExtractTablesWithRelations<typeof schema>
+    >,
   ): Promise<{
     success: boolean;
     orderId: string;
     message: string;
     wasAlreadyVerified?: boolean;
+    jobId?: string;
   }> {
     if (!orderId) {
       throw new HttpException(
@@ -553,15 +567,15 @@ export class OrdersService {
         );
       }
 
-      const orderLines = await this.db
-        .select({
-          variantId: order_items.product_variant_id,
-          quantity: order_items.quantity,
-        })
-        .from(order_items)
-        .where(eq(order_items.order_id, orderId));
+      const execute = async (tx: DrizzleService) => {
+        const orderLines = await tx
+          .select({
+            variantId: order_items.product_variant_id,
+            quantity: order_items.quantity,
+          })
+          .from(order_items)
+          .where(eq(order_items.order_id, orderId));
 
-      const verificationResult = await this.db.transaction(async (tx) => {
         // Enforce idempotency inside transaction to prevent race conditions (SELECT FOR UPDATE)
         const [orderRecord] = await tx
           .select({ order_status: orders.order_status })
@@ -595,7 +609,10 @@ export class OrdersService {
         }
         if (isSuccess) {
           const orderItemsRecord = await tx
-            .select({ id: order_items.id })
+            .select({
+              id: order_items.id,
+              product_variant_id: order_items.product_variant_id,
+            })
             .from(order_items)
             .where(eq(order_items.order_id, orderId));
 
@@ -625,7 +642,9 @@ export class OrdersService {
           await tx
             .update(payments)
             .set({
-              payment_status: isCod ? PaymentStatus.PENDING : PaymentStatus.COMPLETED,
+              payment_status: isCod
+                ? PaymentStatus.PENDING
+                : PaymentStatus.COMPLETED,
             })
             .where(eq(payments.order_id, orderId))
             .returning()
@@ -670,41 +689,48 @@ export class OrdersService {
             // Fire-and-forget warranty PDF generation per item
             for (const itemPolicy of orderItemsWithPolicies) {
               const snapshot = itemPolicy.policy_snapshot as PolicySnapshot;
-              // if (snapshot?.generates_document) {
-              //   this.policyDocumentService
-              //     .generatePolicyDocument(itemPolicy.order_item_id)
-              //     .then(() =>
-              //       ,
-              //     )
-              //     .catch((err) =>
-              //       ,
-              //     );
-              // }
+              if (snapshot?.generates_document) {
+                // this.policyDocumentService
+                //   .generatePolicyDocument(itemPolicy.order_item_id)
+                //   .then(() =>
+                //     ,
+                //   )
+                //   .catch((err) =>
+                //     ,
+                //   );
+              }
             }
           }
-          // Cart cleanup happens inside the transaction so the connection
-          // is never used after commit (prevents Drizzle pool exhaustion).
-          if (productVariantId) {
-            await tx
-              .delete(cart_items)
-              .where(eq(cart_items.product_variant_id, productVariantId))
-              .catch((error) => {
-                throw new InternalServerErrorException(
-                  OrdersErrorKeyEnum.FAILED_TO_CLEAR_SINGLE_PRODUCT_VARIANT_CART,
-                  { cause: error },
-                );
-              });
-          }
-          if (cartId) {
-            await tx
-              .delete(cart_items)
-              .where(eq(cart_items.cart_id, cartId))
-              .catch((error) => {
-                throw new InternalServerErrorException(
-                  OrdersErrorKeyEnum.FAILED_TO_CLEAR_CART,
-                  { cause: error },
-                );
-              });
+          // Cart cleanup: SEC_PARAM_12: Securely resolve Cart ID from the database rather than trusting client parameters
+          if (existingOrder.user_id) {
+            const [userCart] = await tx
+              .select({ id: carts.id })
+              .from(carts)
+              .where(eq(carts.user_id, existingOrder.user_id))
+              .limit(1);
+
+            if (userCart?.id) {
+              const variantIds = orderItemsRecord
+                .map((item) => item.product_variant_id)
+                .filter((id): id is string => id !== null);
+
+              if (variantIds.length > 0) {
+                await tx
+                  .delete(cart_items)
+                  .where(
+                    and(
+                      eq(cart_items.cart_id, userCart.id),
+                      inArray(cart_items.product_variant_id, variantIds),
+                    ),
+                  )
+                  .catch((error) => {
+                    throw new InternalServerErrorException(
+                      OrdersErrorKeyEnum.FAILED_TO_CLEAR_PURCHASED_ITEMS_FROM_CART,
+                      { cause: error },
+                    );
+                  });
+              }
+            }
           }
           // ── Outbox write (atomic with order commit) ────────────────────────
           // Writing the job record here guarantees it is never lost even if
@@ -740,7 +766,7 @@ export class OrdersService {
               quantity: l.quantity,
             })),
             companyId,
-            tx as DrizzleService,
+            tx,
           );
           await tx
             .update(order_items)
@@ -766,7 +792,7 @@ export class OrdersService {
             .update(payments)
             .set({ payment_status: PaymentStatus.FAILED })
             .where(eq(payments.order_id, orderId))
-            .catch((error) => {
+            .catch((error: any) => {
               throw new InternalServerErrorException(
                 OrdersErrorKeyEnum.FAILED_TO_UPDATE_PAYMENT_STATUS,
                 { cause: error },
@@ -778,7 +804,11 @@ export class OrdersService {
             message: 'Payment failed. Order has been cancelled.',
           };
         }
-      });
+      };
+
+      const verificationResult = txContext
+        ? await execute(txContext)
+        : await this.db.transaction(execute);
 
       // ── Fire-and-forget QStash push (Listen-to-Yourself pattern) ─────────
       // The outbox row was already written inside the transaction above.
@@ -926,7 +956,14 @@ export class OrdersService {
             },
           },
           payment: true,
-          shipping: { columns: { tracking_url: true } },
+          shipping: {
+            columns: {
+              tracking_url: true,
+              shipping_status: true,
+              awb_number: true,
+              courier_name: true,
+            },
+          },
           gstInvoice: true,
         },
       });

@@ -7,8 +7,7 @@ import {
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { InitiateCheckoutDto, VerifyCheckoutDto } from './dto/checkout.dto';
-import { type DrizzleDB } from '../../drizzle/types/drizzle';
-import { DRIZZLE, DrizzleService } from '../../drizzle/drizzle.module';
+import { DRIZZLE, type DrizzleService } from '../../drizzle/drizzle.module';
 import {
   address,
   cart_items,
@@ -18,14 +17,39 @@ import {
   product_variants,
   user,
   payments,
+  promotions,
+  promotion_usage,
+  inventory,
+  warehouse,
+  products,
+  vendor_gateways,
+  vendor_credentials,
+  order_items,
 } from '../../drizzle/schema';
-import { and, eq, isNull, or, sql } from 'drizzle-orm';
+import * as schema from '../../drizzle/schema';
+import {
+  LogisticsMode,
+  PaymentRoutingStatus,
+  PromotionStatus,
+} from '../../drizzle/types/types';
+import { PaymentSplitterService } from '../vendors/payment/payment-splitter.service';
+import { PaymentService } from '../vendors/payment/payment.service';
+import {
+  and,
+  eq,
+  ExtractTablesWithRelations,
+  inArray,
+  isNull,
+  or,
+  sql,
+} from 'drizzle-orm';
 import Razorpay from 'razorpay';
 import * as crypto from 'crypto';
 import { OrdersService } from '../orders/orders.service';
 import { CompanyService } from '../company/company.service';
 import { MailService } from '../../common/services/mail/mail.service';
 import { ShipRocketService } from '../ship-rocket/ship-rocket.service';
+import { CryptoService } from '../shipping/crypto.service';
 import { domainExtractor } from '../../common/filters/domainExtractor.filter';
 
 import { CheckoutErrorKeyEnum } from './constants/checkout.enums';
@@ -35,16 +59,27 @@ import {
   RazorpayPaymentCapturedWebhook,
 } from './constants/razorpay.webhook';
 import { Orders } from 'razorpay/dist/types/orders';
+import { PgTransaction } from 'drizzle-orm/pg-core';
+import { NodePgQueryResultHKT } from 'drizzle-orm/node-postgres';
+import { PgSchema } from 'drizzle-orm/pg-core';
 
 @Injectable()
 export class CheckoutService {
+  private readonly serviceabilityCache = new Map<
+    string,
+    { serviceable: boolean; timestamp: number }
+  >();
+
   constructor(
-    @Inject(DRIZZLE) private readonly db: DrizzleDB,
+    @Inject(DRIZZLE) private readonly db: DrizzleService,
     private readonly ordersService: OrdersService,
     private readonly companyService: CompanyService,
     private readonly mailService: MailService,
     private readonly shipRocketService: ShipRocketService,
     private readonly configService: ConfigService,
+    private readonly cryptoService: CryptoService,
+    private readonly paymentSplitterService: PaymentSplitterService,
+    private readonly paymentService: PaymentService,
   ) {}
 
   private getRazorpayInstance(): Razorpay {
@@ -84,168 +119,478 @@ export class CheckoutService {
     }
     const companyId = await this.resolveCompanyId(domain);
 
-    const addressRecord = await this.db
-      .select()
-      .from(address)
-      .where(eq(address.id, addressId))
-      .limit(1)
-      .catch((error) => {
-        throw new HttpException(
-          CheckoutErrorKeyEnum.FAILED_TO_FETCH_ADDRESS_FOR_CHECKOUT,
-          HttpStatus.INTERNAL_SERVER_ERROR,
-          { cause: error },
-        );
-      });
-    if (!addressRecord || addressRecord.length === 0) {
-      throw new HttpException(
-        CheckoutErrorKeyEnum.ADDRESS_NOT_FOUND,
-        HttpStatus.NOT_FOUND,
-      );
-    }
-    const [resolvedAddress] = addressRecord;
-
-    // ── Pincode serviceability check ──────────────────────────────────────
-    // Validate that at least one Shiprocket courier serves this pincode
-    // BEFORE creating the order.  This prevents paid-but-unshippable orders.
-    // We use placeholder dimensions (1 kg, 10×10×10 cm) because serviceability
-    // is pincode-based; exact weight only affects rate, not coverage.
-    const pickupPincode = this.configService.get<string>(
-      'SHIPROCKET_PICKUP_PINCODE',
-    );
-    if (pickupPincode && resolvedAddress?.postal_code) {
-      try {
-        const serviceabilityRes: any =
-          await this.shipRocketService.getServiceability({
-            pickup_pincode: pickupPincode,
-            delivery_pincode: resolvedAddress.postal_code,
-            weight: 1,
-            breadth: 10,
-            height: 10,
-            qc_check: 0,
-            is_return: 0,
-            mode: 'Surface',
-            cod: 0,
-          });
-
-        const availableCouriers =
-          serviceabilityRes?.data?.available_courier_companies ?? [];
-        if (availableCouriers.length === 0) {
+    // Run entire order initialization inside an atomic transaction block
+    return await this.db.transaction(async (tx) => {
+      //  Enforce address verification matches both the user and current tenant
+      const addressRecord = await tx
+        .select()
+        .from(address)
+        .where(and(eq(address.id, addressId), eq(address.user_id, userId)))
+        .limit(1)
+        .catch((error) => {
           throw new HttpException(
-            `Delivery to pincode ${resolvedAddress.postal_code} is not currently serviceable. Please use a different address.`,
-            HttpStatus.UNPROCESSABLE_ENTITY,
+            CheckoutErrorKeyEnum.FAILED_TO_FETCH_ADDRESS_FOR_CHECKOUT,
+            HttpStatus.INTERNAL_SERVER_ERROR,
+          );
+        });
+
+      if (!addressRecord || addressRecord.length === 0) {
+        throw new HttpException(
+          CheckoutErrorKeyEnum.ADDRESS_NOT_FOUND,
+          HttpStatus.NOT_FOUND,
+        );
+      }
+
+      const orderLines = await this._resolveOrderLines(
+        userId,
+        cartId,
+        productVariantId,
+        initiateCheckoutDto.qty,
+      );
+      if (!orderLines || orderLines.length === 0) {
+        throw new HttpException(
+          CheckoutErrorKeyEnum.NO_VALID_ORDER_LINES_FOUND_FOR_CHECKOUT,
+          HttpStatus.BAD_REQUEST,
+        );
+      }
+
+      // Resolve logistics credentials strategy for dynamic serviceability check
+      const [compRecord] = await this.db
+        .select({
+          logistics_mode: company.logistics_mode,
+          encrypted_logistics_api_key: company.encrypted_logistics_api_key,
+          logistics_api_key_iv: company.logistics_api_key_iv,
+          logistics_api_key_tag: company.logistics_api_key_tag,
+          encrypted_logistics_api_secret:
+            company.encrypted_logistics_api_secret,
+          logistics_api_secret_iv: company.logistics_api_secret_iv,
+          logistics_api_secret_tag: company.logistics_api_secret_tag,
+        })
+        .from(company)
+        .where(eq(company.id, companyId))
+        .limit(1);
+
+      let credentials: { email?: string; password?: string } | undefined;
+      if (compRecord?.logistics_mode === LogisticsMode.STANDALONE) {
+        if (
+          compRecord.encrypted_logistics_api_key &&
+          compRecord.logistics_api_key_iv &&
+          compRecord.logistics_api_key_tag &&
+          compRecord.encrypted_logistics_api_secret &&
+          compRecord.logistics_api_secret_iv &&
+          compRecord.logistics_api_secret_tag
+        ) {
+          const email = this.cryptoService.decrypt(
+            `${compRecord.logistics_api_key_iv}:${compRecord.encrypted_logistics_api_key}:${compRecord.logistics_api_key_tag}`,
+          );
+          const password = this.cryptoService.decrypt(
+            `${compRecord.logistics_api_secret_iv}:${compRecord.encrypted_logistics_api_secret}:${compRecord.logistics_api_secret_tag}`,
+          );
+          credentials = { email, password };
+        }
+      }
+
+      /** Resolve originating warehouse pincodes dynamically from variant stock levels
+       */
+      const originPincodes = new Set<string>();
+      const variantIds = orderLines.map((line) => line.variantId);
+
+      const warehouseAddresses = await this.db
+        .select({
+          variantId: inventory.product_variant_id,
+          postalCode: address.postal_code,
+          stockQuantity: inventory.stock_quantity,
+        })
+        .from(inventory)
+        .innerJoin(warehouse, eq(inventory.warehouse_id, warehouse.id))
+        .innerJoin(address, eq(warehouse.address_id, address.id))
+        .where(
+          and(
+            inArray(inventory.product_variant_id, variantIds),
+            eq(inventory.company_id, companyId),
+            sql`${inventory.stock_quantity} > 0`,
+          ),
+        );
+
+      for (const line of orderLines) {
+        const matches = warehouseAddresses.filter(
+          (w) => w.variantId === line.variantId,
+        );
+        if (matches.length > 0) {
+          // Pick the warehouse with the highest stock quantity for the variant
+          matches.sort((a, b) => b.stockQuantity - a.stockQuantity);
+          if (matches[0].postalCode) {
+            originPincodes.add(matches[0].postalCode);
+          }
+        }
+      }
+
+      // Fallback to platform-default pickup pincode if no warehouse addresses could be resolved from inventory
+      if (originPincodes.size === 0) {
+        const fallbackPincode = this.configService.get<string>(
+          'SHIPROCKET_PICKUP_PINCODE',
+        );
+        if (fallbackPincode) {
+          originPincodes.add(fallbackPincode);
+        }
+      }
+
+      // ── Pincode serviceability check ──────────────────────────────────────
+      // Validate that at least one Shiprocket courier serves the delivery address
+      // from each active origin warehouse pincode BEFORE finalizing order creation.
+
+      const [resolvedAddress] = addressRecord;
+      if (originPincodes.size > 0 && resolvedAddress?.postal_code) {
+        for (const originPincode of originPincodes) {
+          try {
+            const serviceabilityRes: any =
+              await this.shipRocketService.getServiceability(
+                {
+                  pickup_pincode: originPincode,
+                  delivery_pincode: resolvedAddress.postal_code,
+                  weight: 1,
+                  breadth: 10,
+                  height: 10,
+                  qc_check: 0,
+                  is_return: 0,
+                  mode: 'Surface',
+                  cod: initiateCheckoutDto.paymentMethod === 'COD' ? 1 : 0,
+                },
+                credentials,
+                companyId,
+              );
+
+            const availableCouriers =
+              serviceabilityRes?.data?.available_courier_companies ?? [];
+            if (availableCouriers.length === 0) {
+              throw new HttpException(
+                `Delivery to pincode ${resolvedAddress.postal_code} is not currently serviceable from our warehouse location (${originPincode}). Please use a different delivery address.`,
+                HttpStatus.UNPROCESSABLE_ENTITY,
+              );
+            }
+          } catch (err: any) {
+            // Only rethrow serviceability errors — network/API failures should
+            // not block checkout (Shiprocket may be temporarily unavailable).
+            if (err instanceof HttpException) throw err;
+            console.warn(
+              `[Checkout] Serviceability check skipped (Shiprocket API error): ${err?.message}`,
+            );
+          }
+        }
+      }
+      // Cache serviceability results to prevent third-party API resource exhaustion / DOS
+      const cacheKey = resolvedAddress.postal_code;
+      const cachedServiceability = this.serviceabilityCache.get(cacheKey);
+      const CACHE_TTL_MS = 24 * 60 * 60 * 1000; // 24-hour cache TTL
+      let isServiceable = false;
+
+      if (
+        cachedServiceability &&
+        Date.now() - cachedServiceability.timestamp < CACHE_TTL_MS
+      ) {
+        isServiceable = cachedServiceability.serviceable;
+      } else {
+        const pickupPincode = this.configService.get<string>(
+          'SHIPROCKET_PICKUP_PINCODE',
+        );
+        if (pickupPincode && resolvedAddress?.postal_code) {
+          try {
+            const serviceabilityRes: any =
+              await this.shipRocketService.getServiceability({
+                pickup_pincode: pickupPincode,
+                delivery_pincode: resolvedAddress.postal_code,
+                weight: 1,
+                breadth: 10,
+                height: 10,
+                qc_check: 0,
+                is_return: 0,
+                mode: 'Surface',
+                cod: 0,
+              });
+
+            const availableCouriers =
+              serviceabilityRes?.data?.available_courier_companies ?? [];
+            isServiceable = availableCouriers.length > 0;
+            this.serviceabilityCache.set(cacheKey, {
+              serviceable: isServiceable,
+              timestamp: Date.now(),
+            });
+          } catch (err: any) {
+            if (err instanceof HttpException) throw err;
+            // Fallback to true during temporary Shiprocket outages to avoid blocking checkout
+            isServiceable = true;
+          }
+        } else {
+          isServiceable = true;
+        }
+      }
+
+      if (!isServiceable) {
+        throw new HttpException(
+          `Delivery to pincode ${resolvedAddress.postal_code} is not currently serviceable. Please use a different address.`,
+          HttpStatus.UNPROCESSABLE_ENTITY,
+        );
+      }
+      //  Enforce server-side coupon and promotion validation checks
+      if (initiateCheckoutDto.promotionId) {
+        const [promo] = await tx
+          .select()
+          .from(promotions)
+          .where(
+            and(
+              eq(promotions.id, initiateCheckoutDto.promotionId),
+              eq(promotions.company_id, companyId),
+              eq(promotions.status, PromotionStatus.ACTIVE),
+            ),
+          )
+          .limit(1);
+
+        if (!promo) {
+          throw new HttpException(
+            'Invalid or inactive promotion.',
+            HttpStatus.BAD_REQUEST,
           );
         }
-      } catch (err: any) {
-        // Only rethrow serviceability errors — network/API failures should
-        // not block checkout (Shiprocket may be temporarily unavailable).
-        if (err instanceof HttpException) throw err;
-        console.warn(
-          `[Checkout] Serviceability check skipped (Shiprocket API error): ${err?.message}`,
-        );
+
+        const now = new Date();
+        if (promo.valid_from && new Date(promo.valid_from) > now) {
+          throw new HttpException(
+            'This promotion is not yet active.',
+            HttpStatus.BAD_REQUEST,
+          );
+        }
+        if (promo.valid_to && new Date(promo.valid_to) < now) {
+          throw new HttpException(
+            'This promotion has expired.',
+            HttpStatus.BAD_REQUEST,
+          );
+        }
+
+        const [isUsed] = await tx
+          .select({ id: promotion_usage.id })
+          .from(promotion_usage)
+          .where(
+            and(
+              eq(promotion_usage.promotion_id, promo.id),
+              eq(promotion_usage.user_id, userId),
+            ),
+          )
+          .limit(1);
+
+        if (isUsed) {
+          throw new HttpException(
+            'You have already used this promotion.',
+            HttpStatus.BAD_REQUEST,
+          );
+        }
       }
-    }
 
-    const orderLines = await this._resolveOrderLines(
-      userId,
-      cartId,
-      productVariantId,
-      initiateCheckoutDto.qty,
-    );
-    if (!orderLines || orderLines.length === 0) {
-      throw new HttpException(
-        CheckoutErrorKeyEnum.NO_VALID_ORDER_LINES_FOUND_FOR_CHECKOUT,
-        HttpStatus.BAD_REQUEST,
-      );
-    }
-    const orderResult = await this.ordersService.createOrder({
-      userId,
-      companyId,
-      addressId,
-      orderLines,
-      paymentMethod,
-      promotion_id: initiateCheckoutDto.promotionId ?? undefined,
-    });
-
-    const isCod = paymentMethod.toLowerCase() === 'cod';
-    if (isCod) {
-      return {
-        success: true,
-        message: 'Order created successfully (COD)',
-        data: orderResult,
-      };
-    }
-
-    try {
-      const razorpay = this.getRazorpayInstance();
-      const amountInPaise = Math.round(Number(orderResult.totalAmount) * 100);
-      const razorpayPayload: Orders.RazorpayOrderCreateRequestBody = {
-        amount: amountInPaise,
-        currency: 'INR',
-        receipt: orderResult.orderId,
-        notes: {
-          userId: userId,
-          companyId: companyId,
-          orderId: orderResult.orderId,
-          paymentMethod: paymentMethod,
-        },
-      };
-      const razorpayOrder = await razorpay.orders.create(razorpayPayload);
-
-      // Update payment record transaction reference with the Razorpay order ID
-      await this.db
-        .update(payments)
-        .set({ transaction_ref: razorpayOrder.id })
-        .where(eq(payments.order_id, orderResult.orderId));
-
-      return {
-        success: true,
-        message: 'Razorpay payment initiated',
-        data: {
-          ...orderResult,
-          razorpayOrderId: razorpayOrder.id,
-          razorpayKeyId: this.configService.get<string>('RAZORPAY_KEY_ID'),
-        },
-      };
-    } catch (error: any) {
-      // Rollback order stock level or cancel if Razorpay order creation fails
-      try {
-        await this.ordersService.completeOrderVerification(
-          { email: '', first_name: '', last_name: '' },
-          {
-            id: orderResult.orderId,
-            total_amount: orderResult.totalAmount || '0',
-            created_at: new Date(),
-            updated_at: new Date(),
-            user_id: userId,
-            address_id: addressId,
-            company_id: companyId,
-          },
-          orderResult.orderId,
-          false, // marks failure and cancels order
+      // Create order with injected Drizzle transaction context
+      const orderResult = await this.ordersService.createOrder(
+        {
+          userId,
           companyId,
-          cartId,
-          productVariantId,
-        );
-      } catch (rollbackErr) {}
+          addressId,
+          orderLines,
+          paymentMethod,
+          promotion_id: initiateCheckoutDto.promotionId ?? undefined,
+        },
+        tx,
+      );
 
-      let errorMessage = '';
-      if (error && typeof error === 'object') {
-        errorMessage =
-          error.message ||
-          error.description ||
-          (error.error && typeof error.error === 'object'
-            ? error.error.description || JSON.stringify(error.error)
-            : '') ||
-          JSON.stringify(error);
-      } else {
-        errorMessage = String(error);
+      const isCod = paymentMethod.toLowerCase() === 'cod';
+      if (isCod) {
+        return {
+          success: true,
+          message: 'Order created successfully (COD)',
+          data: orderResult,
+        };
       }
 
-      throw new HttpException(
-        `Failed to initialize payment gateway: ${errorMessage}`,
-        HttpStatus.BAD_GATEWAY,
-      );
-    }
+      try {
+        // Resolve vendor ID from order items
+        const firstLine = orderLines[0];
+        const [variantWithProduct] = await tx
+          .select({
+            vendorId: products.vendor_id,
+          })
+          .from(product_variants)
+          .innerJoin(products, eq(product_variants.product_id, products.id))
+          .where(eq(product_variants.id, firstLine.variantId))
+          .limit(1);
+
+        const vendorId = variantWithProduct?.vendorId;
+        let vendorGateway = null;
+        if (vendorId) {
+          [vendorGateway] = await tx
+            .select()
+            .from(vendor_gateways)
+            .where(eq(vendor_gateways.vendor_id, vendorId))
+            .limit(1);
+        }
+
+        let razorpayInstance: Razorpay;
+        let razorpayKeyIdForFrontend: string;
+        let razorpayPayload: any;
+
+        const [compRecord] = await tx
+          .select({
+            logistics_mode: company.logistics_mode,
+          })
+          .from(company)
+          .where(eq(company.id, companyId))
+          .limit(1);
+
+        const isStandalone =
+          compRecord &&
+          compRecord.logistics_mode === LogisticsMode.STANDALONE &&
+          vendorGateway &&
+          vendorGateway.routing_status !== PaymentRoutingStatus.SUSPENDED;
+        const isPlatformProxy =
+          compRecord &&
+          compRecord.logistics_mode === LogisticsMode.PLATFORM_PROXY &&
+          vendorGateway &&
+          vendorGateway.routing_status !== PaymentRoutingStatus.SUSPENDED;
+
+        if (isStandalone && vendorId) {
+          const decrypted =
+            await this.paymentService.getDecryptedSecret(vendorId);
+          if (!decrypted) {
+            throw new HttpException(
+              'Vendor payment gateway credentials are not correctly configured.',
+              HttpStatus.BAD_REQUEST,
+            );
+          }
+          razorpayInstance = this.paymentSplitterService.getRazorpayInstance(
+            decrypted.keyId,
+            decrypted.keySecret,
+          );
+          razorpayKeyIdForFrontend = decrypted.keyId;
+
+          const amountInPaise = Math.round(
+            Number(orderResult.totalAmount) * 100,
+          );
+          razorpayPayload = {
+            amount: amountInPaise,
+            currency: 'INR',
+            receipt: orderResult.orderId,
+            notes: {
+              userId: userId,
+              companyId: companyId,
+              orderId: orderResult.orderId,
+              paymentMethod: paymentMethod,
+            },
+          };
+        } else if (isPlatformProxy) {
+          if (!vendorGateway || !vendorGateway.id) {
+            throw new HttpException(
+              'Vendor payment gateway configuration is missing.',
+              HttpStatus.BAD_REQUEST,
+            );
+          }
+
+          const [credentials] = await tx
+            .select({ public_identifier: vendor_credentials.public_identifier })
+            .from(vendor_credentials)
+            .where(
+              and(
+                eq(vendor_credentials.vendor_gateway_id, vendorGateway.id),
+                eq(vendor_credentials.credential_type, 'razorpay_key_id'),
+              ),
+            )
+            .limit(1);
+
+          const connectedAccountId = credentials?.public_identifier;
+
+          if (!connectedAccountId || !connectedAccountId.startsWith('acc_')) {
+            throw new HttpException(
+              'Vendor payment gateway platform proxy account ID is missing or invalid.',
+              HttpStatus.BAD_REQUEST,
+            );
+          }
+
+          razorpayInstance = this.getRazorpayInstance();
+          razorpayKeyIdForFrontend =
+            this.configService.get<string>('RAZORPAY_KEY_ID') || '';
+
+          const itemsSubtotal = orderLines.reduce(
+            (sum, line) => sum + line.price * line.quantity,
+            0,
+          );
+          const split = await this.paymentSplitterService.getSplitDetails(
+            Number(orderResult.totalAmount),
+            companyId,
+            itemsSubtotal,
+          );
+
+          razorpayPayload = {
+            amount: split.totalAmountInPaise,
+            currency: 'INR',
+            receipt: orderResult.orderId,
+            notes: {
+              userId: userId,
+              companyId: companyId,
+              orderId: orderResult.orderId,
+              paymentMethod: paymentMethod,
+            },
+            transfers: [
+              {
+                account: connectedAccountId,
+                amount: split.vendorAmountInPaise,
+                currency: 'INR',
+                on_hold: false,
+              },
+            ],
+          };
+        } else {
+          razorpayInstance = this.getRazorpayInstance();
+          razorpayKeyIdForFrontend =
+            this.configService.get<string>('RAZORPAY_KEY_ID') || '';
+
+          const amountInPaise = Math.round(
+            Number(orderResult.totalAmount) * 100,
+          );
+          razorpayPayload = {
+            amount: amountInPaise,
+            currency: 'INR',
+            receipt: orderResult.orderId,
+            notes: {
+              userId: userId,
+              companyId: companyId,
+              orderId: orderResult.orderId,
+              paymentMethod: paymentMethod,
+            },
+          };
+        }
+
+        const razorpayOrder =
+          await razorpayInstance.orders.create(razorpayPayload);
+
+        // Update payment record transaction reference using transaction context
+        await tx
+          .update(payments)
+          .set({ transaction_ref: razorpayOrder.id })
+          .where(eq(payments.order_id, orderResult.orderId));
+
+        return {
+          success: true,
+          message: 'Razorpay payment initiated',
+          data: {
+            ...orderResult,
+            razorpayOrderId: razorpayOrder.id,
+            razorpayKeyId: razorpayKeyIdForFrontend,
+          },
+        };
+      } catch (error: any) {
+        if (error instanceof HttpException) {
+          throw error;
+        }
+        throw new HttpException(
+          CheckoutErrorKeyEnum.PAYMENT_GATEWAY_INITIALIZATION_FAILED,
+          HttpStatus.BAD_GATEWAY,
+        );
+      }
+    });
   }
 
   async verifyCheckout(dto: VerifyCheckoutDto, domain: string) {
@@ -273,7 +618,8 @@ export class CheckoutService {
       .select()
       .from(orders)
       .where(and(eq(orders.id, orderId), eq(orders.company_id, companyId)))
-      .limit(1);
+      .limit(1)
+      .for('update');
     if (!existingOrder || !existingOrder.user_id) {
       throw new HttpException(
         CheckoutErrorKeyEnum.USER_NOT_FOUND,
@@ -286,7 +632,7 @@ export class CheckoutService {
       .from(payments)
       .where(eq(payments.order_id, orderId))
       .limit(1);
-    if (!paymentRecord) {
+    if (!paymentRecord || paymentRecord.company_id) {
       throw new HttpException(
         'Payment record not found for verification.',
         HttpStatus.NOT_FOUND,
@@ -302,7 +648,52 @@ export class CheckoutService {
       if (!razorpayOrderId || !razorpayPaymentId || !razorpaySignature) {
         isSuccessVerified = false;
       } else {
-        const keySecret = this.configService.get<string>('RAZORPAY_KEY_SECRET');
+        let keySecret = this.configService.get<string>('RAZORPAY_KEY_SECRET');
+
+        // Resolve vendor ID from order items
+        const [firstOrderItem] = await this.db
+          .select({ variantId: order_items.product_variant_id })
+          .from(order_items)
+          .where(eq(order_items.order_id, orderId))
+          .limit(1);
+
+        if (firstOrderItem && firstOrderItem.variantId) {
+          const [variantWithProduct] = await this.db
+            .select({ vendorId: products.vendor_id })
+            .from(product_variants)
+            .innerJoin(products, eq(product_variants.product_id, products.id))
+            .where(eq(product_variants.id, firstOrderItem.variantId))
+            .limit(1);
+
+          if (variantWithProduct?.vendorId && paymentRecord.company_id) {
+            const [vendorGateway] = await this.db
+              .select()
+              .from(vendor_gateways)
+              .where(eq(vendor_gateways.vendor_id, variantWithProduct.vendorId))
+              .limit(1);
+
+            const [compRecord] = await this.db
+              .select({ logistics_mode: company.logistics_mode })
+              .from(company)
+              .where(eq(company.id, paymentRecord.company_id))
+              .limit(1);
+
+            if (
+              compRecord &&
+              compRecord.logistics_mode === LogisticsMode.STANDALONE &&
+              vendorGateway &&
+              vendorGateway.routing_status !== PaymentRoutingStatus.SUSPENDED
+            ) {
+              const decrypted = await this.paymentService.getDecryptedSecret(
+                variantWithProduct.vendorId,
+              );
+              if (decrypted) {
+                keySecret = decrypted.keySecret;
+              }
+            }
+          }
+        }
+
         if (!keySecret) {
           throw new HttpException(
             'Payment gateway credentials are not configured on server.',
@@ -322,8 +713,9 @@ export class CheckoutService {
         }
       }
     } else {
-      // If it is a COD payment, we don't have Razorpay signatures, so we trust client parameter isSuccess
-      isSuccessVerified = isSuccess;
+      // If it is a COD payment, the server directly authorizes the transition to processing.
+      // We do not trust the client-supplied 'isSuccess' parameter to determine the state.
+      isSuccessVerified = true;
     }
 
     try {
@@ -359,8 +751,6 @@ export class CheckoutService {
           orderId,
           isSuccessVerified,
           companyId,
-          cartId,
-          productVariantId,
         );
 
       if (!isSuccessVerified) {
@@ -390,23 +780,13 @@ export class CheckoutService {
       );
     }
   }
+
   async handleRazorpayWebhook(
     rawBody: string | RazorpayWebhookEvent,
     signature: string,
+    timestamp?: string,
   ) {
-    const webhookSecret = this.configService.get<string>(
-      'RAZORPAY_WEBHOOK_SECRET',
-    );
-    if (!webhookSecret) {
-      throw new HttpException(
-        'Webhook secret is not configured on server.',
-        HttpStatus.INTERNAL_SERVER_ERROR,
-      );
-    }
-
-    const rawBodyString =
-      typeof rawBody === 'string' ? rawBody : JSON.stringify(rawBody);
-
+    // 1. Parse raw body (fail fast on bad JSON)
     let parsedBody: RazorpayWebhookEvent;
     try {
       parsedBody = typeof rawBody === 'string' ? JSON.parse(rawBody) : rawBody;
@@ -417,8 +797,41 @@ export class CheckoutService {
       );
     }
 
+    // 2. Validate timestamp header (prevent replay attacks)
+    if (!timestamp) {
+      throw new HttpException(
+        'Webhook request timestamp is required.',
+        HttpStatus.BAD_REQUEST,
+      );
+    }
+    const receivedTimestamp = Number(timestamp);
+    const currentTimestamp = Math.floor(Date.now() / 1000);
+    if (
+      isNaN(receivedTimestamp) ||
+      Math.abs(currentTimestamp - receivedTimestamp) > 300
+    ) {
+      throw new HttpException(
+        'Webhook request timestamp expired or invalid.',
+        HttpStatus.BAD_REQUEST,
+      );
+    }
+
+    // 3. Verify HMAC signature with PLATFORM secret FIRST
+    const platformSecret = this.configService.get<string>(
+      'RAZORPAY_WEBHOOK_SECRET',
+    );
+    if (!platformSecret) {
+      throw new HttpException(
+        'Webhook secret is not configured on server.',
+        HttpStatus.INTERNAL_SERVER_ERROR,
+      );
+    }
+
+    const rawBodyString =
+      typeof rawBody === 'string' ? rawBody : JSON.stringify(rawBody);
+
     const generatedSignature = crypto
-      .createHmac('sha256', webhookSecret)
+      .createHmac('sha256', platformSecret)
       .update(rawBodyString)
       .digest('hex');
 
@@ -429,53 +842,148 @@ export class CheckoutService {
       );
     }
 
-    const event: string = parsedBody.event;
-
-    switch (event) {
-      case 'order.paid': {
-        return this.handleOrderPaidWebhook(
-          parsedBody as RazorpayOrderPaidWebhook,
+    // 4. Validate account_id (fail closed)
+    const expectedAccountId = this.configService.get<string>(
+      'EXPECTED_RAZORPAY_ACCOUNT_ID',
+    );
+    if (expectedAccountId) {
+      if (
+        !parsedBody.account_id ||
+        parsedBody.account_id !== expectedAccountId
+      ) {
+        throw new HttpException(
+          'Cross-account merchant event rejected.',
+          HttpStatus.FORBIDDEN,
         );
-      }
-      case 'payment.captured': {
-        return this.handlePaymentCapturedWebhook(
-          parsedBody as RazorpayPaymentCapturedWebhook,
-        );
-      }
-      default: {
-        return { success: true, message: `Ignored webhook event: ${event}` };
       }
     }
-  }
 
-  private async handlePaymentCapturedWebhook(
-    payload: RazorpayPaymentCapturedWebhook,
-  ) {
-    const paymentEntity = payload.payload?.payment?.entity;
-    let orderId = paymentEntity?.notes?.orderId;
+    const event: string = parsedBody.event;
+
+    // 5. Resolve orderId from payment notes (available in both order.paid and payment.captured)
+    let orderId: string | undefined;
+    const paymentEntity = parsedBody.payload?.payment?.entity;
+
+    if (paymentEntity?.notes) {
+      orderId = paymentEntity.notes.orderId || paymentEntity.notes.order_id;
+    }
 
     if (!orderId && paymentEntity?.order_id) {
-      // Fallback: lookup by Razorpay order ID in payments table
-      const [paymentRecord] = await this.db
+      const results = await this.db
         .select({ order_id: payments.order_id })
         .from(payments)
         .where(eq(payments.transaction_ref, paymentEntity.order_id))
         .limit(1)
-        .catch((err) => {
-          throw new InternalServerErrorException(
-            CheckoutErrorKeyEnum.PAYMENT_NOT_FOUND,
-            {
-              cause: err,
-            },
-          );
-        });
-      if (!paymentRecord.order_id) {
+        .catch(() => []);
+      const paymentRecord = results[0];
+      if (paymentRecord?.order_id) {
+        orderId = paymentRecord.order_id;
+      }
+    }
+
+    // 6. Determine which webhook secret to use (vendor vs platform)
+    let customWebhookSecret: string | null = null;
+
+    if (orderId) {
+      const [orderResults] = await this.db
+        .select({ company_id: orders.company_id })
+        .from(orders)
+        .where(eq(orders.id, orderId))
+        .limit(1)
+        .catch(() => []);
+
+      if (orderResults?.company_id) {
+        const [compResults] = await this.db
+          .select({ logistics_mode: company.logistics_mode })
+          .from(company)
+          .where(eq(company.id, orderResults.company_id))
+          .limit(1)
+          .catch(() => []);
+
+        const [firstOrderItem] = await this.db
+          .select({ variantId: order_items.product_variant_id })
+          .from(order_items)
+          .where(eq(order_items.order_id, orderId))
+          .limit(1)
+          .catch(() => []);
+
+        if (firstOrderItem?.variantId) {
+          const [variantWithProduct] = await this.db
+            .select({ vendorId: products.vendor_id })
+            .from(product_variants)
+            .innerJoin(products, eq(product_variants.product_id, products.id))
+            .where(eq(product_variants.id, firstOrderItem.variantId))
+            .limit(1)
+            .catch(() => []);
+
+          if (variantWithProduct?.vendorId) {
+            const [vendorGateway] = await this.db
+              .select()
+              .from(vendor_gateways)
+              .where(eq(vendor_gateways.vendor_id, variantWithProduct.vendorId))
+              .limit(1)
+              .catch(() => []);
+
+            if (
+              compResults &&
+              compResults.logistics_mode === LogisticsMode.STANDALONE &&
+              vendorGateway &&
+              vendorGateway.routing_status !== PaymentRoutingStatus.SUSPENDED
+            ) {
+              const secret =
+                await this.paymentService.getDecryptedWebhookSecret(
+                  variantWithProduct.vendorId,
+                );
+              if (secret) {
+                customWebhookSecret = secret;
+              } else {
+                throw new HttpException(
+                  'Vendor custom webhook secret expected but not configured.',
+                  HttpStatus.BAD_REQUEST,
+                );
+              }
+            }
+          }
+        }
+      }
+    }
+
+    // 7. If vendor secret is active -> re-verify signature with vendor secret
+    if (customWebhookSecret) {
+      const generatedVendorSig = crypto
+        .createHmac('sha256', customWebhookSecret)
+        .update(rawBodyString)
+        .digest('hex');
+
+      if (generatedVendorSig !== signature) {
         throw new HttpException(
-          CheckoutErrorKeyEnum.PAYMENT_NOT_FOUND,
-          HttpStatus.NOT_FOUND,
+          'Invalid vendor webhook signature.',
+          HttpStatus.BAD_REQUEST,
         );
       }
-      orderId = paymentRecord?.order_id;
+    }
+
+    // 8. Validate amount
+    let paidAmountInPaise: number;
+    if (event === 'order.paid') {
+      paidAmountInPaise =
+        'order' in parsedBody.payload
+          ? Number(parsedBody.payload.order.entity.amount)
+          : 0;
+    } else if (event === 'payment.captured') {
+      paidAmountInPaise =
+        'payment' in parsedBody.payload
+          ? Number(parsedBody.payload.payment.entity.amount)
+          : 0;
+    } else {
+      return { success: true, message: `Ignored webhook event: ${event}` };
+    }
+
+    if (!paidAmountInPaise || isNaN(paidAmountInPaise)) {
+      throw new HttpException(
+        'Invalid amount in webhook payload',
+        HttpStatus.BAD_REQUEST,
+      );
     }
 
     if (!orderId) {
@@ -485,139 +993,104 @@ export class CheckoutService {
       };
     }
 
-    const [existingOrder] = await this.db
-      .select()
-      .from(orders)
-      .where(eq(orders.id, orderId))
-      .limit(1);
-
-    if (!existingOrder) {
-      return { success: false, message: 'Order not found in database' };
-    }
-
-    if (!existingOrder.user_id) {
-      return {
-        success: false,
-        message: 'No user associated with this order',
-      };
-    }
-
-    const [customerRecord] = await this.db
-      .select({
-        email: user.email,
-        first_name: user.first_name,
-        last_name: user.last_name,
-      })
-      .from(user)
-      .where(eq(user.id, existingOrder.user_id))
-      .limit(1);
-
-    if (
-      !customerRecord ||
-      !customerRecord.email ||
-      !customerRecord.first_name ||
-      !customerRecord.last_name
-    ) {
-      throw new HttpException(
-        CheckoutErrorKeyEnum.CUSTOMER_NOT_FOUND,
-        HttpStatus.NOT_FOUND,
-      );
-    }
-
-    const customerDetails = {
-      email: customerRecord.email,
-      first_name: customerRecord.first_name as string,
-      last_name: customerRecord.last_name as string,
-    };
-
-    const verificationResult =
-      await this.ordersService.completeOrderVerification(
-        customerDetails,
-        existingOrder,
-        orderId,
-        true, // marks order paid and moves to processing
-        existingOrder.company_id ?? undefined,
-      );
-
-    return {
-      success: true,
-      message: 'Payment captured verification completed via webhook',
-      orderId,
-      verified: verificationResult.success,
-    };
+    // 9. Fulfill order inside transaction
+    return this.fulfillOrder(orderId, paidAmountInPaise);
   }
 
-  private async handleOrderPaidWebhook(payload: RazorpayOrderPaidWebhook) {
-    const orderEntity = payload.payload?.order?.entity;
-    const orderId = orderEntity?.receipt;
+  private async fulfillOrder(orderId: string, paidAmountInPaise: number) {
+    return await this.db.transaction(async (tx) => {
+      const [existingOrder] = await tx
+        .select()
+        .from(orders)
+        .where(eq(orders.id, orderId))
+        .limit(1)
+        .for('update');
 
-    if (!orderId) {
-      return {
-        success: false,
-        message: 'No receipt order ID found in webhook payload',
-      };
-    }
+      if (!existingOrder) {
+        throw new HttpException(
+          'Order not found in database',
+          HttpStatus.NOT_FOUND,
+        );
+      }
 
-    const [existingOrder] = await this.db
-      .select()
-      .from(orders)
-      .where(eq(orders.id, orderId))
-      .limit(1);
+      // Webhook Idempotency & Double Fulfillment Guard inside lock
+      if (existingOrder.order_status !== 'pending') {
+        return {
+          success: true,
+          message:
+            'Transaction already updated via collateral webhook channel.',
+        };
+      }
 
-    if (!existingOrder) {
-      return { success: false, message: 'Order not found in database' };
-    }
-
-    if (!existingOrder.user_id) {
-      return {
-        success: false,
-        message: 'No user associated with this order',
-      };
-    }
-
-    const [customerRecord] = await this.db
-      .select({
-        email: user.email,
-        first_name: user.first_name,
-        last_name: user.last_name,
-      })
-      .from(user)
-      .where(eq(user.id, existingOrder.user_id))
-      .limit(1);
-
-    if (
-      !customerRecord ||
-      !customerRecord.email ||
-      !customerRecord.first_name ||
-      !customerRecord.last_name
-    ) {
-      throw new HttpException(
-        CheckoutErrorKeyEnum.CUSTOMER_NOT_FOUND,
-        HttpStatus.NOT_FOUND,
+      // Amount Reconciliation
+      const expectedAmountInPaise = Math.round(
+        Number(existingOrder.total_amount) * 100,
       );
-    }
 
-    const customerDetails = {
-      email: customerRecord.email,
-      first_name: customerRecord.first_name as string,
-      last_name: customerRecord.last_name as string,
-    };
+      if (paidAmountInPaise !== expectedAmountInPaise) {
+        throw new HttpException(
+          CheckoutErrorKeyEnum.TRANSACTION_AMOUNT_MISMATCH,
+          HttpStatus.BAD_REQUEST,
+        );
+      }
 
-    const verificationResult =
-      await this.ordersService.completeOrderVerification(
-        customerDetails,
-        existingOrder,
+      if (!existingOrder.user_id) {
+        return {
+          success: false,
+          message: 'No user associated with this order',
+        };
+      }
+
+      const [customerRecord] = await tx
+        .select({
+          email: user.email,
+          first_name: user.first_name,
+          last_name: user.last_name,
+        })
+        .from(user)
+        .where(eq(user.id, existingOrder.user_id))
+        .limit(1);
+
+      if (
+        !customerRecord ||
+        !customerRecord.email ||
+        !customerRecord.first_name ||
+        !customerRecord.last_name
+      ) {
+        throw new HttpException(
+          CheckoutErrorKeyEnum.CUSTOMER_NOT_FOUND,
+          HttpStatus.NOT_FOUND,
+        );
+      }
+
+      const customerDetails = {
+        email: customerRecord.email,
+        first_name: customerRecord.first_name as string,
+        last_name: customerRecord.last_name as string,
+      };
+
+      const verificationResult =
+        await this.ordersService.completeOrderVerification(
+          customerDetails,
+          existingOrder,
+          orderId,
+          true,
+          existingOrder.company_id ?? undefined,
+          tx as PgTransaction<
+            NodePgQueryResultHKT,
+            typeof schema,
+            ExtractTablesWithRelations<typeof schema>
+          >,
+        );
+
+      return {
+        success: true,
+        message:
+          'Order verification and payment completed successfully via webhook',
         orderId,
-        true, // marks order paid and moves to processing
-        existingOrder.company_id ?? undefined,
-      );
-
-    return {
-      success: true,
-      message: 'Order paid verification completed via webhook',
-      orderId,
-      verified: verificationResult.success,
-    };
+        verified: verificationResult.success,
+      };
+    });
   }
 
   // private helpers
@@ -725,6 +1198,27 @@ export class CheckoutService {
     }
     const companyId = await this.resolveCompanyId(domain);
 
+    // Verify that the shipping address belongs to the requested company bounds
+    const addressRecord = await this.db
+      .select()
+      .from(address)
+      .where(and(eq(address.id, dto.addressId), eq(address.user_id, userId)))
+      .limit(1)
+      .catch((error) => {
+        //  Sanitize exception metadata from public payloads
+        throw new HttpException(
+          CheckoutErrorKeyEnum.FAILED_TO_FETCH_ADDRESS_FOR_CHECKOUT,
+          HttpStatus.INTERNAL_SERVER_ERROR,
+        );
+      });
+
+    if (!addressRecord || addressRecord.length === 0) {
+      throw new HttpException(
+        CheckoutErrorKeyEnum.ADDRESS_NOT_FOUND,
+        HttpStatus.NOT_FOUND,
+      );
+    }
+
     const [companyRecord] = await this.db
       .select()
       .from(company)
@@ -752,30 +1246,37 @@ export class CheckoutService {
       );
     }
 
-    const cartSubtotal = orderLines.reduce(
-      (acc, line) => acc + line.price * line.quantity,
+    //  Prevent IEEE 754 precision errors by calculating subtotal using integer math (Paise/Cents)
+    const cartSubtotalInPaise = orderLines.reduce(
+      (acc, line) => acc + Math.round(Number(line.price) * 100) * line.quantity,
       0,
+    );
+
+    const thresholdInPaise = Math.round(
+      Number(companyRecord.free_delivery_threshold) * 100,
+    );
+    const standardDeliveryCharge = Number(
+      companyRecord.standard_delivery_charge,
     );
 
     const isFreeShipping =
       companyRecord.is_free_shipping_enabled &&
-      cartSubtotal >= Number(companyRecord.free_delivery_threshold);
-    const shippingCost = isFreeShipping
-      ? 0
-      : Number(companyRecord.standard_delivery_charge);
+      cartSubtotalInPaise >= thresholdInPaise;
 
-    const threshold = Number(companyRecord.free_delivery_threshold);
-    const nudgeAmount =
-      companyRecord.is_free_shipping_enabled && cartSubtotal < threshold
-        ? threshold - cartSubtotal
+    const shippingCost = isFreeShipping ? 0 : standardDeliveryCharge;
+
+    const nudgeAmountInPaise =
+      companyRecord.is_free_shipping_enabled &&
+      cartSubtotalInPaise < thresholdInPaise
+        ? thresholdInPaise - cartSubtotalInPaise
         : 0;
 
     return {
       shippingCost,
       isFreeShippingEnabled: companyRecord.is_free_shipping_enabled,
-      freeDeliveryThreshold: threshold,
+      freeDeliveryThreshold: thresholdInPaise / 100,
       isFreeShipping,
-      nudgeAmount,
+      nudgeAmount: nudgeAmountInPaise / 100,
     };
   }
 }

@@ -89,9 +89,7 @@ export class VendorsService {
       resource_type: string;
     }[] = [];
     try {
-      const docFiles = Array.isArray(files['documents'])
-        ? files['documents']
-        : [];
+      const docFiles = Array.isArray(files[0]) ? files[0] : [];
       const documentPromises = docFiles.map(
         async (file: Express.Multer.File) => {
           return await this.uploadToCloudService
@@ -514,7 +512,9 @@ export class VendorsService {
       };
 
       const expiresIn: any = process.env.JWT_EXPIRES_IN
-        ? (isNaN(Number(process.env.JWT_EXPIRES_IN)) ? process.env.JWT_EXPIRES_IN : parseInt(process.env.JWT_EXPIRES_IN, 10))
+        ? isNaN(Number(process.env.JWT_EXPIRES_IN))
+          ? process.env.JWT_EXPIRES_IN
+          : parseInt(process.env.JWT_EXPIRES_IN, 10)
         : '7d';
 
       const accessToken = await this.jwtService.signAsync(payload, {
@@ -1137,7 +1137,7 @@ export class VendorsService {
         number: addressData.phone,
         address_type: AddressType.BUSINESS,
         address_line_1: addressData.address_line_1,
-   
+
         street: addressData.street,
         city: addressData.city,
         state: addressData.state,

@@ -3,24 +3,27 @@
 import * as pg from 'drizzle-orm/pg-core';
 import { company } from './main.schema';
 import { EntityStatusEnum } from './enums.schema';
-import { EntityStatus } from '../types/types';
+import {
+  EntityStatus,
+  PolicyDurationUnit,
+  PolicyType,
+  ReturnReplaceMode,
+} from '../types/types';
 import { categories, order_items, products } from './shop.schema';
 import { templates } from './utils.schema';
 import { relations } from 'drizzle-orm';
 
 // Policy type enum — covers all real-world cases
-export const policyTypeEnum = pg.pgEnum('policy_type_enum', [
-  'warranty', // defect coverage for duration
-  'guarantee', // performance promise, money-back
-  'exchange_only', // no refund, swap allowed
-  'no_return', // final sale — innerwear, perishables
-  'extended_support', // software/SaaS support contract
-  'none', // explicitly no policy (consumables, gift cards)
-]);
+export const policyTypeEnum = pg.pgEnum('policy_type_enum', PolicyType);
 
 export const policy_duration_unit_enum = pg.pgEnum(
   'policy_duration_unit_enum',
-  ['days', 'months', 'years', 'lifetime'],
+  PolicyDurationUnit,
+);
+
+export const return_replace_mode_enum = pg.pgEnum(
+  'return_replace_mode_enum',
+  ReturnReplaceMode,
 );
 
 // ─── 1. POLICY DEFINITIONS ─────────────────────────────────────
@@ -63,6 +66,29 @@ export const product_policies = pg.pgTable(
       .uuid('document_id')
       .references(() => templates.id, { onDelete: 'cascade' }),
     is_active: pg.boolean('is_active').notNull().default(true),
+    // ─── Return & Replacement Eligibility ──────────────────────
+    // Vendor explicitly opts in — both default false so existing
+    // policies are NOT returnable/replaceable until configured.
+    is_returnable: pg.boolean('is_returnable').notNull().default(false),
+    is_replaceable: pg.boolean('is_replaceable').notNull().default(false),
+
+    // Days from delivery within which a return/replacement is valid.
+    // NULL when the corresponding flag is false.
+    return_window_days: pg.integer('return_window_days'),
+    replacement_window_days: pg.integer('replacement_window_days'),
+
+    // Freetext conditions shown to the customer on the product page.
+    // e.g. "Item must be unused, sealed, with all accessories included."
+    return_conditions: pg.text('return_conditions'),
+
+    // Derived mode — kept as an explicit column for fast reads.
+    // Must be synced with is_returnable + is_replaceable by the service layer.
+    // 'none' | 'return_only' | 'replace_only' | 'both'
+    return_replace_mode: return_replace_mode_enum('return_replace_mode')
+      .notNull()
+      .default(ReturnReplaceMode.NONE),
+    // ─────────────────────────────────────────────────────────────
+
     // Owner — policy belongs to either a company or a vendor
     // Both nullable — application logic enforces at least one is set
     company_id: pg
@@ -80,6 +106,9 @@ export const product_policies = pg.pgTable(
   (table) => [
     pg.index('idx_policy_company_id').on(table.company_id),
     pg.index('idx_policy_type').on(table.policy_type),
+    pg.index('idx_policy_is_returnable').on(table.is_returnable),
+    pg.index('idx_policy_is_replaceable').on(table.is_replaceable),
+    pg.index('idx_policy_return_replace_mode').on(table.return_replace_mode),
   ],
 );
 
@@ -182,7 +211,9 @@ export const order_item_policy = pg.pgTable(
     document_url: pg.text('document_url'), // S3/CDN URL of the generated PDF
 
     created_at: pg.timestamp('created_at').notNull().defaultNow(),
-    record_status: EntityStatusEnum('record_status').default(EntityStatus.ACTIVE),
+    record_status: EntityStatusEnum('record_status').default(
+      EntityStatus.ACTIVE,
+    ),
     deleted_at: pg.timestamp('deleted_at'),
   },
   (table) => [

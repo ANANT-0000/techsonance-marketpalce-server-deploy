@@ -7,6 +7,7 @@ import { UploadToCloudModule } from '../../utils/upload-to-cloud/upload-to-cloud
 import { RefundsModule } from '../refunds/refunds.module';
 import { InventoryModule } from '../inventory/inventory.module';
 import { MailModule } from '../../common/services/mail/mail.module';
+import { OrderEligibilityGuardModule } from '../order-eligibility-guard/order-eligibility-guard.module';
 
 @Module({
   imports: [
@@ -16,8 +17,10 @@ import { MailModule } from '../../common/services/mail/mail.module';
     RefundsModule,
     InventoryModule,
     MailModule,
+    OrderEligibilityGuardModule,
   ],
   controllers: [ReturnsController],
   providers: [ReturnsService],
 })
 export class ReturnsModule {}
+

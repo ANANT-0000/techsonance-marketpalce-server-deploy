@@ -73,6 +73,7 @@
     "@types/express": "^5.0.6",
     "@types/handlebars": "^4.0.40",
     "@types/jest": "^30.0.0",
+    "@types/mocha": "^10.0.10",
     "@types/multer": "^2.1.0",
     "@types/node": "^22.19.17",
     "@types/nodemailer": "^6.4.23",
@@ -97,7 +98,7 @@
     "ts-loader": "^9.5.2",
     "ts-node": "^10.9.2",
     "tsconfig-paths": "^4.2.0",
-    "typescript": "^5.7.3",
+    "typescript": "^6.0.3",
     "typescript-eslint": "^8.20.0"
   },
   "jest": {

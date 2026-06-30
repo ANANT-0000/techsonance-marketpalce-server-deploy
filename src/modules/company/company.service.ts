@@ -109,7 +109,7 @@ export class CompanyService {
       const result = await this.db.transaction(async (tx) => {
         const [companyRecord] = await tx
           .update(company)
-          .set({ company_status: UserStatus.ACTIVE })
+          .set({ onboarding_status: UserStatus.ACTIVE })
           .where(eq(company.id, companyId))
           .returning({ id: company.id })
           .catch((error) => {
@@ -200,7 +200,7 @@ export class CompanyService {
       const result = await this.db.transaction(async (tx) => {
         const [companyRecord] = await tx
           .update(company)
-          .set({ company_status: UserStatus.INACTIVE })
+          .set({ onboarding_status: UserStatus.INACTIVE })
           .where(eq(company.id, companyId))
           .returning({ id: company.id })
           .catch((error) => {
@@ -291,7 +291,7 @@ export class CompanyService {
       const result = await this.db.transaction(async (tx) => {
         const [companyRecord] = await tx
           .update(company)
-          .set({ company_status: UserStatus.SUSPENDED })
+          .set({ onboarding_status: UserStatus.SUSPENDED })
           .where(eq(company.id, companyId))
           .returning({ id: company.id })
           .catch((error) => {

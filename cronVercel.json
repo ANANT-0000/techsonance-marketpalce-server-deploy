@@ -1,8 +1,0 @@
-{
-  "crons": [
-    {
-      "path": "/api/v1/internal/sweep-outbox",
-      "schedule": "*/5 * * * *"
-    }
-  ]
-}

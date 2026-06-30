@@ -8,6 +8,7 @@ import { ShipRocketModule } from '../ship-rocket/ship-rocket.module';
 import { DrizzleModule } from '../../drizzle/drizzle.module';
 import { CompanyModule } from '../company/company.module';
 import { MailModule } from '../../common/services/mail/mail.module';
+import { InventoryModule } from '../inventory/inventory.module';
 
 @Module({
   imports: [
@@ -15,6 +16,7 @@ import { MailModule } from '../../common/services/mail/mail.module';
     DrizzleModule,
     forwardRef(() => CompanyModule),
     MailModule,
+    forwardRef(() => InventoryModule),
   ],
   controllers: [ShippingController, ShippingWebhookController],
   providers: [ShippingService, ShippingManagerService, CryptoService],

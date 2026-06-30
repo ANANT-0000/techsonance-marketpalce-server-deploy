@@ -13,14 +13,14 @@ export class UpdateNavItemDto extends PartialType(
 /** Single entry in a reorder request. */
 export class ReorderEntryDto {
   @IsUUID()
-  id: string;
+  id!: string;
 
-  sort_order: number;
+  sort_order!: number;
 }
 
 /** Bulk sort_order update for items within the same parent. */
 export class ReorderNavItemsDto {
   @IsArray()
   @ArrayMinSize(1)
-  items: ReorderEntryDto[];
+  items!: ReorderEntryDto[];
 }

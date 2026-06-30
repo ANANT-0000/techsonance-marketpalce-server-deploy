@@ -1,7 +1,8 @@
 // Cryptography Constants
 export const CRYPTO_ALGORITHM = 'aes-256-gcm';
 export const CRYPTO_KEY_ENV = 'PROCESS_ENV_LOGISTICS_CIPHER';
-export const CRYPTO_DEFAULT_KEY = 'my-super-secret-logistics-cipher-key-32-chars';
+export const CRYPTO_DEFAULT_KEY =
+  'my-super-secret-logistics-cipher-key-32-chars';
 export const CRYPTO_HASH_ALGORITHM = 'sha256';
 export const CRYPTO_ENCODING_UTF8 = 'utf8';
 export const CRYPTO_ENCODING_HEX = 'hex';
@@ -13,15 +14,19 @@ export const CRYPTO_ERROR_INVALID_FORMAT = 'Invalid cipher text format';
 // Shipping Service & Manager Constants
 export const SHIPPING_ITEM_FALLBACK_NAME = 'Item';
 export const SHIPPING_COMPANY_NOT_FOUND_MSG = 'Company not found';
-export const SHIPPING_SETTINGS_UPDATED_MSG = 'Shipping settings updated successfully';
+export const SHIPPING_SETTINGS_UPDATED_MSG =
+  'Shipping settings updated successfully';
 export const SHIPPING_API_KEY_PLACEHOLDER = '********';
 export const SHIPPING_PAYMENT_METHOD_PREPAID = 'Prepaid' as const;
 export const SHIPPING_DEFAULT_PICKUP_LOCATION = 'Delhi Warehouse';
 
 // Logistics Provider States & Audit Action Names
-export const SHIPROCKET_DRAFT_ORDER_SUCCESS_ACTION = 'SHIPROCKET_DRAFT_ORDER_SUCCESS';
-export const SHIPROCKET_DRAFT_ORDER_FAILURE_ACTION = 'SHIPROCKET_DRAFT_ORDER_FAILURE';
+export const SHIPROCKET_DRAFT_ORDER_SUCCESS_ACTION =
+  'SHIPROCKET_DRAFT_ORDER_SUCCESS';
+export const SHIPROCKET_DRAFT_ORDER_FAILURE_ACTION =
+  'SHIPROCKET_DRAFT_ORDER_FAILURE';
 export const SHIPROCKET_WEBHOOK_RECEIVED_ACTION = 'SHIPROCKET_WEBHOOK_RECEIVED';
+export const SHIPROCKET_NDR_EVENT_ACTION = 'SHIPROCKET_NDR_EVENT';
 
 export const SHIPPING_ENTITY_SHIPPING_DETAILS = 'shipping_details';
 export const SHIPPING_ENTITY_ORDERS = 'orders';
@@ -36,9 +41,34 @@ export const LOGISTICS_PARTNER_FALLBACK_NAME = 'Shiprocket Partner';
 export const BILLING_ACCOUNT_PLATFORM_MASTER = 'PLATFORM_MASTER';
 export const ZERO_PRICE_STRING = '0.00';
 
-// Ledger-level shipping statuses (shipping_status is varchar(50) — no migration needed)
-export const SHIPPING_STATUS_DRAFTING = 'DRAFTING';
-export const SHIPPING_STATUS_FAILED = 'FAILED';
-
 // Audit action for unmatched/orphaned Shiprocket webhooks
 export const ORPHANED_WEBHOOK_ACTION = 'ORPHANED_WEBHOOK';
+
+// Phase 2: RTO Automation
+export const SHIPROCKET_RTO_RETURN_INITIATED_ACTION =
+  'SHIPROCKET_RTO_RETURN_INITIATED';
+export const SHIPROCKET_RTO_RETURN_FAILED_ACTION =
+  'SHIPROCKET_RTO_RETURN_FAILED';
+
+// Phase 2: Pickup Scheduling
+export const SHIPROCKET_PICKUP_SCHEDULED_ACTION = 'SHIPROCKET_PICKUP_SCHEDULED';
+export const SHIPROCKET_PICKUP_FAILED_ACTION = 'SHIPROCKET_PICKUP_FAILED';
+
+// Phase 2: Shipment Cancellation
+export const SHIPROCKET_SHIPMENT_CANCELLED_ACTION =
+  'SHIPROCKET_SHIPMENT_CANCELLED';
+export const SHIPROCKET_SHIPMENT_CANCEL_FAILED_ACTION =
+  'SHIPROCKET_SHIPMENT_CANCEL_FAILED';
+export const SHIPROCKET_PICKUP_EXCEPTION_STATUS = 'PICKUP EXCEPTION';
+export const SHIPROCKET_PICKUP_RETRY_SCHEDULED_ACTION =
+  'SHIPROCKET_PICKUP_RETRY_SCHEDULED';
+export const SHIPROCKET_PICKUP_RETRY_FAILED_ACTION =
+  'SHIPROCKET_PICKUP_RETRY_FAILED';
+
+export const SHIPROCKET_ADDRESS_RECTIFICATION_ACTION =
+  'SHIPROCKET_ADDRESS_RECTIFICATION';
+export const SHIPROCKET_ADDRESS_RECTIFICATION_FAILED_ACTION =
+  'SHIPROCKET_ADDRESS_RECTIFICATION_FAILED';
+
+export const SHIPROCKET_TRACKING_URL =
+  'https://www.shiprocket.in/shipment-tracking';

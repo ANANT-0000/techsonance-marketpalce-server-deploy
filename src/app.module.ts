@@ -60,6 +60,8 @@ import { ShipRocketModule } from './modules/ship-rocket/ship-rocket.module';
 import { CacheModule } from '@nestjs/cache-manager';
 import { redisStore } from 'cache-manager-redis-yet';
 import { OutboxModule } from './modules/outbox/outbox.module';
+
+import { PaymentModule } from './modules/vendors/payment/payment.module';
 export enum RATELIMIT_NAME {
   SHORT = 'short',
   MEDIUM = 'medium',
@@ -162,6 +164,7 @@ export enum RATELIMIT_LIMIT {
     SiteMapsModule,
     ShipRocketModule,
     OutboxModule,
+    PaymentModule,
   ],
   controllers: [AppController, UsersController],
   providers: [

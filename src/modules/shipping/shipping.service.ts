@@ -194,7 +194,11 @@ export class ShippingService {
         free_delivery_threshold: true,
         standard_delivery_charge: true,
         encrypted_logistics_api_key: true,
+        logistics_api_key_iv: true,
+        logistics_api_key_tag: true,
         encrypted_logistics_api_secret: true,
+        logistics_api_secret_iv: true,
+        logistics_api_secret_tag: true,
       },
     });
 
@@ -208,8 +212,16 @@ export class ShippingService {
       is_free_shipping_enabled: comp.is_free_shipping_enabled,
       free_delivery_threshold: comp.free_delivery_threshold,
       standard_delivery_charge: comp.standard_delivery_charge,
-      has_api_key: !!comp.encrypted_logistics_api_key,
-      has_api_secret: !!comp.encrypted_logistics_api_secret,
+      has_api_key: !!(
+        comp.encrypted_logistics_api_key &&
+        comp.logistics_api_key_iv &&
+        comp.logistics_api_key_tag
+      ),
+      has_api_secret: !!(
+        comp.encrypted_logistics_api_secret &&
+        comp.logistics_api_secret_iv &&
+        comp.logistics_api_secret_tag
+      ),
     };
   }
 
@@ -245,21 +257,33 @@ export class ShippingService {
 
     if (payload.logistics_api_key) {
       if (payload.logistics_api_key !== SHIPPING_API_KEY_PLACEHOLDER) {
-        updateFields.encrypted_logistics_api_key = this.cryptoService.encrypt(payload.logistics_api_key);
+        const encryptedStr = this.cryptoService.encrypt(payload.logistics_api_key);
+        const [iv, encrypted, tag] = encryptedStr.split(':');
+        updateFields.encrypted_logistics_api_key = encrypted;
+        updateFields.logistics_api_key_iv = iv;
+        updateFields.logistics_api_key_tag = tag;
         credentialsChanged = true;
       }
     } else if (payload.logistics_api_key === '') {
       updateFields.encrypted_logistics_api_key = null;
+      updateFields.logistics_api_key_iv = null;
+      updateFields.logistics_api_key_tag = null;
       credentialsChanged = true;
     }
 
     if (payload.logistics_api_secret) {
       if (payload.logistics_api_secret !== SHIPPING_API_KEY_PLACEHOLDER) {
-        updateFields.encrypted_logistics_api_secret = this.cryptoService.encrypt(payload.logistics_api_secret);
+        const encryptedStr = this.cryptoService.encrypt(payload.logistics_api_secret);
+        const [iv, encrypted, tag] = encryptedStr.split(':');
+        updateFields.encrypted_logistics_api_secret = encrypted;
+        updateFields.logistics_api_secret_iv = iv;
+        updateFields.logistics_api_secret_tag = tag;
         credentialsChanged = true;
       }
     } else if (payload.logistics_api_secret === '') {
       updateFields.encrypted_logistics_api_secret = null;
+      updateFields.logistics_api_secret_iv = null;
+      updateFields.logistics_api_secret_tag = null;
       credentialsChanged = true;
     }
 

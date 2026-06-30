@@ -1,4 +1,4 @@
-import { Controller, Get, Res } from '@nestjs/common';
+import { Controller, Get, Res, Query, UnauthorizedException } from '@nestjs/common';
 import { AppService } from './app.service';
 import express from 'express';
 import { HealthCheck, HealthCheckService } from '@nestjs/terminus';
@@ -8,8 +8,6 @@ import { Public } from './common/decorators/public.decorator';
 export class AppController {
   constructor(
     private readonly appService: AppService,
-    private readonly health: HealthCheckService,
-    private readonly drizzleHealthIndicator: DrizzleHealthIndicator,
   ) {}
   @Public()
   @Get('/test')
@@ -29,9 +27,7 @@ export class AppController {
   @Public()
   @Get('health')
   @HealthCheck()
-  check() {
-    return this.health.check([
-      () => this.drizzleHealthIndicator.isHealthy('drizzle'),
-    ]);
+  check(@Query('code') code: string) {
+    return this.appService.checkHealth(code);
   }
 }

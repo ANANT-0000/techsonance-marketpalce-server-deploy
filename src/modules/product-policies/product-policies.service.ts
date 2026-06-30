@@ -12,10 +12,7 @@ import {
   InternalServerErrorException,
   NotFoundException,
 } from '@nestjs/common';
-import {
-  CreateProductPolicyDto,
-  PolicyType,
-} from './dto/create-product-policy.dto';
+import { CreateProductPolicyDto } from './dto/create-product-policy.dto';
 import { UpdateProductPolicyDto } from './dto/update-product-policy.dto';
 import { DRIZZLE, type DrizzleService } from '../../drizzle/drizzle.module';
 import { and, eq } from 'drizzle-orm';
@@ -69,7 +66,6 @@ export class ProductPoliciesService {
         })
         .returning();
 
-
       return {
         message: 'Product policy created successfully',
         status: HttpStatus.CREATED,
@@ -85,7 +81,9 @@ export class ProductPoliciesService {
 
   async findAll(domain: string) {
     if (!domain) {
-      throw new BadRequestException(ProductPoliciesErrorKeyEnum.DOMAIN_HEADER_IS_REQUIRED);
+      throw new BadRequestException(
+        ProductPoliciesErrorKeyEnum.DOMAIN_HEADER_IS_REQUIRED,
+      );
     }
     const companyId = await this.resolveCompanyId(domain);
 
@@ -95,20 +93,28 @@ export class ProductPoliciesService {
         .from(product_policies)
         .where(eq(product_policies.company_id, companyId))
         .catch((error) => {
-          throw new InternalServerErrorException(ProductPoliciesErrorKeyEnum.FAILED_TO_FETCH_POLICIES, {
-            cause: error,
-          });
+          throw new InternalServerErrorException(
+            ProductPoliciesErrorKeyEnum.FAILED_TO_FETCH_POLICIES,
+            {
+              cause: error,
+            },
+          );
         });
     } catch (error) {
-      throw new InternalServerErrorException(ProductPoliciesErrorKeyEnum.FAILED_TO_FETCH_POLICIES, {
-        cause: error,
-      });
+      throw new InternalServerErrorException(
+        ProductPoliciesErrorKeyEnum.FAILED_TO_FETCH_POLICIES,
+        {
+          cause: error,
+        },
+      );
     }
   }
 
   async findOne(id: string, domain?: string) {
     if (!domain) {
-      throw new BadRequestException(ProductPoliciesErrorKeyEnum.DOMAIN_HEADER_IS_REQUIRED);
+      throw new BadRequestException(
+        ProductPoliciesErrorKeyEnum.DOMAIN_HEADER_IS_REQUIRED,
+      );
     }
 
     const companyId = await this.resolveCompanyId(domain);
@@ -142,7 +148,9 @@ export class ProductPoliciesService {
 
   async update(id: string, updateDto: UpdateProductPolicyDto, domain: string) {
     if (!domain) {
-      throw new BadRequestException(ProductPoliciesErrorKeyEnum.DOMAIN_HEADER_IS_REQUIRED);
+      throw new BadRequestException(
+        ProductPoliciesErrorKeyEnum.DOMAIN_HEADER_IS_REQUIRED,
+      );
     }
     const companyId = await this.resolveCompanyId(domain);
 
@@ -159,7 +167,6 @@ export class ProductPoliciesService {
           ),
         )
         .returning();
-
 
       return {
         message: 'Product policy updated successfully',
@@ -181,7 +188,9 @@ export class ProductPoliciesService {
 
   async delete(id: string, domain: string) {
     if (!domain) {
-      throw new BadRequestException(ProductPoliciesErrorKeyEnum.DOMAIN_HEADER_IS_REQUIRED);
+      throw new BadRequestException(
+        ProductPoliciesErrorKeyEnum.DOMAIN_HEADER_IS_REQUIRED,
+      );
     }
 
     const companyId = await this.resolveCompanyId(domain);
@@ -195,7 +204,6 @@ export class ProductPoliciesService {
             eq(product_policies.company_id, companyId),
           ),
         );
-
 
       return {
         message: 'Product policy deleted successfully',
@@ -219,9 +227,14 @@ export class ProductPoliciesService {
   // ==========================================================================
 
   async assignCategoryPolicy(dto: AssignCategoryPolicyDto, domain: string) {
-    if (!domain) throw new BadRequestException(ProductPoliciesErrorKeyEnum.DOMAIN_IS_REQUIRED);
+    if (!domain)
+      throw new BadRequestException(
+        ProductPoliciesErrorKeyEnum.DOMAIN_IS_REQUIRED,
+      );
     if (!dto.category_id || !dto.policy_id) {
-      throw new BadRequestException(ProductPoliciesErrorKeyEnum.CATEGORY_ID_AND_POLICY_ID_ARE_REQUIRED);
+      throw new BadRequestException(
+        ProductPoliciesErrorKeyEnum.CATEGORY_ID_AND_POLICY_ID_ARE_REQUIRED,
+      );
     }
     await this.findOne(dto.policy_id, domain);
 
@@ -250,7 +263,6 @@ export class ProductPoliciesService {
           priority: dto.priority ?? 1,
         })
         .returning();
-
 
       return {
         message: 'Policy successfully assigned to category',
@@ -305,7 +317,10 @@ export class ProductPoliciesService {
     dto: AssignProductPolicyOverrideDto,
     domain: string,
   ) {
-    if (!domain) throw new BadRequestException(ProductPoliciesErrorKeyEnum.DOMAIN_IS_REQUIRED);
+    if (!domain)
+      throw new BadRequestException(
+        ProductPoliciesErrorKeyEnum.DOMAIN_IS_REQUIRED,
+      );
 
     await this.findOne(dto.policy_id, domain);
 
@@ -334,7 +349,6 @@ export class ProductPoliciesService {
           overrides_category: dto.overrides_category ?? true,
         })
         .returning();
-
 
       return {
         message: 'Product policy override applied successfully',
@@ -450,7 +464,6 @@ export class ProductPoliciesService {
           );
         });
 
-
       return snapshot;
     } catch (error) {
       throw new InternalServerErrorException(
@@ -484,7 +497,10 @@ export class ProductPoliciesService {
   }
 
   async getCoverageOverview(domain: string, policyId?: string | null) {
-    if (!domain) throw new BadRequestException(ProductPoliciesErrorKeyEnum.A_DOMAIN_IS_REQUIRED);
+    if (!domain)
+      throw new BadRequestException(
+        ProductPoliciesErrorKeyEnum.A_DOMAIN_IS_REQUIRED,
+      );
     const companyId = await this.resolveCompanyId(domain);
     const whereCause = [eq(product_policies.company_id, companyId)];
     if (policyId) {
@@ -584,7 +600,6 @@ export class ProductPoliciesService {
   }
 
   async getWarrantyUrl(orderId: string) {
-
     try {
       const warrantyUrls = await this.db.query.orders
         .findMany({
@@ -622,9 +637,12 @@ export class ProductPoliciesService {
 
       return extractedUrls;
     } catch (error) {
-      throw new InternalServerErrorException(ProductPoliciesErrorKeyEnum.FAILED_TO_FETCH_WARRANTY_URL, {
-        cause: error,
-      });
+      throw new InternalServerErrorException(
+        ProductPoliciesErrorKeyEnum.FAILED_TO_FETCH_WARRANTY_URL,
+        {
+          cause: error,
+        },
+      );
     }
   }
 
@@ -640,7 +658,6 @@ export class ProductPoliciesService {
    * (html2canvas + jsPDF) — no Puppeteer / server-side rendering needed.
    */
   async getWarrantyPayload(orderId: string) {
-
     try {
       // 1. Resolve all order items that have a policy snapshot for this order
       const orderData = await this.db.query.orders.findFirst({
@@ -672,14 +689,12 @@ export class ProductPoliciesService {
         };
       }
 
-
       // 3. Build the full payload for each item (reuses PolicyPayloadBuilderService)
       const payloads = await Promise.all(
         policyItems.map((item) =>
           this.policyPayloadBuilder.buildPayload(item.id),
         ),
       );
-
 
       return {
         message: 'Warranty payload(s) fetched successfully',

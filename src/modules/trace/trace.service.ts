@@ -14,9 +14,9 @@ export class TraceService implements OnModuleInit {
   onModuleInit() {
     const isProd = this.configService.get<string>('NODE_ENV') === 'production';
 
-    if (isProd) {
-      return;
-    }
+    // if (isProd) {
+    //   return;
+    // }
     const providers = this.discoveryService.getProviders();
 
     providers.forEach((wrapper) => {

@@ -58,11 +58,12 @@ export class CheckoutController {
   async handleRazorpayWebhook(
     @Req() req: any,
     @Headers('x-razorpay-signature') signature: string,
+    @Headers('x-razorpay-timestamp') timestamp?: string,
   ) {
     const rawBody: string = req.rawBody
       ? req.rawBody.toString('utf8')
       : '';
-    return this.checkoutService.handleRazorpayWebhook(rawBody, signature);
+    return this.checkoutService.handleRazorpayWebhook(rawBody, signature, timestamp);
   }
 
   @Post('apply-coupon/:userId')

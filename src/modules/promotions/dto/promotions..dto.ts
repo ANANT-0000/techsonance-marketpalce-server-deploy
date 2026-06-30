@@ -54,7 +54,7 @@ export class CreatePromotionDto {
   @IsString({ message: 'name must be a string' })
   @MinLength(3, { message: 'name must be at least 3 characters' })
   @MaxLength(200, { message: 'name must not exceed 200 characters' })
-  name: string;
+  name!: string;
 
   @IsOptional()
   @IsString({ message: 'description must be a string' })

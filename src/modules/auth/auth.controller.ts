@@ -111,13 +111,12 @@ export class AuthController {
           `${frontendUrl}/auth/authSuccess?message=${result.message}&status=${result.status}&email=${result.email}`,
         );
       }
-    } catch (error) {
+    } catch (error: any) {
       // Redirect to error page on failure
       const errorDomain: string = req.query.state as string;
       const frontendUrl: string = errorDomain.startsWith('http')
         ? errorDomain
         : `https://${errorDomain}`;
-
       res.redirect(
         `${frontendUrl}/auth/error?message=${encodeURIComponent(error.message || 'Authentication failed')}&status=${error.status}&email=${error.email}`,
       );

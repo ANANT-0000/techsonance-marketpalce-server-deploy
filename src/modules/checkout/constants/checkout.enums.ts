@@ -14,4 +14,6 @@ export enum CheckoutErrorKeyEnum {
   FAILED_TO_CLEAR_CART_AFTER_SUCCESSFUL_CHECKOUT = 'Failed to clear cart after successful checkout',
   FAILED_TO_CLEAR_CART_ITEMS_AFTER_SUCCESSFUL_CHECKOUT = 'Failed to clear cart items after successful checkout',
   PAYMENT_NOT_FOUND = 'Payment not found',
+  TRANSACTION_AMOUNT_MISMATCH = 'Transaction amount mismatch',
+  PAYMENT_GATEWAY_INITIALIZATION_FAILED = 'Payment gateway initialization failed',
 }

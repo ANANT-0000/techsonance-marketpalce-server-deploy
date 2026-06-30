@@ -99,7 +99,7 @@ export class CreateNavItemDto {
   /** UUID of the nav_menus row this item belongs to. */
   @IsUUID()
   @IsNotEmpty()
-  menu_id: string;
+  menu_id!: string;
 
   /**
    * NULL → L1 item. UUID → L2 column under the given L1 item.
@@ -112,14 +112,14 @@ export class CreateNavItemDto {
   @IsString()
   @IsNotEmpty()
   @MaxLength(120)
-  label: string;
+  label!: string;
 
   @IsString()
   @IsNotEmpty()
-  href: string;
+  href!: string;
 
   @IsEnum(NavItemType)
-  item_type: NavItemType;
+  item_type!: NavItemType;
 
   /** FK to categories — required when item_type = 'category'. */
   @ValidateIf((o) => o.item_type === NavItemType.CATEGORY)
@@ -127,7 +127,7 @@ export class CreateNavItemDto {
   category_id?: string;
 
   @IsBoolean()
-  has_mega_menu: boolean;
+  has_mega_menu!: boolean;
 
   @IsOptional()
   @IsEnum(NavLayoutType)

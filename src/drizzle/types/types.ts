@@ -52,6 +52,7 @@ export enum ProductStatus {
   DRAFT = 'draft',
 }
 export enum OrderStatus {
+  // Existing e-commerce core states
   PENDING = 'pending',
   PROCESSING = 'processing',
   SHIPPED = 'shipped',
@@ -60,6 +61,16 @@ export enum OrderStatus {
   RETURNED = 'returned',
   REFUNDED = 'refunded',
   REPLACED = 'replaced',
+
+  // Granular logistics states
+  DRAFTING = 'drafting',
+  AWB_ASSIGNED = 'awb_assigned',
+  IN_TRANSIT = 'in_transit',
+  OUT_FOR_DELIVERY = 'out_for_delivery',
+  OUT_FOR_DELIVERY_EXCEPTION = 'out_for_delivery_exception',
+  UNDELIVERED = 'undelivered',
+  RTO = 'rto',
+  FAILED = 'failed',
 }
 export enum PaymentStatus {
   PENDING = 'pending',
@@ -81,16 +92,43 @@ export enum PaymentStatus {
  */
 export enum ShippingStatus {
   PENDING = 'PENDING',
+  DRAFTING = 'DRAFTING',
+  AWB_ASSIGNED = 'AWB_ASSIGNED',
   SHIPPED = 'SHIPPED',
+  IN_TRANSIT = 'IN_TRANSIT',
+  OUT_FOR_DELIVERY = 'OUT_FOR_DELIVERY',
+  OUT_FOR_DELIVERY_EXCEPTION = 'OUT_FOR_DELIVERY_EXCEPTION',
+  UNDELIVERED = 'UNDELIVERED',
   DELIVERED = 'DELIVERED',
   RETURNED = 'RETURNED',
   RTO = 'RTO',
   CANCELLED = 'CANCELLED',
+  FAILED = 'FAILED',
 }
 export enum ReturnType {
   RETURN = 'return',
   REFUND = 'refund',
   REPLACEMENT = 'replacement',
+}
+export enum ReturnReplaceMode {
+  NONE = 'none',
+  RETURN_ONLY = 'return_only',
+  REPLACE_ONLY = 'replace_only',
+  BOTH = 'both',
+}
+export enum PolicyDurationUnit {
+  DAYS = 'days',
+  MONTHS = 'months',
+  YEARS = 'years',
+  LIFETIME = 'lifetime',
+}
+export enum PolicyType {
+  WARRANTY = 'warranty',
+  GUARANTEE = 'guarantee',
+  EXCHANGE_ONLY = 'exchange_only',
+  NO_RETURN = 'no_return',
+  EXTENDED_SUPPORT = 'extended_support',
+  NONE = 'none',
 }
 export enum ReturnStatus {
   PENDING = 'pending',
@@ -391,4 +429,15 @@ export interface NavItemPayload {
   root_category_id?: string | null;
   categories?: CategoryNode[];
   isEmptyTree?: boolean;
+}
+
+export enum ShippingChargeStrategy {
+  DYNAMIC_CUSTOMER_RATE = 'DYNAMIC_CUSTOMER_RATE',
+  STANDARD_FLAT_RATE = 'STANDARD_FLAT_RATE',
+}
+
+export enum PaymentRoutingStatus {
+  VAULTED = 'VAULTED',
+  ROTATED = 'ROTATED',
+  SUSPENDED = 'SUSPENDED',
 }

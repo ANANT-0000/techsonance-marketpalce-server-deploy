@@ -8,21 +8,11 @@ import {
   IsNotEmpty,
 } from 'class-validator';
 
-export enum PolicyType {
-  WARRANTY = 'warranty',
-  GUARANTEE = 'guarantee',
-  EXCHANGE_ONLY = 'exchange_only',
-  NO_RETURN = 'no_return',
-  EXTENDED_SUPPORT = 'extended_support',
-  NONE = 'none',
-}
-
-export enum DurationUnit {
-  DAYS = 'days',
-  MONTHS = 'months',
-  YEARS = 'years',
-  LIFETIME = 'lifetime',
-}
+import {
+  PolicyDurationUnit,
+  PolicyType,
+  ReturnReplaceMode,
+} from '../../../drizzle/types/types';
 
 export class CreateProductPolicyDto {
   @IsNotEmpty()
@@ -38,8 +28,8 @@ export class CreateProductPolicyDto {
   duration_value?: number;
 
   @IsOptional()
-  @IsEnum(DurationUnit)
-  duration_unit?: DurationUnit;
+  @IsEnum(PolicyDurationUnit)
+  duration_unit?: PolicyDurationUnit;
 
   @IsOptional()
   @IsString()
@@ -80,4 +70,22 @@ export class CreateProductPolicyDto {
   @IsOptional()
   @IsString()
   vendor_id?: string;
+  @IsOptional()
+  @IsBoolean()
+  is_returnable?: boolean;
+  @IsOptional()
+  @IsBoolean()
+  is_replaceable?: boolean;
+  @IsOptional()
+  @IsNumber()
+  return_window_days?: number;
+  @IsOptional()
+  @IsNumber()
+  replacement_window_days?: number;
+  @IsOptional()
+  @IsString()
+  return_conditions?: string;
+  @IsOptional()
+  @IsEnum(ReturnReplaceMode)
+  return_replace_mode?: ReturnReplaceMode;
 }

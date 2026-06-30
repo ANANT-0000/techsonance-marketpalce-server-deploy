@@ -3,15 +3,15 @@ import { IsString, IsNotEmpty, IsOptional, IsObject } from 'class-validator';
 export class CreateCmsDto {
   @IsString()
   @IsNotEmpty()
-  title: string;
+  title!: string;
 
   @IsString()
   @IsNotEmpty()
-  content: string;
+  content!: string;
 
   @IsString()
   @IsNotEmpty()
-  page_content_type: string;
+  page_content_type!: string;
 
   @IsObject()
   @IsOptional()

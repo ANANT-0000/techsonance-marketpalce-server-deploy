@@ -22,7 +22,7 @@ export class CustomersController {
   @Get('dashboard/:user_id')
   @HttpCode(HttpStatus.OK)
   async getDashboardData(
-    @Param('user_id') userId,
+    @Param('user_id') userId: string,
     @Headers('company-domain') domain: string,
   ) {
     return this.customersService.getDashboardData(userId, domain);

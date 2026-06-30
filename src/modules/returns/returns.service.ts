@@ -31,6 +31,11 @@ import { MailService } from '../../common/services/mail/mail.service';
 import { domainExtractor } from '../../common/filters/domainExtractor.filter';
 import { extractCloudinaryPublicId } from '../../common/filters/extractCloudinaryPublicId.filter';
 import { ReturnsErrorKeyEnum } from './constants/returns.enums';
+import { OrderEligibilityGuardService } from '../order-eligibility-guard/order-eligibility-guard.service';
+import {
+  GuardInput,
+  GuardOperation,
+} from '../order-eligibility-guard/dto/guard-input.dto';
 
 // ── Valid transitions per return type ──────────────────────────────────────
 // Prevents arbitrary status jumps (e.g. PENDING → QC_PASSED directly)
@@ -80,6 +85,7 @@ export class ReturnsService {
     private readonly inventoryService: InventoryService,
     private readonly companyService: CompanyService,
     private readonly mailService: MailService,
+    private readonly guardService: OrderEligibilityGuardService,
   ) {}
 
   private async resolveCompanyId(domain: string): Promise<string> {
@@ -97,6 +103,22 @@ export class ReturnsService {
     const failedUploads: { url: string; resource_type: string }[] = [];
     try {
       const companyId = await this.resolveCompanyId(domain);
+
+      // ── GUARD: centralised eligibility check ──────────────────────────
+      // assertEligible() throws immediately on any rule violation:
+      //   ForbiddenException  → Final Sale / SET constraint / user mismatch
+      //   BadRequestException → status, policy flag, time window, duplicate
+      //   NotFoundException   → item not found
+      // On success it returns the already-fetched order item — reuse it below.
+      const guardInput: GuardInput = {
+        orderItemId: dto.order_item_id,
+        userId,
+        companyId,
+        operation: GuardOperation.RETURN,
+      };
+      await this.guardService.assertEligible(guardInput);
+      // ─────────────────────────────────────────────────────────────────
+
       const [userDetails] = await this.db
         .select({
           first_name: user.first_name,
@@ -125,29 +147,6 @@ export class ReturnsService {
       if (!orderItem || !orderItem.order) {
         throw new NotFoundException(ReturnsErrorKeyEnum.ORDER_ITEM_NOT_FOUND);
       }
-
-      // Only delivered items can be returned/replaced/refunded
-      if (orderItem.order_status !== OrderStatus.DELIVERED) {
-        throw new BadRequestException(
-          `Cannot raise a return request for an item with status: ${orderItem.order_status}. Item must be delivered first.`,
-        );
-      }
-      const existingReturn = await this.db.query.return_requests
-        .findFirst({
-          where: eq(return_requests.order_item_id, dto.order_item_id),
-        })
-        .catch((error) => {
-          throw new InternalServerErrorException(
-            ReturnsErrorKeyEnum.FAILED_TO_CHECK_EXISTING_RETURN_REQUEST,
-            { cause: error },
-          );
-        });
-
-      if (existingReturn) {
-        throw new BadRequestException(
-          ReturnsErrorKeyEnum.A_RETURN_OR_REPLACEMENT_REQUEST_ALREADY_EXISTS_FOR_THIS_ITEM,
-        );
-      }
       // Upload evidence images if provided
       const finalResults: { url: string }[] = [];
       if (files?.evidence_images && files.evidence_images.length > 0) {
@@ -169,7 +168,7 @@ export class ReturnsService {
           order_item_id: dto.order_item_id,
           user_id: userId,
           company_id: companyId,
-          type: dto.type,
+          type: ReturnType.RETURN,
           status: ReturnStatus.PENDING,
           reason: dto.reason,
           customer_note: dto.customer_note,

@@ -9,6 +9,7 @@ import {
   Post,
   Query,
   Res,
+  UploadedFiles,
   UseGuards,
 } from '@nestjs/common';
 import { AdminService } from './admin.service';
@@ -18,9 +19,11 @@ import { UsersService } from '../users/users.service';
 import { OrdersService } from '../orders/orders.service';
 import { Roles } from '../../common/decorators/roles.decorator';
 import { Role } from '../../enums/role.enum';
-import { JwtAuthGuard } from '../auth/jwt-auth.guard';
+
 import { RoleGuard } from '../../guards/role.guard';
 import { CompanyService } from '../company/company.service';
+
+import { UploadToCloud } from '../../common/decorators/upload.decorator';
 
 @Controller({
   version: '1',
@@ -42,9 +45,13 @@ export class AdminController {
   }
 
   @Post('create-vendor')
+  @UploadToCloud([{ name: 'documents', maxCount: 20 }])
   @HttpCode(HttpStatus.OK)
-  async createVendor(@Body() vendorData: any) {
-    return await this.vendorService.vendorRegister(vendorData, []);
+  async createVendor(
+    @Body() vendorData: any,
+    @UploadedFiles() files: Express.Multer.File[],
+  ) {
+    return await this.vendorService.vendorRegister(vendorData, files);
   }
   @Get('vendor-applications')
   @HttpCode(HttpStatus.OK)

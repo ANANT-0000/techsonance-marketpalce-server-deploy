@@ -17,38 +17,55 @@ export const company = pg.pgTable(
     company_name: pg.text('company_name').notNull(),
     company_domain: pg.text('company_domain').notNull(),
     company_structure: pg.text('company_structure').notNull(),
-    company_status: companyEnum('company_status').default(UserStatus.PENDING),
+
+    // SINGLE status field with clear semantics
+    onboarding_status: companyEnum('onboarding_status').notNull().default(UserStatus.PENDING),
+    entity_status: EntityStatusEnum('entity_status').notNull().default(EntityStatus.ACTIVE),
+
+    // Logistics — platform level defaults only
+    logistics_mode: LogisticsModeEnum('logistics_mode')
+      .notNull()
+      .default(LogisticsMode.PLATFORM_PROXY),
+    logistics_is_active: pg.boolean('logistics_is_active').notNull().default(true),
+    encrypted_logistics_api_key: pg.text('encrypted_logistics_api_key'),
+    logistics_api_key_iv: pg.text('logistics_api_key_iv'),
+    logistics_api_key_tag: pg.text('logistics_api_key_tag'),
+    encrypted_logistics_api_secret: pg.text('encrypted_logistics_api_secret'),
+    logistics_api_secret_iv: pg.text('logistics_api_secret_iv'),
+    logistics_api_secret_tag: pg.text('logistics_api_secret_tag'),
+    logistics_pickup_id: pg.varchar('logistics_pickup_id', { length: 100 }),
+    encryption_key_version: pg.integer('encryption_key_version').notNull().default(1),
+
+    // Shipping
+    is_free_shipping_enabled: pg.boolean('is_free_shipping_enabled').notNull().default(false),
+    free_delivery_threshold: pg.decimal('free_delivery_threshold', { precision: 10, scale: 2 }),
+    standard_delivery_charge: pg
+      .decimal('standard_delivery_charge', { precision: 10, scale: 2 })
+      .notNull()
+      .default('50.00'),
+
     created_at: pg.timestamp('created_at').notNull().defaultNow(),
     updated_at: pg
       .timestamp('updated_at')
       .notNull()
       .defaultNow()
       .$onUpdate(() => new Date()),
-    status: EntityStatusEnum('status').default(EntityStatus.ACTIVE),
     deleted_at: pg.timestamp('deleted_at'),
-    logistics_mode: LogisticsModeEnum('logistics_mode')
-      .default(LogisticsMode.PLATFORM_PROXY)
-      .notNull(),
-    encrypted_logistics_api_key: pg.text('encrypted_logistics_api_key'),
-    encrypted_logistics_api_secret: pg.text('encrypted_logistics_api_secret'),
-    logistics_pickup_id: pg.varchar('logistics_pickup_id', { length: 100 }),
-    is_free_shipping_enabled: pg
-      .boolean('is_free_shipping_enabled')
-      .default(false)
-      .notNull(),
-    free_delivery_threshold: pg
-      .decimal('free_delivery_threshold', { precision: 10, scale: 2 })
-      .default('0.00')
-      .notNull(),
-    standard_delivery_charge: pg
-      .decimal('standard_delivery_charge', { precision: 10, scale: 2 })
-      .default('50.00')
-      .notNull(),
   },
   (t) => [
     pg.uniqueIndex('uq_company_domain').on(t.company_domain),
-    pg.index('idx_company_status').on(t.company_status),
-    pg.index('idx_company_name').on(t.company_name),
+    pg.index('idx_company_onboarding_status').on(t.onboarding_status),
+    pg.index('idx_company_entity_status').on(t.entity_status),
+    pg.check(
+      'chk_free_shipping_threshold',
+      sql`is_free_shipping_enabled = false OR free_delivery_threshold IS NOT NULL`,
+    ),
+    pg.check(
+      'chk_logistics_credentials',
+      sql`logistics_mode = 'PLATFORM_PROXY' OR (
+        encrypted_logistics_api_key IS NOT NULL AND logistics_pickup_id IS NOT NULL
+      )`,
+    ),
   ],
 );
 export const UserRoleEnum = pg.pgEnum('user_role_enum', [

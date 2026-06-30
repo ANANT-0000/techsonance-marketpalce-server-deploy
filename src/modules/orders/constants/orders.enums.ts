@@ -1,5 +1,6 @@
 export enum OrdersErrorKeyEnum {
   PROMOTION_IS_NOT_ACTIVE_OR_HAS_EXPIRED = 'Promotion is not active or has expired',
+  FAILED_TO_CLEAR_PURCHASED_ITEMS_FROM_CART = 'Failed to clear purchased items from cart',
   YOU_HAVE_ALREADY_USED_THIS_PROMOTION = 'You have already used this promotion',
   FAILED_TO_CREATE_ORDER = 'Failed to create order',
   FAILED_TO_CREATE_ORDER_ITEMS = 'Failed to create order items',

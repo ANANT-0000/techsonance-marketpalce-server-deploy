@@ -25,12 +25,11 @@ export interface RazorpayOrderPaidWebhook {
 
   /** Main webhook data. */
   payload: {
-    payment: {
-      entity: RazorpayPayment;
-    };
-
     order: {
       entity: RazorpayOrder;
+    };
+    payment: {
+      entity: RazorpayPayment;
     };
   };
 
@@ -46,7 +45,9 @@ export interface RazorpayWebhookEvent {
   account_id: string;
   event: string;
   contains: string[];
-  payload: Record<string, any>;
+  payload:
+    | RazorpayOrderPaidWebhook['payload']
+    | RazorpayPaymentCapturedWebhook['payload'];
   created_at: number;
 }
 
