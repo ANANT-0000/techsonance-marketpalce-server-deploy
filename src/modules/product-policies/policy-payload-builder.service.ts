@@ -5,16 +5,16 @@ import {
   InternalServerErrorException,
 } from '@nestjs/common';
 import { eq } from 'drizzle-orm';
-import { DRIZZLE, type DrizzleService } from '../../drizzle/drizzle.module';
+import { DRIZZLE, type DrizzleService } from '../../drizzle/drizzle.module.js';
 import {
   order_item_policy,
   company_branding,
   company,
-} from '../../drizzle/schema';
+} from '../../drizzle/schema/index.js';
 import {
   PolicyDocumentPayload,
   PolicySnapshot,
-} from './interfaces/policy-document.interface';
+} from './interfaces/policy-document.interface.js';
 @Injectable()
 export class PolicyPayloadBuilderService {
   constructor(@Inject(DRIZZLE) private readonly db: DrizzleService) {}

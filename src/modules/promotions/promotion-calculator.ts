@@ -7,7 +7,7 @@ import {
   PercentageOffConfig,
   PromotionType,
   TieredDiscountConfig,
-} from '../../drizzle/types/types';
+} from '../../drizzle/types/types.js';
 
 export interface CartContext {
   grandTotal: number; // post-tax subtotal before promotion

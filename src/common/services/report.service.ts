@@ -6,9 +6,9 @@ import {
   products,
   categories,
   refunds,
-} from '../../drizzle/schema';
-import { gst_invoices } from '../../drizzle/schema/finance.schema';
-import { DrizzleService } from '../../drizzle/drizzle.module';
+} from '../../drizzle/schema/index.js';
+import { gst_invoices } from '../../drizzle/schema/finance.schema.js';
+import { DrizzleService } from '../../drizzle/drizzle.module.js';
 export type DashboardFilter = {
   companyId: string;
   startDate: Date;

@@ -10,8 +10,8 @@ import { ConfigService } from '@nestjs/config';
 import { type Cache } from 'cache-manager';
 import { CACHE_MANAGER } from '@nestjs/cache-manager';
 import got from 'got';
-import { IShippingProvider } from '../shipping/interfaces/shipping-provider.interface';
-import { SHIPROCKET_APIs } from './constants/ship-rocket.constants';
+import { IShippingProvider } from '../shipping/interfaces/shipping-provider.interface.js';
+import { SHIPROCKET_APIs } from './constants/ship-rocket.constants.js';
 import {
   ShiprocketAddPickupAddress,
   ShiprocketAddPickupAddressResponse,
@@ -24,7 +24,9 @@ import {
   ShipRocketRequestForShipmentPickupResponse,
   ShipRocketCancelShipmentRequest,
   ShipRocketCancelShipmentResponse,
-} from '../../common/Types/shiprocket';
+  ShipRocketCheckServiceabilityRequest,
+  ShiprocketCourierServiceabilityResponse,
+} from '../../common/Types/shiprocket.js';
 
 /** Hard cap on all outbound Shiprocket requests — prevents connection-pool exhaustion */
 
@@ -115,24 +117,55 @@ export class ShipRocketService implements IShippingProvider {
     companyId?: string,
   ) {
     const token = await this.getToken(credentials, companyId);
+    console.log(
+      `\n\n\n\n[ShipRocketService.getServiceability] Token generated:`,
+      token,
+      '\n\n\n\nCompanyId:',
+      companyId,
+    );
     const url = SHIPROCKET_APIs.SERVICEABILITY;
-    const res = await got
-      .post(url, {
-        searchParams: {
-          pickup_pincode: data.pickup_pincode,
-          delivery_pincode: data.delivery_pincode,
-          breadth: data.breadth,
-          height: data.height,
-          weight: data.weight,
-          qc_check: data.qc_check,
-          is_return: data.is_return,
-          mode: data.mode,
-          cod: data.cod,
-        },
+    const params = {
+      pickup_postcode: Number(data.pickup_pincode),
+      delivery_postcode: Number(data.delivery_pincode),
+      weight: String(data.weight),
+      cod: data.cod,
+      qc_check: data.qc_check as 1,
+    };
+
+    console.log(
+      '\n\n[ShipRocket] Sending GET request to:',
+      url,
+      '\n[ShipRocket] With params:',
+      params,
+      '\n\n',
+    );
+
+    const res: ShiprocketCourierServiceabilityResponse = await got
+      .get(url, {
+        searchParams: params,
         headers: { Authorization: `Bearer ${token}` },
         timeout: { request: SHIPROCKET_REQUEST_TIMEOUT_MS },
       })
       .json();
+
+    const filteredCouriers = res.data.available_courier_companies?.map((c: any) => ({
+      courier_company_id: c.courier_company_id,
+      courier_name: c.courier_name,
+      rate: c.rate,
+      rating: c.rating,
+      estimated_delivery_days: c.estimated_delivery_days,
+      delivery_performance: c.delivery_performance,
+      pickup_performance: c.pickup_performance,
+      cod_charges: c.cod_charges,
+      is_surface: c.is_surface,
+    }));
+
+    console.log(
+      '[ShipRocket] Filtered Courier Options for Vendor Selection:',
+      JSON.stringify(filteredCouriers, null, 2),
+      '\n----------------------------------------------------------------------------------------\n[ShipRocket] Recommended by:',
+      res.data.recommended_by,
+    );
     return res;
   }
 

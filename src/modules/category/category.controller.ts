@@ -12,14 +12,14 @@ import {
   Query,
   UseGuards,
 } from '@nestjs/common';
-import { CategoryService } from './category.service';
-import { CreateCategoryDto } from './dto/CreateCategory.dto';
-import { UpdateCategoryDto } from './dto/UpdateCategory.dto';
-import { GetCategoriesQueryDto } from './dto/GetCategoriesQuery.dto';
-import { RoleGuard } from '../../guards/role.guard';
-import { Role } from '../../enums/role.enum';
-import { Roles } from '../../common/decorators/roles.decorator';
-import { Public } from '../../common/decorators/public.decorator';
+import { CategoryService } from './category.service.js';
+import { CreateCategoryDto } from './dto/CreateCategory.dto.js';
+import { UpdateCategoryDto } from './dto/UpdateCategory.dto.js';
+import { GetCategoriesQueryDto } from './dto/GetCategoriesQuery.dto.js';
+import { RoleGuard } from '../../guards/role.guard.js';
+import { Role } from '../../enums/role.enum.js';
+import { Roles } from '../../common/decorators/roles.decorator.js';
+import { Public } from '../../common/decorators/public.decorator.js';
 
 @Controller({
   version: '1',

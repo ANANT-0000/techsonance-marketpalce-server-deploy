@@ -1,7 +1,7 @@
 import { Inject, Injectable, UnauthorizedException } from '@nestjs/common';
-import { DRIZZLE, type DrizzleService } from './drizzle/drizzle.module';
+import { DRIZZLE, type DrizzleService } from './drizzle/drizzle.module.js';
 import { HealthCheckService } from '@nestjs/terminus';
-import { DrizzleHealthIndicator } from './drizzle/drizzle.health';
+import { DrizzleHealthIndicator } from './drizzle/drizzle.health.js';
 
 @Injectable()
 export class AppService {

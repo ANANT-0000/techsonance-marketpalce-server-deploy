@@ -12,18 +12,18 @@ import {
   UploadedFiles,
   UseGuards,
 } from '@nestjs/common';
-import { AdminService } from './admin.service';
-import { UserStatus } from '../../drizzle/types/types';
-import { VendorsService } from '../vendors/vendors.service';
-import { UsersService } from '../users/users.service';
-import { OrdersService } from '../orders/orders.service';
-import { Roles } from '../../common/decorators/roles.decorator';
-import { Role } from '../../enums/role.enum';
+import { AdminService } from './admin.service.js';
+import { UserStatus } from '../../drizzle/types/types.js';
+import { VendorsService } from '../vendors/vendors.service.js';
+import { UsersService } from '../users/users.service.js';
+import { OrdersService } from '../orders/orders.service.js';
+import { Roles } from '../../common/decorators/roles.decorator.js';
+import { Role } from '../../enums/role.enum.js';
 
-import { RoleGuard } from '../../guards/role.guard';
-import { CompanyService } from '../company/company.service';
+import { RoleGuard } from '../../guards/role.guard.js';
+import { CompanyService } from '../company/company.service.js';
 
-import { UploadToCloud } from '../../common/decorators/upload.decorator';
+import { UploadToCloud } from '../../common/decorators/upload.decorator.js';
 
 @Controller({
   version: '1',

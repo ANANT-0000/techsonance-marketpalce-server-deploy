@@ -8,11 +8,11 @@ import {
   Delete,
   Headers,
 } from '@nestjs/common';
-import { WarehouseService } from './warehouse.service';
+import { WarehouseService } from './warehouse.service.js';
 import {
   updateWarehouseAddressDto,
   warehouseAddressDto,
-} from './dto/warehouse.dto';
+} from './dto/warehouse.dto.js';
 
 @Controller({
   version: '1',

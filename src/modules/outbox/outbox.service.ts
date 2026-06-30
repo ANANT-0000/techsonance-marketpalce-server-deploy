@@ -11,12 +11,12 @@ import { Client, Receiver } from '@upstash/qstash';
 import {
   OUTBOX_CONSTANTS,
   OutboxJobStatus,
-} from './constants/outbox.constants';
-import { outbox_jobs } from '../../drizzle/schema';
+} from './constants/outbox.constants.js';
+import { outbox_jobs } from '../../drizzle/schema/index.js';
 import { and, eq, lt } from 'drizzle-orm';
-import { DRIZZLE, type DrizzleService } from '../../drizzle/drizzle.module';
+import { DRIZZLE, type DrizzleService } from '../../drizzle/drizzle.module.js';
 import type { Request } from 'express';
-import { ShippingManagerService } from '../shipping/shipping-manager.service';
+import { ShippingManagerService } from '../shipping/shipping-manager.service.js';
 
 @Injectable()
 export class OutboxService {

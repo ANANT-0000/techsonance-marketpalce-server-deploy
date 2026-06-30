@@ -1,9 +1,9 @@
 import * as pg from 'drizzle-orm/pg-core';
-import { company } from './main.schema';
-import { EntityStatusEnum } from './enums.schema';
-import { orders, products } from './shop.schema';
+import { company } from './main.schema.js';
+import { EntityStatusEnum } from './enums.schema.js';
+import { orders, products } from './shop.schema.js';
 import { relations, sql } from 'drizzle-orm';
-import { EntityStatus } from '../types/types';
+import { EntityStatus } from '../types/types.js';
 
 export const tax_profiles = pg.pgTable('tax_profiles', {
   id: pg.uuid('id').primaryKey().defaultRandom(),
@@ -18,7 +18,9 @@ export const tax_profiles = pg.pgTable('tax_profiles', {
     .$onUpdate(() => new Date()),
   record_status: EntityStatusEnum('record_status').default(EntityStatus.ACTIVE),
   deleted_at: pg.timestamp('deleted_at'),
-  company_id: pg.uuid('company_id').references(() => company.id, { onDelete: 'restrict' }),
+  company_id: pg
+    .uuid('company_id')
+    .references(() => company.id, { onDelete: 'restrict' }),
 });
 export const tax_types = pg.pgTable('tax_types', {
   id: pg.uuid('id').primaryKey().defaultRandom(),
@@ -37,7 +39,9 @@ export const tax_types = pg.pgTable('tax_types', {
     .references(() => tax_profiles.id, { onDelete: 'cascade' }),
   record_status: EntityStatusEnum('record_status').default(EntityStatus.ACTIVE),
   deleted_at: pg.timestamp('deleted_at'),
-  company_id: pg.uuid('company_id').references(() => company.id, { onDelete: 'restrict' }),
+  company_id: pg
+    .uuid('company_id')
+    .references(() => company.id, { onDelete: 'restrict' }),
 });
 
 // finance.schema.ts — replace tax_types + tax_rates with tax_slabs
@@ -50,7 +54,10 @@ export const tax_slabs = pg.pgTable('tax_slabs', {
   description: pg.text('description'), // optional
   is_exempt: pg.boolean('is_exempt').notNull().default(false),
   effective_from: pg.date('effective_from').notNull(),
-  effective_to: pg.date('effective_to').notNull().default(sql`'2099-12-31'`),
+  effective_to: pg
+    .date('effective_to')
+    .notNull()
+    .default(sql`'2099-12-31'`),
   created_at: pg.timestamp('created_at').notNull().defaultNow(),
   updated_at: pg
     .timestamp('updated_at')
@@ -65,7 +72,9 @@ export const tax_slabs = pg.pgTable('tax_slabs', {
     .references(() => tax_types.id, { onDelete: 'cascade' }),
   record_status: EntityStatusEnum('record_status').default(EntityStatus.ACTIVE),
   deleted_at: pg.timestamp('deleted_at'),
-  company_id: pg.uuid('company_id').references(() => company.id, { onDelete: 'restrict' }),
+  company_id: pg
+    .uuid('company_id')
+    .references(() => company.id, { onDelete: 'restrict' }),
 });
 
 export const product_tax = pg.pgTable('product_tax', {
@@ -101,8 +110,13 @@ export const gst_invoices = pg.pgTable('gst_invoices', {
     .notNull()
     .defaultNow()
     .$onUpdate(() => new Date()),
-  order_id: pg.uuid('order_id').references(() => orders.id, { onDelete: 'restrict' }).unique(),
-  company_id: pg.uuid('company_id').references(() => company.id, { onDelete: 'restrict' }),
+  order_id: pg
+    .uuid('order_id')
+    .references(() => orders.id, { onDelete: 'restrict' })
+    .unique(),
+  company_id: pg
+    .uuid('company_id')
+    .references(() => company.id, { onDelete: 'restrict' }),
   status: EntityStatusEnum('status').default(EntityStatus.ACTIVE),
   deleted_at: pg.timestamp('deleted_at'),
 });

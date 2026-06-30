@@ -19,8 +19,8 @@ import {
   or,
   sql,
 } from 'drizzle-orm';
-import { DRIZZLE, type DrizzleService } from '../../drizzle/drizzle.module';
-import * as schema from '../../drizzle/schema';
+import { DRIZZLE, type DrizzleService } from '../../drizzle/drizzle.module.js';
+import * as schema from '../../drizzle/schema/index.js';
 import {
   gst_invoices,
   order_item_policy,
@@ -42,7 +42,7 @@ import {
   promotion_analytics_events,
   company,
   company_document_config,
-} from '../../drizzle/schema';
+} from '../../drizzle/schema/index.js';
 import {
   DiscountConfig,
   OrderStatus,
@@ -50,31 +50,31 @@ import {
   PromoEventType,
   PromotionRuleType,
   PromotionStatus,
-} from '../../drizzle/types/types';
-import { CompanyService } from '../company/company.service';
-import { InventoryService } from '../inventory/inventory.service';
-import { MailService } from '../../common/services/mail/mail.service';
-import { domainExtractor } from '../../common/filters/domainExtractor.filter';
-import { InvoiceService } from '../invoice/invoice.service';
-import { FinancesService } from '../finances/finances.service';
+} from '../../drizzle/types/types.js';
+import { CompanyService } from '../company/company.service.js';
+import { InventoryService } from '../inventory/inventory.service.js';
+import { MailService } from '../../common/services/mail/mail.service.js';
+import { domainExtractor } from '../../common/filters/domainExtractor.filter.js';
+import { InvoiceService } from '../invoice/invoice.service.js';
+import { FinancesService } from '../finances/finances.service.js';
 
-import { ProductPoliciesService } from '../product-policies/product-policies.service';
-import { PolicyResolutionService } from '../product-policies/policy-resolution.service';
-import { PolicySnapshot } from '../product-policies/interfaces/policy-document.interface';
+import { ProductPoliciesService } from '../product-policies/product-policies.service.js';
+import { PolicyResolutionService } from '../product-policies/policy-resolution.service.js';
+import { PolicySnapshot } from '../product-policies/interfaces/policy-document.interface.js';
 import {
   calculatePromotionDiscount,
   CartContext,
   DiscountResult,
-} from '../promotions/promotion-calculator';
-import { CouponService } from '../coupon/coupon.service';
-import { PromotionsService } from '../promotions/promotions.service';
-import { OrdersErrorKeyEnum } from './constants/orders.enums';
-import { ShippingManagerService } from '../shipping/shipping-manager.service';
-import { OutboxService } from '../outbox/outbox.service';
+} from '../promotions/promotion-calculator.js';
+import { CouponService } from '../coupon/coupon.service.js';
+import { PromotionsService } from '../promotions/promotions.service.js';
+import { OrdersErrorKeyEnum } from './constants/orders.enums.js';
+import { ShippingManagerService } from '../shipping/shipping-manager.service.js';
+import { OutboxService } from '../outbox/outbox.service.js';
 import {
   OutboxJobType,
   OutboxJobStatus,
-} from '../outbox/constants/outbox.constants';
+} from '../outbox/constants/outbox.constants.js';
 import { PgTransaction } from 'drizzle-orm/pg-core';
 import { NodePgQueryResultHKT } from 'drizzle-orm/node-postgres';
 import { PgSchema } from 'drizzle-orm/pg-core';

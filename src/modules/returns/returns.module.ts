@@ -1,13 +1,13 @@
 import { Module } from '@nestjs/common';
-import { ReturnsService } from './returns.service';
-import { ReturnsController } from './returns.controller';
-import { CompanyModule } from '../company/company.module';
-import { DrizzleModule } from '../../drizzle/drizzle.module';
-import { UploadToCloudModule } from '../../utils/upload-to-cloud/upload-to-cloud.module';
-import { RefundsModule } from '../refunds/refunds.module';
-import { InventoryModule } from '../inventory/inventory.module';
-import { MailModule } from '../../common/services/mail/mail.module';
-import { OrderEligibilityGuardModule } from '../order-eligibility-guard/order-eligibility-guard.module';
+import { ReturnsService } from './returns.service.js';
+import { ReturnsController } from './returns.controller.js';
+import { CompanyModule } from '../company/company.module.js';
+import { DrizzleModule } from '../../drizzle/drizzle.module.js';
+import { UploadToCloudModule } from '../../utils/upload-to-cloud/upload-to-cloud.module.js';
+import { RefundsModule } from '../refunds/refunds.module.js';
+import { InventoryModule } from '../inventory/inventory.module.js';
+import { MailModule } from '../../common/services/mail/mail.module.js';
+import { OrderEligibilityGuardModule } from '../order-eligibility-guard/order-eligibility-guard.module.js';
 
 @Module({
   imports: [

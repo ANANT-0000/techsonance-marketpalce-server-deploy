@@ -3,7 +3,7 @@ import {
   PromotionStatus,
   PromotionTargetType,
   PromotionType,
-} from '../../../drizzle/types/types';
+} from '../../../drizzle/types/types.js';
 import {
   IsEnum,
   IsOptional,

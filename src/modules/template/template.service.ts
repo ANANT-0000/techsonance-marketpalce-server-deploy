@@ -5,12 +5,12 @@ import {
   Injectable,
   InternalServerErrorException,
 } from '@nestjs/common';
-import { CreateTemplateDto, UpdateTemplateDto } from './dto/template.dto';
-import { DRIZZLE, type DrizzleService } from '../../drizzle/drizzle.module';
-import { templates } from '../../drizzle/schema/utils.schema';
+import { CreateTemplateDto, UpdateTemplateDto } from './dto/template.dto.js';
+import { DRIZZLE, type DrizzleService } from '../../drizzle/drizzle.module.js';
+import { templates } from '../../drizzle/schema/utils.schema.js';
 import { eq } from 'drizzle-orm';
-import { UploadToCloudService } from '../../utils/upload-to-cloud/upload-to-cloud.service';
-import { TemplateErrorKeyEnum } from './constants/template.enums';
+import { UploadToCloudService } from '../../utils/upload-to-cloud/upload-to-cloud.service.js';
+import { TemplateErrorKeyEnum } from './constants/template.enums.js';
 
 @Injectable()
 export class TemplateService {

@@ -1,13 +1,13 @@
 import { forwardRef, Module } from '@nestjs/common';
-import { VendorsService } from './vendors.service';
-import { VendorsController } from './vendors.controller';
-import { DrizzleModule } from '../../drizzle/drizzle.module';
+import { VendorsService } from './vendors.service.js';
+import { VendorsController } from './vendors.controller.js';
+import { DrizzleModule } from '../../drizzle/drizzle.module.js';
 import { JwtModule } from '@nestjs/jwt';
-import { MailModule } from '../../common/services/mail/mail.module';
-import { UploadToCloudModule } from '../../utils/upload-to-cloud/upload-to-cloud.module';
-import { CompanyModule } from '../company/company.module';
-import { OrdersModule } from '../orders/orders.module';
-import { SubscriptionModule } from '../subscription/subscription.module';
+import { MailModule } from '../../common/services/mail/mail.module.js';
+import { UploadToCloudModule } from '../../utils/upload-to-cloud/upload-to-cloud.module.js';
+import { CompanyModule } from '../company/company.module.js';
+import { OrdersModule } from '../orders/orders.module.js';
+import { SubscriptionModule } from '../subscription/subscription.module.js';
 
 @Module({
   imports: [

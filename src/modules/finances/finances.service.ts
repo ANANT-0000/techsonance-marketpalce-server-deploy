@@ -1,4 +1,4 @@
-import { DiscountConfig } from './../../drizzle/types/types';
+import { DiscountConfig } from './../../drizzle/types/types.js';
 // finances.service.ts
 import {
   Injectable,
@@ -20,7 +20,7 @@ import {
   lt,
   count,
 } from 'drizzle-orm';
-import { DRIZZLE, type DrizzleService } from '../../drizzle/drizzle.module';
+import { DRIZZLE, type DrizzleService } from '../../drizzle/drizzle.module.js';
 import {
   address,
   company,
@@ -35,14 +35,14 @@ import {
   tax_slabs,
   tax_types,
   vendor,
-} from '../../drizzle/schema';
-import { CompanyService } from '../company/company.service';
-import { domainExtractor } from '../../common/filters/domainExtractor.filter';
-import { COUNTRIES_COMPLIANCE, getStateByCode } from '../../common/constants';
-import { PaymentStatus } from '../../drizzle/types/types';
-import { multiplyRoundDivide } from '../promotions/promotion-calculator';
-import { CreateTaxSlabDto } from './dto/create-tax-slab.dto';
-import { FinancesErrorKeyEnum } from './constants/finances.enums';
+} from '../../drizzle/schema/index.js';
+import { CompanyService } from '../company/company.service.js';
+import { domainExtractor } from '../../common/filters/domainExtractor.filter.js';
+import { COUNTRIES_COMPLIANCE, getStateByCode } from '../../common/constants.js';
+import { PaymentStatus } from '../../drizzle/types/types.js';
+import { multiplyRoundDivide } from '../promotions/promotion-calculator.js';
+import { CreateTaxSlabDto } from './dto/create-tax-slab.dto.js';
+import { FinancesErrorKeyEnum } from './constants/finances.enums.js';
 
 // ─── helpers ────────────────────────────────────────────────────
 export interface LineBreakdown {

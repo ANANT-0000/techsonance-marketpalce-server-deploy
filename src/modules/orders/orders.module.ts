@@ -1,18 +1,18 @@
 import { Module, forwardRef } from '@nestjs/common';
-import { OrdersService } from './orders.service';
-import { OrdersController } from './orders.controller';
-import { DrizzleModule } from '../../drizzle/drizzle.module';
-import { CompanyModule } from '../company/company.module';
-import { InventoryModule } from '../inventory/inventory.module';
-import { MailModule } from '../../common/services/mail/mail.module';
-import { InvoiceModule } from '../invoice/invoice.module';
-import { FinancesModule } from '../finances/finances.module';
-import { ProductPoliciesModule } from '../product-policies/product-policies.module';
-import { CouponModule } from '../coupon/coupon.module';
-import { PromotionsModule } from '../promotions/promotions.module';
-import { ShippingModule } from '../shipping/shipping.module';
-import { OutboxModule } from '../outbox/outbox.module';
-import { PolicyResolutionService } from '../product-policies/policy-resolution.service';
+import { OrdersService } from './orders.service.js';
+import { OrdersController } from './orders.controller.js';
+import { DrizzleModule } from '../../drizzle/drizzle.module.js';
+import { CompanyModule } from '../company/company.module.js';
+import { InventoryModule } from '../inventory/inventory.module.js';
+import { MailModule } from '../../common/services/mail/mail.module.js';
+import { InvoiceModule } from '../invoice/invoice.module.js';
+import { FinancesModule } from '../finances/finances.module.js';
+import { ProductPoliciesModule } from '../product-policies/product-policies.module.js';
+import { CouponModule } from '../coupon/coupon.module.js';
+import { PromotionsModule } from '../promotions/promotions.module.js';
+import { ShippingModule } from '../shipping/shipping.module.js';
+import { OutboxModule } from '../outbox/outbox.module.js';
+import { PolicyResolutionService } from '../product-policies/policy-resolution.service.js';
 
 @Module({
   imports: [

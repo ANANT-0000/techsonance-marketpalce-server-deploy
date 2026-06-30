@@ -1,8 +1,8 @@
 import * as pg from 'drizzle-orm/pg-core';
 import { relations, sql } from 'drizzle-orm';
-import { company } from './main.schema';
-import { EntityStatusEnum } from './enums.schema';
-import { orders, order_items, coupons } from './shop.schema';
+import { company } from './main.schema.js';
+import { EntityStatusEnum } from './enums.schema.js';
+import { orders, order_items, coupons } from './shop.schema.js';
 import {
   BannerPlacement,
   ChangelogAction,
@@ -13,8 +13,8 @@ import {
   PromotionType,
   SegmentCriteriaOperator,
   EntityStatus,
-} from '../types/types';
-import { user } from './users.schema';
+} from '../types/types.js';
+import { user } from './users.schema.js';
 
 // ================================================================
 // PROMOTIONS & MARKETING SCHEMA
@@ -185,7 +185,9 @@ export const promotions = pg.pgTable(
       .notNull()
       .defaultNow()
       .$onUpdate(() => new Date()),
-    record_status: EntityStatusEnum('record_status').default(EntityStatus.ACTIVE),
+    record_status: EntityStatusEnum('record_status').default(
+      EntityStatus.ACTIVE,
+    ),
     deleted_at: pg.timestamp('deleted_at'),
     // Set by cron when status is moved to EXPIRED
     expired_at: pg.timestamp('expired_at', { withTimezone: true }),

@@ -1,20 +1,20 @@
-export * from './enums.schema';
-export * from './users.schema';
-export * from './main.schema';
-export * from './utils.schema';
-export * from './finance.schema';
-export * from './shop.schema';
-export * from './promotions.schema';
-export * from './product_policy.schema';
-export * from './company_identity.schema';
-export * from './subscription.schema';
-export * from './vendor_storefront.schema';
-export * from './nav_storefront.schema';
-export * from './outbox.schema';
-export * from './vendor-gateway.schema';
-import { address, user, vendor } from './users.schema';
-import { vendor_storefront_sections } from './vendor_storefront.schema';
-import { nav_menus, nav_items } from './nav_storefront.schema';
+export * from './enums.schema.js';
+export * from './users.schema.js';
+export * from './main.schema.js';
+export * from './utils.schema.js';
+export * from './finance.schema.js';
+export * from './shop.schema.js';
+export * from './promotions.schema.js';
+export * from './product_policy.schema.js';
+export * from './company_identity.schema.js';
+export * from './subscription.schema.js';
+export * from './vendor_storefront.schema.js';
+export * from './nav_storefront.schema.js';
+export * from './outbox.schema.js';
+export * from './vendor-gateway.schema.js';
+import { address, user, vendor } from './users.schema.js';
+import { vendor_storefront_sections } from './vendor_storefront.schema.js';
+import { nav_menus, nav_items } from './nav_storefront.schema.js';
 import {
   cart_items,
   carts,
@@ -36,7 +36,7 @@ import {
   shipping_details,
   wishlist,
   wishlist_items,
-} from './shop.schema';
+} from './shop.schema.js';
 import { relations } from 'drizzle-orm';
 import {
   cms_pages,
@@ -47,7 +47,7 @@ import {
   site_maps,
   user_and_company,
   user_roles,
-} from './main.schema';
+} from './main.schema.js';
 import {
   audit_logs,
   inventory,
@@ -60,14 +60,14 @@ import {
   ticket_comments,
   notification_settings,
   ticket_ratings,
-} from './utils.schema';
+} from './utils.schema.js';
 import {
   company_branding,
   company_compliance,
   company_document_config,
   company_legal_profile,
-} from './company_identity.schema';
-import { order_item_policy } from './product_policy.schema';
+} from './company_identity.schema.js';
+import { order_item_policy } from './product_policy.schema.js';
 import {
   customer_segments,
   marketing_banners,
@@ -76,15 +76,15 @@ import {
   promotion_usage,
   promotions,
   segment_members,
-} from './promotions.schema';
+} from './promotions.schema.js';
 import {
   subscription_events,
   subscription_plans,
   vendor_subscriptions,
-} from './subscription.schema';
-import { gst_invoices } from './finance.schema';
-import { outbox_jobs } from './outbox.schema';
-import { vendor_gateways } from './vendor-gateway.schema';
+} from './subscription.schema.js';
+import { gst_invoices } from './finance.schema.js';
+import { outbox_jobs } from './outbox.schema.js';
+import { vendor_gateways } from './vendor-gateway.schema.js';
 
 export const companyRelations = relations(company, ({ one, many }) => ({
   roles: many(user_roles),

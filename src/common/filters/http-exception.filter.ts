@@ -6,7 +6,7 @@ import {
   Logger,
 } from '@nestjs/common';
 import { Response } from 'express';
-import { SecureErrorHandler } from '../error/error.handler';
+import { SecureErrorHandler } from '../error/error.handler.js';
 
 @Catch()
 export class HttpExceptionFilter implements ExceptionFilter {

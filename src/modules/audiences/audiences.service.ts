@@ -5,19 +5,19 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { and, desc, eq, sql } from 'drizzle-orm';
-import { DRIZZLE, type DrizzleService } from '../../drizzle/drizzle.module';
+import { DRIZZLE, type DrizzleService } from '../../drizzle/drizzle.module.js';
 import {
   customer_segments,
   segment_members,
   user,
   orders,
   user_and_company,
-} from '../../drizzle/schema';
-import { CompanyService } from '../company/company.service';
-import { domainExtractor } from '../../common/filters/domainExtractor.filter';
-import { CreateSegmentDto } from './dto/audience.dto';
-import { SegmentCriteriaOperator } from '../../drizzle/types/types';
-import { AudiencesErrorKeyEnum } from './constants/audiences.enums';
+} from '../../drizzle/schema/index.js';
+import { CompanyService } from '../company/company.service.js';
+import { domainExtractor } from '../../common/filters/domainExtractor.filter.js';
+import { CreateSegmentDto } from './dto/audience.dto.js';
+import { SegmentCriteriaOperator } from '../../drizzle/types/types.js';
+import { AudiencesErrorKeyEnum } from './constants/audiences.enums.js';
 
 export interface SegmentCriterion {
   field:

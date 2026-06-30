@@ -8,22 +8,22 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { and, asc, eq, inArray } from 'drizzle-orm';
-import { DRIZZLE, type DrizzleService } from '../../drizzle/drizzle.module';
+import { DRIZZLE, type DrizzleService } from '../../drizzle/drizzle.module.js';
 import {
   categories,
   nav_items,
   nav_menus,
   products,
-} from '../../drizzle/schema';
-import { CompanyService } from '../company/company.service';
-import { domainExtractor } from '../../common/filters/domainExtractor.filter';
-import { NavbarErrorKeyEnum } from './constants/navbar.enums';
-import { UpsertNavMenuDto } from './dto/upsert-nav-menu.dto';
-import { CreateNavItemDto } from './dto/create-nav-item.dto';
+} from '../../drizzle/schema/index.js';
+import { CompanyService } from '../company/company.service.js';
+import { domainExtractor } from '../../common/filters/domainExtractor.filter.js';
+import { NavbarErrorKeyEnum } from './constants/navbar.enums.js';
+import { UpsertNavMenuDto } from './dto/upsert-nav-menu.dto.js';
+import { CreateNavItemDto } from './dto/create-nav-item.dto.js';
 import {
   UpdateNavItemDto,
   ReorderNavItemsDto,
-} from './dto/update-nav-item.dto';
+} from './dto/update-nav-item.dto.js';
 import {
   NavMenuSettings,
   NavMenuLogoAlignment,
@@ -32,13 +32,13 @@ import {
   NavItemDisplayType,
   NavItemColType,
   NavItemType,
-} from '../../drizzle/schema/nav_storefront.schema';
-import { SiteMapsService } from '../site-maps/site-maps.service';
+} from '../../drizzle/schema/nav_storefront.schema.js';
+import { SiteMapsService } from '../site-maps/site-maps.service.js';
 import {
   NavLayoutType,
   NavbarErrorCode,
   EntityStatus,
-} from '../../drizzle/types/types';
+} from '../../drizzle/types/types.js';
 
 // ─── Default settings applied when a field is absent from the JSONB blob ────
 const SETTINGS_DEFAULTS: Required<NavMenuSettings> = {

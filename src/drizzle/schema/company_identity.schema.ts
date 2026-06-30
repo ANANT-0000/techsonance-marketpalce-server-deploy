@@ -1,7 +1,7 @@
 import * as pg from 'drizzle-orm/pg-core';
-import { company } from './main.schema';
-import { address, user } from './users.schema';
-import { company_document, templates } from './utils.schema';
+import { company } from './main.schema.js';
+import { address, user } from './users.schema.js';
+import { company_document, templates } from './utils.schema.js';
 
 // ================================================================
 // COMPANY IDENTITY SCHEMA
@@ -46,18 +46,31 @@ export const company_branding = pg.pgTable('company_branding', {
   font_family: pg.text('font_family').default('Inter'),
 
   // ── Storefront Layout & Themes ──
-  background_color: pg.varchar('background_color', { length: 7 }).default('#f8fafc'),
+  background_color: pg
+    .varchar('background_color', { length: 7 })
+    .default('#f8fafc'),
   text_color: pg.varchar('text_color', { length: 7 }).default('#0f172a'),
   navbar_bg: pg.varchar('navbar_bg', { length: 7 }).default('#ffffff'),
   navbar_fg: pg.varchar('navbar_fg', { length: 7 }).default('#0f172a'),
   footer_bg: pg.varchar('footer_bg', { length: 7 }).default('#0f172a'),
   footer_fg: pg.varchar('footer_fg', { length: 7 }).default('#ffffff'),
-  navbar_position: pg.varchar('navbar_position', { length: 20 }).default('sticky'),
+  navbar_position: pg
+    .varchar('navbar_position', { length: 20 })
+    .default('sticky'),
   logo_alignment: pg.varchar('logo_alignment', { length: 20 }).default('left'),
   footer_style: pg.varchar('footer_style', { length: 20 }).default('detailed'),
   border_radius: pg.varchar('border_radius', { length: 20 }).default('md'),
   card_style: pg.varchar('card_style', { length: 20 }).default('standard'),
-  homepage_layout: pg.jsonb('homepage_layout').default(['hero', 'categories', 'products', 'promo', 'new_arrivals', 'newsletter']),
+  homepage_layout: pg
+    .jsonb('homepage_layout')
+    .default([
+      'hero',
+      'categories',
+      'products',
+      'promo',
+      'new_arrivals',
+      'newsletter',
+    ]),
 
   created_at: pg.timestamp('created_at').notNull().defaultNow(),
   updated_at: pg

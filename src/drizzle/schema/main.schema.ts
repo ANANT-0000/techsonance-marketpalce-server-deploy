@@ -5,9 +5,9 @@ import {
   UserStatus,
   EntityStatus,
   LogisticsMode,
-} from '../types/types';
-import { EntityStatusEnum, LogisticsModeEnum } from './enums.schema';
-import { user } from './users.schema';
+} from '../types/types.js';
+import { EntityStatusEnum, LogisticsModeEnum } from './enums.schema.js';
+import { user } from './users.schema.js';
 import { sql } from 'drizzle-orm';
 export const companyEnum = pg.pgEnum('company_enum', UserStatus);
 export const company = pg.pgTable(
@@ -19,14 +19,21 @@ export const company = pg.pgTable(
     company_structure: pg.text('company_structure').notNull(),
 
     // SINGLE status field with clear semantics
-    onboarding_status: companyEnum('onboarding_status').notNull().default(UserStatus.PENDING),
-    entity_status: EntityStatusEnum('entity_status').notNull().default(EntityStatus.ACTIVE),
+    onboarding_status: companyEnum('onboarding_status')
+      .notNull()
+      .default(UserStatus.PENDING),
+    entity_status: EntityStatusEnum('entity_status')
+      .notNull()
+      .default(EntityStatus.ACTIVE),
 
     // Logistics — platform level defaults only
     logistics_mode: LogisticsModeEnum('logistics_mode')
       .notNull()
       .default(LogisticsMode.PLATFORM_PROXY),
-    logistics_is_active: pg.boolean('logistics_is_active').notNull().default(true),
+    logistics_is_active: pg
+      .boolean('logistics_is_active')
+      .notNull()
+      .default(true),
     encrypted_logistics_api_key: pg.text('encrypted_logistics_api_key'),
     logistics_api_key_iv: pg.text('logistics_api_key_iv'),
     logistics_api_key_tag: pg.text('logistics_api_key_tag'),
@@ -34,11 +41,20 @@ export const company = pg.pgTable(
     logistics_api_secret_iv: pg.text('logistics_api_secret_iv'),
     logistics_api_secret_tag: pg.text('logistics_api_secret_tag'),
     logistics_pickup_id: pg.varchar('logistics_pickup_id', { length: 100 }),
-    encryption_key_version: pg.integer('encryption_key_version').notNull().default(1),
+    encryption_key_version: pg
+      .integer('encryption_key_version')
+      .notNull()
+      .default(1),
 
     // Shipping
-    is_free_shipping_enabled: pg.boolean('is_free_shipping_enabled').notNull().default(false),
-    free_delivery_threshold: pg.decimal('free_delivery_threshold', { precision: 10, scale: 2 }),
+    is_free_shipping_enabled: pg
+      .boolean('is_free_shipping_enabled')
+      .notNull()
+      .default(false),
+    free_delivery_threshold: pg.decimal('free_delivery_threshold', {
+      precision: 10,
+      scale: 2,
+    }),
     standard_delivery_charge: pg
       .decimal('standard_delivery_charge', { precision: 10, scale: 2 })
       .notNull()
@@ -131,8 +147,12 @@ export const permissions = pg.pgTable('user_permissions', {
 });
 export const role_permissions = pg.pgTable('role_permissions', {
   id: pg.uuid('id').primaryKey().defaultRandom(),
-  role_id: pg.uuid('role_id').references(() => user_roles.id, { onDelete: 'cascade' }),
-  permission_id: pg.uuid('permission_id').references(() => permissions.id, { onDelete: 'cascade' }),
+  role_id: pg
+    .uuid('role_id')
+    .references(() => user_roles.id, { onDelete: 'cascade' }),
+  permission_id: pg
+    .uuid('permission_id')
+    .references(() => permissions.id, { onDelete: 'cascade' }),
   created_at: pg.timestamp('created_at').notNull().defaultNow(),
   updated_at: pg
     .timestamp('updated_at')
@@ -153,7 +173,9 @@ export const cms_pages = pg.pgTable('cms_pages', {
     .notNull()
     .defaultNow()
     .$onUpdate(() => new Date()),
-  company_id: pg.uuid('company_id').references(() => company.id, { onDelete: 'restrict' }),
+  company_id: pg
+    .uuid('company_id')
+    .references(() => company.id, { onDelete: 'restrict' }),
   record_status: EntityStatusEnum('record_status').default(EntityStatus.ACTIVE),
   deleted_at: pg.timestamp('deleted_at'),
 });
@@ -207,7 +229,9 @@ export const site_maps = pg.pgTable(
       .notNull()
       .defaultNow()
       .$onUpdate(() => new Date()),
-    record_status: EntityStatusEnum('record_status').default(EntityStatus.ACTIVE),
+    record_status: EntityStatusEnum('record_status').default(
+      EntityStatus.ACTIVE,
+    ),
     deleted_at: pg.timestamp('deleted_at'),
   },
   (t) => [pg.uniqueIndex('uq_site_maps_company_key').on(t.company_id, t.key)],

@@ -7,24 +7,24 @@ import {
   InternalServerErrorException,
 } from '@nestjs/common';
 import { eq, and } from 'drizzle-orm';
-import { DRIZZLE, type DrizzleService } from '../../drizzle/drizzle.module';
+import { DRIZZLE, type DrizzleService } from '../../drizzle/drizzle.module.js';
 import {
   order_items,
   orders,
   order_item_policy,
   return_requests,
-} from '../../drizzle/schema';
-import { OrderStatus } from '../../drizzle/types/types';
+} from '../../drizzle/schema/index.js';
+import { OrderStatus } from '../../drizzle/types/types.js';
 import {
   GuardErrorCode,
   GUARD_ERROR_MESSAGES,
-} from './constants/guard-error.enum';
-import { GuardInput, GuardOperation } from './dto/guard-input.dto';
+} from './constants/guard-error.enum.js';
+import { GuardInput, GuardOperation } from './dto/guard-input.dto.js';
 import {
   GuardResult,
   PolicySnapshot,
   GuardOrderItem,
-} from './dto/guard-result.dto';
+} from './dto/guard-result.dto.js';
 
 // ─── SET-constraint policy types ─────────────────────────────────────────────
 // Products under these policy types are Final Sale.

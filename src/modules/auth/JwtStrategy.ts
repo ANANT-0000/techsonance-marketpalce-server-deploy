@@ -1,16 +1,26 @@
 import { ExtractJwt, Strategy } from 'passport-jwt';
 import { PassportStrategy } from '@nestjs/passport';
 import { Inject, Injectable, UnauthorizedException } from '@nestjs/common';
-import { JWT_GUARD } from './jwt-auth.guard';
-import { DRIZZLE, type DrizzleService } from '../../drizzle/drizzle.module';
-import { user } from '../../drizzle/schema';
+import { JWT_GUARD } from './jwt-auth.guard.js';
+import { DRIZZLE, type DrizzleService } from '../../drizzle/drizzle.module.js';
+import { user } from '../../drizzle/schema/index.js';
 import { eq } from 'drizzle-orm';
-import { UserStatus } from '../../drizzle/types/types';
+import { UserStatus } from '../../drizzle/types/types.js';
 
 interface CacheEntry {
   status: UserStatus;
   expiresAt: number;
 }
+
+import { Request } from 'express';
+
+const cookieExtractor = (req: Request) => {
+  let token = null;
+  if (req && req.cookies) {
+    token = req.cookies['accessToken'];
+  }
+  return token || ExtractJwt.fromAuthHeaderAsBearerToken()(req);
+};
 
 @Injectable()
 export class JwtStrategy extends PassportStrategy(Strategy, JWT_GUARD) {
@@ -25,7 +35,7 @@ export class JwtStrategy extends PassportStrategy(Strategy, JWT_GUARD) {
       throw new Error('JWT_SECRET environment variable is missing!');
     }
     super({
-      jwtFromRequest: ExtractJwt.fromAuthHeaderAsBearerToken(),
+      jwtFromRequest: cookieExtractor,
       ignoreExpiration: false,
       secretOrKey: jwtSecret,
     });
@@ -48,6 +58,7 @@ export class JwtStrategy extends PassportStrategy(Strategy, JWT_GUARD) {
 
     return {
       id: payload.sub,
+      vendorId: payload.vendor_id,
       email: payload.email,
       role: payload.role,
       company_id: payload.company_id,

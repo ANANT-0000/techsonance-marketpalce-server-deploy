@@ -1,8 +1,8 @@
 import { Inject, Injectable, InternalServerErrorException } from '@nestjs/common';
 import { eq } from 'drizzle-orm';
-import { DRIZZLE, type DrizzleService } from '../../drizzle/drizzle.module';
-import { notification_settings } from '../../drizzle/schema';
-import { NotificationSettingsErrorKeyEnum } from './constants/notification-settings.enums';
+import { DRIZZLE, type DrizzleService } from '../../drizzle/drizzle.module.js';
+import { notification_settings } from '../../drizzle/schema/index.js';
+import { NotificationSettingsErrorKeyEnum } from './constants/notification-settings.enums.js';
 
 @Injectable()
 export class NotificationSettingsService {

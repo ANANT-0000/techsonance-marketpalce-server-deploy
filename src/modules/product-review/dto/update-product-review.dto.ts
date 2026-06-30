@@ -1,5 +1,5 @@
 import { PartialType } from '@nestjs/swagger';
-import { CreateProductReviewDto } from './create-product-review.dto';
+import { CreateProductReviewDto } from './create-product-review.dto.js';
 import { IsNotEmpty, IsString, Length } from 'class-validator';
 
 export class UpdateProductReviewDto extends PartialType(

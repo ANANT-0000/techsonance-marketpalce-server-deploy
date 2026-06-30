@@ -1,4 +1,4 @@
-import { OrderStatus } from '../../../drizzle/types/types';
+import { OrderStatus } from '../../../drizzle/types/types.js';
 
 /**
  * Snapshot of the resolved policy fields needed by the guard.

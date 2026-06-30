@@ -9,9 +9,9 @@ import {
   Headers,
   Query,
 } from '@nestjs/common';
-import { CartService } from './cart.service';
-import { CreateCartDto } from './dto/create-cart.dto';
-import { UpdateCartDto } from './dto/update-cart.dto';
+import { CartService } from './cart.service.js';
+import { CreateCartDto } from './dto/create-cart.dto.js';
+import { UpdateCartDto } from './dto/update-cart.dto.js';
 
 @Controller({
   version: '1',

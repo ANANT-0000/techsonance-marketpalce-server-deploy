@@ -1,15 +1,15 @@
 import { HttpException, HttpStatus, Inject, Injectable } from '@nestjs/common';
 
-import { DRIZZLE, type DrizzleService } from '../../drizzle/drizzle.module';
+import { DRIZZLE, type DrizzleService } from '../../drizzle/drizzle.module.js';
 import {
   product_variants,
   wishlist,
   wishlist_items,
-} from '../../drizzle/schema';
+} from '../../drizzle/schema/index.js';
 import { and, eq, or } from 'drizzle-orm';
-import { CompanyService } from '../company/company.service';
-import { domainExtractor } from '../../common/filters/domainExtractor.filter';
-import { WishlistErrorKeyEnum } from './constants/wishlist.enums';
+import { CompanyService } from '../company/company.service.js';
+import { domainExtractor } from '../../common/filters/domainExtractor.filter.js';
+import { WishlistErrorKeyEnum } from './constants/wishlist.enums.js';
 
 @Injectable()
 export class WishlistService {

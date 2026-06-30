@@ -12,8 +12,8 @@ import {
   Query,
   Req,
 } from '@nestjs/common';
-import { PromotionsService } from './promotions.service';
-import { CreatePromotionDto } from './dto/promotions..dto';
+import { PromotionsService } from './promotions.service.js';
+import { CreatePromotionDto } from './dto/promotions..dto.js';
 
 @Controller({ version: '1', path: 'promotions' })
 export class PromotionsController {

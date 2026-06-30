@@ -4,16 +4,16 @@ import {
   InternalServerErrorException,
   Logger,
 } from '@nestjs/common';
-import { InvoicePayloadBuilderService } from './invoice-payload-builder.service';
+import { InvoicePayloadBuilderService } from './invoice-payload-builder.service.js';
 
-import { UploadToCloudService } from '../../utils/upload-to-cloud/upload-to-cloud.service';
-import { CompanyService } from '../company/company.service';
-import { domainExtractor } from '../../common/filters/domainExtractor.filter';
+import { UploadToCloudService } from '../../utils/upload-to-cloud/upload-to-cloud.service.js';
+import { CompanyService } from '../company/company.service.js';
+import { domainExtractor } from '../../common/filters/domainExtractor.filter.js';
 import { Inject } from '@nestjs/common';
-import { DRIZZLE, type DrizzleService } from '../../drizzle/drizzle.module';
+import { DRIZZLE, type DrizzleService } from '../../drizzle/drizzle.module.js';
 import { and, eq, inArray } from 'drizzle-orm';
-import { invoices } from '../../drizzle/schema';
-import { InvoiceErrorKeyEnum } from './constants/invoice.enums';
+import { invoices } from '../../drizzle/schema/index.js';
+import { InvoiceErrorKeyEnum } from './constants/invoice.enums.js';
 
 @Injectable()
 export class InvoiceService {
@@ -170,10 +170,10 @@ export class InvoiceService {
   // private async _generateOneInvoice(
   //   orderId: string,
   //   warehouseId: string,
-  //   group: import('./interfaces/invoice.interface').WarehouseGroup,
-  //   orderInfo: import('./interfaces/invoice.interface').MappedOrderInfo,
-  //   vendorInfo: import('./interfaces/invoice.interface').MappedVendorInfo,
-  //   context: import('./interfaces/invoice.interface').CompanyContext,
+  //   group: import('./interfaces/invoice.interface.js').WarehouseGroup,
+  //   orderInfo: import('./interfaces/invoice.interface.js').MappedOrderInfo,
+  //   vendorInfo: import('./interfaces/invoice.interface.js').MappedVendorInfo,
+  //   context: import('./interfaces/invoice.interface.js').CompanyContext,
   //   templateId: string,
   //   gstData: Awaited<
   //     ReturnType<InvoicePayloadBuilderService['fetchGstDataForOrder']>

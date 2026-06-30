@@ -8,7 +8,7 @@ import {
   Param,
   Post,
 } from '@nestjs/common';
-import { TicketsService } from './tickets.service';
+import { TicketsService } from './tickets.service.js';
 
 @Controller({ version: '1', path: 'tickets' })
 export class TicketsController {

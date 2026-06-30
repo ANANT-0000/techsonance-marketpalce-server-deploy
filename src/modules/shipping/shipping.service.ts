@@ -7,20 +7,20 @@ import {
 } from '@nestjs/common';
 import { CACHE_MANAGER } from '@nestjs/cache-manager';
 import { type Cache } from 'cache-manager';
-import { DRIZZLE, type DrizzleService } from '../../drizzle/drizzle.module';
-import { CompanyService } from '../company/company.service';
+import { DRIZZLE, type DrizzleService } from '../../drizzle/drizzle.module.js';
+import { CompanyService } from '../company/company.service.js';
 import { and, eq } from 'drizzle-orm';
-import { company, orders, shipping_details } from '../../drizzle/schema';
-import { MailService } from '../../common/services/mail/mail.service';
-import { domainExtractor } from '../../common/filters/domainExtractor.filter';
-import { ShippingErrorKeyEnum } from './constants/shipping.enums';
-import { CryptoService } from './crypto.service';
+import { company, orders, shipping_details, vendor_gateways } from '../../drizzle/schema/index.js';
+import { MailService } from '../../common/services/mail/mail.service.js';
+import { domainExtractor } from '../../common/filters/domainExtractor.filter.js';
+import { ShippingErrorKeyEnum } from './constants/shipping.enums.js';
+import { CryptoService } from './crypto.service.js';
 import {
   SHIPPING_ITEM_FALLBACK_NAME,
   SHIPPING_COMPANY_NOT_FOUND_MSG,
   SHIPPING_SETTINGS_UPDATED_MSG,
   SHIPPING_API_KEY_PLACEHOLDER,
-} from './constants/shipping.constants';
+} from './constants/shipping.constants.js';
 
 @Injectable()
 export class ShippingService {
@@ -206,9 +206,16 @@ export class ShippingService {
       throw new HttpException(SHIPPING_COMPANY_NOT_FOUND_MSG, HttpStatus.NOT_FOUND);
     }
 
+    const [gatewayRecord] = await this.db
+      .select({ shipping_charge_strategy: vendor_gateways.shipping_charge_strategy })
+      .from(vendor_gateways)
+      .where(eq(vendor_gateways.company_id, companyId))
+      .limit(1);
+
     return {
       logistics_mode: comp.logistics_mode,
       logistics_pickup_id: comp.logistics_pickup_id,
+      shipping_charge_strategy: gatewayRecord?.shipping_charge_strategy || 'STANDARD_FLAT_RATE',
       is_free_shipping_enabled: comp.is_free_shipping_enabled,
       free_delivery_threshold: comp.free_delivery_threshold,
       standard_delivery_charge: comp.standard_delivery_charge,
@@ -251,6 +258,13 @@ export class ShippingService {
     }
     if (payload.standard_delivery_charge !== undefined) {
       updateFields.standard_delivery_charge = payload.standard_delivery_charge;
+    }
+
+    if (payload.shipping_charge_strategy !== undefined) {
+      await this.db
+        .update(vendor_gateways)
+        .set({ shipping_charge_strategy: payload.shipping_charge_strategy })
+        .where(eq(vendor_gateways.company_id, companyId));
     }
 
     let credentialsChanged = false;

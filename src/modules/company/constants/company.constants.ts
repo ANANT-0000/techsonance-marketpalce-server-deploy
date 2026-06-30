@@ -1,7 +1,7 @@
 import {
   CompanyOperationEnum,
   CompanyOperationResultEnum,
-} from './company.enums';
+} from './company.enums.js';
 
 export const COMPANY_CONTROLLER_MESSAGES = {
   HEALTH_CHECK: 'Company controller is working',

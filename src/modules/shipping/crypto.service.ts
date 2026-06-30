@@ -12,7 +12,7 @@ import {
   CRYPTO_SEPARATOR,
   CRYPTO_EXPECTED_PARTS,
   CRYPTO_ERROR_INVALID_FORMAT,
-} from './constants/shipping.constants';
+} from './constants/shipping.constants.js';
 
 @Injectable()
 export class CryptoService {

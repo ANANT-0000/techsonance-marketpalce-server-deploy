@@ -1,11 +1,11 @@
 import { Injectable, Inject, HttpException, HttpStatus } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import Razorpay from 'razorpay';
-import { DRIZZLE } from '../../../drizzle/drizzle.module';
-import { type DrizzleDB } from '../../../drizzle/types/drizzle';
-import { vendor_gateways, company } from '../../../drizzle/schema';
+import { DRIZZLE } from '../../../drizzle/drizzle.module.js';
+import { type DrizzleDB } from '../../../drizzle/types/drizzle.js';
+import { vendor_gateways, company } from '../../../drizzle/schema/index.js';
 import { eq } from 'drizzle-orm';
-import { VendorCryptoService } from './vendor-crypto.service';
+import { VendorCryptoService } from './vendor-crypto.service.js';
 
 @Injectable()
 export class PaymentSplitterService {

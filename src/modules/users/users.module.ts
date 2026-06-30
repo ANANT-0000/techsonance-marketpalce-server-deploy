@@ -1,10 +1,10 @@
 import { Module } from '@nestjs/common';
-import { DrizzleModule } from '../../drizzle/drizzle.module';
-import { UsersController } from './users.controller';
-import { UsersService } from './users.service';
+import { DrizzleModule } from '../../drizzle/drizzle.module.js';
+import { UsersController } from './users.controller.js';
+import { UsersService } from './users.service.js';
 import { JwtModule } from '@nestjs/jwt';
-import { MailModule } from '../../common/services/mail/mail.module';
-import { CompanyModule } from '../company/company.module';
+import { MailModule } from '../../common/services/mail/mail.module.js';
+import { CompanyModule } from '../company/company.module.js';
 
 @Module({
   imports: [DrizzleModule, JwtModule, MailModule, CompanyModule],

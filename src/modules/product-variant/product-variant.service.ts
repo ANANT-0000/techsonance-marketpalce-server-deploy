@@ -7,8 +7,8 @@ import {
   Injectable,
   InternalServerErrorException,
 } from '@nestjs/common';
-import { CreateProductVariantDto } from './dto/create-product-variant.dto';
-import { DRIZZLE, type DrizzleService } from '../../drizzle/drizzle.module';
+import { CreateProductVariantDto } from './dto/create-product-variant.dto.js';
+import { DRIZZLE, type DrizzleService } from '../../drizzle/drizzle.module.js';
 import { and, eq, inArray } from 'drizzle-orm';
 import {
   inventory,
@@ -16,15 +16,15 @@ import {
   product_variants,
   products,
   warehouse,
-} from '../../drizzle/schema';
-import { ProductImageType, ProductStatus } from '../../drizzle/types/types';
-import { UploadToCloudService } from '../../utils/upload-to-cloud/upload-to-cloud.service';
-import { ProductFiles } from '../../common/Types/index.type';
-import { UpdateProductVariantDto } from './dto/update-product-variant.dto';
-import { CompanyService } from '../company/company.service';
-import { InventoryService } from '../inventory/inventory.service';
-import { domainExtractor } from '../../common/filters/domainExtractor.filter';
-import { ProductVariantErrorKeyEnum } from './constants/product-variant.enums';
+} from '../../drizzle/schema/index.js';
+import { ProductImageType, ProductStatus } from '../../drizzle/types/types.js';
+import { UploadToCloudService } from '../../utils/upload-to-cloud/upload-to-cloud.service.js';
+import { ProductFiles } from '../../common/Types/index.type.js';
+import { UpdateProductVariantDto } from './dto/update-product-variant.dto.js';
+import { CompanyService } from '../company/company.service.js';
+import { InventoryService } from '../inventory/inventory.service.js';
+import { domainExtractor } from '../../common/filters/domainExtractor.filter.js';
+import { ProductVariantErrorKeyEnum } from './constants/product-variant.enums.js';
 @Injectable()
 export class ProductVariantService {
   constructor(

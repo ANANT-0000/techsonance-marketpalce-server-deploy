@@ -6,15 +6,15 @@ import {
   NotFoundException,
   UnauthorizedException,
 } from '@nestjs/common';
-import { CreateProductReviewDto } from './dto/create-product-review.dto';
-import { UpdateProductReviewDto } from './dto/update-product-review.dto';
-import { DRIZZLE, type DrizzleService } from '../../drizzle/drizzle.module';
-import { product_reviews, product_variants } from '../../drizzle/schema';
+import { CreateProductReviewDto } from './dto/create-product-review.dto.js';
+import { UpdateProductReviewDto } from './dto/update-product-review.dto.js';
+import { DRIZZLE, type DrizzleService } from '../../drizzle/drizzle.module.js';
+import { product_reviews, product_variants } from '../../drizzle/schema/index.js';
 import { eq, and, inArray } from 'drizzle-orm';
-import { CompanyService } from '../company/company.service';
-import { domainExtractor } from '../../common/filters/domainExtractor.filter';
+import { CompanyService } from '../company/company.service.js';
+import { domainExtractor } from '../../common/filters/domainExtractor.filter.js';
 import { or } from 'drizzle-orm';
-import { ProductReviewErrorKeyEnum } from './constants/product-review.enums';
+import { ProductReviewErrorKeyEnum } from './constants/product-review.enums.js';
 @Injectable()
 export class ProductReviewService {
   constructor(

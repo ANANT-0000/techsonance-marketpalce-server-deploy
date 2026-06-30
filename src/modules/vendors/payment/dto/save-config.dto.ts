@@ -1,6 +1,6 @@
 import { IsString, IsEnum, IsOptional } from 'class-validator';
-import { LogisticsMode } from '../../../../drizzle/types/types';
-import { ShippingChargeStrategy } from '../../../../drizzle/types/types';
+import { LogisticsMode } from '../../../../drizzle/types/types.js';
+import { ShippingChargeStrategy } from '../../../../drizzle/types/types.js';
 
 export class SavePaymentConfigDto {
   @IsString()

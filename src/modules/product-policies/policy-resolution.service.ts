@@ -1,13 +1,13 @@
 import { Injectable, Inject, Logger } from '@nestjs/common';
 import { eq } from 'drizzle-orm';
-import { DRIZZLE, type DrizzleService } from '../../drizzle/drizzle.module';
+import { DRIZZLE, type DrizzleService } from '../../drizzle/drizzle.module.js';
 import {
   category_policy,
   product_policies,
   product_policy_override,
   products,
   product_variants,
-} from '../../drizzle/schema';
+} from '../../drizzle/schema/index.js';
 
 export interface PolicyResolutionResult {
   /** The resolved policy_id, or null if none found */

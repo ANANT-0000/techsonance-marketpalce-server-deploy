@@ -1,4 +1,4 @@
-import { emailLayout } from './layout.template';
+import { emailLayout } from './layout.template.js';
 
 export function vendorRegistrationTemplate(
   storeName: string,

@@ -1,7 +1,7 @@
 import * as pg from 'drizzle-orm/pg-core';
 import { relations } from 'drizzle-orm';
-import { company } from './main.schema';
-import { SubscriptionStatus } from '../types/types';
+import { company } from './main.schema.js';
+import { SubscriptionStatus } from '../types/types.js';
 
 export const subscriptionStatusEnum = pg.pgEnum(
   'subscription_status_enum',

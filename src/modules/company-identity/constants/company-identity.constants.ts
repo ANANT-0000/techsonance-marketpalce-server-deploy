@@ -2,7 +2,7 @@ import {
   COMPANY_IDENTITY_BRANDING_VALUE,
   CompanyIdentityErrorKeyEnum,
   CompanyIdentityHomepageSectionEnum,
-} from './company-identity.enums';
+} from './company-identity.enums.js';
 
 export const COMPANY_IDENTITY_MESSAGES = {
   COMPANY_NOT_FOUND: 'Company not found',

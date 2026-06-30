@@ -1,14 +1,14 @@
 import { forwardRef, Module } from '@nestjs/common';
-import { ShippingService } from './shipping.service';
-import { ShippingController } from './shipping.controller';
-import { ShippingWebhookController } from './shipping-webhook.controller';
-import { ShippingManagerService } from './shipping-manager.service';
-import { CryptoService } from './crypto.service';
-import { ShipRocketModule } from '../ship-rocket/ship-rocket.module';
-import { DrizzleModule } from '../../drizzle/drizzle.module';
-import { CompanyModule } from '../company/company.module';
-import { MailModule } from '../../common/services/mail/mail.module';
-import { InventoryModule } from '../inventory/inventory.module';
+import { ShippingService } from './shipping.service.js';
+import { ShippingController } from './shipping.controller.js';
+import { ShippingWebhookController } from './shipping-webhook.controller.js';
+import { ShippingManagerService } from './shipping-manager.service.js';
+import { CryptoService } from './crypto.service.js';
+import { ShipRocketModule } from '../ship-rocket/ship-rocket.module.js';
+import { DrizzleModule } from '../../drizzle/drizzle.module.js';
+import { CompanyModule } from '../company/company.module.js';
+import { MailModule } from '../../common/services/mail/mail.module.js';
+import { InventoryModule } from '../inventory/inventory.module.js';
 
 @Module({
   imports: [

@@ -11,8 +11,8 @@ import {
   HttpStatus,
   Query,
 } from '@nestjs/common';
-import { InventoryService } from './inventory.service';
-import { CreateInventoryDto } from './dto/inventory.dto';
+import { InventoryService } from './inventory.service.js';
+import { CreateInventoryDto } from './dto/inventory.dto.js';
 
 @Controller({ version: '1', path: 'inventory' })
 export class InventoryController {

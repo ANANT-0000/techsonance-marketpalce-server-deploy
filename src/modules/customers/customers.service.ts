@@ -6,7 +6,7 @@ import {
   InternalServerErrorException,
   NotFoundException,
 } from '@nestjs/common';
-import { DRIZZLE, type DrizzleService } from '../../drizzle/drizzle.module';
+import { DRIZZLE, type DrizzleService } from '../../drizzle/drizzle.module.js';
 import {
   user as userTable,
   address as addressTable,
@@ -14,13 +14,13 @@ import {
   wishlist,
   wishlist_items,
   product_reviews,
-} from '../../drizzle/schema';
+} from '../../drizzle/schema/index.js';
 import { eq, and, count } from 'drizzle-orm';
-import { UserStatus } from '../../drizzle/types/types';
+import { UserStatus } from '../../drizzle/types/types.js';
 
-import { domainExtractor } from '../../common/filters/domainExtractor.filter';
-import { CompanyService } from '../company/company.service';
-import { ComplianceErrorKeyEnum } from '../compliance/constants/compliance.enums';
+import { domainExtractor } from '../../common/filters/domainExtractor.filter.js';
+import { CompanyService } from '../company/company.service.js';
+import { ComplianceErrorKeyEnum } from '../compliance/constants/compliance.enums.js';
 
 @Injectable()
 export class CustomersService {

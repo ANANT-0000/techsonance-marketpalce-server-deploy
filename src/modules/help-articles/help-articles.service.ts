@@ -5,11 +5,11 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { and, eq, like, or } from 'drizzle-orm';
-import { DRIZZLE, type DrizzleService } from '../../drizzle/drizzle.module';
-import { help_articles } from '../../drizzle/schema';
-import { CompanyService } from '../company/company.service';
-import { domainExtractor } from '../../common/filters/domainExtractor.filter';
-import { HelpArticlesErrorKeyEnum } from './constants/help-articles.enums';
+import { DRIZZLE, type DrizzleService } from '../../drizzle/drizzle.module.js';
+import { help_articles } from '../../drizzle/schema/index.js';
+import { CompanyService } from '../company/company.service.js';
+import { domainExtractor } from '../../common/filters/domainExtractor.filter.js';
+import { HelpArticlesErrorKeyEnum } from './constants/help-articles.enums.js';
 
 @Injectable()
 export class HelpArticlesService {

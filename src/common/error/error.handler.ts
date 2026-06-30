@@ -1,6 +1,6 @@
 import { HttpException } from "@nestjs/common";
-import { SanitizedErrorResponse, InternalErrorCode } from "./error.types";
-import { ERROR_MAPPING } from "./error.constants";
+import { SanitizedErrorResponse, InternalErrorCode } from './error.types.js';
+import { ERROR_MAPPING } from './error.constants.js';
 
 export class SecureErrorHandler {
   /**

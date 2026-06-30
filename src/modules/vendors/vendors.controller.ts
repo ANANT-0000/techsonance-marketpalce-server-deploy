@@ -1,5 +1,5 @@
-import { OrdersService } from '../orders/orders.service';
-import { VendorsService } from './vendors.service';
+import { OrdersService } from '../orders/orders.service.js';
+import { VendorsService } from './vendors.service.js';
 import {
   Controller,
   Get,

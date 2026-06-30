@@ -1,11 +1,11 @@
 import { Controller, Get, Req, HttpCode, HttpStatus } from '@nestjs/common';
 import type { Request } from 'express';
-import { OutboxService } from './outbox.service';
-import { Public } from '../../common/decorators/public.decorator';
+import { OutboxService } from './outbox.service.js';
+import { Public } from '../../common/decorators/public.decorator.js';
 import {
   OUTBOX_CONSTANTS,
   OutboxJobStatus,
-} from './constants/outbox.constants';
+} from './constants/outbox.constants.js';
 
 @Controller({
   version: OUTBOX_CONSTANTS.INTERNAL_VERSION,

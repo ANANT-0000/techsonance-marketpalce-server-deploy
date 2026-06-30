@@ -12,7 +12,7 @@ import {
   PolicyDurationUnit,
   PolicyType,
   ReturnReplaceMode,
-} from '../../../drizzle/types/types';
+} from '../../../drizzle/types/types.js';
 
 export class CreateProductPolicyDto {
   @IsNotEmpty()

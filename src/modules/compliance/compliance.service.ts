@@ -6,14 +6,14 @@ import {
   InternalServerErrorException,
 } from '@nestjs/common';
 
-import { DRIZZLE, type DrizzleService } from '../../drizzle/drizzle.module';
-import { CompanyService } from '../company/company.service';
-import { UploadToCloudService } from '../../utils/upload-to-cloud/upload-to-cloud.service';
-import { domainExtractor } from '../../common/filters/domainExtractor.filter';
-import { company_compliance, company_document } from '../../drizzle/schema';
+import { DRIZZLE, type DrizzleService } from '../../drizzle/drizzle.module.js';
+import { CompanyService } from '../company/company.service.js';
+import { UploadToCloudService } from '../../utils/upload-to-cloud/upload-to-cloud.service.js';
+import { domainExtractor } from '../../common/filters/domainExtractor.filter.js';
+import { company_compliance, company_document } from '../../drizzle/schema/index.js';
 import { and, desc, eq } from 'drizzle-orm';
-import { CreateComplianceDto } from './dto/compliance.dto';
-import { ComplianceErrorKeyEnum } from './constants/compliance.enums';
+import { CreateComplianceDto } from './dto/compliance.dto.js';
+import { ComplianceErrorKeyEnum } from './constants/compliance.enums.js';
 
 @Injectable()
 export class ComplianceService {

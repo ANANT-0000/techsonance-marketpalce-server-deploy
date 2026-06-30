@@ -6,17 +6,17 @@ import {
   forwardRef,
 } from '@nestjs/common';
 import { and, asc, eq, gte, lt } from 'drizzle-orm';
-import { MailService } from '../../common/services/mail/mail.service';
-import { DRIZZLE, type DrizzleService } from '../../drizzle/drizzle.module';
+import { MailService } from '../../common/services/mail/mail.service.js';
+import { DRIZZLE, type DrizzleService } from '../../drizzle/drizzle.module.js';
 import {
   subscription_events,
   subscription_plans,
   vendor_subscriptions,
-} from '../../drizzle/schema/subscription.schema';
-import { SubscriptionStatus } from '../../drizzle/types/types';
-import { CompanyService } from '../company/company.service';
-import { domainExtractor } from '../../common/filters/domainExtractor.filter';
-import { SubscriptionErrorKeyEnum } from './constants/subscription.enums';
+} from '../../drizzle/schema/subscription.schema.js';
+import { SubscriptionStatus } from '../../drizzle/types/types.js';
+import { CompanyService } from '../company/company.service.js';
+import { domainExtractor } from '../../common/filters/domainExtractor.filter.js';
+import { SubscriptionErrorKeyEnum } from './constants/subscription.enums.js';
 
 export enum BannerUrgency {
   INFO = 'info',

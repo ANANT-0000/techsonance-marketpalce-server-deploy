@@ -5,25 +5,26 @@ import {
   Injectable,
   InternalServerErrorException,
 } from '@nestjs/common';
-import { DRIZZLE, type DrizzleService } from '../../drizzle/drizzle.module';
-import { CompanyService } from '../company/company.service';
+import { DRIZZLE, type DrizzleService } from '../../drizzle/drizzle.module.js';
+import { CompanyService } from '../company/company.service.js';
 import {
   updateWarehouseAddressDto,
   warehouseAddressDto,
-} from './dto/warehouse.dto';
-import { ShiprocketAddPickupAddress } from '../../common/Types/shiprocket';
+} from './dto/warehouse.dto.js';
+import { ShiprocketAddPickupAddress } from '../../common/Types/shiprocket.js';
 import {
   address,
   warehouse,
   company,
   user,
   user_and_company,
-} from '../../drizzle/schema';
+} from '../../drizzle/schema/index.js';
 import { and, eq } from 'drizzle-orm';
-import { domainExtractor } from '../../common/filters/domainExtractor.filter';
-import { WarehouseErrorKeyEnum } from './constants/warehouse.enums';
-import { ShipRocketService } from '../ship-rocket/ship-rocket.service';
-import { CryptoService } from '../shipping/crypto.service';
+import { domainExtractor } from '../../common/filters/domainExtractor.filter.js';
+import { WarehouseErrorKeyEnum } from './constants/warehouse.enums.js';
+import { ShipRocketService } from '../ship-rocket/ship-rocket.service.js';
+import { CryptoService } from '../shipping/crypto.service.js';
+import * as crypto from 'crypto';
 
 @Injectable()
 export class WarehouseService {
@@ -71,6 +72,9 @@ export class WarehouseService {
               );
             });
         }
+        const uniqueSuffix = crypto.randomBytes(3).toString('hex');
+        const uniquePickupLocation = `${warehouseAddressDto.name.slice(0, 28)}_${uniqueSuffix}`;
+
         const [addressResult] = await tx
           .insert(address)
           .values({
@@ -86,7 +90,7 @@ export class WarehouseService {
             country: warehouseAddressDto.country,
             landmark: warehouseAddressDto.landmark,
             company_id: companyId,
-            pickup_location: warehouseAddressDto.name.slice(0, 36),
+            pickup_location: uniquePickupLocation,
           })
           .returning({ id: address.id });
         const addressId = addressResult.id;
@@ -96,30 +100,28 @@ export class WarehouseService {
           address_id: addressId,
         });
 
-        if (warehouseAddressDto.is_default) {
-          const shiprocketPayload: ShiprocketAddPickupAddress = {
-            pickup_location: warehouseAddressDto.name.slice(0, 36),
-            name: warehouseAddressDto.name,
-            email: '', // will be resolved inside service
-            phone: Number(warehouseAddressDto.phone),
-            address: warehouseAddressDto.address_line_1,
-            address_2:
-              warehouseAddressDto.street +
-              (warehouseAddressDto.landmark
-                ? ', ' + warehouseAddressDto.landmark
-                : ''),
-            city: warehouseAddressDto.city,
-            state: warehouseAddressDto.state,
-            country: warehouseAddressDto.country,
-            pin_code: Number(warehouseAddressDto.postal_code),
-          };
-          await this.registerWarehouseWithShiprocket(
-            companyId,
-            warehouseAddressDto.name,
-            shiprocketPayload,
-            tx,
-          );
-        }
+        const shiprocketPayload: ShiprocketAddPickupAddress = {
+          pickup_location: uniquePickupLocation,
+          name: warehouseAddressDto.name,
+          email: '', // will be resolved inside service
+          phone: Number(warehouseAddressDto.phone),
+          address: warehouseAddressDto.address_line_1,
+          address_2:
+            warehouseAddressDto.street +
+            (warehouseAddressDto.landmark
+              ? ', ' + warehouseAddressDto.landmark
+              : ''),
+          city: warehouseAddressDto.city,
+          state: warehouseAddressDto.state,
+          country: warehouseAddressDto.country,
+          pin_code: Number(warehouseAddressDto.postal_code),
+        };
+        await this.registerWarehouseWithShiprocket(
+          companyId,
+          uniquePickupLocation,
+          shiprocketPayload,
+          tx,
+        );
 
         return {
           message: 'Warehouse created successfully',
@@ -282,6 +284,11 @@ export class WarehouseService {
               );
             });
         }
+        const uniqueSuffix = crypto.randomBytes(3).toString('hex');
+        const updatedName =
+          updateWarehouseDto.name ?? existingWarehouse.warehouse_name;
+        const uniquePickupLocation = `${updatedName.slice(0, 28)}_${uniqueSuffix}`;
+
         const addressUpdate = await tx
           .update(address)
           .set({
@@ -296,7 +303,7 @@ export class WarehouseService {
             postal_code: updateWarehouseDto.postal_code,
             country: updateWarehouseDto.country,
             landmark: updateWarehouseDto.landmark,
-            pickup_location: updateWarehouseDto.name?.slice(0, 36),
+            pickup_location: uniquePickupLocation,
           })
           .where(eq(address.id, existingWarehouse.address_id))
           .returning({ id: address.id })
@@ -339,57 +346,50 @@ export class WarehouseService {
                 .limit(1)
                 .then(([r]) => r?.is_default ?? false);
 
-        if (isDefault) {
-          const [currentAddress] = await tx
-            .select()
-            .from(address)
-            .where(eq(address.id, existingWarehouse.address_id))
-            .limit(1);
+        const [currentAddress] = await tx
+          .select()
+          .from(address)
+          .where(eq(address.id, existingWarehouse.address_id))
+          .limit(1);
 
-          const mergedAddress = {
-            name: updateWarehouseDto.name ?? currentAddress.name ?? '',
-            phone: updateWarehouseDto.phone ?? currentAddress.number ?? '',
-            address_line_1:
-              updateWarehouseDto.address_line_1 ??
-              currentAddress.address_line_1 ??
-              '',
-            street: updateWarehouseDto.street ?? currentAddress.street ?? '',
-            city: updateWarehouseDto.city ?? currentAddress.city ?? '',
-            state: updateWarehouseDto.state ?? currentAddress.state ?? '',
-            country: updateWarehouseDto.country ?? currentAddress.country ?? '',
-            postal_code:
-              updateWarehouseDto.postal_code ??
-              currentAddress.postal_code ??
-              '',
-            landmark:
-              updateWarehouseDto.landmark ?? currentAddress.landmark ?? '',
-          };
+        const mergedAddress = {
+          name: updateWarehouseDto.name ?? currentAddress.name ?? '',
+          phone: updateWarehouseDto.phone ?? currentAddress.number ?? '',
+          address_line_1:
+            updateWarehouseDto.address_line_1 ??
+            currentAddress.address_line_1 ??
+            '',
+          street: updateWarehouseDto.street ?? currentAddress.street ?? '',
+          city: updateWarehouseDto.city ?? currentAddress.city ?? '',
+          state: updateWarehouseDto.state ?? currentAddress.state ?? '',
+          country: updateWarehouseDto.country ?? currentAddress.country ?? '',
+          postal_code:
+            updateWarehouseDto.postal_code ?? currentAddress.postal_code ?? '',
+          landmark:
+            updateWarehouseDto.landmark ?? currentAddress.landmark ?? '',
+        };
 
-          if (isDefault) {
-            const shiprocketPayload: ShiprocketAddPickupAddress = {
-              pickup_location: (
-                updateWarehouseDto.name ?? existingWarehouse.warehouse_name
-              ).slice(0, 36),
-              name: updateWarehouseDto.name ?? existingWarehouse.warehouse_name,
-              email: '', // resolved inside service
-              phone: Number(mergedAddress.phone),
-              address: mergedAddress.address_line_1,
-              address_2:
-                mergedAddress.street +
-                (mergedAddress.landmark ? ', ' + mergedAddress.landmark : ''),
-              city: mergedAddress.city,
-              state: mergedAddress.state,
-              country: mergedAddress.country,
-              pin_code: Number(mergedAddress.postal_code),
-            };
-            await this.registerWarehouseWithShiprocket(
-              companyId,
-              updateWarehouseDto.name ?? existingWarehouse.warehouse_name,
-              shiprocketPayload,
-              tx,
-            );
-          }
-        }
+        const shiprocketPayload: ShiprocketAddPickupAddress = {
+          pickup_location: uniquePickupLocation,
+          name: updatedName,
+          email: '', // resolved inside service
+          phone: Number(mergedAddress.phone),
+          address: mergedAddress.address_line_1,
+          address_2:
+            mergedAddress.street +
+            (mergedAddress.landmark ? ', ' + mergedAddress.landmark : ''),
+          city: mergedAddress.city,
+          state: mergedAddress.state,
+          country: mergedAddress.country,
+          pin_code: Number(mergedAddress.postal_code),
+        };
+
+        await this.registerWarehouseWithShiprocket(
+          companyId,
+          uniquePickupLocation,
+          shiprocketPayload,
+          tx,
+        );
 
         return {
           message: 'Warehouse updated successfully',
@@ -487,6 +487,8 @@ export class WarehouseService {
       .limit(1);
 
     const email = vendorUser?.email || 'shipper@marketplace.com';
+
+    addressDetails.email = email;
 
     try {
       await this.shipRocketService.addPickupLocation(

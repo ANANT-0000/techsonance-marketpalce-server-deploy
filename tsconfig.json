@@ -15,7 +15,9 @@
     "outDir": "./dist",
     "incremental": true,
     "skipLibCheck": true,
-    "forceConsistentCasingInFileNames": true
+    "forceConsistentCasingInFileNames": true,
+    "types": ["node"],
+    "typeRoots": ["./node_modules/@types"]
   },
   "include": ["src/**/*", "**/*.ts"],
   "exclude": ["node_modules", "dist", ".vercel"]

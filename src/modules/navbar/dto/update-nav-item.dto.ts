@@ -1,5 +1,5 @@
 import { PartialType, OmitType } from '@nestjs/mapped-types';
-import { CreateNavItemDto } from './create-nav-item.dto';
+import { CreateNavItemDto } from './create-nav-item.dto.js';
 import { ArrayMinSize, IsArray, IsUUID } from 'class-validator';
 
 /**

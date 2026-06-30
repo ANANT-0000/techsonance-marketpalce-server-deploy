@@ -8,13 +8,13 @@ import {
   Delete,
   Headers,
 } from '@nestjs/common';
-import { ProductPoliciesService } from './product-policies.service';
-import { CreateProductPolicyDto } from './dto/create-product-policy.dto';
-import { UpdateProductPolicyDto } from './dto/update-product-policy.dto';
+import { ProductPoliciesService } from './product-policies.service.js';
+import { CreateProductPolicyDto } from './dto/create-product-policy.dto.js';
+import { UpdateProductPolicyDto } from './dto/update-product-policy.dto.js';
 import {
   AssignCategoryPolicyDto,
   AssignProductPolicyOverrideDto,
-} from './dto/product-policy.dto';
+} from './dto/product-policy.dto.js';
 
 @Controller({ version: '1', path: 'product-policies' })
 export class ProductPoliciesController {

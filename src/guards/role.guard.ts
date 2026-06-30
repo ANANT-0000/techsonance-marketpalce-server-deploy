@@ -5,8 +5,8 @@ import {
   ForbiddenException,
 } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
-import { IS_PUBLIC_KEY } from '../common/decorators/public.decorator';
-import { ROLES_KEY } from '../common/decorators/roles.decorator';
+import { IS_PUBLIC_KEY } from '../common/decorators/public.decorator.js';
+import { ROLES_KEY } from '../common/decorators/roles.decorator.js';
 @Injectable()
 export class RoleGuard implements CanActivate {
   constructor(private reflector: Reflector) {}

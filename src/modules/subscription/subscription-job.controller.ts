@@ -11,10 +11,10 @@ import {
 import type { Request } from 'express';
 import { Receiver } from '@upstash/qstash';
 import { ConfigService } from '@nestjs/config';
-import { Public } from '../../common/decorators/public.decorator';
-import { SubscriptionService } from './subscription.service';
-import { MailService } from '../../common/services/mail/mail.service';
-import { SUBSCRIPTION_JOB_CONSTANTS } from './constants/subscription-job.constants';
+import { Public } from '../../common/decorators/public.decorator.js';
+import { SubscriptionService } from './subscription.service.js';
+import { MailService } from '../../common/services/mail/mail.service.js';
+import { SUBSCRIPTION_JOB_CONSTANTS } from './constants/subscription-job.constants.js';
 
 @Controller({
   version: SUBSCRIPTION_JOB_CONSTANTS.INTERNAL_VERSION,

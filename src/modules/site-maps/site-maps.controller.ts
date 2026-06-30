@@ -1,5 +1,5 @@
 import { Controller, Get, Headers } from '@nestjs/common';
-import { SiteMapsService } from './site-maps.service';
+import { SiteMapsService } from './site-maps.service.js';
 
 @Controller({ version: '1', path: 'site-maps' })
 export class SiteMapsController {

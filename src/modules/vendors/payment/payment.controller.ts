@@ -7,11 +7,11 @@ import {
   UseGuards,
   Headers,
 } from '@nestjs/common';
-import { RoleGuard } from '../../../guards/role.guard';
-import { Role } from '../../../enums/role.enum';
-import { Roles } from '../../../common/decorators/roles.decorator';
-import { PaymentService } from './payment.service';
-import { SavePaymentConfigDto } from './dto/save-config.dto';
+import { RoleGuard } from '../../../guards/role.guard.js';
+import { Role } from '../../../enums/role.enum.js';
+import { Roles } from '../../../common/decorators/roles.decorator.js';
+import { PaymentService } from './payment.service.js';
+import { SavePaymentConfigDto } from './dto/save-config.dto.js';
 
 @Controller({
   version: '1',

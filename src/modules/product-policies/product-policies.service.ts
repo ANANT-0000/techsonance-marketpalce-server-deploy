@@ -2,8 +2,8 @@ import {
   AssignCategoryPolicyDto,
   AssignProductPolicyOverrideDto,
   CreateOrderItemPolicySnapshotDto,
-} from './dto/product-policy.dto';
-import { CompanyService } from './../company/company.service';
+} from './dto/product-policy.dto.js';
+import { CompanyService } from './../company/company.service.js';
 import {
   BadRequestException,
   HttpStatus,
@@ -12,20 +12,20 @@ import {
   InternalServerErrorException,
   NotFoundException,
 } from '@nestjs/common';
-import { CreateProductPolicyDto } from './dto/create-product-policy.dto';
-import { UpdateProductPolicyDto } from './dto/update-product-policy.dto';
-import { DRIZZLE, type DrizzleService } from '../../drizzle/drizzle.module';
+import { CreateProductPolicyDto } from './dto/create-product-policy.dto.js';
+import { UpdateProductPolicyDto } from './dto/update-product-policy.dto.js';
+import { DRIZZLE, type DrizzleService } from '../../drizzle/drizzle.module.js';
 import { and, eq } from 'drizzle-orm';
 import {
   category_policy,
   order_item_policy,
   product_policies,
   product_policy_override,
-} from '../../drizzle/schema/product_policy.schema';
-import { domainExtractor } from '../../common/filters/domainExtractor.filter';
-import { orders } from '../../drizzle/schema';
-import { PolicyPayloadBuilderService } from './policy-payload-builder.service';
-import { ProductPoliciesErrorKeyEnum } from './constants/product-policies.enums';
+} from '../../drizzle/schema/product_policy.schema.js';
+import { domainExtractor } from '../../common/filters/domainExtractor.filter.js';
+import { orders } from '../../drizzle/schema/index.js';
+import { PolicyPayloadBuilderService } from './policy-payload-builder.service.js';
+import { ProductPoliciesErrorKeyEnum } from './constants/product-policies.enums.js';
 
 @Injectable()
 export class ProductPoliciesService {

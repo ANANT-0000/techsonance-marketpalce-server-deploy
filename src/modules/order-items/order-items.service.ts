@@ -1,4 +1,4 @@
-import { orderItemCancelledRelations } from './../../drizzle/schema/index';
+import { orderItemCancelledRelations } from './../../drizzle/schema/index.js';
 import {
   HttpException,
   HttpStatus,
@@ -6,17 +6,17 @@ import {
   Injectable,
   InternalServerErrorException,
 } from '@nestjs/common';
-import { DRIZZLE, type DrizzleService } from '../../drizzle/drizzle.module';
+import { DRIZZLE, type DrizzleService } from '../../drizzle/drizzle.module.js';
 import {
   CancelledBy,
   OrderStatus,
   PaymentStatus,
   ProductImageType,
   RefundStatus,
-} from '../../drizzle/types/types';
-import { CompanyService } from '../company/company.service';
-import { InventoryService } from '../inventory/inventory.service';
-import { MailService } from '../../common/services/mail/mail.service';
+} from '../../drizzle/types/types.js';
+import { CompanyService } from '../company/company.service.js';
+import { InventoryService } from '../inventory/inventory.service.js';
+import { MailService } from '../../common/services/mail/mail.service.js';
 import {
   order_item_cancelled,
   order_items,
@@ -24,12 +24,12 @@ import {
   payments,
   product_images,
   refunds,
-} from '../../drizzle/schema/shop.schema';
+} from '../../drizzle/schema/shop.schema.js';
 import { and, asc, desc, eq, inArray, SQL } from 'drizzle-orm';
-import { address, user } from '../../drizzle/schema/users.schema';
-import { user_and_company, user_roles } from '../../drizzle/schema';
-import { domainExtractor } from '../../common/filters/domainExtractor.filter';
-import { OrderItemsErrorKeyEnum } from './constants/order-items.enums';
+import { address, user } from '../../drizzle/schema/users.schema.js';
+import { user_and_company, user_roles } from '../../drizzle/schema/index.js';
+import { domainExtractor } from '../../common/filters/domainExtractor.filter.js';
+import { OrderItemsErrorKeyEnum } from './constants/order-items.enums.js';
 
 @Injectable()
 export class OrderItemsService {

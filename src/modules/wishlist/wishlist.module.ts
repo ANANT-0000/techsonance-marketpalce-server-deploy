@@ -1,8 +1,8 @@
 import { Module } from '@nestjs/common';
-import { WishlistService } from './wishlist.service';
-import { WishlistController } from './wishlist.controller';
-import { DrizzleModule } from '../../drizzle/drizzle.module';
-import { CompanyModule } from '../company/company.module';
+import { WishlistService } from './wishlist.service.js';
+import { WishlistController } from './wishlist.controller.js';
+import { DrizzleModule } from '../../drizzle/drizzle.module.js';
+import { CompanyModule } from '../company/company.module.js';
 
 @Module({
   imports: [DrizzleModule, CompanyModule],

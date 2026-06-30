@@ -1,9 +1,9 @@
 import * as pg from 'drizzle-orm/pg-core';
 import { AnyPgColumn } from 'drizzle-orm/pg-core';
-import { company, site_maps } from './main.schema';
-import { categories } from './shop.schema';
+import { company, site_maps } from './main.schema.js';
+import { categories } from './shop.schema.js';
 import { sql } from 'drizzle-orm';
-import { NavLayoutType } from '../types/types';
+import { NavLayoutType } from '../types/types.js';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // DESIGN PHILOSOPHY — Lean Hybrid Schema

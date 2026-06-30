@@ -1,6 +1,6 @@
 import { Module } from '@nestjs/common';
-import { OrderEligibilityGuardService } from './order-eligibility-guard.service';
-import { DrizzleModule } from '../../drizzle/drizzle.module';
+import { OrderEligibilityGuardService } from './order-eligibility-guard.service.js';
+import { DrizzleModule } from '../../drizzle/drizzle.module.js';
 
 /**
  * OrderEligibilityGuardModule

@@ -1,9 +1,9 @@
 import { Module } from '@nestjs/common';
-import { NavbarService } from './navbar.service';
-import { NavbarController } from './navbar.controller';
-import { DrizzleModule } from '../../drizzle/drizzle.module';
-import { CompanyModule } from '../company/company.module';
-import { SiteMapsModule } from '../site-maps/site-maps.module';
+import { NavbarService } from './navbar.service.js';
+import { NavbarController } from './navbar.controller.js';
+import { DrizzleModule } from '../../drizzle/drizzle.module.js';
+import { CompanyModule } from '../company/company.module.js';
+import { SiteMapsModule } from '../site-maps/site-maps.module.js';
 
 @Module({
   imports: [DrizzleModule, CompanyModule, SiteMapsModule],

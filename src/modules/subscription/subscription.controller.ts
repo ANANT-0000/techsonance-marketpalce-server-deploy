@@ -8,10 +8,10 @@ import {
   HttpCode,
   HttpStatus,
 } from '@nestjs/common';
-import { SubscriptionService } from './subscription.service';
-import { JwtAuthGuard } from '../auth/jwt-auth.guard';
-import { SkipSubscription } from '../../common/decorators/skip-subscription.decorator';
-import { Public } from '../../common/decorators/public.decorator';
+import { SubscriptionService } from './subscription.service.js';
+import { JwtAuthGuard } from '../auth/jwt-auth.guard.js';
+import { SkipSubscription } from '../../common/decorators/skip-subscription.decorator.js';
+import { Public } from '../../common/decorators/public.decorator.js';
 
 @Controller({ version: '1', path: 'subscription' })
 export class SubscriptionController {

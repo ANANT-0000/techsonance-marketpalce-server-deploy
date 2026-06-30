@@ -7,7 +7,7 @@ import {
   UnauthorizedException,
 } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
-import { DRIZZLE, type DrizzleService } from '../../drizzle/drizzle.module';
+import { DRIZZLE, type DrizzleService } from '../../drizzle/drizzle.module.js';
 import {
   address as addressTable,
   categories,
@@ -28,7 +28,7 @@ import {
   vendor,
   vendor as vendorTable,
   company_document as vendor_documentTable,
-} from '../../drizzle/schema';
+} from '../../drizzle/schema/index.js';
 import {
   and,
   asc,
@@ -47,22 +47,22 @@ import {
   ProductStatus,
   UserRole,
   UserStatus,
-} from '../../drizzle/types/types';
+} from '../../drizzle/types/types.js';
 import bcrypt from 'bcryptjs';
-import { MailService } from '../../common/services/mail/mail.service';
-import { CreateVendorDto } from './dto/CreateVendorDto';
-import { LoginDto } from '../users/dto/userAuth.dto.ts';
-import { UploadToCloudService } from '../../utils/upload-to-cloud/upload-to-cloud.service';
-import { formatCompanyDomain } from '../../common/filters/formatDomain.filter';
-import { company_compliance } from '../../drizzle/schema/company_identity.schema';
-import { CreateAddressDto } from '../address/dto/createAddress.dto';
-import { AddressType } from '../../common/Types/index.type';
-import { CompanyService } from '../company/company.service';
-import { domainExtractor } from '../../common/filters/domainExtractor.filter';
+import { MailService } from '../../common/services/mail/mail.service.js';
+import { CreateVendorDto } from './dto/CreateVendorDto.js';
+import { LoginDto } from '../users/dto/userAuth.dto.js';
+import { UploadToCloudService } from '../../utils/upload-to-cloud/upload-to-cloud.service.js';
+import { formatCompanyDomain } from '../../common/filters/formatDomain.filter.js';
+import { company_compliance } from '../../drizzle/schema/company_identity.schema.js';
+import { CreateAddressDto } from '../address/dto/createAddress.dto.js';
+import { AddressType } from '../../common/Types/index.type.js';
+import { CompanyService } from '../company/company.service.js';
+import { domainExtractor } from '../../common/filters/domainExtractor.filter.js';
 import { randomBytes } from 'crypto';
-import { extractCloudinaryPublicId } from '../../common/filters/extractCloudinaryPublicId.filter';
-import { SubscriptionService } from '../subscription/subscription.service';
-import { VendorsErrorKeyEnum } from './constants/vendors.enums';
+import { extractCloudinaryPublicId } from '../../common/filters/extractCloudinaryPublicId.filter.js';
+import { SubscriptionService } from '../subscription/subscription.service.js';
+import { VendorsErrorKeyEnum } from './constants/vendors.enums.js';
 
 const SALT_ROUNDS = 10;
 type UserType = typeof userTable.$inferSelect;
@@ -499,12 +499,14 @@ export class VendorsService {
       const role = existingUser?.role;
       const payload: {
         sub: string | undefined;
+        vendor_id: string | undefined;
         email: string | undefined;
         role: string | undefined;
         company_id: string | undefined;
         password_change_required: boolean | undefined;
       } = {
         sub: user.id,
+        vendor_id: vendor.id,
         email: user.email,
         role: role?.role_name,
         company_id: vendor.company_id ?? undefined,

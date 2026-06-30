@@ -1,9 +1,11 @@
 import * as pg from 'drizzle-orm/pg-core';
 import { sql } from 'drizzle-orm';
-import { vendor } from './users.schema';
-import { company } from './main.schema';
-import { LogisticsModeEnum } from './enums.schema';
-import { ShippingChargeStrategy, PaymentRoutingStatus } from '../types/types';
+import { vendor } from './users.schema.js';
+import { company } from './main.schema.js';
+import {
+  ShippingChargeStrategy,
+  PaymentRoutingStatus,
+} from '../types/types.js';
 
 export const ShippingChargeStrategyEnum = pg.pgEnum(
   'shipping_charge_strategy_enum',

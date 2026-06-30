@@ -6,30 +6,30 @@ import {
   InternalServerErrorException,
 } from '@nestjs/common';
 import { and, eq } from 'drizzle-orm';
-import { DRIZZLE, type DrizzleService } from '../../drizzle/drizzle.module';
+import { DRIZZLE, type DrizzleService } from '../../drizzle/drizzle.module.js';
 import {
   company_branding,
   company_compliance,
   company_document_config,
   company_legal_profile,
-} from '../../drizzle/schema/company_identity.schema';
-import { CompanyService } from '../company/company.service';
-import { domainExtractor } from '../../common/filters/domainExtractor.filter';
-import { UploadToCloudService } from '../../utils/upload-to-cloud/upload-to-cloud.service';
+} from '../../drizzle/schema/company_identity.schema.js';
+import { CompanyService } from '../company/company.service.js';
+import { domainExtractor } from '../../common/filters/domainExtractor.filter.js';
+import { UploadToCloudService } from '../../utils/upload-to-cloud/upload-to-cloud.service.js';
 import {
   UpsertBrandingDto,
   UpsertDocumentConfigDto,
   UpsertLegalProfileDto,
-} from './dto/upsert-company-identity.dto';
+} from './dto/upsert-company-identity.dto.js';
 import {
   COMPANY_IDENTITY_BRANDING_DEFAULTS,
   COMPANY_IDENTITY_MESSAGES,
-} from './constants/company-identity.constants';
+} from './constants/company-identity.constants.js';
 import {
   CompanyIdentityErrorKeyEnum,
   CompanyIdentityTemplateTokenEnum,
   CompanyIdentityUploadFolderEnum,
-} from './constants/company-identity.enums';
+} from './constants/company-identity.enums.js';
 
 @Injectable()
 export class CompanyIdentityService {

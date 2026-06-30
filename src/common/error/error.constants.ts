@@ -1,5 +1,5 @@
 import { HttpStatus } from "@nestjs/common";
-import { InternalErrorCode, ClientActionCode, ErrorMappingConfig } from "./error.types";
+import { InternalErrorCode, ClientActionCode, ErrorMappingConfig } from './error.types.js';
 
 export const ERROR_MAPPING: Record<InternalErrorCode, ErrorMappingConfig> = {
   [InternalErrorCode.DATABASE_CONNECTION_FAILURE]: {

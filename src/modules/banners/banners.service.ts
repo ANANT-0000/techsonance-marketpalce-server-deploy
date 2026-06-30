@@ -7,20 +7,20 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { and, desc, eq, sql } from 'drizzle-orm';
-import { DRIZZLE, type DrizzleService } from '../../drizzle/drizzle.module';
+import { DRIZZLE, type DrizzleService } from '../../drizzle/drizzle.module.js';
 import {
   marketing_banners,
   orders,
   promotion_analytics_events,
   promotions,
   promotion_usage,
-} from '../../drizzle/schema';
-import { CompanyService } from '../company/company.service';
-import { domainExtractor } from '../../common/filters/domainExtractor.filter';
-import { BannerPlacement, PromoEventType } from '../../drizzle/types/types';
-import { CreateBannerDto } from './dto/banner.dto';
-import { UploadToCloudService } from '../../utils/upload-to-cloud/upload-to-cloud.service';
-import { BannersErrorKeyEnum } from './constants/banners.enums';
+} from '../../drizzle/schema/index.js';
+import { CompanyService } from '../company/company.service.js';
+import { domainExtractor } from '../../common/filters/domainExtractor.filter.js';
+import { BannerPlacement, PromoEventType } from '../../drizzle/types/types.js';
+import { CreateBannerDto } from './dto/banner.dto.js';
+import { UploadToCloudService } from '../../utils/upload-to-cloud/upload-to-cloud.service.js';
+import { BannersErrorKeyEnum } from './constants/banners.enums.js';
 
 // export interface CreateBannerDto {
 //   placement: BannerPlacement;

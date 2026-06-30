@@ -7,23 +7,23 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { and, desc, eq, sql } from 'drizzle-orm';
-import { DRIZZLE, type DrizzleService } from '../../drizzle/drizzle.module';
+import { DRIZZLE, type DrizzleService } from '../../drizzle/drizzle.module.js';
 import {
   promotion_analytics_events,
   promotion_rules,
   promotion_targets,
   promotion_usage,
   promotions,
-} from '../../drizzle/schema';
-import { CompanyService } from '../company/company.service';
-import { domainExtractor } from '../../common/filters/domainExtractor.filter';
+} from '../../drizzle/schema/index.js';
+import { CompanyService } from '../company/company.service.js';
+import { domainExtractor } from '../../common/filters/domainExtractor.filter.js';
 import {
   PromoEventType,
   PromotionStatus,
   PromotionType,
-} from '../../drizzle/types/types';
-import { CreatePromotionDto } from './dto/promotions..dto';
-import { PromotionsErrorKeyEnum } from './constants/promotions.enums';
+} from '../../drizzle/types/types.js';
+import { CreatePromotionDto } from './dto/promotions..dto.js';
+import { PromotionsErrorKeyEnum } from './constants/promotions.enums.js';
 
 @Injectable()
 export class PromotionsService {

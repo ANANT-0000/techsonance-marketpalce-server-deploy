@@ -1,11 +1,11 @@
 import { Module } from '@nestjs/common';
-import { OrderItemsService } from './order-items.service';
-import { OrderItemsController } from './order-items.controller';
-import { MailModule } from '../../common/services/mail/mail.module';
-import { CompanyModule } from '../company/company.module';
-import { InventoryModule } from '../inventory/inventory.module';
-import { DrizzleModule } from '../../drizzle/drizzle.module';
-import { ProductPoliciesModule } from '../product-policies/product-policies.module';
+import { OrderItemsService } from './order-items.service.js';
+import { OrderItemsController } from './order-items.controller.js';
+import { MailModule } from '../../common/services/mail/mail.module.js';
+import { CompanyModule } from '../company/company.module.js';
+import { InventoryModule } from '../inventory/inventory.module.js';
+import { DrizzleModule } from '../../drizzle/drizzle.module.js';
+import { ProductPoliciesModule } from '../product-policies/product-policies.module.js';
 
 @Module({
   imports: [

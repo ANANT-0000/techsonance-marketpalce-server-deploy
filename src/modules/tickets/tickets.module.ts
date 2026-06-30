@@ -1,9 +1,9 @@
 import { Module } from '@nestjs/common';
-import { TicketsService } from './tickets.service';
-import { TicketsController } from './tickets.controller';
-import { DrizzleModule } from '../../drizzle/drizzle.module';
-import { CompanyModule } from '../company/company.module';
-import { OutboxModule } from '../outbox/outbox.module';
+import { TicketsService } from './tickets.service.js';
+import { TicketsController } from './tickets.controller.js';
+import { DrizzleModule } from '../../drizzle/drizzle.module.js';
+import { CompanyModule } from '../company/company.module.js';
+import { OutboxModule } from '../outbox/outbox.module.js';
 
 @Module({
   imports: [DrizzleModule, CompanyModule, OutboxModule],

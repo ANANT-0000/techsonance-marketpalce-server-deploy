@@ -12,11 +12,11 @@ import {
   HttpCode,
   UploadedFiles,
 } from '@nestjs/common';
-import { ReturnsService } from './returns.service';
-import { CreateReturnDto } from './dto/create-return.dto';
+import { ReturnsService } from './returns.service.js';
+import { CreateReturnDto } from './dto/create-return.dto.js';
  
-import { ParseJsonPipe } from '../../common/pipes/parseJsonPipe';
-import { UploadToCloud } from '../../common/decorators/upload.decorator';
+import { ParseJsonPipe } from '../../common/pipes/parseJsonPipe.js';
+import { UploadToCloud } from '../../common/decorators/upload.decorator.js';
 
 @Controller({ path: 'returns', version: '1' })
 export class ReturnsController {

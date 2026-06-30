@@ -9,7 +9,7 @@ import {
   HttpStatus,
 } from '@nestjs/common';
 import { and, eq } from 'drizzle-orm';
-import { DRIZZLE, type DrizzleService } from '../../drizzle/drizzle.module';
+import { DRIZZLE, type DrizzleService } from '../../drizzle/drizzle.module.js';
 import {
   company_branding,
   company_compliance,
@@ -18,7 +18,7 @@ import {
   gst_invoices,
   orders,
   payments,
-} from '../../drizzle/schema';
+} from '../../drizzle/schema/index.js';
 import {
   CompanyContext,
   DbAddress,
@@ -39,11 +39,11 @@ import {
   OrderWithRelations,
   StandardizedInvoicePayload,
   WarehouseGroup,
-} from './interfaces/invoice.interface';
+} from './interfaces/invoice.interface.js';
 import { randomUUID } from 'crypto';
-import { fetchImageAsBuffer } from '../../utils/image-fetcher.util';
-import { COUNTRIES_COMPLIANCE, getStateByCode } from '../../common/constants';
-import { InvoiceErrorKeyEnum } from './constants/invoice.enums';
+import { fetchImageAsBuffer } from '../../utils/image-fetcher.util.js';
+import { COUNTRIES_COMPLIANCE, getStateByCode } from '../../common/constants.js';
+import { InvoiceErrorKeyEnum } from './constants/invoice.enums.js';
 
 // ─── helpers ────────────────────────────────────────────────────
 

@@ -11,9 +11,9 @@ import {
   Post,
   Query,
 } from '@nestjs/common';
-import { AddressService } from './address.service';
-import { CreateAddressDto } from './dto/createAddress.dto';
-import { UpdateAddressDto } from './dto/updateAddress.dto';
+import { AddressService } from './address.service.js';
+import { CreateAddressDto } from './dto/createAddress.dto.js';
+import { UpdateAddressDto } from './dto/updateAddress.dto.js';
 
 @Controller({ version: '1', path: 'address' })
 export class AddressController {

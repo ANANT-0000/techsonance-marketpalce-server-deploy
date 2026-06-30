@@ -10,13 +10,13 @@ import {
   UseInterceptors,
   UseGuards,
 } from '@nestjs/common';
-import { ProductReviewService } from './product-review.service';
-import { CreateProductReviewDto } from './dto/create-product-review.dto';
-import { UpdateProductReviewDto } from './dto/update-product-review.dto';
-import { ParseJsonPipe } from '../../common/pipes/parseJsonPipe';
+import { ProductReviewService } from './product-review.service.js';
+
+import { UpdateProductReviewDto } from './dto/update-product-review.dto.js';
+import { ParseJsonPipe } from '../../common/pipes/parseJsonPipe.js';
 import { AnyFilesInterceptor } from '@nestjs/platform-express';
-import { JwtAuthGuard } from '../auth/jwt-auth.guard';
-import { Public } from '../../common/decorators/public.decorator';
+import { JwtAuthGuard } from '../auth/jwt-auth.guard.js';
+import { Public } from '../../common/decorators/public.decorator.js';
 
 @Controller({ version: '1', path: 'product-review' })
 export class ProductReviewController {

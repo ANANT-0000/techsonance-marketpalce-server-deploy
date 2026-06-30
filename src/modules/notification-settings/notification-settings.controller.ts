@@ -1,5 +1,5 @@
 import { Body, Controller, Get, HttpCode, HttpStatus, Param, Post } from '@nestjs/common';
-import { NotificationSettingsService } from './notification-settings.service';
+import { NotificationSettingsService } from './notification-settings.service.js';
 
 @Controller({ version: '1', path: 'users/:userId/notification-settings' })
 export class NotificationSettingsController {

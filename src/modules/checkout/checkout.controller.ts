@@ -11,14 +11,14 @@ import {
   HttpStatus,
   Req,
 } from '@nestjs/common';
-import { CheckoutService } from './checkout.service';
-import { InitiateCheckoutDto, VerifyCheckoutDto } from './dto/checkout.dto';
-import { CouponService } from '../coupon/coupon.service';
-import { Public } from '../../common/decorators/public.decorator';
+import { CheckoutService } from './checkout.service.js';
+import { InitiateCheckoutDto, VerifyCheckoutDto } from './dto/checkout.dto.js';
+import { CouponService } from '../coupon/coupon.service.js';
+import { Public } from '../../common/decorators/public.decorator.js';
 import {
   RazorpayOrderPaidWebhook,
   RazorpayWebhookEvent,
-} from './constants/razorpay.webhook';
+} from './constants/razorpay.webhook.js';
 
 @Controller({
   version: '1',

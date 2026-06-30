@@ -1,7 +1,7 @@
 import * as pg from 'drizzle-orm/pg-core';
-import { company } from './main.schema';
-import { EntityStatusEnum } from './enums.schema';
-import { EntityStatus, UserStatus } from '../types/types';
+import { company } from './main.schema.js';
+import { EntityStatusEnum } from './enums.schema.js';
+import { EntityStatus, UserStatus } from '../types/types.js';
 
 export const UserStatusEnum = pg.pgEnum('user_status_enum', UserStatus);
 export const user = pg.pgTable(
@@ -18,6 +18,7 @@ export const user = pg.pgTable(
     user_status: UserStatusEnum().default(UserStatus.PENDING),
     otp: pg.varchar('otp', { length: 6 }),
     otp_expires: pg.timestamp('otp_expires'),
+    otp_attempts: pg.integer('otp_attempts').default(0).notNull(),
     password_change_required: pg
       .boolean('password_change_required')
       .notNull()
@@ -28,7 +29,9 @@ export const user = pg.pgTable(
       .notNull()
       .defaultNow()
       .$onUpdate(() => new Date()),
-    record_status: EntityStatusEnum('record_status').default(EntityStatus.ACTIVE),
+    record_status: EntityStatusEnum('record_status').default(
+      EntityStatus.ACTIVE,
+    ),
     deleted_at: pg.timestamp('deleted_at'),
   },
   (table) => [
@@ -55,39 +58,46 @@ export const vendor = pg.pgTable('vendor', {
     .$onUpdate(() => new Date()),
   record_status: EntityStatusEnum('record_status').default(EntityStatus.ACTIVE),
   deleted_at: pg.timestamp('deleted_at'),
-  company_id: pg.uuid('company_id').references(() => company.id, { onDelete: 'restrict' }),
+  company_id: pg
+    .uuid('company_id')
+    .references(() => company.id, { onDelete: 'restrict' }),
   user_id: pg
     .uuid('user_id')
     .references(() => user.id, { onDelete: 'restrict' }),
 });
-export const address = pg.pgTable('address', {
-  id: pg.uuid('id').primaryKey().defaultRandom(),
-  name: pg.text('name').notNull(),
-  number: pg.text('number').notNull(),
-  address_type: pg.text('address_type').notNull(),
-  address_line_1: pg.text('address_line_1').notNull(),
-
-  street: pg.text('street').notNull(),
-  city: pg.text('city').notNull(),
-  state: pg.text('state').notNull(),
-  postal_code: pg.text('postal_code').notNull(),
-  country: pg.text('country').notNull(),
-  landmark: pg.text('landmark').notNull(),
-  pickup_location: pg.text('pickup_location'),
-  is_default: pg.boolean('is_default').notNull().default(false),
-  created_at: pg.timestamp('created_at').notNull().defaultNow(),
-  updated_at: pg
-    .timestamp('updated_at')
-    .notNull()
-    .defaultNow()
-    .$onUpdate(() => new Date()),
-  user_id: pg
-    .uuid('user_id')
-    .references(() => user.id, { onDelete: 'restrict' }),
-  status: EntityStatusEnum('status').default(EntityStatus.ACTIVE),
-  deleted_at: pg.timestamp('deleted_at'),
-  company_id: pg.uuid('company_id').references(() => company.id, { onDelete: 'restrict' }),
-}, (table) => [
-  pg.index('idx_address_user_id').on(table.user_id),
-  pg.index('idx_address_company_id').on(table.company_id),
-]);
+export const address = pg.pgTable(
+  'address',
+  {
+    id: pg.uuid('id').primaryKey().defaultRandom(),
+    name: pg.text('name').notNull(),
+    number: pg.text('number').notNull(),
+    address_type: pg.text('address_type').notNull(),
+    address_line_1: pg.text('address_line_1').notNull(),
+    street: pg.text('street').notNull(),
+    city: pg.text('city').notNull(),
+    state: pg.text('state').notNull(),
+    postal_code: pg.text('postal_code').notNull(),
+    country: pg.text('country').notNull(),
+    landmark: pg.text('landmark').notNull(),
+    pickup_location: pg.text('pickup_location'),
+    is_default: pg.boolean('is_default').notNull().default(false),
+    created_at: pg.timestamp('created_at').notNull().defaultNow(),
+    updated_at: pg
+      .timestamp('updated_at')
+      .notNull()
+      .defaultNow()
+      .$onUpdate(() => new Date()),
+    user_id: pg
+      .uuid('user_id')
+      .references(() => user.id, { onDelete: 'restrict' }),
+    status: EntityStatusEnum('status').default(EntityStatus.ACTIVE),
+    deleted_at: pg.timestamp('deleted_at'),
+    company_id: pg
+      .uuid('company_id')
+      .references(() => company.id, { onDelete: 'restrict' }),
+  },
+  (table) => [
+    pg.index('idx_address_user_id').on(table.user_id),
+    pg.index('idx_address_company_id').on(table.company_id),
+  ],
+);

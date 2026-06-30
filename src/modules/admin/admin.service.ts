@@ -7,7 +7,7 @@ import {
 } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { and, eq, sql } from 'drizzle-orm';
-import { DRIZZLE } from '../../drizzle/drizzle.module';
+import { DRIZZLE } from '../../drizzle/drizzle.module.js';
 import {
   audit_logs,
   company,
@@ -17,11 +17,11 @@ import {
   user,
   user_roles,
   vendor,
-} from '../../drizzle/schema';
-import { type DrizzleDB } from '../../drizzle/types/drizzle';
-import { OrderStatus, UserRole } from '../../drizzle/types/types';
+} from '../../drizzle/schema/index.js';
+import { type DrizzleDB } from '../../drizzle/types/drizzle.js';
+import { OrderStatus, UserRole } from '../../drizzle/types/types.js';
 import { ConfigService } from '@nestjs/config';
-import { AdminErrorKeyEnum } from './constants/admin.enums';
+import { AdminErrorKeyEnum } from './constants/admin.enums.js';
 @Injectable()
 export class AdminService {
   constructor(

@@ -6,8 +6,8 @@ import {
   HttpStatus,
   Headers,
 } from '@nestjs/common';
-import { Public } from '../../common/decorators/public.decorator';
-import { ShippingManagerService } from './shipping-manager.service';
+import { Public } from '../../common/decorators/public.decorator.js';
+import { ShippingManagerService } from './shipping-manager.service.js';
 
 @Controller('webhooks')
 export class ShippingWebhookController {

@@ -8,8 +8,8 @@ import {
   Post,
   Query,
 } from '@nestjs/common';
-import { FinancesService } from './finances.service';
-import { PaymentStatus } from '../../drizzle/types/types';
+import { FinancesService } from './finances.service.js';
+import { PaymentStatus } from '../../drizzle/types/types.js';
 
 @Controller({ version: '1', path: 'finances' })
 export class FinancesController {

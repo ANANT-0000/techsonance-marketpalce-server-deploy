@@ -8,10 +8,10 @@ import {
   Delete,
   UploadedFiles,
 } from '@nestjs/common';
-import { TemplateService } from './template.service';
-import { CreateTemplateDto } from './dto/template.dto';
-import { UploadToCloud } from '../../common/decorators/upload.decorator';
-import { ParseJsonPipe } from '../../common/pipes/parseJsonPipe';
+import { TemplateService } from './template.service.js';
+import { CreateTemplateDto } from './dto/template.dto.js';
+import { UploadToCloud } from '../../common/decorators/upload.decorator.js';
+import { ParseJsonPipe } from '../../common/pipes/parseJsonPipe.js';
 
 @Controller({ version: '1', path: 'template' })
 export class TemplateController {

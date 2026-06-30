@@ -10,7 +10,7 @@ import {
   Post,
   Query,
 } from '@nestjs/common';
-import { RefundsService } from './refunds.service';
+import { RefundsService } from './refunds.service.js';
 
 @Controller({ version: '1', path: 'refunds' })
 export class RefundsController {

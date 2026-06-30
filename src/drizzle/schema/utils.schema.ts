@@ -1,13 +1,13 @@
 import * as pg from 'drizzle-orm/pg-core';
-import { company } from './main.schema';
-import { address, user, vendor } from './users.schema';
-import { product_variants, orders } from './shop.schema';
+import { company } from './main.schema.js';
+import { address, user, vendor } from './users.schema.js';
+import { product_variants, orders } from './shop.schema.js';
 import {
   EntityStatus,
   SupportTicketPriority,
   SupportTicketStatus,
-} from '../types/types';
-import { EntityStatusEnum } from './enums.schema';
+} from '../types/types.js';
+import { EntityStatusEnum } from './enums.schema.js';
 export const support_tickets_status_enum = pg.pgEnum(
   'support_tickets_status_enum',
   SupportTicketStatus,
@@ -81,7 +81,9 @@ export const inventory = pg.pgTable(
     company_id: pg
       .uuid('company_id')
       .references(() => company.id, { onDelete: 'restrict' }),
-    record_status: EntityStatusEnum('record_status').default(EntityStatus.ACTIVE),
+    record_status: EntityStatusEnum('record_status').default(
+      EntityStatus.ACTIVE,
+    ),
     deleted_at: pg.timestamp('deleted_at'),
   },
   (table) => [

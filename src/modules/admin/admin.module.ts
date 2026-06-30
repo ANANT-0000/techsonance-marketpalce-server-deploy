@@ -1,12 +1,12 @@
 import { Module } from '@nestjs/common';
-import { AdminController } from './admin.controller';
-import { AdminService } from './admin.service';
-import { DrizzleModule } from '../../drizzle/drizzle.module';
+import { AdminController } from './admin.controller.js';
+import { AdminService } from './admin.service.js';
+import { DrizzleModule } from '../../drizzle/drizzle.module.js';
 import { JwtModule } from '@nestjs/jwt';
-import { UsersModule } from '../users/users.module';
-import { VendorsModule } from '../vendors/vendors.module';
-import { OrdersModule } from '../orders/orders.module';
-import { CompanyModule } from '../company/company.module';
+import { UsersModule } from '../users/users.module.js';
+import { VendorsModule } from '../vendors/vendors.module.js';
+import { OrdersModule } from '../orders/orders.module.js';
+import { CompanyModule } from '../company/company.module.js';
 
 @Module({
   imports: [

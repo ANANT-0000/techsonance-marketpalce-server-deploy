@@ -1,13 +1,13 @@
 import { forwardRef, Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
-import { SubscriptionService } from './subscription.service';
-import { SubscriptionController } from './subscription.controller';
-import { SubscriptionJobController } from './subscription-job.controller';
-import { DrizzleModule } from '../../drizzle/drizzle.module';
-import { MailModule } from '../../common/services/mail/mail.module';
-import { SubscriptionGuard } from './subscription.guard';
-import { CompanyModule } from '../company/company.module';
-import { AuthModule } from '../auth/auth.module';
+import { SubscriptionService } from './subscription.service.js';
+import { SubscriptionController } from './subscription.controller.js';
+import { SubscriptionJobController } from './subscription-job.controller.js';
+import { DrizzleModule } from '../../drizzle/drizzle.module.js';
+import { MailModule } from '../../common/services/mail/mail.module.js';
+import { SubscriptionGuard } from './subscription.guard.js';
+import { CompanyModule } from '../company/company.module.js';
+import { AuthModule } from '../auth/auth.module.js';
 
 @Module({
   imports: [

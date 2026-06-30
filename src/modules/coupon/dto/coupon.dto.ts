@@ -10,7 +10,7 @@ import {
   IsObject,
 } from 'class-validator';
 import { Type } from 'class-transformer';
-import { PromotionRuleType, PromotionType } from '../../../drizzle/types/types';
+import { PromotionRuleType, PromotionType } from '../../../drizzle/types/types.js';
 
 // ─── RULE CONFIG DTOs ────────────────────────────────────────────
 // One class per PromotionRuleType — mirrors the jsonb shapes in

@@ -12,12 +12,12 @@ import {
   Query,
   UploadedFiles,
 } from '@nestjs/common';
-import { BannersService } from './banners.service';
-import { BannerPlacement } from '../../drizzle/types/types';
-import { UploadToCloud } from '../../common/decorators/upload.decorator';
-import { CreateBannerDto } from './dto/banner.dto';
-import { ParseJsonPipe } from '../../common/pipes/parseJsonPipe';
-import { Public } from '../../common/decorators/public.decorator';
+import { BannersService } from './banners.service.js';
+import { BannerPlacement } from '../../drizzle/types/types.js';
+import { UploadToCloud } from '../../common/decorators/upload.decorator.js';
+import { CreateBannerDto } from './dto/banner.dto.js';
+import { ParseJsonPipe } from '../../common/pipes/parseJsonPipe.js';
+import { Public } from '../../common/decorators/public.decorator.js';
 
 @Controller({ version: '1', path: 'banners' })
 export class BannersController {

@@ -6,12 +6,12 @@ import {
   ForbiddenException,
 } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
-import { DRIZZLE, type DrizzleService } from '../../drizzle/drizzle.module';
+import { DRIZZLE, type DrizzleService } from '../../drizzle/drizzle.module.js';
 import { Inject } from '@nestjs/common';
-import { vendor_subscriptions } from '../../drizzle/schema';
+import { vendor_subscriptions } from '../../drizzle/schema/index.js';
 import { eq } from 'drizzle-orm';
-import { SKIP_SUBSCRIPTION_KEY } from '../../common/decorators/skip-subscription.decorator';
-import { SubscriptionStatus, UserRole } from '../../drizzle/types/types';
+import { SKIP_SUBSCRIPTION_KEY } from '../../common/decorators/skip-subscription.decorator.js';
+import { SubscriptionStatus, UserRole } from '../../drizzle/types/types.js';
 
 @Injectable()
 export class SubscriptionGuard implements CanActivate {

@@ -11,13 +11,13 @@ import {
   Query,
   UseGuards,
 } from '@nestjs/common';
-import { OrdersService } from './orders.service';
-import { OrderStatus } from '../../drizzle/types/types';
-import { JwtAuthGuard } from '../auth/jwt-auth.guard';
-import { RoleGuard } from '../../guards/role.guard';
-import { Role } from '../../enums/role.enum';
-import { Roles } from '../../common/decorators/roles.decorator';
-import { ProductPoliciesService } from '../product-policies/product-policies.service';
+import { OrdersService } from './orders.service.js';
+import { OrderStatus } from '../../drizzle/types/types.js';
+import { JwtAuthGuard } from '../auth/jwt-auth.guard.js';
+import { RoleGuard } from '../../guards/role.guard.js';
+import { Role } from '../../enums/role.enum.js';
+import { Roles } from '../../common/decorators/roles.decorator.js';
+import { ProductPoliciesService } from '../product-policies/product-policies.service.js';
 import type { Response } from 'express';
 @Controller({
   version: '1',

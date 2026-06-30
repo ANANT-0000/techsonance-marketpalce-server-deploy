@@ -7,9 +7,9 @@ import {
   Body,
 } from '@nestjs/common';
 import type { Request } from 'express';
-import { Public } from '../../../common/decorators/public.decorator';
-import { OUTBOX_CONSTANTS } from '../constants/outbox.constants';
-import { OutboxService } from '../outbox.service';
+import { Public } from '../../../common/decorators/public.decorator.js';
+import { OUTBOX_CONSTANTS } from '../constants/outbox.constants.js';
+import { OutboxService } from '../outbox.service.js';
 
 @Controller({
   version: OUTBOX_CONSTANTS.INTERNAL_VERSION,

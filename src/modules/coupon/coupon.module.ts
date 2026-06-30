@@ -1,8 +1,8 @@
 import { forwardRef, Module } from '@nestjs/common';
-import { CouponService } from './coupon.service';
-import { CouponController } from './coupon.controller';
-import { DrizzleModule } from '../../drizzle/drizzle.module';
-import { CompanyModule } from '../company/company.module';
+import { CouponService } from './coupon.service.js';
+import { CouponController } from './coupon.controller.js';
+import { DrizzleModule } from '../../drizzle/drizzle.module.js';
+import { CompanyModule } from '../company/company.module.js';
 
 @Module({
   imports: [DrizzleModule, forwardRef(() => CompanyModule)],

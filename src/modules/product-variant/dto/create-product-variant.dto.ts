@@ -7,7 +7,7 @@ import {
   isString,
   IsString,
 } from 'class-validator';
-import { ProductStatus } from '../../../drizzle/types/types';
+import { ProductStatus } from '../../../drizzle/types/types.js';
 
 export class CreateProductVariantDto {
   @IsString()

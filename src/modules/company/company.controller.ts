@@ -8,15 +8,15 @@ import {
   Post,
   UseGuards,
 } from '@nestjs/common';
-import { CompanyService } from './company.service';
-import { JwtAuthGuard } from '../auth/jwt-auth.guard';
-import { RoleGuard } from '../../guards/role.guard';
-import { Role } from '../../enums/role.enum';
-import { Roles } from '../../common/decorators/roles.decorator';
-import { VendorsService } from '../vendors/vendors.service';
-import { COMPANY_CONTROLLER_MESSAGES } from './constants/company.constants';
-import { CreateAddressDto } from '../address/dto/createAddress.dto';
-import { Public } from '../../common/decorators/public.decorator';
+import { CompanyService } from './company.service.js';
+import { JwtAuthGuard } from '../auth/jwt-auth.guard.js';
+import { RoleGuard } from '../../guards/role.guard.js';
+import { Role } from '../../enums/role.enum.js';
+import { Roles } from '../../common/decorators/roles.decorator.js';
+import { VendorsService } from '../vendors/vendors.service.js';
+import { COMPANY_CONTROLLER_MESSAGES } from './constants/company.constants.js';
+import { CreateAddressDto } from '../address/dto/createAddress.dto.js';
+import { Public } from '../../common/decorators/public.decorator.js';
 
 @Controller({ version: '1', path: 'company' })
 export class CompanyController {

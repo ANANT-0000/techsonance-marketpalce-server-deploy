@@ -5,15 +5,15 @@ import {
   Injectable,
   InternalServerErrorException,
 } from '@nestjs/common';
-import { DRIZZLE, type DrizzleService } from '../../drizzle/drizzle.module';
-import { CreateProductDto } from './dto/createProduct.dto';
+import { DRIZZLE, type DrizzleService } from '../../drizzle/drizzle.module.js';
+import { CreateProductDto } from './dto/createProduct.dto.js';
 import {
   categories,
   product_images,
   product_variants,
   products,
-} from '../../drizzle/schema/shop.schema';
-import { ProductImageType, ProductStatus } from '../../drizzle/types/types';
+} from '../../drizzle/schema/shop.schema.js';
+import { ProductImageType, ProductStatus } from '../../drizzle/types/types.js';
 import {
   and,
   asc,
@@ -30,16 +30,16 @@ import {
   sql,
 } from 'drizzle-orm';
 
-import { UploadToCloudService } from '../../utils/upload-to-cloud/upload-to-cloud.service';
-import { UpdateProductDto } from './dto/updatedProduct.dto';
-import { type ProductFiles } from '../../common/Types/index.type';
-import { CompanyService } from '../company/company.service';
-import { InventoryService } from '../inventory/inventory.service';
-import { product_tax, warehouse } from '../../drizzle/schema';
-import { domainExtractor } from '../../common/filters/domainExtractor.filter';
-import { GetProductsQueryDto, SortBy } from './dto/get-products-query.dto';
-import { extractCloudinaryPublicId } from '../../common/filters/extractCloudinaryPublicId.filter';
-import { ProductsErrorKeyEnum } from './constants/products.enums';
+import { UploadToCloudService } from '../../utils/upload-to-cloud/upload-to-cloud.service.js';
+import { UpdateProductDto } from './dto/updatedProduct.dto.js';
+import { type ProductFiles } from '../../common/Types/index.type.js';
+import { CompanyService } from '../company/company.service.js';
+import { InventoryService } from '../inventory/inventory.service.js';
+import { product_tax, warehouse } from '../../drizzle/schema/index.js';
+import { domainExtractor } from '../../common/filters/domainExtractor.filter.js';
+import { GetProductsQueryDto, SortBy } from './dto/get-products-query.dto.js';
+import { extractCloudinaryPublicId } from '../../common/filters/extractCloudinaryPublicId.filter.js';
+import { ProductsErrorKeyEnum } from './constants/products.enums.js';
 
 @Injectable()
 export class ProductsService {
@@ -949,6 +949,7 @@ export class ProductsService {
     product: UpdateProductDto,
     imagesToDelete?: string[],
     files?: ProductFiles,
+    vendorId?: string,
   ) {
     const imageToDeleteUrl: {
       toDeleteUrl: string | undefined;
@@ -989,6 +990,7 @@ export class ProductsService {
           and(
             eq(products.id, productVariantId),
             eq(products.company_id, companyId),
+            vendorId ? eq(products.vendor_id, vendorId) : sql`TRUE`
           ),
         )
         .limit(1)
@@ -1040,6 +1042,7 @@ export class ProductsService {
               and(
                 eq(products.id, resolvedProductId),
                 eq(products.company_id, companyId),
+                vendorId ? eq(products.vendor_id, vendorId) : sql`TRUE`
               ),
             )
             .catch((error) => {
@@ -1246,7 +1249,7 @@ export class ProductsService {
     }
   }
 
-  async deleteProduct(productId: string) {
+  async deleteProduct(productId: string, vendorId?: string) {
     if (!productId) {
       return new HttpException(
         ProductsErrorKeyEnum.PRODUCT_ID_IS_REQUIRED,
@@ -1256,7 +1259,7 @@ export class ProductsService {
     try {
       await this.db
         .delete(products)
-        .where(eq(products.id, productId))
+        .where(and(eq(products.id, productId), vendorId ? eq(products.vendor_id, vendorId) : sql`TRUE`))
         .catch((error) => {
           throw new InternalServerErrorException(
             ProductsErrorKeyEnum.FAILED_TO_DELETE_PRODUCT,
@@ -1278,7 +1281,7 @@ export class ProductsService {
       );
     }
   }
-  async UpdateProductCategory(categoryId: string, productId: string) {
+  async UpdateProductCategory(categoryId: string, productId: string, vendorId?: string) {
     if (!categoryId && !productId) {
       return new HttpException(
         ProductsErrorKeyEnum.CATEGORY_ID_IS_REQUIRED,
@@ -1289,7 +1292,7 @@ export class ProductsService {
       await this.db
         .update(products)
         .set({ category_id: categoryId })
-        .where(eq(products.id, productId));
+        .where(and(eq(products.id, productId), vendorId ? eq(products.vendor_id, vendorId) : sql`TRUE`));
       return {
         message: 'Product category updated successfully',
         status: HttpStatus.OK,
@@ -1304,7 +1307,7 @@ export class ProductsService {
     }
   }
 
-  async deleteSelectedProducts(productIds: string[]) {
+  async deleteSelectedProducts(productIds: string[], vendorId?: string) {
     if (!productIds || productIds.length === 0) {
       return new HttpException(
         ProductsErrorKeyEnum.PRODUCT_IDS_ARE_REQUIRED,
@@ -1312,7 +1315,7 @@ export class ProductsService {
       );
     }
     try {
-      await this.db.delete(products).where(inArray(products.id, productIds));
+      await this.db.delete(products).where(and(inArray(products.id, productIds), vendorId ? eq(products.vendor_id, vendorId) : sql`TRUE`));
       return {
         message: 'Selected products deleted successfully',
         status: HttpStatus.OK,
@@ -1327,7 +1330,7 @@ export class ProductsService {
     }
   }
 
-  async deleteProductVariant(variantId: string) {
+  async deleteProductVariant(variantId: string, vendorId?: string) {
     if (!variantId) {
       return new HttpException(
         ProductsErrorKeyEnum.VARIANT_ID_IS_REQUIRED,
@@ -1337,7 +1340,7 @@ export class ProductsService {
     try {
       await this.db
         .delete(product_variants)
-        .where(eq(product_variants.id, variantId));
+        .where(and(eq(product_variants.id, variantId), vendorId ? inArray(product_variants.product_id, this.db.select({id: products.id}).from(products).where(eq(products.vendor_id, vendorId))) : sql`TRUE`));
       return {
         message: 'Product variant deleted successfully',
         status: HttpStatus.OK,
@@ -1351,7 +1354,7 @@ export class ProductsService {
       );
     }
   }
-  async deleteSelectedProductVariants(variantIds: string[]) {
+  async deleteSelectedProductVariants(variantIds: string[], vendorId?: string) {
     if (!variantIds || variantIds.length === 0) {
       return new HttpException(
         ProductsErrorKeyEnum.VARIANT_IDS_ARE_REQUIRED,
@@ -1361,7 +1364,7 @@ export class ProductsService {
     try {
       await this.db
         .delete(product_variants)
-        .where(inArray(product_variants.id, variantIds));
+        .where(and(inArray(product_variants.id, variantIds), vendorId ? inArray(product_variants.product_id, this.db.select({id: products.id}).from(products).where(eq(products.vendor_id, vendorId))) : sql`TRUE`));
       return {
         message: 'Product variant deleted successfully',
         status: HttpStatus.OK,

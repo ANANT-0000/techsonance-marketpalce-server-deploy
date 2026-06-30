@@ -7,17 +7,17 @@ import {
   BadRequestException,
   ConflictException,
 } from '@nestjs/common';
-import { CreateCategoryDto } from './dto/CreateCategory.dto';
-import { UpdateCategoryDto } from './dto/UpdateCategory.dto';
-import { DRIZZLE } from '../../drizzle/drizzle.module';
-import { categories, products } from '../../drizzle/schema';
+import { CreateCategoryDto } from './dto/CreateCategory.dto.js';
+import { UpdateCategoryDto } from './dto/UpdateCategory.dto.js';
+import { DRIZZLE } from '../../drizzle/drizzle.module.js';
+import { categories, products } from '../../drizzle/schema/index.js';
 import { and, eq, or, ilike, inArray, desc, asc, sql, SQL } from 'drizzle-orm';
-import { type DrizzleService } from '../../drizzle/drizzle.module';
-import { CompanyService } from '../company/company.service';
-import { domainExtractor } from '../../common/filters/domainExtractor.filter';
-import { CategoryErrorKeyEnum } from './constants/category.enums';
-import { HttpExceptionFilter } from '../../common/filters/http-exception.filter';
-import { EntityStatus } from '../../drizzle/types/types';
+import { type DrizzleService } from '../../drizzle/drizzle.module.js';
+import { CompanyService } from '../company/company.service.js';
+import { domainExtractor } from '../../common/filters/domainExtractor.filter.js';
+import { CategoryErrorKeyEnum } from './constants/category.enums.js';
+import { HttpExceptionFilter } from '../../common/filters/http-exception.filter.js';
+import { EntityStatus } from '../../drizzle/types/types.js';
 
 @Injectable()
 export class CategoryService {

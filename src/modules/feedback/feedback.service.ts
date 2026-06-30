@@ -1,10 +1,10 @@
 import { Inject, Injectable, InternalServerErrorException } from '@nestjs/common';
 import { and, eq } from 'drizzle-orm';
-import { DRIZZLE, type DrizzleService } from '../../drizzle/drizzle.module';
-import { customer_feedback } from '../../drizzle/schema';
-import { CompanyService } from '../company/company.service';
-import { domainExtractor } from '../../common/filters/domainExtractor.filter';
-import { FeedbackErrorKeyEnum } from './constants/feedback.enums';
+import { DRIZZLE, type DrizzleService } from '../../drizzle/drizzle.module.js';
+import { customer_feedback } from '../../drizzle/schema/index.js';
+import { CompanyService } from '../company/company.service.js';
+import { domainExtractor } from '../../common/filters/domainExtractor.filter.js';
+import { FeedbackErrorKeyEnum } from './constants/feedback.enums.js';
 
 @Injectable()
 export class FeedbackService {

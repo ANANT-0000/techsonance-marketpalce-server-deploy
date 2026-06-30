@@ -9,9 +9,9 @@ import {
   Headers,
   Query,
 } from '@nestjs/common';
-import { CouponService } from './coupon.service';
-import { CreateCouponDto, UpdateCouponDto } from './dto/coupon.dto';
-import { Public } from '../../common/decorators/public.decorator';
+import { CouponService } from './coupon.service.js';
+import { CreateCouponDto, UpdateCouponDto } from './dto/coupon.dto.js';
+import { Public } from '../../common/decorators/public.decorator.js';
 
 @Controller({ version: '1', path: 'coupon' })
 export class CouponController {

@@ -7,7 +7,7 @@ import {
   InternalServerErrorException,
   NotFoundException,
 } from '@nestjs/common';
-import { DRIZZLE, type DrizzleService } from '../../drizzle/drizzle.module';
+import { DRIZZLE, type DrizzleService } from '../../drizzle/drizzle.module.js';
 import { and, count, desc, eq, gte, isNull, or } from 'drizzle-orm';
 import {
   coupons,
@@ -16,20 +16,20 @@ import {
   promotion_targets,
   promotion_usage,
   user,
-} from '../../drizzle/schema';
-import { CompanyService } from '../company/company.service';
-import { domainExtractor } from '../../common/filters/domainExtractor.filter';
+} from '../../drizzle/schema/index.js';
+import { CompanyService } from '../company/company.service.js';
+import { domainExtractor } from '../../common/filters/domainExtractor.filter.js';
 import {
   CreateCouponDto,
   UpdateCouponDto,
   PromotionRuleDto,
-} from './dto/coupon.dto';
+} from './dto/coupon.dto.js';
 import {
   PromotionRuleType,
   PromotionStatus,
   PromotionTargetType,
   PromotionType,
-} from '../../drizzle/types/types';
+} from '../../drizzle/types/types.js';
 @Injectable()
 export class CouponService {
   constructor(

@@ -8,20 +8,20 @@ import {
   UnauthorizedException,
 } from '@nestjs/common';
 import { eq, and, or, like, ne, sql } from 'drizzle-orm';
-import { DRIZZLE, type DrizzleService } from '../../drizzle/drizzle.module';
-import { cms_pages, marketing_banners, product_images, products } from '../../drizzle/schema';
-import { CompanyService } from '../company/company.service';
-import { domainExtractor } from '../../common/filters/domainExtractor.filter';
-import { CreateCmsDto } from './dto/create-cms.dto';
-import { UploadToCloudService } from '../../utils/upload-to-cloud/upload-to-cloud.service';
+import { DRIZZLE, type DrizzleService } from '../../drizzle/drizzle.module.js';
+import { cms_pages, marketing_banners, product_images, products } from '../../drizzle/schema/index.js';
+import { CompanyService } from '../company/company.service.js';
+import { domainExtractor } from '../../common/filters/domainExtractor.filter.js';
+import { CreateCmsDto } from './dto/create-cms.dto.js';
+import { UploadToCloudService } from '../../utils/upload-to-cloud/upload-to-cloud.service.js';
 import {
   CMS_ALLOWED_IMAGE_MIME_TYPES,
   CMS_IMAGE_MAX_FILE_SIZE_BYTES,
   CMS_MESSAGES,
   CMS_THEME_COLOR_KEYS,
-} from './constants/cms.constants';
-import { CmsLanguageEnum, CmsPageContentTypeEnum } from './constants/cms.enums';
-import { extractCloudinaryPublicId } from '../../common/filters/extractCloudinaryPublicId.filter';
+} from './constants/cms.constants.js';
+import { CmsLanguageEnum, CmsPageContentTypeEnum } from './constants/cms.enums.js';
+import { extractCloudinaryPublicId } from '../../common/filters/extractCloudinaryPublicId.filter.js';
 
 function isValidHexColor(color: unknown): boolean {
   if (typeof color !== 'string') return false;

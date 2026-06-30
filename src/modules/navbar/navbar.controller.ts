@@ -9,11 +9,11 @@ import {
   Put,
   Patch,
 } from '@nestjs/common';
-import { NavbarService } from './navbar.service';
-import { UpsertNavMenuDto } from './dto/upsert-nav-menu.dto';
-import { CreateNavItemDto } from './dto/create-nav-item.dto';
-import { UpdateNavItemDto, ReorderNavItemsDto } from './dto/update-nav-item.dto';
-import { Public } from '../../common/decorators/public.decorator';
+import { NavbarService } from './navbar.service.js';
+import { UpsertNavMenuDto } from './dto/upsert-nav-menu.dto.js';
+import { CreateNavItemDto } from './dto/create-nav-item.dto.js';
+import { UpdateNavItemDto, ReorderNavItemsDto } from './dto/update-nav-item.dto.js';
+import { Public } from '../../common/decorators/public.decorator.js';
 
 @Controller({ version: '1', path: 'navbar' })
 export class NavbarController {

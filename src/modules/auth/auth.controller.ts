@@ -14,18 +14,18 @@ import {
   Req,
   Query,
 } from '@nestjs/common';
-import { AuthService } from './auth.service';
-import { VendorsService } from '../vendors/vendors.service';
-import { UsersService } from '../users/users.service';
-import express, { Request } from 'express';
-import { CreateUserDto, LoginDto } from '../users/dto/userAuth.dto.ts';
-import { UploadToCloud } from '../../common/decorators/upload.decorator';
-import { ParseJsonPipe } from '../../common/pipes/parseJsonPipe';
+import { AuthService } from './auth.service.js';
+import { VendorsService } from '../vendors/vendors.service.js';
+import { UsersService } from '../users/users.service.js';
+import express from 'express';
+import { CreateUserDto, LoginDto } from '../users/dto/userAuth.dto.js';
+import { UploadToCloud } from '../../common/decorators/upload.decorator.js';
+import { ParseJsonPipe } from '../../common/pipes/parseJsonPipe.js';
 import { AuthGuard } from '@nestjs/passport';
-import { GoogleOAuthGuard } from './google-oauth.guard';
-import { AdminService } from '../admin/admin.service';
+import { GoogleOAuthGuard } from './google-oauth.guard.js';
+import { AdminService } from '../admin/admin.service.js';
 import { Throttle } from '@nestjs/throttler';
-import { Public } from '../../common/decorators/public.decorator';
+import { Public } from '../../common/decorators/public.decorator.js';
 
 @Controller({ version: '1', path: 'auth' })
 export class AuthController {
@@ -46,8 +46,15 @@ export class AuthController {
   @HttpCode(HttpStatus.OK)
   async adminLogin(
     @Body() body: { email: string; password: string },
+    @Res({ passthrough: true }) res: express.Response,
   ): Promise<Record<string, unknown>> {
-    return await this.adminService.adminLogin(body.email, body.password);
+    const result = await this.adminService.adminLogin(
+      body.email,
+      body.password,
+    );
+    if (result.access_token)
+      this.authService.setAuthCookie(res, result.access_token as string);
+    return result;
   }
   /**
    * Step 1: Initiate Google OAuth flow
@@ -100,6 +107,7 @@ export class AuthController {
         : `https://${targetDomain}`;
       if ('access_token' in result && 'refresh_token' in result) {
         const { access_token, refresh_token } = result;
+        this.authService.setAuthCookie(res, access_token as string);
         // Ensure the domain has proper protocol
 
         // Redirect to frontend with token
@@ -130,6 +138,7 @@ export class AuthController {
   async signUpVendor(
     @Body('vendor', ParseJsonPipe) body: any,
     @UploadedFiles() files: Express.Multer.File[],
+    @Res({ passthrough: true }) res: express.Response,
   ) {
     const vendor = await this.vendorService.vendorRegister(body, files);
     return vendor;
@@ -138,8 +147,14 @@ export class AuthController {
   @Throttle({ short: { limit: 5, ttl: 60_000 } })
   @Post('login-vendor')
   @HttpCode(HttpStatus.OK)
-  async loginVendor(@Body() loginDto: LoginDto) {
-    return await this.vendorService.vendorLogin(loginDto);
+  async loginVendor(
+    @Body() loginDto: LoginDto,
+    @Res({ passthrough: true }) res: express.Response,
+  ) {
+    const result = await this.vendorService.vendorLogin(loginDto);
+    if (result && result.access_token)
+      this.authService.setAuthCookie(res, result.access_token);
+    return result;
   }
   @Public()
   @Throttle({ short: { limit: 5, ttl: 60_000 } })
@@ -148,6 +163,7 @@ export class AuthController {
   async signUpUser(
     @Body('customer_data') createUser: CreateUserDto,
     @Headers('company-domain') domain: string,
+    @Res({ passthrough: true }) res: express.Response,
   ) {
     const result = await this.userService.register(createUser, domain);
     return result;
@@ -159,14 +175,18 @@ export class AuthController {
   async loginUser(
     @Body() loginDto: LoginDto,
     @Headers('company-domain') domain: string,
+    @Res({ passthrough: true }) res: express.Response,
   ) {
-    return await this.userService.login(loginDto, domain);
+    const result = await this.userService.login(loginDto, domain);
+    if (result && result.access_token)
+      this.authService.setAuthCookie(res, result.access_token);
+    return result;
   }
   @Public()
   @Post('logout')
   @HttpCode(HttpStatus.OK)
   logout(@Res({ passthrough: true }) res: express.Response) {
-    return this.authService.logout(res);
+    return this.authService.logout(res as any);
   }
   @Public()
   @Throttle({ short: { limit: 5, ttl: 60_000 } })

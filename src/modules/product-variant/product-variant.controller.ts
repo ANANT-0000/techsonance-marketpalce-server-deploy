@@ -12,15 +12,15 @@ import {
   Headers,
   UseGuards,
 } from '@nestjs/common';
-import { ProductVariantService } from './product-variant.service';
-import { UploadToCloud } from '../../common/decorators/upload.decorator';
-import { ParseJsonPipe } from '../../common/pipes/parseJsonPipe';
-import { type ProductFiles } from '../../common/Types/index.type';
-import { ProductStatus } from '../../drizzle/types/types';
-import { Public } from '../../common/decorators/public.decorator';
-import { RoleGuard } from '../../guards/role.guard';
-import { Role } from '../../enums/role.enum';
-import { Roles } from '../../common/decorators/roles.decorator';
+import { ProductVariantService } from './product-variant.service.js';
+import { UploadToCloud } from '../../common/decorators/upload.decorator.js';
+import { ParseJsonPipe } from '../../common/pipes/parseJsonPipe.js';
+import { type ProductFiles } from '../../common/Types/index.type.js';
+import { ProductStatus } from '../../drizzle/types/types.js';
+import { Public } from '../../common/decorators/public.decorator.js';
+import { RoleGuard } from '../../guards/role.guard.js';
+import { Role } from '../../enums/role.enum.js';
+import { Roles } from '../../common/decorators/roles.decorator.js';
 
 @Controller({
   version: '1',

@@ -12,16 +12,16 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
-import { CmsService } from './cms.service';
-import { CreateCmsDto } from './dto/create-cms.dto';
-import { CmsLanguageEnum } from './constants/cms.enums';
+import { CmsService } from './cms.service.js';
+import { CreateCmsDto } from './dto/create-cms.dto.js';
+import { CmsLanguageEnum } from './constants/cms.enums.js';
 import {
   IS_PUBLIC_KEY,
   Public,
-} from '../../common/decorators/public.decorator';
-import { Roles } from '../../common/decorators/roles.decorator';
-import { Role } from '../../enums/role.enum';
-import { RoleGuard } from '../../guards/role.guard';
+} from '../../common/decorators/public.decorator.js';
+import { Roles } from '../../common/decorators/roles.decorator.js';
+import { Role } from '../../enums/role.enum.js';
+import { RoleGuard } from '../../guards/role.guard.js';
 
 @Controller({ version: '1', path: 'cms' })
 export class CmsController {

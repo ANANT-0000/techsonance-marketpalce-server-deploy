@@ -1,6 +1,6 @@
 import * as pg from 'drizzle-orm/pg-core';
-import { company } from './main.schema';
-import { OutboxJobStatus } from '../../modules/outbox/constants/outbox.constants';
+import { company } from './main.schema.js';
+import { OutboxJobStatus } from '../../modules/outbox/constants/outbox.constants.js';
 
 /**
  * Persistent outbox table — every Shiprocket sync job is written here

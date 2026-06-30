@@ -11,7 +11,7 @@ import {
   Headers,
   UploadedFiles,
 } from '@nestjs/common';
-import { ComplianceService } from './compliance.service';
+import { ComplianceService } from './compliance.service.js';
 
 @Controller({ version: '1', path: 'compliance' })
 export class ComplianceController {

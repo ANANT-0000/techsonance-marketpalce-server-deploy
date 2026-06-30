@@ -1,19 +1,19 @@
 import { Module } from '@nestjs/common';
-import { AuthController } from './auth.controller';
-import { AuthService } from './auth.service';
+import { AuthController } from './auth.controller.js';
+import { AuthService } from './auth.service.js';
 import { APP_GUARD } from '@nestjs/core';
-import { RoleGuard } from '../../guards/role.guard';
-import { DrizzleModule } from '../../drizzle/drizzle.module';
+import { RoleGuard } from '../../guards/role.guard.js';
+import { DrizzleModule } from '../../drizzle/drizzle.module.js';
 import { JwtModule } from '@nestjs/jwt';
 import { PassportModule } from '@nestjs/passport';
-import { JwtStrategy } from './JwtStrategy';
-import { UsersModule } from '../users/users.module';
-import { VendorsModule } from '../vendors/vendors.module';
-import { MailModule } from '../../common/services/mail/mail.module';
-import { CompanyModule } from '../company/company.module';
-import { GoogleStrategy } from './google.strategy';
-import { AdminModule } from '../admin/admin.module';
-import { JwtAuthGuard } from './jwt-auth.guard';
+import { JwtStrategy } from './JwtStrategy.js';
+import { UsersModule } from '../users/users.module.js';
+import { VendorsModule } from '../vendors/vendors.module.js';
+import { MailModule } from '../../common/services/mail/mail.module.js';
+import { CompanyModule } from '../company/company.module.js';
+import { GoogleStrategy } from './google.strategy.js';
+import { AdminModule } from '../admin/admin.module.js';
+import { JwtAuthGuard } from './jwt-auth.guard.js';
 
 @Module({
   imports: [

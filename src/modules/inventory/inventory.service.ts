@@ -5,10 +5,10 @@ import {
   Injectable,
   InternalServerErrorException,
 } from '@nestjs/common';
-// import { UpdateInventoryDto } from './dto/update-inventory.dto';
-import { DRIZZLE, type DrizzleService } from '../../drizzle/drizzle.module';
-import { CompanyService } from '../company/company.service';
-import { CreateInventoryDto } from './dto/inventory.dto';
+// import { UpdateInventoryDto } from './dto/update-inventory.dto.js';
+import { DRIZZLE, type DrizzleService } from '../../drizzle/drizzle.module.js';
+import { CompanyService } from '../company/company.service.js';
+import { CreateInventoryDto } from './dto/inventory.dto.js';
 import {
   inventory,
   product_images,
@@ -16,11 +16,11 @@ import {
   productImageTypeEnum,
   products,
   warehouse,
-} from '../../drizzle/schema';
+} from '../../drizzle/schema/index.js';
 import { and, asc, desc, eq, ilike, or, SQL, sql } from 'drizzle-orm';
-import { ProductImageType } from '../../drizzle/types/types';
-import { domainExtractor } from '../../common/filters/domainExtractor.filter';
-import { InventoryErrorKeyEnum } from './constants/inventory.enums';
+import { ProductImageType } from '../../drizzle/types/types.js';
+import { domainExtractor } from '../../common/filters/domainExtractor.filter.js';
+import { InventoryErrorKeyEnum } from './constants/inventory.enums.js';
 export const LOW_STOCK_THRESHOLD = 5; // configurable
 
 @Injectable()

@@ -6,7 +6,7 @@ import {
   IsUUID,
   IsArray,
 } from 'class-validator';
-import { ReturnType } from '../../../drizzle/types/types';
+import { ReturnType } from '../../../drizzle/types/types.js';
 
 export class CreateReturnDto {
   @IsString()

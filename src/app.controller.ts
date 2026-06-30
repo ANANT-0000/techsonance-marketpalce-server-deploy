@@ -1,9 +1,9 @@
 import { Controller, Get, Res, Query, UnauthorizedException } from '@nestjs/common';
-import { AppService } from './app.service';
+import { AppService } from './app.service.js';
 import express from 'express';
 import { HealthCheck, HealthCheckService } from '@nestjs/terminus';
-import { DrizzleHealthIndicator } from './drizzle/drizzle.health';
-import { Public } from './common/decorators/public.decorator';
+import { DrizzleHealthIndicator } from './drizzle/drizzle.health.js';
+import { Public } from './common/decorators/public.decorator.js';
 @Controller()
 export class AppController {
   constructor(

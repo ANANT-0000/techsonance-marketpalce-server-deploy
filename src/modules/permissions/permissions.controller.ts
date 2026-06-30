@@ -8,8 +8,8 @@ import {
   Patch,
   Post,
 } from '@nestjs/common';
-import { PermissionsService } from './permissions.service';
-import { PermissionsErrorKeyEnum } from './constants/permissions.enums';
+import { PermissionsService } from './permissions.service.js';
+import { PermissionsErrorKeyEnum } from './constants/permissions.enums.js';
 @Controller({
   version: '1',
   path: 'permissions',

@@ -5,10 +5,10 @@ import {
   BadRequestException,
   InternalServerErrorException,
 } from '@nestjs/common';
-import { CreateReturnDto } from './dto/create-return.dto';
+import { CreateReturnDto } from './dto/create-return.dto.js';
 import { eq, and } from 'drizzle-orm';
-import { DRIZZLE, type DrizzleService } from '../../drizzle/drizzle.module';
-import { CompanyService } from '../company/company.service';
+import { DRIZZLE, type DrizzleService } from '../../drizzle/drizzle.module.js';
+import { CompanyService } from '../company/company.service.js';
 import {
   inventory,
   order_items,
@@ -16,26 +16,26 @@ import {
   refunds,
   return_requests,
   shipping_details,
-} from '../../drizzle/schema';
-import { orders, user } from '../../drizzle/schema';
-import { UpdateReturnDto } from './dto/update-return.dto';
+} from '../../drizzle/schema/index.js';
+import { orders, user } from '../../drizzle/schema/index.js';
+import { UpdateReturnDto } from './dto/update-return.dto.js';
 import {
   OrderStatus,
   ReturnStatus,
   ReturnType,
-} from '../../drizzle/types/types';
-import { UploadToCloudService } from '../../utils/upload-to-cloud/upload-to-cloud.service';
-import { RefundsService } from '../refunds/refunds.service';
-import { InventoryService } from '../inventory/inventory.service';
-import { MailService } from '../../common/services/mail/mail.service';
-import { domainExtractor } from '../../common/filters/domainExtractor.filter';
-import { extractCloudinaryPublicId } from '../../common/filters/extractCloudinaryPublicId.filter';
-import { ReturnsErrorKeyEnum } from './constants/returns.enums';
-import { OrderEligibilityGuardService } from '../order-eligibility-guard/order-eligibility-guard.service';
+} from '../../drizzle/types/types.js';
+import { UploadToCloudService } from '../../utils/upload-to-cloud/upload-to-cloud.service.js';
+import { RefundsService } from '../refunds/refunds.service.js';
+import { InventoryService } from '../inventory/inventory.service.js';
+import { MailService } from '../../common/services/mail/mail.service.js';
+import { domainExtractor } from '../../common/filters/domainExtractor.filter.js';
+import { extractCloudinaryPublicId } from '../../common/filters/extractCloudinaryPublicId.filter.js';
+import { ReturnsErrorKeyEnum } from './constants/returns.enums.js';
+import { OrderEligibilityGuardService } from '../order-eligibility-guard/order-eligibility-guard.service.js';
 import {
   GuardInput,
   GuardOperation,
-} from '../order-eligibility-guard/dto/guard-input.dto';
+} from '../order-eligibility-guard/dto/guard-input.dto.js';
 
 // ── Valid transitions per return type ──────────────────────────────────────
 // Prevents arbitrary status jumps (e.g. PENDING → QC_PASSED directly)

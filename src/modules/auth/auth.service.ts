@@ -8,24 +8,24 @@ import {
 } from '@nestjs/common';
 
 import { JwtService } from '@nestjs/jwt';
-import { DRIZZLE, type DrizzleService } from '../../drizzle/drizzle.module';
-import { UsersService } from '../users/users.service';
-import { VendorsService } from '../vendors/vendors.service';
+import { DRIZZLE, type DrizzleService } from '../../drizzle/drizzle.module.js';
+import { UsersService } from '../users/users.service.js';
+import { VendorsService } from '../vendors/vendors.service.js';
 import {
   company,
   user,
   user_and_company,
   user_roles,
-} from '../../drizzle/schema';
+} from '../../drizzle/schema/index.js';
 import { and, eq } from 'drizzle-orm';
-import { MailService } from '../../common/services/mail/mail.service';
+import { MailService } from '../../common/services/mail/mail.service.js';
 import express from 'express';
-import { CompanyService } from '../company/company.service';
-import { randomInt } from 'crypto';
+import { CompanyService } from '../company/company.service.js';
+import { randomInt, randomBytes } from 'crypto';
 import bcrypt from 'bcrypt';
-import { AccessStatus, UserRole, UserStatus } from '../../drizzle/types/types';
-import { domainExtractor } from '../../common/filters/domainExtractor.filter';
-import { AuthErrorKeyEnum } from './constants/auth.enums';
+import { AccessStatus, UserRole, UserStatus } from '../../drizzle/types/types.js';
+import { domainExtractor } from '../../common/filters/domainExtractor.filter.js';
+import { AuthErrorKeyEnum } from './constants/auth.enums.js';
 
 @Injectable()
 export class AuthService {
@@ -58,8 +58,17 @@ export class AuthService {
   }
 
   logout(res: express.Response) {
-    // Clear any auth cookies if you're using them
+    res.clearCookie('accessToken');
     return { message: 'Logged out successfully' };
+  }
+
+  setAuthCookie(res: express.Response, token: string) {
+    res.cookie('accessToken', token, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'strict',
+      maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
+    });
   }
 
   async forgetPassword(email: string) {
@@ -76,14 +85,16 @@ export class AuthService {
         .from(user)
         .where(eq(user.email, email));
       if (!mailExists || mailExists.length === 0) {
-        throw new HttpException(
-          AuthErrorKeyEnum.USER_NOT_FOUND,
-          HttpStatus.NOT_FOUND,
-        );
+        await new Promise((resolve) => setTimeout(resolve, 250 + Math.random() * 100));
+        return {
+          status: 'success',
+          message: 'Verification instructions have been dispatched if the account exists.',
+        };
       }
       await this.mail.sendResetPasswordEmail(email);
       return {
-        message: 'Password reset link sent to email',
+        status: 'success',
+        message: 'Verification instructions have been dispatched if the account exists.',
       };
     } catch (error) {
       throw new InternalServerErrorException(
@@ -133,10 +144,11 @@ export class AuthService {
         .from(user)
         .where(eq(user.email, email));
       if (!userExists) {
-        throw new HttpException(
-          AuthErrorKeyEnum.USER_NOT_FOUND,
-          HttpStatus.NOT_FOUND,
-        );
+        await new Promise((resolve) => setTimeout(resolve, 250 + Math.random() * 100));
+        return {
+          status: 'success',
+          message: 'Verification instructions have been dispatched if the account exists.',
+        };
       }
       const otp = randomInt(100000, 999999).toString();
       const companyId = await this.resolveCompanyId(domain);
@@ -154,8 +166,8 @@ export class AuthService {
       otpExpires.setMinutes(otpExpires.getMinutes() + 15); //15 minutes from now
       await this.db
         .update(user)
-        .set({ otp: otp, otp_expires: otpExpires })
-        .where(eq(user.email, email));
+        .set({ otp: otp, otp_expires: otpExpires, otp_attempts: 0 })
+        .where(eq(user.id, userExists.id));
       const formattedExpireTime = new Intl.DateTimeFormat('en-US', {
         hour: 'numeric',
         minute: '2-digit',
@@ -170,7 +182,8 @@ export class AuthService {
         companyDetails.company_name,
       );
       return {
-        message: 'Password reset OTP sent to email',
+        status: 'success',
+        message: 'Verification instructions have been dispatched if the account exists.',
       };
     } catch (error) {
       throw new InternalServerErrorException(
@@ -194,7 +207,23 @@ export class AuthService {
       );
 
     if (!userRecord.otp || userRecord.otp !== otp) {
-      throw new UnauthorizedException(AuthErrorKeyEnum.INVALID_OTP);
+      const newAttempts = (userRecord.otp_attempts || 0) + 1;
+      if (newAttempts >= 3) {
+        await this.db
+          .update(user)
+          .set({ otp: null, otp_expires: null, otp_attempts: 0 })
+          .where(eq(user.id, userRecord.id));
+        throw new HttpException(
+          'Verification token has expired or is invalid. Please request a new code.',
+          HttpStatus.BAD_REQUEST,
+        );
+      } else {
+        await this.db
+          .update(user)
+          .set({ otp_attempts: newAttempts })
+          .where(eq(user.id, userRecord.id));
+        throw new UnauthorizedException(AuthErrorKeyEnum.INVALID_OTP);
+      }
     }
     if (!userRecord.otp_expires) {
       throw new UnauthorizedException(AuthErrorKeyEnum.INVALID_OTP);
@@ -203,7 +232,7 @@ export class AuthService {
     if (new Date() > new Date(userRecord.otp_expires)) {
       await this.db
         .update(user)
-        .set({ otp: null, otp_expires: null })
+        .set({ otp: null, otp_expires: null, otp_attempts: 0 })
         .where(eq(user.id, userRecord.id));
       throw new UnauthorizedException(
         AuthErrorKeyEnum.OTP_HAS_EXPIRED_PLEASE_REQUEST_A_NEW_ONE,
@@ -217,6 +246,7 @@ export class AuthService {
         password_hash: hashedPassword,
         otp: null,
         otp_expires: null,
+        otp_attempts: 0,
       })
       .where(eq(user.id, userRecord.id));
 
@@ -356,7 +386,7 @@ export class AuthService {
         );
       }
 
-      const randomPassword = Math.random().toString(36).slice(-10);
+      const randomPassword = randomBytes(16).toString('hex');
       const hashedPassword = bcrypt.hashSync(randomPassword, 10);
 
       // Create new user

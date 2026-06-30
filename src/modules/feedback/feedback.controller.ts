@@ -1,5 +1,5 @@
 import { Body, Controller, Get, Headers, HttpCode, HttpStatus, Param, Post } from '@nestjs/common';
-import { FeedbackService } from './feedback.service';
+import { FeedbackService } from './feedback.service.js';
 
 @Controller({ version: '1', path: 'feedback' })
 export class FeedbackController {

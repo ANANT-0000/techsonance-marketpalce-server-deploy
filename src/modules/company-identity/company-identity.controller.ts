@@ -10,16 +10,16 @@ import {
   UploadedFiles,
 } from '@nestjs/common';
 
-import { UploadToCloud } from '../../common/decorators/upload.decorator';
-import { ParseJsonPipe } from '../../common/pipes/parseJsonPipe';
-import { CompanyIdentityService } from './company-identity.service';
+import { UploadToCloud } from '../../common/decorators/upload.decorator.js';
+import { ParseJsonPipe } from '../../common/pipes/parseJsonPipe.js';
+import { CompanyIdentityService } from './company-identity.service.js';
 import {
   UpsertBrandingDto,
   // UpsertComplianceFieldDto,
   UpsertDocumentConfigDto,
   UpsertLegalProfileDto,
-} from './dto/upsert-company-identity.dto';
-import { Public } from '../../common/decorators/public.decorator';
+} from './dto/upsert-company-identity.dto.js';
+import { Public } from '../../common/decorators/public.decorator.js';
 
 @Controller({ version: '1', path: 'company-identity' })
 export class CompanyIdentityController {

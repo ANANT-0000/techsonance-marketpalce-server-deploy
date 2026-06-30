@@ -5,10 +5,10 @@ import {
   InternalServerErrorException,
 } from '@nestjs/common';
 import { eq } from 'drizzle-orm';
-import { DRIZZLE } from '../../drizzle/drizzle.module';
-import { permissions } from '../../drizzle/schema';
-import { type DrizzleDB } from '../../drizzle/types/drizzle';
-import { PermissionsErrorKeyEnum } from './constants/permissions.enums';
+import { DRIZZLE } from '../../drizzle/drizzle.module.js';
+import { permissions } from '../../drizzle/schema/index.js';
+import { type DrizzleDB } from '../../drizzle/types/drizzle.js';
+import { PermissionsErrorKeyEnum } from './constants/permissions.enums.js';
 
 @Injectable()
 export class PermissionsService {

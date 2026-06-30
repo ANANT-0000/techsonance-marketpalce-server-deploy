@@ -6,19 +6,19 @@ import {
   InternalServerErrorException,
   NotFoundException,
 } from '@nestjs/common';
-import { CreateCartDto } from './dto/create-cart.dto';
-import { UpdateCartDto } from './dto/update-cart.dto';
-import { DRIZZLE, type DrizzleService } from '../../drizzle/drizzle.module';
+import { CreateCartDto } from './dto/create-cart.dto.js';
+import { UpdateCartDto } from './dto/update-cart.dto.js';
+import { DRIZZLE, type DrizzleService } from '../../drizzle/drizzle.module.js';
 import {
   cart_items,
   carts,
   company,
   product_variants,
-} from '../../drizzle/schema';
+} from '../../drizzle/schema/index.js';
 import { and, eq, or, sql } from 'drizzle-orm';
-import { CompanyService } from '../company/company.service';
-import { domainExtractor } from '../../common/filters/domainExtractor.filter';
-import { CartErrorKeyEnum } from './constants/cart.enums';
+import { CompanyService } from '../company/company.service.js';
+import { domainExtractor } from '../../common/filters/domainExtractor.filter.js';
+import { CartErrorKeyEnum } from './constants/cart.enums.js';
 
 @Injectable()
 export class CartService {

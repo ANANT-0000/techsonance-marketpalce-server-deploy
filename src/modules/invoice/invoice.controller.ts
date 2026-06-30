@@ -7,11 +7,11 @@ import {
   Post,
   UseGuards,
 } from '@nestjs/common';
-import { InvoiceService } from './invoice.service';
-import { Roles } from '../../common/decorators/roles.decorator';
-import { RoleGuard } from '../../guards/role.guard';
-import { JwtAuthGuard } from '../auth/jwt-auth.guard';
-import { Role } from '../../enums/role.enum';
+import { InvoiceService } from './invoice.service.js';
+import { Roles } from '../../common/decorators/roles.decorator.js';
+import { RoleGuard } from '../../guards/role.guard.js';
+import { JwtAuthGuard } from '../auth/jwt-auth.guard.js';
+import { Role } from '../../enums/role.enum.js';
 @Controller({ version: '1', path: 'invoice' })
 export class InvoiceController {
   constructor(private readonly invoiceService: InvoiceService) {}

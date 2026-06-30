@@ -1,7 +1,7 @@
 import { Module } from '@nestjs/common';
-import { UploadToCloudService } from './upload-to-cloud.service';
-import { UploadToCloudController } from './upload-to-cloud.controller';
-import { CloudinaryModule } from '../cloudinary/cloudinary.module';
+import { UploadToCloudService } from './upload-to-cloud.service.js';
+import { UploadToCloudController } from './upload-to-cloud.controller.js';
+import { CloudinaryModule } from '../cloudinary/cloudinary.module.js';
 
 @Module({
   imports: [CloudinaryModule],

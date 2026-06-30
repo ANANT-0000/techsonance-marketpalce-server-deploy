@@ -8,7 +8,7 @@ import {
   Delete,
   Headers,
 } from '@nestjs/common';
-import { ShippingService } from './shipping.service';
+import { ShippingService } from './shipping.service.js';
 
 @Controller({
   version: '1',

@@ -12,9 +12,9 @@ import {
 import type { Request } from 'express';
 import { Receiver } from '@upstash/qstash';
 import { ConfigService } from '@nestjs/config';
-import { Public } from '../../../common/decorators/public.decorator';
-import { MailService } from '../../../common/services/mail/mail.service';
-import { OUTBOX_CONSTANTS } from '../constants/outbox.constants';
+import { Public } from '../../../common/decorators/public.decorator.js';
+import { MailService } from '../../../common/services/mail/mail.service.js';
+import { OUTBOX_CONSTANTS } from '../constants/outbox.constants.js';
 
 interface EmailJobPayload {
   to: string;

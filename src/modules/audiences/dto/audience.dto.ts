@@ -10,7 +10,7 @@ import {
   MaxLength,
   Min,
 } from 'class-validator';
-import { SegmentCriteriaOperator } from '../../../drizzle/types/types';
+import { SegmentCriteriaOperator } from '../../../drizzle/types/types.js';
 
 export enum SegmentField {
   TOTAL_ORDERS = 'total_orders',

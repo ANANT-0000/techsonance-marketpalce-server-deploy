@@ -1,4 +1,4 @@
-import { vendor } from './../../../drizzle/schema/users.schema';
+import { vendor } from './../../../drizzle/schema/users.schema.js';
 import { Transform, Type } from 'class-transformer';
 import {
   IsArray,

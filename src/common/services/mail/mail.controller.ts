@@ -1,5 +1,5 @@
 import { Controller } from '@nestjs/common';
-import { MailService } from './mail.service';
+import { MailService } from './mail.service.js';
 
 @Controller('mail')
 export class MailController {

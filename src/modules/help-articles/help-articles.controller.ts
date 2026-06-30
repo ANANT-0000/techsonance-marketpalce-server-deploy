@@ -1,6 +1,6 @@
 import { Body, Controller, Get, Headers, HttpCode, HttpStatus, Param, Post, Query } from '@nestjs/common';
-import { HelpArticlesService } from './help-articles.service';
-import { Public } from '../../common/decorators/public.decorator';
+import { HelpArticlesService } from './help-articles.service.js';
+import { Public } from '../../common/decorators/public.decorator.js';
 
 @Controller({ version: '1', path: 'help-articles' })
 export class HelpArticlesController {

@@ -7,14 +7,14 @@ import {
   InternalServerErrorException,
 } from '@nestjs/common';
 import { and, eq, InferSelectModel } from 'drizzle-orm';
-import { DRIZZLE } from '../../drizzle/drizzle.module';
+import { DRIZZLE } from '../../drizzle/drizzle.module.js';
 import {
   permissions,
   role_permissions,
   user_roles,
-} from '../../drizzle/schema';
-import { type DrizzleDB } from '../../drizzle/types/drizzle';
-import { RolesErrorKeyEnum } from './constants/roles.enums';
+} from '../../drizzle/schema/index.js';
+import { type DrizzleDB } from '../../drizzle/types/drizzle.js';
+import { RolesErrorKeyEnum } from './constants/roles.enums.js';
 type Role = InferSelectModel<typeof user_roles>['role_name'];
 @Injectable()
 export class RolesService {

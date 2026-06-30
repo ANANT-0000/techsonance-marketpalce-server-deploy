@@ -1,6 +1,6 @@
 import { Injectable, Inject, HttpException, HttpStatus } from '@nestjs/common';
 import { eq, and, inArray, desc } from 'drizzle-orm';
-import { DRIZZLE, type DrizzleService } from '../../drizzle/drizzle.module';
+import { DRIZZLE, type DrizzleService } from '../../drizzle/drizzle.module.js';
 import {
   company,
   orders,
@@ -11,11 +11,11 @@ import {
   address,
   vendor,
   order_items,
-} from '../../drizzle/schema';
-import { ShipRocketService } from '../ship-rocket/ship-rocket.service';
-import { CryptoService } from './crypto.service';
-import { MailService } from '../../common/services/mail/mail.service';
-import { InventoryService } from '../inventory/inventory.service';
+} from '../../drizzle/schema/index.js';
+import { ShipRocketService } from '../ship-rocket/ship-rocket.service.js';
+import { CryptoService } from './crypto.service.js';
+import { MailService } from '../../common/services/mail/mail.service.js';
+import { InventoryService } from '../inventory/inventory.service.js';
 import {
   BillingAccountUsed,
   LogisticsMode,
@@ -23,7 +23,7 @@ import {
   LogisticsProvider,
   ShippingStatus,
   PaymentMethod,
-} from '../../drizzle/types/types';
+} from '../../drizzle/types/types.js';
 import {
   SHIPROCKET_DRAFT_ORDER_SUCCESS_ACTION,
   SHIPROCKET_DRAFT_ORDER_FAILURE_ACTION,
@@ -47,12 +47,12 @@ import {
   SHIPROCKET_ADDRESS_RECTIFICATION_ACTION,
   SHIPROCKET_ADDRESS_RECTIFICATION_FAILED_ACTION,
   SHIPROCKET_TRACKING_URL,
-} from './constants/shipping.constants';
+} from './constants/shipping.constants.js';
 import {
   ShiprocketCreateOrderResponse,
   ShiprocketWebhookBody,
   ShiprocketReturnOrderPayload,
-} from '../../common/Types/shiprocket';
+} from '../../common/Types/shiprocket.js';
 
 // ---------------------------------------------------------------------------
 // Validated contract types

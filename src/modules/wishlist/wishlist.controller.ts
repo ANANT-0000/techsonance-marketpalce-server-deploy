@@ -8,9 +8,9 @@ import {
   Delete,
   Headers,
 } from '@nestjs/common';
-import { WishlistService } from './wishlist.service';
-import { CreateWishlistDto } from './dto/create-wishlist.dto';
-import { UpdateWishlistDto } from './dto/update-wishlist.dto';
+import { WishlistService } from './wishlist.service.js';
+import { CreateWishlistDto } from './dto/create-wishlist.dto.js';
+import { UpdateWishlistDto } from './dto/update-wishlist.dto.js';
 
 @Controller({
   version: '1',

@@ -5,16 +5,16 @@ import {
   InternalServerErrorException,
 } from '@nestjs/common';
 import { eq } from 'drizzle-orm';
-import { DRIZZLE, type DrizzleService } from '../../drizzle/drizzle.module';
-import { company, user_and_company, vendor } from '../../drizzle/schema';
-import { AccessStatus, UserStatus } from '../../drizzle/types/types';
-import { domainExtractor } from '../../common/filters/domainExtractor.filter';
-import { COMPANY_MESSAGES } from './constants/company.constants';
+import { DRIZZLE, type DrizzleService } from '../../drizzle/drizzle.module.js';
+import { company, user_and_company, vendor } from '../../drizzle/schema/index.js';
+import { AccessStatus, UserStatus } from '../../drizzle/types/types.js';
+import { domainExtractor } from '../../common/filters/domainExtractor.filter.js';
+import { COMPANY_MESSAGES } from './constants/company.constants.js';
 import {
   CompanyEnvironmentEnum,
   CompanyOperationEnum,
   CompanyOperationResultEnum,
-} from './constants/company.enums';
+} from './constants/company.enums.js';
 
 @Injectable()
 export class CompanyService {

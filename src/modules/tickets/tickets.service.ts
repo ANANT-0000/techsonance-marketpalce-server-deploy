@@ -4,17 +4,17 @@ import {
   InternalServerErrorException,
 } from '@nestjs/common';
 import { and, eq } from 'drizzle-orm';
-import { DRIZZLE, type DrizzleService } from '../../drizzle/drizzle.module';
-import { support_tickets, ticket_comments, ticket_ratings } from '../../drizzle/schema';
+import { DRIZZLE, type DrizzleService } from '../../drizzle/drizzle.module.js';
+import { support_tickets, ticket_comments, ticket_ratings } from '../../drizzle/schema/index.js';
 import {
   SupportTicketPriority,
   SupportTicketStatus,
-} from '../../drizzle/types/types';
-import { domainExtractor } from '../../common/filters/domainExtractor.filter';
-import { CompanyService } from '../company/company.service';
-import { user } from '../../drizzle/schema/users.schema';
-import { TicketsErrorKeyEnum } from './constants/tickets.enums';
-import { OutboxService } from '../outbox/outbox.service';
+} from '../../drizzle/types/types.js';
+import { domainExtractor } from '../../common/filters/domainExtractor.filter.js';
+import { CompanyService } from '../company/company.service.js';
+import { user } from '../../drizzle/schema/users.schema.js';
+import { TicketsErrorKeyEnum } from './constants/tickets.enums.js';
+import { OutboxService } from '../outbox/outbox.service.js';
 
 @Injectable()
 export class TicketsService {

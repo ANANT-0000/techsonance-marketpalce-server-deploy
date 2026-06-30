@@ -1,5 +1,5 @@
 import { Inject, Injectable } from '@nestjs/common';
-import { DRIZZLE, type DrizzleService } from './drizzle.module';
+import { DRIZZLE, type DrizzleService } from './drizzle.module.js';
 import {
   HealthIndicatorResult,
   HealthIndicatorService,

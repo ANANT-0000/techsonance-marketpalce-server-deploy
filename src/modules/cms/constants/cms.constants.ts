@@ -1,4 +1,4 @@
-import { CmsImageMimeTypeEnum } from './cms.enums';
+import { CmsImageMimeTypeEnum } from './cms.enums.js';
 
 export const CMS_MESSAGES = {
   INVALID_JSON_CONTENT: 'CMS content must be valid JSON',

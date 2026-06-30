@@ -9,7 +9,7 @@ import {
 import {
   NavMenuLogoAlignment,
   NavMenuPosition,
-} from '../../../drizzle/schema/nav_storefront.schema';
+} from '../../../drizzle/schema/nav_storefront.schema.js';
 
 /** DTO for upserting the scalar navbar settings (logo, behavior, search, utilities). */
 export class UpsertNavMenuDto {

@@ -1,5 +1,5 @@
 import { Module } from '@nestjs/common';
-import { TraceService } from './trace.service';
+import { TraceService } from './trace.service.js';
 import { DiscoveryModule } from '@nestjs/core';
 
 @Module({

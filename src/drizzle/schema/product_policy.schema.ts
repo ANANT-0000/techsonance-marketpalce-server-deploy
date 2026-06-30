@@ -1,16 +1,16 @@
 // ─── product_policy.schema.ts ───────────────────────────────────
 
 import * as pg from 'drizzle-orm/pg-core';
-import { company } from './main.schema';
-import { EntityStatusEnum } from './enums.schema';
+import { company } from './main.schema.js';
+import { EntityStatusEnum } from './enums.schema.js';
 import {
   EntityStatus,
   PolicyDurationUnit,
   PolicyType,
   ReturnReplaceMode,
-} from '../types/types';
-import { categories, order_items, products } from './shop.schema';
-import { templates } from './utils.schema';
+} from '../types/types.js';
+import { categories, order_items, products } from './shop.schema.js';
+import { templates } from './utils.schema.js';
 import { relations } from 'drizzle-orm';
 
 // Policy type enum — covers all real-world cases

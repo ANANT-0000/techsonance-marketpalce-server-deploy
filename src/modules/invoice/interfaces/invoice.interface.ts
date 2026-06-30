@@ -1,4 +1,4 @@
-import { promotionTargetsRelations } from './../../../drizzle/schema/promotions.schema';
+import { promotionTargetsRelations } from './../../../drizzle/schema/promotions.schema.js';
 import { Buffer } from 'buffer';
 
 // ================================================================

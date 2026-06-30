@@ -1,7 +1,7 @@
 import * as pg from 'drizzle-orm/pg-core';
-import { company } from './main.schema';
-import { EntityStatusEnum, BillingAccountUsedEnum } from './enums.schema';
-import { address, user, vendor } from './users.schema';
+import { company } from './main.schema.js';
+import { EntityStatusEnum, BillingAccountUsedEnum } from './enums.schema.js';
+import { address, user, vendor } from './users.schema.js';
 import {
   CancelledBy,
   OrderStatus,
@@ -13,7 +13,7 @@ import {
   ReturnType,
   ShippingStatus,
   EntityStatus,
-} from '../types/types';
+} from '../types/types.js';
 import { AnyPgColumn } from 'drizzle-orm/pg-core';
 import { unique } from 'drizzle-orm/pg-core';
 

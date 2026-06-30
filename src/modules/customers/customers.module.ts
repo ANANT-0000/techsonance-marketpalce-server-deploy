@@ -1,9 +1,9 @@
 import { Module } from '@nestjs/common';
-import { DrizzleModule } from '../../drizzle/drizzle.module';
+import { DrizzleModule } from '../../drizzle/drizzle.module.js';
 import { JwtModule } from '@nestjs/jwt';
-import { CustomersController } from './customers.controller';
-import { CustomersService } from './customers.service';
-import { CompanyModule } from '../company/company.module';
+import { CustomersController } from './customers.controller.js';
+import { CustomersService } from './customers.service.js';
+import { CompanyModule } from '../company/company.module.js';
 
 @Module({
   imports: [DrizzleModule, JwtModule, CompanyModule],

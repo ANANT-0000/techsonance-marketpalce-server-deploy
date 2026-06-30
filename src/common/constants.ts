@@ -1,4 +1,4 @@
-import { CountryCompliance } from './Types/index.type';
+import { CountryCompliance } from './Types/index.type.js';
 
 export interface StateCode {
   state: string;

@@ -5,15 +5,15 @@ import {
   Injectable,
   InternalServerErrorException,
 } from '@nestjs/common';
-import { AddressErrorKeyEnum } from './constants/address.enums';
+import { AddressErrorKeyEnum } from './constants/address.enums.js';
 import { and, count, eq, desc } from 'drizzle-orm';
-import { DRIZZLE, type DrizzleService } from '../../drizzle/drizzle.module';
-import { address, user, vendor } from '../../drizzle/schema';
-import { CreateAddressDto } from './dto/createAddress.dto';
-import { UpdateAddressDto } from './dto/updateAddress.dto';
-import { domainExtractor } from '../../common/filters/domainExtractor.filter';
-import { CompanyService } from '../company/company.service';
-import { EntityStatus } from '../../drizzle/types/types';
+import { DRIZZLE, type DrizzleService } from '../../drizzle/drizzle.module.js';
+import { address, user, vendor } from '../../drizzle/schema/index.js';
+import { CreateAddressDto } from './dto/createAddress.dto.js';
+import { UpdateAddressDto } from './dto/updateAddress.dto.js';
+import { domainExtractor } from '../../common/filters/domainExtractor.filter.js';
+import { CompanyService } from '../company/company.service.js';
+import { EntityStatus } from '../../drizzle/types/types.js';
 
 @Injectable()
 export class AddressService {

@@ -3,7 +3,7 @@ import {
   BillingAccountUsed,
   EntityStatus,
   LogisticsMode,
-} from '../types/types';
+} from '../types/types.js';
 
 export const EntityStatusEnum = pg.pgEnum('entity_status_enum', EntityStatus);
 export const LogisticsModeEnum = pg.pgEnum('logistics_mode_enum', [

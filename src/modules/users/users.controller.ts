@@ -11,13 +11,13 @@ import {
   UseGuards,
   Req,
 } from '@nestjs/common';
-import { UsersService } from './users.service';
-import { SkipSubscription } from '../../common/decorators/skip-subscription.decorator';
-import { RoleGuard } from '../../guards/role.guard';
-import { JwtAuthGuard } from '../auth/jwt-auth.guard';
-import { Roles } from '../../common/decorators/roles.decorator';
-import { Role } from '../../enums/role.enum';
-import { UserStatus } from '../../drizzle/types/types';
+import { UsersService } from './users.service.js';
+import { SkipSubscription } from '../../common/decorators/skip-subscription.decorator.js';
+import { RoleGuard } from '../../guards/role.guard.js';
+import { JwtAuthGuard } from '../auth/jwt-auth.guard.js';
+import { Roles } from '../../common/decorators/roles.decorator.js';
+import { Role } from '../../enums/role.enum.js';
+import { UserStatus } from '../../drizzle/types/types.js';
 
 @Controller({ version: '1', path: 'users' })
 export class UsersController {

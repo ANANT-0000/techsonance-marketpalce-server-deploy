@@ -1,5 +1,5 @@
 import { IsEnum, IsNotEmpty, IsOptional, IsString } from 'class-validator';
-import { ReturnStatus } from '../../../drizzle/types/types';
+import { ReturnStatus } from '../../../drizzle/types/types.js';
 
 export class UpdateReturnDto {
   @IsEnum(ReturnStatus)

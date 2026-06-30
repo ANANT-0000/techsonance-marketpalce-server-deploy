@@ -10,8 +10,8 @@ import {
   Patch,
   Post,
 } from '@nestjs/common';
-import { AudiencesService } from './audiences.service';
-import { CreateSegmentDto } from './dto/audience.dto';
+import { AudiencesService } from './audiences.service.js';
+import { CreateSegmentDto } from './dto/audience.dto.js';
 
 @Controller({ version: '1', path: 'audiences' })
 export class AudiencesController {
