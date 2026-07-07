@@ -1,9 +1,8 @@
+import { EntityStatus, UserStatus } from '../types/types.js';
+import { EntityStatusEnum, UserStatusEnum } from './enums.schema.js';
 import * as pg from 'drizzle-orm/pg-core';
 import { company } from './main.schema.js';
-import { EntityStatusEnum } from './enums.schema.js';
-import { EntityStatus, UserStatus } from '../types/types.js';
 
-export const UserStatusEnum = pg.pgEnum('user_status_enum', UserStatus);
 export const user = pg.pgTable(
   'user',
   {

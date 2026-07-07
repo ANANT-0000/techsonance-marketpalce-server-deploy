@@ -11,7 +11,11 @@ import {
   address,
   vendor,
   order_items,
+  product_variants,
+  products,
+  inventory,
 } from '../../drizzle/schema/index.js';
+import { ShippingPreferenceEngineService } from './shipping-preference-engine.service.js';
 import { ShipRocketService } from '../ship-rocket/ship-rocket.service.js';
 import { CryptoService } from './crypto.service.js';
 import { MailService } from '../../common/services/mail/mail.service.js';
@@ -416,6 +420,7 @@ export class ShippingManagerService {
     private readonly shipRocketService: ShipRocketService,
     private readonly mailService: MailService,
     private readonly inventoryService: InventoryService,
+    private readonly shippingPreferenceEngineService: ShippingPreferenceEngineService,
   ) {}
 
   /**
@@ -784,9 +789,120 @@ export class ShippingManagerService {
 
     const shipmentId = Number(shipDetail.logistics_order_id);
 
+    let resolvedCourierId = courierId;
+
+    if (!resolvedCourierId) {
+      // 1. Fetch order details to retrieve vendor information, destination pincode, and dimensions
+      const orderDetail = await this.db.query.orders.findFirst({
+        where: eq(orders.id, orderId),
+        with: {
+          address: true,
+          items: {
+            with: {
+              variant: {
+                with: {
+                  product: true,
+                },
+              },
+            },
+          },
+        },
+      });
+
+      if (orderDetail && orderDetail.address && orderDetail.items.length > 0) {
+        const firstItem = orderDetail.items[0];
+        const vendorId = firstItem?.variant?.product?.vendor_id;
+
+        // Calculate total volumetric weight & dimensions
+        const totalVolumeCm3 = orderDetail.items.reduce((sum, item) => {
+          const v = item.variant;
+          return v
+            ? sum +
+                Number(v.length_cm) *
+                  Number(v.width_cm) *
+                  Number(v.height_cm) *
+                  item.quantity
+            : sum;
+        }, 0);
+        const estimatedSideCm = Math.max(
+          10,
+          Math.ceil(Math.cbrt(totalVolumeCm3)),
+        );
+        const totalWeight = orderDetail.items.reduce((sum, item) => {
+          const v = item.variant;
+          return v ? sum + Number(v.weight_kg) * item.quantity : sum;
+        }, 0);
+
+        // Resolve pickup origin postcode (fallback to system config if stock/warehouse not found)
+        let pickupPincode = process.env.SHIPROCKET_PICKUP_PINCODE || '110001';
+        if (firstItem?.variant) {
+          const [inv] = await this.db
+            .select({ postalCode: address.postal_code })
+            .from(inventory)
+            .innerJoin(warehouse, eq(inventory.warehouse_id, warehouse.id))
+            .innerJoin(address, eq(warehouse.address_id, address.id))
+            .where(
+              and(
+                eq(inventory.product_variant_id, firstItem.variant.id),
+                eq(inventory.company_id, companyId),
+              ),
+            )
+            .limit(1);
+          if (inv?.postalCode) {
+            pickupPincode = inv.postalCode;
+          }
+        }
+
+        try {
+          const serviceabilityRes =
+            await this.shipRocketService.getServiceability(
+              {
+                pickup_postcode: Number(pickupPincode),
+                delivery_postcode: Number(orderDetail.address.postal_code),
+                weight: String(totalWeight || 1),
+                breadth: estimatedSideCm,
+                height: estimatedSideCm,
+                qc_check: 0,
+                is_return: 0,
+                mode: 'Surface',
+                cod: 0,
+              },
+              strategy.credentials,
+              companyId,
+            );
+
+          const availableCouriers =
+            serviceabilityRes?.data?.available_courier_companies ?? [];
+
+          if (availableCouriers.length > 0 && vendorId) {
+            const engineResult =
+              await this.shippingPreferenceEngineService.resolveBestShippingOption(
+                availableCouriers.map((c: any) => ({
+                  courier_company_id: c.courier_company_id,
+                  courier_name: c.courier_name,
+                  rate: c.rate,
+                  rating: c.rating,
+                  estimated_delivery_days: c.estimated_delivery_days,
+                  delivery_performance: c.delivery_performance,
+                  pickup_performance: c.pickup_performance,
+                  cod_charges: c.cod_charges,
+                  is_surface: c.is_surface,
+                })),
+                vendorId,
+              );
+
+            if (engineResult.selectedOption) {
+              resolvedCourierId =
+                engineResult.selectedOption.courier_company_id;
+            }
+          }
+        } catch (err: any) {}
+      }
+    }
+
     const awbRes = await this.shipRocketService.generateAWB(
       shipmentId,
-      courierId,
+      resolvedCourierId,
       strategy.credentials,
       companyId,
     );
@@ -918,7 +1034,7 @@ export class ShippingManagerService {
     }
 
     // PII-safe log: never log the raw payload (customer names, phones, addresses)
-  
+
     // ─────────────────────────────────────────────────────────────────────
 
     let shipDetail: any = null;

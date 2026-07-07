@@ -12,12 +12,12 @@ import {
   ValidateNested,
 } from 'class-validator';
 import { Type } from 'class-transformer';
+
+import { NavItemType, NavLayoutType } from '../../../drizzle/types/types.js';
 import {
-  NavItemType,
-  NavItemDisplayType,
   NavItemColType,
-} from '../../../drizzle/schema/nav_storefront.schema.js';
-import { NavLayoutType } from '../../../drizzle/types/types.js';
+  NavItemDisplayType,
+} from '../../../drizzle/schema/enums.schema.js';
 
 /** Promo block — only required when col_type = PROMOTION */
 export class NavItemPromoDto {

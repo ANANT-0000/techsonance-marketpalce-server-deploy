@@ -1155,6 +1155,14 @@ export class OrdersService {
         row.items.map((i) => i?.variant?.inventory?.warehouse_id ?? null),
       );
       const isSingleWarehouse = warehouseIds.size <= 1;
+      
+      const outboxJob = await this.db.query.outbox_jobs.findFirst({
+        where: and(
+          eq(outbox_jobs.job_type, OutboxJobType.CREATE_SHIPROCKET_DRAFT_ORDER),
+          sql`payload->>'orderId' = ${orderId}`,
+        ),
+      });
+      
       return {
         id: row.id,
         total_amount: row.total_amount,
@@ -1223,6 +1231,13 @@ export class OrdersService {
             }
           : null,
         shipping: { tracking_url: row.shipping?.tracking_url ?? null },
+        shipping_sync_job: outboxJob
+          ? {
+              status: outboxJob.status,
+              error_message: outboxJob.error_message,
+              retry_count: outboxJob.retry_count,
+            }
+          : null,
       };
     } catch (error) {
       if (error instanceof HttpException) throw error;
@@ -1604,6 +1619,55 @@ export class OrdersService {
       );
     }
   }
+
+  async retryFailedShipping(orderId: string, domain: string) {
+    const companyId = await this.resolveCompanyId(domain);
+
+    const [job] = await this.db
+      .select({ id: outbox_jobs.id, status: outbox_jobs.status })
+      .from(outbox_jobs)
+      .where(
+        and(
+          eq(outbox_jobs.company_id, companyId),
+          eq(outbox_jobs.job_type, OutboxJobType.CREATE_SHIPROCKET_DRAFT_ORDER),
+          sql`payload->>'orderId' = ${orderId}`,
+        ),
+      )
+      .limit(1);
+
+    if (!job) {
+      throw new HttpException(
+        'No shipping sync job found for this order.',
+        HttpStatus.NOT_FOUND,
+      );
+    }
+
+    if (job.status !== OutboxJobStatus.FAILED) {
+      throw new HttpException(
+        `Shipping sync job is currently ${job.status}, not FAILED. Cannot retry.`,
+        HttpStatus.BAD_REQUEST,
+      );
+    }
+
+    await this.db
+      .update(outbox_jobs)
+      .set({
+        status: OutboxJobStatus.PENDING,
+        retry_count: 0,
+        error_message: null,
+      })
+      .where(eq(outbox_jobs.id, job.id));
+
+    this.outboxService.publishShiprocketJob(job.id).catch((err) => {
+      this.logger.warn(`Failed to push job ${job.id} manually:`, err);
+    });
+
+    return {
+      success: true,
+      message: 'Shipping process queued for retry successfully.',
+    };
+  }
+
   async exportVendorAnalytics(domain: string): Promise<string> {
     try {
       const companyId = await this.resolveCompanyId(domain);

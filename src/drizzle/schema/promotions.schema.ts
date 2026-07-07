@@ -1,16 +1,12 @@
 import * as pg from 'drizzle-orm/pg-core';
 import { relations, sql } from 'drizzle-orm';
 import { company } from './main.schema.js';
-import { EntityStatusEnum } from './enums.schema.js';
+import { bannerPlacementEnum, changelogActionEnum, EntityStatusEnum, promoEventTypeEnum, promotionRuleTypeEnum, promotionStatusEnum, promotionTargetTypeEnum, promotionTypeEnum, segmentCriteriaOperatorEnum } from './enums.schema.js';
 import { orders, order_items, coupons } from './shop.schema.js';
 import {
-  BannerPlacement,
-  ChangelogAction,
-  PromoEventType,
-  PromotionRuleType,
+ 
   PromotionStatus,
-  PromotionTargetType,
-  PromotionType,
+ 
   SegmentCriteriaOperator,
   EntityStatus,
 } from '../types/types.js';
@@ -34,45 +30,7 @@ import { user } from './users.schema.js';
 
 // ─── ENUMS ──────────────────────────────────────────────────────
 
-export const promotionTypeEnum = pg.pgEnum(
-  'promotion_type_enum',
-  PromotionType,
-);
 
-export const promotionStatusEnum = pg.pgEnum(
-  'promotion_status_enum',
-  PromotionStatus,
-);
-
-export const promotionTargetTypeEnum = pg.pgEnum(
-  'promotion_target_type_enum',
-  PromotionTargetType,
-);
-
-export const promotionRuleTypeEnum = pg.pgEnum(
-  'promotion_rule_type_enum',
-  PromotionRuleType,
-);
-
-export const bannerPlacementEnum = pg.pgEnum(
-  'banner_placement_enum',
-  BannerPlacement,
-);
-
-export const promoEventTypeEnum = pg.pgEnum(
-  'promo_event_type_enum',
-  PromoEventType,
-);
-
-export const segmentCriteriaOperatorEnum = pg.pgEnum(
-  'segment_criteria_operator_enum',
-  SegmentCriteriaOperator,
-);
-
-export const changelogActionEnum = pg.pgEnum(
-  'changelog_action_enum',
-  ChangelogAction,
-);
 
 // ================================================================
 // 1. PROMOTIONS

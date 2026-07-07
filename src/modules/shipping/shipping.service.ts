@@ -10,7 +10,15 @@ import { type Cache } from 'cache-manager';
 import { DRIZZLE, type DrizzleService } from '../../drizzle/drizzle.module.js';
 import { CompanyService } from '../company/company.service.js';
 import { and, eq } from 'drizzle-orm';
-import { company, orders, shipping_details, vendor_gateways } from '../../drizzle/schema/index.js';
+
+import {
+  company,
+  orders,
+  shipping_details,
+  vendor_payment_gateways,
+  vendor,
+  vendor_shipping_preferences,
+} from '../../drizzle/schema/index.js';
 import { MailService } from '../../common/services/mail/mail.service.js';
 import { domainExtractor } from '../../common/filters/domainExtractor.filter.js';
 import { ShippingErrorKeyEnum } from './constants/shipping.enums.js';
@@ -21,6 +29,14 @@ import {
   SHIPPING_SETTINGS_UPDATED_MSG,
   SHIPPING_API_KEY_PLACEHOLDER,
 } from './constants/shipping.constants.js';
+import { logistic_companies } from '../../drizzle/schema/logistics.schema.js';
+import { ShipRocketService } from '../ship-rocket/ship-rocket.service.js';
+import {
+  CourierCompany,
+  ShipRocketCheckServiceabilityRequest,
+  ShiprocketCourierServiceabilityResponse,
+} from '../../common/Types/shiprocket.js';
+import { ShippingChargeStrategy } from '../../drizzle/types/types.js';
 
 @Injectable()
 export class ShippingService {
@@ -28,12 +44,35 @@ export class ShippingService {
   private readonly SHIPROCKET_AUTH_CACHE_KEY = 'shiprocket_auth_cache';
 
   constructor(
+    @Inject(CACHE_MANAGER) private cacheManager: Cache,
     @Inject(DRIZZLE) private readonly db: DrizzleService,
-    @Inject(CACHE_MANAGER) private readonly cacheManager: Cache,
     private readonly companyService: CompanyService,
     private readonly mailService: MailService,
     private readonly cryptoService: CryptoService,
+    private readonly shipRocketService: ShipRocketService,
   ) {}
+
+  async getVendorIdByUserId(
+    userId: string,
+  ): Promise<{ id: string; company_id: string }> {
+    const [vendorRecord] = await this.db
+      .select({ id: vendor.id, company_id: vendor.company_id })
+      .from(vendor)
+      .where(eq(vendor.user_id, userId))
+      .limit(1);
+
+    if (!vendorRecord) {
+      throw new HttpException(
+        'Vendor record not found for this user.',
+        HttpStatus.NOT_FOUND,
+      );
+    }
+    return {
+      id: vendorRecord.id,
+      company_id: vendorRecord.company_id ?? '',
+    };
+  }
+
   async addTrackingUrl(orderId: string, trackingUrl: string, domain: string) {
     const filteredDomain = domainExtractor(domain);
     const companyId = await this.companyService.find(filteredDomain);
@@ -50,7 +89,10 @@ export class ShippingService {
         .where(and(eq(orders.id, orderId), eq(orders.company_id, companyId)))
         .limit(1);
       if (!isOrderValid || !isOrderValid.id) {
-        throw new HttpException(ShippingErrorKeyEnum.ORDER_NOT_FOUND, HttpStatus.NOT_FOUND);
+        throw new HttpException(
+          ShippingErrorKeyEnum.ORDER_NOT_FOUND,
+          HttpStatus.NOT_FOUND,
+        );
       }
       await this.db
         .insert(shipping_details)
@@ -82,10 +124,14 @@ export class ShippingService {
       });
 
       if (!orderDetail?.customer) {
-        throw new HttpException(ShippingErrorKeyEnum.ORDER_NOT_FOUND, HttpStatus.NOT_FOUND);
+        throw new HttpException(
+          ShippingErrorKeyEnum.ORDER_NOT_FOUND,
+          HttpStatus.NOT_FOUND,
+        );
       }
       const firstItem = orderDetail.items[0];
-      const productName = firstItem?.variant?.variant_name || SHIPPING_ITEM_FALLBACK_NAME;
+      const productName =
+        firstItem?.variant?.variant_name || SHIPPING_ITEM_FALLBACK_NAME;
       const itemName =
         orderDetail.items.length > 1
           ? `${productName} +${orderDetail.items.length - 1} more items`
@@ -129,7 +175,10 @@ export class ShippingService {
         .where(and(eq(orders.id, orderId), eq(orders.company_id, companyId)))
         .limit(1);
       if (!isOrderValid || !isOrderValid.id) {
-        throw new HttpException(ShippingErrorKeyEnum.ORDER_NOT_FOUND, HttpStatus.NOT_FOUND);
+        throw new HttpException(
+          ShippingErrorKeyEnum.ORDER_NOT_FOUND,
+          HttpStatus.NOT_FOUND,
+        );
       }
       const [existingShipping] = await this.db
         .select({ id: shipping_details.id })
@@ -199,23 +248,23 @@ export class ShippingService {
         encrypted_logistics_api_secret: true,
         logistics_api_secret_iv: true,
         logistics_api_secret_tag: true,
+        shipping_charge_strategy: true,
       },
     });
 
     if (!comp) {
-      throw new HttpException(SHIPPING_COMPANY_NOT_FOUND_MSG, HttpStatus.NOT_FOUND);
+      throw new HttpException(
+        SHIPPING_COMPANY_NOT_FOUND_MSG,
+        HttpStatus.NOT_FOUND,
+      );
     }
-
-    const [gatewayRecord] = await this.db
-      .select({ shipping_charge_strategy: vendor_gateways.shipping_charge_strategy })
-      .from(vendor_gateways)
-      .where(eq(vendor_gateways.company_id, companyId))
-      .limit(1);
 
     return {
       logistics_mode: comp.logistics_mode,
       logistics_pickup_id: comp.logistics_pickup_id,
-      shipping_charge_strategy: gatewayRecord?.shipping_charge_strategy || 'STANDARD_FLAT_RATE',
+      shipping_charge_strategy:
+        comp.shipping_charge_strategy ||
+        ShippingChargeStrategy.STANDARD_FLAT_RATE,
       is_free_shipping_enabled: comp.is_free_shipping_enabled,
       free_delivery_threshold: comp.free_delivery_threshold,
       standard_delivery_charge: comp.standard_delivery_charge,
@@ -261,17 +310,16 @@ export class ShippingService {
     }
 
     if (payload.shipping_charge_strategy !== undefined) {
-      await this.db
-        .update(vendor_gateways)
-        .set({ shipping_charge_strategy: payload.shipping_charge_strategy })
-        .where(eq(vendor_gateways.company_id, companyId));
+      updateFields.shipping_charge_strategy = payload.shipping_charge_strategy;
     }
 
     let credentialsChanged = false;
 
     if (payload.logistics_api_key) {
       if (payload.logistics_api_key !== SHIPPING_API_KEY_PLACEHOLDER) {
-        const encryptedStr = this.cryptoService.encrypt(payload.logistics_api_key);
+        const encryptedStr = this.cryptoService.encrypt(
+          payload.logistics_api_key,
+        );
         const [iv, encrypted, tag] = encryptedStr.split(':');
         updateFields.encrypted_logistics_api_key = encrypted;
         updateFields.logistics_api_key_iv = iv;
@@ -287,7 +335,9 @@ export class ShippingService {
 
     if (payload.logistics_api_secret) {
       if (payload.logistics_api_secret !== SHIPPING_API_KEY_PLACEHOLDER) {
-        const encryptedStr = this.cryptoService.encrypt(payload.logistics_api_secret);
+        const encryptedStr = this.cryptoService.encrypt(
+          payload.logistics_api_secret,
+        );
         const [iv, encrypted, tag] = encryptedStr.split(':');
         updateFields.encrypted_logistics_api_secret = encrypted;
         updateFields.logistics_api_secret_iv = iv;
@@ -314,5 +364,131 @@ export class ShippingService {
     }
 
     return { success: true, message: SHIPPING_SETTINGS_UPDATED_MSG };
+  }
+
+  // =========================================================================
+  // MULTI-VENDOR PREFERENCES & RATE CALCULATOR
+  // =========================================================================
+
+  async getLogisticCompanies() {
+    return this.db.select().from(logistic_companies);
+  }
+
+  async getVendorPreferences(userId: string, domain: string) {
+    const filteredDomain = domainExtractor(domain);
+    const companyId = await this.companyService.find(filteredDomain);
+    const vendorRecord = await this.getVendorIdByUserId(userId);
+
+    if (vendorRecord.company_id !== companyId) {
+      throw new HttpException('Unauthorized access.', HttpStatus.FORBIDDEN);
+    }
+
+    const [preferences] = await this.db
+      .select()
+      .from(vendor_shipping_preferences)
+      .where(
+        and(
+          eq(vendor_shipping_preferences.vendor_id, vendorRecord.id),
+          eq(vendor_shipping_preferences.company_id, companyId),
+        ),
+      )
+      .limit(1);
+
+    if (!preferences) {
+      return {
+        priority_list: [],
+        primary_strategy: 'lowest_cost',
+        fallback_strategy: 'lowest_cost',
+        exclusion_rules: { blocked_courier_ids: [] },
+      };
+    }
+
+    return preferences;
+  }
+
+  async upsertVendorPreferences(userId: string, domain: string, payload: any) {
+    const filteredDomain = domainExtractor(domain);
+    const companyId = await this.companyService.find(filteredDomain);
+    const vendorRecord = await this.getVendorIdByUserId(userId);
+
+    if (vendorRecord.company_id !== companyId) {
+      throw new HttpException('Unauthorized access.', HttpStatus.FORBIDDEN);
+    }
+
+    const [existing] = await this.db
+      .select({ id: vendor_shipping_preferences.id })
+      .from(vendor_shipping_preferences)
+      .where(
+        and(
+          eq(vendor_shipping_preferences.vendor_id, vendorRecord.id),
+          eq(vendor_shipping_preferences.company_id, companyId),
+        ),
+      )
+      .limit(1);
+
+    if (existing) {
+      await this.db
+        .update(vendor_shipping_preferences)
+        .set({
+          priority_list: payload.priority_list,
+          primary_strategy: payload.primary_strategy,
+          fallback_strategy: payload.fallback_strategy,
+          exclusion_rules: payload.exclusion_rules,
+        })
+        .where(eq(vendor_shipping_preferences.id, existing.id));
+    } else {
+      await this.db.insert(vendor_shipping_preferences).values({
+        vendor_id: vendorRecord.id,
+        company_id: companyId,
+        priority_list: payload.priority_list,
+        primary_strategy: payload.primary_strategy,
+        fallback_strategy: payload.fallback_strategy,
+        exclusion_rules: payload.exclusion_rules,
+      });
+    }
+
+    return this.getVendorPreferences(userId, domain);
+  }
+
+  async calculateTestRates(
+    userId: string,
+    domain: string,
+    payload: ShipRocketCheckServiceabilityRequest,
+  ): Promise<CourierCompany[]> {
+    const filteredDomain = domainExtractor(domain);
+    const companyId = await this.companyService.find(filteredDomain);
+    const vendorRecord = await this.getVendorIdByUserId(userId);
+
+    if (vendorRecord.company_id !== companyId) {
+      throw new HttpException('Unauthorized access.', HttpStatus.FORBIDDEN);
+    }
+    //  pickup_postcode: number;
+    //     delivery_postcode: number;
+    //     weight: string;
+    //     cod: 0 | 1;
+    //     qc_check: 1;
+
+    try {
+      const response = await this.shipRocketService.getServiceability(
+        {
+          pickup_postcode: payload.pickup_postcode,
+          delivery_postcode: payload.delivery_postcode,
+          weight: payload.weight,
+          declared_value: payload.declared_value,
+          cod: 0 as 0,
+          qc_check: 0 as 0,
+        },
+        undefined,
+        companyId,
+      );
+
+      return response.data?.available_courier_companies || [];
+    } catch (error) {
+      if (error instanceof HttpException) throw error;
+      throw new HttpException(
+        error || 'Failed to calculate rates',
+        HttpStatus.BAD_REQUEST,
+      );
+    }
   }
 }

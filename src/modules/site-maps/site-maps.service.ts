@@ -8,7 +8,7 @@ const SYSTEM_DEFAULTS = [
   {
     key: 'store',
     label: 'Store / Shop',
-    base_path: '/store',
+    base_path: '/store/product',
     default_query_param: 'category',
     is_system: true,
   },

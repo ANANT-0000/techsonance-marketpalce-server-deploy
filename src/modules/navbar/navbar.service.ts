@@ -13,6 +13,10 @@ import {
   categories,
   nav_items,
   nav_menus,
+  NavItemColType,
+  NavItemDisplayType,
+  NavMenuLogoAlignment,
+  NavMenuPosition,
   products,
 } from '../../drizzle/schema/index.js';
 import { CompanyService } from '../company/company.service.js';
@@ -26,18 +30,14 @@ import {
 } from './dto/update-nav-item.dto.js';
 import {
   NavMenuSettings,
-  NavMenuLogoAlignment,
-  NavMenuPosition,
   NavItemMeta,
-  NavItemDisplayType,
-  NavItemColType,
-  NavItemType,
 } from '../../drizzle/schema/nav_storefront.schema.js';
 import { SiteMapsService } from '../site-maps/site-maps.service.js';
 import {
   NavLayoutType,
   NavbarErrorCode,
   EntityStatus,
+  NavItemType,
 } from '../../drizzle/types/types.js';
 
 // ─── Default settings applied when a field is absent from the JSONB blob ────
@@ -51,7 +51,7 @@ const SETTINGS_DEFAULTS: Required<NavMenuSettings> = {
   show_border: true,
   search_visible: true,
   search_placeholder: 'Search products...',
-  search_endpoint: '/store/search',
+  search_endpoint: '/store/product/search',
   show_account: true,
   show_wishlist: true,
   show_cart: true,
@@ -90,7 +90,7 @@ export class NavbarService {
     const route = routeMap.get(routeKey ?? 'store') ?? routeMap.get('store');
 
     if (!route) {
-      return `/store?category=${encodeURIComponent(slug)}`;
+      return `/store/product?category=${encodeURIComponent(slug)}`;
     }
 
     const basePath = route.base_path.replace(/\/+$/, '');
@@ -113,7 +113,7 @@ export class NavbarService {
     return (categoryChildrenMap.get(categoryId) ?? []).map((sub) => ({
       id: sub.id,
       label: sub.name,
-      href: this.buildCategoryHref(routeKey, sub.slug, routeMap), // ← was hardcoded /store
+      href: this.buildCategoryHref(routeKey, sub.slug, routeMap), // ← was hardcoded /store/product
       item_type: 'category',
       category_id: sub.id,
       icon_url: sub.icon_url || undefined,

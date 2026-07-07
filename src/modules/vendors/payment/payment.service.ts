@@ -1,11 +1,9 @@
 import { Injectable, Inject, HttpException, HttpStatus } from '@nestjs/common';
-import { DRIZZLE, type DrizzleService } from '../../../drizzle/drizzle.module.js';
 import {
-  vendor,
-  vendor_gateways,
-  vendor_credentials,
-  company,
-} from '../../../drizzle/schema/index.js';
+  DRIZZLE,
+  type DrizzleService,
+} from '../../../drizzle/drizzle.module.js';
+import { vendor, company } from '../../../drizzle/schema/index.js';
 import { eq, and, inArray } from 'drizzle-orm';
 import { VendorCryptoService } from './vendor-crypto.service.js';
 import { PaymentSplitterService } from './payment-splitter.service.js';
@@ -13,9 +11,14 @@ import {
   LogisticsMode,
   ShippingChargeStrategy,
   PaymentRoutingStatus,
+  CredentialType,
 } from '../../../drizzle/types/types.js';
 import { domainExtractor } from '../../../common/filters/domainExtractor.filter.js';
 import { CompanyService } from '../../company/company.service.js';
+import {
+  vendor_credentials,
+  vendor_payment_gateways,
+} from '../../../drizzle/schema/payment-gateway.schema.js';
 
 @Injectable()
 export class PaymentService {
@@ -54,10 +57,7 @@ export class PaymentService {
 
   private async upsertCredential(
     gatewayId: string,
-    credentialType:
-      | 'razorpay_key_id'
-      | 'razorpay_key_secret'
-      | 'razorpay_webhook_secret',
+    credentialType: CredentialType,
     value: string,
     isSecret: boolean,
     txContext?: any,
@@ -69,7 +69,7 @@ export class PaymentService {
       .from(vendor_credentials)
       .where(
         and(
-          eq(vendor_credentials.vendor_gateway_id, gatewayId),
+          eq(vendor_credentials.vendor_payment_gateway_id, gatewayId),
           eq(vendor_credentials.credential_type, credentialType),
         ),
       )
@@ -103,7 +103,7 @@ export class PaymentService {
         .where(eq(vendor_credentials.id, existing.id));
     } else {
       await db.insert(vendor_credentials).values({
-        vendor_gateway_id: gatewayId,
+        vendor_payment_gateway_id: gatewayId,
         credential_type: credentialType,
         public_identifier,
         encrypted_value,
@@ -127,11 +127,11 @@ export class PaymentService {
 
     const [config] = await this.db
       .select()
-      .from(vendor_gateways)
+      .from(vendor_payment_gateways)
       .where(
         and(
-          eq(vendor_gateways.vendor_id, vendorRecord.id),
-          eq(vendor_gateways.company_id, companyId),
+          eq(vendor_payment_gateways.vendor_id, vendorRecord.id),
+          eq(vendor_payment_gateways.company_id, companyId),
         ),
       )
       .limit(1);
@@ -142,6 +142,7 @@ export class PaymentService {
         is_free_shipping_enabled: company.is_free_shipping_enabled,
         free_delivery_threshold: company.free_delivery_threshold,
         standard_delivery_charge: company.standard_delivery_charge,
+        shipping_charge_strategy: company.shipping_charge_strategy,
       })
       .from(company)
       .where(eq(company.id, companyId))
@@ -159,14 +160,15 @@ export class PaymentService {
         razorpay_webhook_secret_masked: null,
         is_free_shipping_enabled: compRecord?.is_free_shipping_enabled ?? false,
         free_delivery_threshold: compRecord?.free_delivery_threshold ?? null,
-        standard_delivery_charge: compRecord?.standard_delivery_charge ?? '50.00',
+        standard_delivery_charge:
+          compRecord?.standard_delivery_charge ?? '50.00',
       };
     }
 
     const credentials = await this.db
       .select()
       .from(vendor_credentials)
-      .where(eq(vendor_credentials.vendor_gateway_id, config.id));
+      .where(eq(vendor_credentials.vendor_payment_gateway_id, config.id));
 
     const keyIdCred = credentials.find(
       (c) => c.credential_type === 'razorpay_key_id',
@@ -189,7 +191,9 @@ export class PaymentService {
         ? '••••••••••••••••'
         : null,
       logistics_mode: logisticsMode,
-      shipping_charge_strategy: config.shipping_charge_strategy,
+      shipping_charge_strategy:
+        compRecord?.shipping_charge_strategy ??
+        ShippingChargeStrategy.STANDARD_FLAT_RATE,
       routing_status: config.routing_status,
       is_free_shipping_enabled: compRecord?.is_free_shipping_enabled ?? false,
       free_delivery_threshold: compRecord?.free_delivery_threshold ?? null,
@@ -267,22 +271,25 @@ export class PaymentService {
       // Update company's logistics and shipping mode
       await tx
         .update(company)
-        .set({ 
+        .set({
           logistics_mode: data.logistics_mode,
           is_free_shipping_enabled: data.is_free_shipping_enabled ?? false,
-          free_delivery_threshold: data.free_delivery_threshold?.toString() ?? null,
-          standard_delivery_charge: data.standard_delivery_charge?.toString() ?? '50.00'
+          free_delivery_threshold:
+            data.free_delivery_threshold?.toString() ?? null,
+          standard_delivery_charge:
+            data.standard_delivery_charge?.toString() ?? '50.00',
+          shipping_charge_strategy: data.shipping_charge_strategy,
         })
         .where(eq(company.id, companyId));
 
       // 2. Lookup existing config
       const [existing] = await tx
         .select()
-        .from(vendor_gateways)
+        .from(vendor_payment_gateways)
         .where(
           and(
-            eq(vendor_gateways.vendor_id, vendorRecord.id),
-            eq(vendor_gateways.company_id, companyId),
+            eq(vendor_payment_gateways.vendor_id, vendorRecord.id),
+            eq(vendor_payment_gateways.company_id, companyId),
           ),
         )
         .limit(1);
@@ -292,23 +299,21 @@ export class PaymentService {
       if (existing) {
         gatewayId = existing.id;
         await tx
-          .update(vendor_gateways)
+          .update(vendor_payment_gateways)
           .set({
-            shipping_charge_strategy: data.shipping_charge_strategy,
             routing_status: PaymentRoutingStatus.VAULTED,
             updated_at: new Date(),
           })
-          .where(eq(vendor_gateways.id, existing.id));
+          .where(eq(vendor_payment_gateways.id, existing.id));
       } else {
         const [newGateway] = await tx
-          .insert(vendor_gateways)
+          .insert(vendor_payment_gateways)
           .values({
             vendor_id: vendorRecord.id,
             company_id: companyId,
-            shipping_charge_strategy: data.shipping_charge_strategy,
             routing_status: PaymentRoutingStatus.VAULTED,
           })
-          .returning({ id: vendor_gateways.id });
+          .returning({ id: vendor_payment_gateways.id });
         gatewayId = newGateway.id;
       }
 
@@ -316,7 +321,7 @@ export class PaymentService {
       if (data.razorpay_key_id) {
         await this.upsertCredential(
           gatewayId,
-          'razorpay_key_id',
+          CredentialType.RAZORPAY_KEY_ID,
           data.razorpay_key_id,
           false,
           tx,
@@ -329,10 +334,10 @@ export class PaymentService {
           .delete(vendor_credentials)
           .where(
             and(
-              eq(vendor_credentials.vendor_gateway_id, gatewayId),
+              eq(vendor_credentials.vendor_payment_gateway_id, gatewayId),
               inArray(vendor_credentials.credential_type, [
-                'razorpay_key_secret',
-                'razorpay_webhook_secret',
+                CredentialType.RAZORPAY_KEY_SECRET,
+                CredentialType.RAZORPAY_WEBHOOK_SECRET,
               ]),
             ),
           );
@@ -344,7 +349,7 @@ export class PaymentService {
         ) {
           await this.upsertCredential(
             gatewayId,
-            'razorpay_key_secret',
+            CredentialType.RAZORPAY_KEY_SECRET,
             data.razorpay_key_secret,
             true,
             tx,
@@ -358,7 +363,7 @@ export class PaymentService {
         ) {
           await this.upsertCredential(
             gatewayId,
-            'razorpay_webhook_secret',
+            CredentialType.RAZORPAY_WEBHOOK_SECRET,
             data.razorpay_webhook_secret,
             true,
             tx,
@@ -375,8 +380,8 @@ export class PaymentService {
   ): Promise<{ keyId: string; keySecret: string } | null> {
     const [config] = await this.db
       .select()
-      .from(vendor_gateways)
-      .where(eq(vendor_gateways.vendor_id, vendorId))
+      .from(vendor_payment_gateways)
+      .where(eq(vendor_payment_gateways.vendor_id, vendorId))
       .limit(1);
 
     if (!config) {
@@ -386,7 +391,7 @@ export class PaymentService {
     const credentials = await this.db
       .select()
       .from(vendor_credentials)
-      .where(eq(vendor_credentials.vendor_gateway_id, config.id));
+      .where(eq(vendor_credentials.vendor_payment_gateway_id, config.id));
 
     const keyIdCred = credentials.find(
       (c) => c.credential_type === 'razorpay_key_id',
@@ -424,8 +429,8 @@ export class PaymentService {
   async getDecryptedWebhookSecret(vendorId: string): Promise<string | null> {
     const [config] = await this.db
       .select()
-      .from(vendor_gateways)
-      .where(eq(vendor_gateways.vendor_id, vendorId))
+      .from(vendor_payment_gateways)
+      .where(eq(vendor_payment_gateways.vendor_id, vendorId))
       .limit(1);
 
     if (!config) {
@@ -437,8 +442,11 @@ export class PaymentService {
       .from(vendor_credentials)
       .where(
         and(
-          eq(vendor_credentials.vendor_gateway_id, config.id),
-          eq(vendor_credentials.credential_type, 'razorpay_webhook_secret'),
+          eq(vendor_credentials.vendor_payment_gateway_id, config.id),
+          eq(
+            vendor_credentials.credential_type,
+            CredentialType.RAZORPAY_WEBHOOK_SECRET,
+          ),
         ),
       )
       .limit(1);

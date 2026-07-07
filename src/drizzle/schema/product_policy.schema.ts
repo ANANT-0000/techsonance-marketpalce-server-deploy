@@ -2,29 +2,16 @@
 
 import * as pg from 'drizzle-orm/pg-core';
 import { company } from './main.schema.js';
-import { EntityStatusEnum } from './enums.schema.js';
 import {
-  EntityStatus,
-  PolicyDurationUnit,
-  PolicyType,
-  ReturnReplaceMode,
-} from '../types/types.js';
+  EntityStatusEnum,
+  policyDurationUnitEnum,
+  policyTypeEnum,
+  returnReplaceModeEnum,
+} from './enums.schema.js';
+import { EntityStatus, ReturnReplaceMode } from '../types/types.js';
 import { categories, order_items, products } from './shop.schema.js';
 import { templates } from './utils.schema.js';
 import { relations } from 'drizzle-orm';
-
-// Policy type enum — covers all real-world cases
-export const policyTypeEnum = pg.pgEnum('policy_type_enum', PolicyType);
-
-export const policy_duration_unit_enum = pg.pgEnum(
-  'policy_duration_unit_enum',
-  PolicyDurationUnit,
-);
-
-export const return_replace_mode_enum = pg.pgEnum(
-  'return_replace_mode_enum',
-  ReturnReplaceMode,
-);
 
 // ─── 1. POLICY DEFINITIONS ─────────────────────────────────────
 // A company/vendor defines their reusable policies once.
@@ -41,7 +28,7 @@ export const product_policies = pg.pgTable(
     policy_type: policyTypeEnum('policy_type').notNull(),
     // Duration — only relevant for WARRANTY, GUARANTEE, EXTENDED_SUPPORT
     duration_value: pg.integer('duration_value'), // e.g. 1, 6, 30
-    duration_unit: policy_duration_unit_enum('duration_unit'), // YEARS, MONTHS, DAYS, LIFETIME
+    duration_unit: policyDurationUnitEnum('duration_unit'), // YEARS, MONTHS, DAYS, LIFETIME
     // What is covered — printed on the policy document / warranty card
     coverage_description: pg.text('coverage_description'),
     // e.g. "Covers manufacturing defects. Does not cover physical damage or water damage."
@@ -84,7 +71,7 @@ export const product_policies = pg.pgTable(
     // Derived mode — kept as an explicit column for fast reads.
     // Must be synced with is_returnable + is_replaceable by the service layer.
     // 'none' | 'return_only' | 'replace_only' | 'both'
-    return_replace_mode: return_replace_mode_enum('return_replace_mode')
+    return_replace_mode: returnReplaceModeEnum('return_replace_mode')
       .notNull()
       .default(ReturnReplaceMode.NONE),
     // ─────────────────────────────────────────────────────────────

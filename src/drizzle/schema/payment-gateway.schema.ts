@@ -3,48 +3,17 @@ import { sql } from 'drizzle-orm';
 import { vendor } from './users.schema.js';
 import { company } from './main.schema.js';
 import {
-  ShippingChargeStrategy,
+  PaymentGatewayProvider,
   PaymentRoutingStatus,
 } from '../types/types.js';
+import {
+  CredentialTypeEnum,
+  GatewayTypeEnum,
+  PaymentRoutingStatusEnum,
+} from './enums.schema.js';
 
-export const ShippingChargeStrategyEnum = pg.pgEnum(
-  'shipping_charge_strategy_enum',
-  [
-    ShippingChargeStrategy.DYNAMIC_CUSTOMER_RATE,
-    ShippingChargeStrategy.STANDARD_FLAT_RATE,
-  ],
-);
-
-export const PaymentRoutingStatusEnum = pg.pgEnum(
-  'payment_routing_status_enum',
-  [
-    PaymentRoutingStatus.VAULTED,
-    PaymentRoutingStatus.ROTATED,
-    PaymentRoutingStatus.SUSPENDED,
-  ],
-);
-
-export const GatewayTypeEnum = pg.pgEnum('gateway_type_enum', [
-  'razorpay',
-  'stripe',
-]);
-
-export const CredentialTypeEnum = pg.pgEnum('credential_type_enum', [
-  // Razorpay
-  'razorpay_key_id',
-  'razorpay_key_secret',
-  'razorpay_webhook_secret',
-  // Stripe
-  'stripe_publishable_key',
-  'stripe_secret_key',
-  'stripe_webhook_secret',
-  // Generic escape hatch
-  'custom_api_key',
-  'custom_api_secret',
-]);
-
-export const vendor_gateways = pg.pgTable(
-  'vendor_gateways',
+export const vendor_payment_gateways = pg.pgTable(
+  'vendor_payment_gateways',
   {
     id: pg.uuid('id').primaryKey().defaultRandom(),
     vendor_id: pg
@@ -56,10 +25,9 @@ export const vendor_gateways = pg.pgTable(
       .notNull()
       .references(() => company.id, { onDelete: 'restrict' }),
 
-    gateway_type: GatewayTypeEnum('gateway_type').notNull().default('razorpay'),
-    shipping_charge_strategy: ShippingChargeStrategyEnum(
-      'shipping_charge_strategy',
-    ).notNull(),
+    gateway_type: GatewayTypeEnum('gateway_type')
+      .notNull()
+      .default(PaymentGatewayProvider.RAZORPAY),
     routing_status: PaymentRoutingStatusEnum('routing_status')
       .notNull()
       .default(PaymentRoutingStatus.VAULTED),
@@ -88,10 +56,10 @@ export const vendor_credentials = pg.pgTable(
   'vendor_credentials',
   {
     id: pg.uuid('id').primaryKey().defaultRandom(),
-    vendor_gateway_id: pg
-      .uuid('vendor_gateway_id')
+    vendor_payment_gateway_id: pg
+      .uuid('vendor_payment_gateway_id')
       .notNull()
-      .references(() => vendor_gateways.id, { onDelete: 'restrict' }),
+      .references(() => vendor_payment_gateways.id, { onDelete: 'restrict' }),
 
     credential_type: CredentialTypeEnum('credential_type').notNull(),
     public_identifier: pg.text('public_identifier'),
@@ -113,7 +81,7 @@ export const vendor_credentials = pg.pgTable(
   (table) => [
     pg
       .uniqueIndex('idx_vendor_creds_gateway_type_uniq')
-      .on(table.vendor_gateway_id, table.credential_type),
+      .on(table.vendor_payment_gateway_id, table.credential_type),
     pg.index('idx_vendor_creds_key_version').on(table.encryption_key_version),
     pg.check(
       'chk_credential_has_value',
@@ -122,9 +90,3 @@ export const vendor_credentials = pg.pgTable(
     ),
   ],
 );
-
-export type VendorGateway = typeof vendor_gateways.$inferSelect;
-export type NewVendorGateway = typeof vendor_gateways.$inferInsert;
-
-export type VendorCredential = typeof vendor_credentials.$inferSelect;
-export type NewVendorCredential = typeof vendor_credentials.$inferInsert;

@@ -22,17 +22,19 @@ import {
   inventory,
   warehouse,
   products,
-  vendor_gateways,
+  vendor_payment_gateways,
   vendor_credentials,
   order_items,
 } from '../../drizzle/schema/index.js';
 import * as schema from '../../drizzle/schema/index.js';
 import {
+  CredentialType,
   LogisticsMode,
   PaymentRoutingStatus,
   PromotionStatus,
   ShippingChargeStrategy,
 } from '../../drizzle/types/types.js';
+import { ShippingPreferenceEngineService } from '../shipping/shipping-preference-engine.service.js';
 import { PaymentSplitterService } from '../vendors/payment/payment-splitter.service.js';
 import { PaymentService } from '../vendors/payment/payment.service.js';
 import {
@@ -77,6 +79,7 @@ export class CheckoutService {
     private readonly cryptoService: CryptoService,
     private readonly paymentSplitterService: PaymentSplitterService,
     private readonly paymentService: PaymentService,
+    private readonly shippingPreferenceEngineService: ShippingPreferenceEngineService,
   ) {}
 
   private getRazorpayInstance(): Razorpay {
@@ -235,18 +238,22 @@ export class CheckoutService {
 
     const [resolvedAddress] = addressRecord;
     if (originPincodes.size > 0 && resolvedAddress?.postal_code) {
+      const totalWeight = orderLines.reduce(
+        (acc, line) => acc + (line.weight_kg || 0.5) * line.quantity,
+        0,
+      );
       for (const originPincode of originPincodes) {
         try {
           const serviceabilityRes: any =
             await this.shipRocketService.getServiceability(
               {
-                pickup_pincode: originPincode,
-                delivery_pincode: resolvedAddress.postal_code,
-                weight: 1,
+                pickup_postcode: Number(originPincode),
+                delivery_postcode: Number(resolvedAddress.postal_code),
+                weight: String(totalWeight > 0 ? totalWeight : 1),
                 breadth: 10,
                 height: 10,
-                qc_check: 0,
-                is_return: 0,
+                qc_check: 0 as 0,
+                is_return: 0 as 0,
                 mode: 'Surface',
                 cod: initiateCheckoutDto.paymentMethod === 'COD' ? 1 : 0,
               },
@@ -266,9 +273,6 @@ export class CheckoutService {
           // Only rethrow serviceability errors — network/API failures should
           // not block checkout (Shiprocket may be temporarily unavailable).
           if (err instanceof HttpException) throw err;
-          console.warn(
-            `[Checkout] Serviceability check skipped (Shiprocket API error): ${err?.message}`,
-          );
         }
       }
     }
@@ -295,13 +299,13 @@ export class CheckoutService {
         try {
           const serviceabilityRes: any =
             await this.shipRocketService.getServiceability({
-              pickup_pincode: pickupPincode,
-              delivery_pincode: resolvedAddress.postal_code,
-              weight: 1,
+              pickup_postcode: Number(pickupPincode),
+              delivery_postcode: Number(resolvedAddress.postal_code),
+              weight: String(1),
               breadth: 10,
               height: 10,
-              qc_check: 0,
-              is_return: 0,
+              qc_check: 0 as 0,
+              is_return: 0 as 0,
               mode: 'Surface',
               cod: 0,
             });
@@ -427,8 +431,8 @@ export class CheckoutService {
         if (vendorId) {
           [vendorGateway] = await tx
             .select()
-            .from(vendor_gateways)
-            .where(eq(vendor_gateways.vendor_id, vendorId))
+            .from(vendor_payment_gateways)
+            .where(eq(vendor_payment_gateways.vendor_id, vendorId))
             .limit(1);
         }
 
@@ -497,8 +501,14 @@ export class CheckoutService {
             .from(vendor_credentials)
             .where(
               and(
-                eq(vendor_credentials.vendor_gateway_id, vendorGateway.id),
-                eq(vendor_credentials.credential_type, 'razorpay_key_id'),
+                eq(
+                  vendor_credentials.vendor_payment_gateway_id,
+                  vendorGateway.id,
+                ),
+                eq(
+                  vendor_credentials.credential_type,
+                  CredentialType.RAZORPAY_KEY_ID,
+                ),
               ),
             )
             .limit(1);
@@ -671,8 +681,13 @@ export class CheckoutService {
           if (variantWithProduct?.vendorId && paymentRecord.company_id) {
             const [vendorGateway] = await this.db
               .select()
-              .from(vendor_gateways)
-              .where(eq(vendor_gateways.vendor_id, variantWithProduct.vendorId))
+              .from(vendor_payment_gateways)
+              .where(
+                eq(
+                  vendor_payment_gateways.vendor_id,
+                  variantWithProduct.vendorId,
+                ),
+              )
               .limit(1);
 
             const [compRecord] = await this.db
@@ -895,8 +910,13 @@ export class CheckoutService {
           if (variantWithProduct?.vendorId) {
             const [vendorGateway] = await this.db
               .select()
-              .from(vendor_gateways)
-              .where(eq(vendor_gateways.vendor_id, variantWithProduct.vendorId))
+              .from(vendor_payment_gateways)
+              .where(
+                eq(
+                  vendor_payment_gateways.vendor_id,
+                  variantWithProduct.vendorId,
+                ),
+              )
               .limit(1)
               .catch(() => []);
 
@@ -1101,7 +1121,14 @@ export class CheckoutService {
     productVariantId?: string,
     qty?: number,
   ): Promise<
-    { variantId: string; price: number; quantity: number; name?: string | null }[] | undefined
+    | {
+        variantId: string;
+        price: number;
+        quantity: number;
+        name?: string | null;
+        weight_kg?: number;
+      }[]
+    | undefined
   > {
     if (productVariantId) {
       const [variant] = await this.db
@@ -1109,6 +1136,7 @@ export class CheckoutService {
           id: product_variants.id,
           price: product_variants.price,
           name: products.name,
+          weight_kg: product_variants.weight_kg,
         })
         .from(product_variants)
         .innerJoin(products, eq(product_variants.product_id, products.id))
@@ -1126,6 +1154,7 @@ export class CheckoutService {
           price: Number(variant.price),
           quantity: qty ?? 1,
           name: variant.name,
+          weight_kg: Number(variant.weight_kg || 0.5),
         },
       ];
     }
@@ -1147,6 +1176,7 @@ export class CheckoutService {
           price: product_variants.price,
           quantity: cart_items.quantity,
           name: products.name,
+          weight_kg: product_variants.weight_kg,
         })
         .from(cart_items)
         .innerJoin(
@@ -1160,6 +1190,7 @@ export class CheckoutService {
         price: Number(item.price),
         quantity: item.quantity,
         name: item.name,
+        weight_kg: Number(item.weight_kg || 0.5),
       }));
     }
   }
@@ -1272,7 +1303,6 @@ export class CheckoutService {
     // 3. Call Shiprocket for the lowest rate
     let totalShippingCost = 0;
     const cacheKeyBase = `dynamic_rate:${companyId}:${resolvedAddress.postal_code}`;
-    const weight = 1; // Assuming default weight of 1kg if not provided per line for now
 
     for (const [originPincode, lines] of originPincodeToLines.entries()) {
       const cacheKey = `${cacheKeyBase}:${originPincode}`;
@@ -1283,18 +1313,35 @@ export class CheckoutService {
         continue;
       }
 
+      // Resolve vendor ID from items for this origin warehouse
+      let vendorId: string | null = null;
+      const firstLine = lines[0];
+      if (firstLine) {
+        const [variantWithProduct] = await this.db
+          .select({ vendorId: products.vendor_id })
+          .from(product_variants)
+          .innerJoin(products, eq(product_variants.product_id, products.id))
+          .where(eq(product_variants.id, firstLine.variantId))
+          .limit(1);
+        vendorId = variantWithProduct?.vendorId || null;
+      }
+
       let lowestRateForThisOrigin: number | null = null;
       try {
+        const originWeight = lines.reduce(
+          (acc, line) => acc + (line.weight_kg || 0.5) * line.quantity,
+          0,
+        );
         const serviceabilityRes: any =
           await this.shipRocketService.getServiceability(
             {
-              pickup_pincode: originPincode,
-              delivery_pincode: resolvedAddress.postal_code,
-              weight,
+              pickup_postcode: Number(originPincode),
+              delivery_postcode: Number(resolvedAddress.postal_code),
+              weight: String(originWeight > 0 ? originWeight : 1),
               breadth: 10,
               height: 10,
-              qc_check: 0,
-              is_return: 0,
+              qc_check: 0 as 0,
+              is_return: 0 as 0,
               mode: 'Surface',
               cod: 0, // Using prepaid estimate
             },
@@ -1304,36 +1351,50 @@ export class CheckoutService {
 
         const availableCouriers =
           serviceabilityRes?.data?.available_courier_companies ?? [];
-        console.log(
-          `[Checkout] availableCouriers for origin ${originPincode}:`,
-          availableCouriers.map((c: any) => ({
-            name: c.courier_name,
-            rate: c.rate,
-          })),
-        );
 
         if (availableCouriers.length > 0) {
-          // Find the courier with the lowest rate
-          lowestRateForThisOrigin = Math.min(
-            ...availableCouriers.map((c: any) => c.rate),
-          );
-          console.log(
-            `[Checkout] lowest rate found for origin ${originPincode}:`,
-            lowestRateForThisOrigin,
-          );
+          if (vendorId) {
+            const engineResult =
+              await this.shippingPreferenceEngineService.resolveBestShippingOption(
+                availableCouriers.map((c: any) => ({
+                  courier_company_id: c.courier_company_id,
+                  courier_name: c.courier_name,
+                  rate: c.rate,
+                  rating: c.rating,
+                  estimated_delivery_days: c.estimated_delivery_days,
+                  delivery_performance: c.delivery_performance,
+                  pickup_performance: c.pickup_performance,
+                  cod_charges: c.cod_charges,
+                  is_surface: c.is_surface,
+                })),
+                vendorId,
+              );
+
+            if (engineResult.selectedOption) {
+              lowestRateForThisOrigin = engineResult.selectedOption.rate;
+            }
+          }
+
+          // Fallback if vendorId is missing or preference engine returns no option
+          if (lowestRateForThisOrigin === null) {
+            lowestRateForThisOrigin = Math.min(
+              ...availableCouriers.map((c: any) => c.rate),
+            );
+          }
+
           await this.cacheManager.set(
             cacheKey,
             lowestRateForThisOrigin,
             60 * 60 * 1000,
           ); // 1-hour cache TTL
-        } else {
-          console.log(
-            `[Checkout] NO available couriers found for origin ${originPincode}`,
-          );
         }
       } catch (err: any) {
-        console.warn(
-          `[Checkout] Dynamic rate calculation failed for origin ${originPincode}: ${err?.message}`,
+        if (err instanceof HttpException) {
+          throw err;
+        }
+        throw new HttpException(
+          'Failed to retrieve shipping rates from the aggregator. Please try again later.',
+          HttpStatus.BAD_GATEWAY,
         );
       }
 
@@ -1342,7 +1403,9 @@ export class CheckoutService {
           .map((l: any) => {
             const name = l.name || `Variant ${l.variantId}`;
             const words = name.split(' ');
-            return words.length > 5 ? words.slice(0, 5).join(' ') + '...' : name;
+            return words.length > 5
+              ? words.slice(0, 5).join(' ') + '...'
+              : name;
           })
           .join(', ');
         throw new HttpException(
@@ -1442,16 +1505,8 @@ export class CheckoutService {
 
     let shippingCost = 0;
     if (!isFreeShipping) {
-      const [gatewayRecord] = await this.db
-        .select({
-          shipping_charge_strategy: vendor_gateways.shipping_charge_strategy,
-        })
-        .from(vendor_gateways)
-        .where(eq(vendor_gateways.company_id, companyId))
-        .limit(1);
-
       const strategy =
-        gatewayRecord?.shipping_charge_strategy ||
+        companyRecord.shipping_charge_strategy ||
         ShippingChargeStrategy.STANDARD_FLAT_RATE;
 
       if (strategy === ShippingChargeStrategy.STANDARD_FLAT_RATE) {
@@ -1482,7 +1537,6 @@ export class CheckoutService {
       nudgeAmount: nudgeAmountInPaise / 100,
     };
 
-    console.log('[Checkout] calculateShippingRate final result:', result);
     return result;
   }
 }

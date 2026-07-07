@@ -17,12 +17,12 @@ import { Public } from '../../common/decorators/public.decorator.js';
 export class SubscriptionController {
   constructor(private readonly subscriptionService: SubscriptionService) { }
 
-  // Public — used during vendor registration to show plan cards
+  // Public — used during vendor registration and CMS editor to show plan cards
   @Public()
   @Get('plans')
   @SkipSubscription()
-  getPlans() {
-    return this.subscriptionService.getAvailablePlans();
+  getPlans(@Headers('company-domain') domain: string) {
+    return this.subscriptionService.getAvailablePlans(domain || undefined);
   }
 
   // Protected — vendor dashboard banner uses this

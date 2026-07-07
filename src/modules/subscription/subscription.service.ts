@@ -5,7 +5,7 @@ import {
   Logger,
   forwardRef,
 } from '@nestjs/common';
-import { and, asc, eq, gte, lt } from 'drizzle-orm';
+import { and, asc, eq, gte, isNull, lt, or } from 'drizzle-orm';
 import { MailService } from '../../common/services/mail/mail.service.js';
 import { DRIZZLE, type DrizzleService } from '../../drizzle/drizzle.module.js';
 import {
@@ -71,7 +71,7 @@ export class SubscriptionService {
     private mailService: MailService,
     @Inject(forwardRef(() => CompanyService))
     private readonly companyService: CompanyService,
-  ) { }
+  ) {}
   /** Returns the plan row whose plan_name = 'trial' */
   private async getTrialPlan() {
     const plan = await this.db.query.subscription_plans
@@ -80,9 +80,12 @@ export class SubscriptionService {
       })
       .catch((err) => {
         this.logger.error('Failed to fetch trial plan from database', err);
-        throw new InternalServerErrorException(SubscriptionErrorKeyEnum.FAILED_TO_FETCH_TRIAL_PLAN, {
-          cause: err,
-        });
+        throw new InternalServerErrorException(
+          SubscriptionErrorKeyEnum.FAILED_TO_FETCH_TRIAL_PLAN,
+          {
+            cause: err,
+          },
+        );
       });
     if (!plan) {
       throw new Error(
@@ -138,7 +141,8 @@ export class SubscriptionService {
   }
 
   private isUuid(val: string): boolean {
-    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    const uuidRegex =
+      /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
     return uuidRegex.test(val);
   }
 
@@ -218,23 +222,24 @@ export class SubscriptionService {
   async getSubscriptionStatus(
     companyIdOrDomain: string,
   ): Promise<Subscription | null> {
-
     const companyId = await this.resolveCompanyId(companyIdOrDomain);
-    const sub = await this.db.query.vendor_subscriptions.findFirst({
-      where: eq(vendor_subscriptions.company_id, companyId),
-      with: { plan: true },
-    }).catch((err) => {
-      this.logger.error(
-        `Failed to fetch subscription status for company ${companyId}`,
-        err,
-      );
-      throw new InternalServerErrorException(
-        SubscriptionErrorKeyEnum.FAILED_TO_FETCH_SUBSCRIPTION_STATUS,
-        {
-          cause: err,
-        },
-      );
-    });
+    const sub = await this.db.query.vendor_subscriptions
+      .findFirst({
+        where: eq(vendor_subscriptions.company_id, companyId),
+        with: { plan: true },
+      })
+      .catch((err) => {
+        this.logger.error(
+          `Failed to fetch subscription status for company ${companyId}`,
+          err,
+        );
+        throw new InternalServerErrorException(
+          SubscriptionErrorKeyEnum.FAILED_TO_FETCH_SUBSCRIPTION_STATUS,
+          {
+            cause: err,
+          },
+        );
+      });
 
     if (!sub) return null;
 
@@ -257,7 +262,7 @@ export class SubscriptionService {
     if (inGracePeriod) {
       bannerUrgency = BannerUrgency.WARNING;
     } else if (showBanner && daysRemaining !== null) {
-      bannerUrgency = this.getBannerUrgency(daysRemaining)
+      bannerUrgency = this.getBannerUrgency(daysRemaining);
     }
 
     return {
@@ -280,13 +285,28 @@ export class SubscriptionService {
 
   /**
    * Fetches all available plans to display on the onboarding plan-selection step.
+   * If a companyId is supplied, returns only plans belonging to that company.
+   * Falls back to returning plans with no company_id (global plans) if none found.
    */
-  async getAvailablePlans() {
-    return this.db
+  async getAvailablePlans(companyId?: string) {
+    const baseWhere = eq(subscription_plans.is_active, true);
+
+    if (companyId) {
+      const plan = await this.db
+        .select()
+        .from(subscription_plans)
+        .where(and(baseWhere, eq(subscription_plans.company_id, companyId)))
+        .orderBy(asc(subscription_plans.display_order));
+
+      if (plan.length > 0) return plan;
+    }
+
+    const plan = await this.db
       .select()
       .from(subscription_plans)
-      .where(eq(subscription_plans.is_active, true))
+      .where(baseWhere)
       .orderBy(asc(subscription_plans.display_order));
+    return plan;
   }
 
   /**

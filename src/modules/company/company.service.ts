@@ -6,8 +6,16 @@ import {
 } from '@nestjs/common';
 import { eq } from 'drizzle-orm';
 import { DRIZZLE, type DrizzleService } from '../../drizzle/drizzle.module.js';
-import { company, user_and_company, vendor } from '../../drizzle/schema/index.js';
-import { AccessStatus, UserStatus } from '../../drizzle/types/types.js';
+import {
+  company,
+  user_and_company,
+  vendor,
+} from '../../drizzle/schema/index.js';
+import {
+  AccessStatus,
+  EntityStatus,
+  UserStatus,
+} from '../../drizzle/types/types.js';
 import { domainExtractor } from '../../common/filters/domainExtractor.filter.js';
 import { COMPANY_MESSAGES } from './constants/company.constants.js';
 import {
@@ -109,7 +117,7 @@ export class CompanyService {
       const result = await this.db.transaction(async (tx) => {
         const [companyRecord] = await tx
           .update(company)
-          .set({ onboarding_status: UserStatus.ACTIVE })
+          .set({ onboarding_status: EntityStatus.ACTIVE })
           .where(eq(company.id, companyId))
           .returning({ id: company.id })
           .catch((error) => {
@@ -200,7 +208,7 @@ export class CompanyService {
       const result = await this.db.transaction(async (tx) => {
         const [companyRecord] = await tx
           .update(company)
-          .set({ onboarding_status: UserStatus.INACTIVE })
+          .set({ onboarding_status: EntityStatus.INACTIVE })
           .where(eq(company.id, companyId))
           .returning({ id: company.id })
           .catch((error) => {
@@ -291,7 +299,7 @@ export class CompanyService {
       const result = await this.db.transaction(async (tx) => {
         const [companyRecord] = await tx
           .update(company)
-          .set({ onboarding_status: UserStatus.SUSPENDED })
+          .set({ onboarding_status: EntityStatus.SUSPENDED })
           .where(eq(company.id, companyId))
           .returning({ id: company.id })
           .catch((error) => {

@@ -9,8 +9,11 @@ import {
 import { ConfigService } from '@nestjs/config';
 import { type Cache } from 'cache-manager';
 import { CACHE_MANAGER } from '@nestjs/cache-manager';
+import { DRIZZLE, type DrizzleService } from '../../drizzle/drizzle.module.js';
+import { logistic_companies } from '../../drizzle/schema/logistics.schema.js';
+import { sql } from 'drizzle-orm';
 import got from 'got';
-import { IShippingProvider } from '../shipping/interfaces/shipping-provider.interface.js';
+
 import { SHIPROCKET_APIs } from './constants/ship-rocket.constants.js';
 import {
   ShiprocketAddPickupAddress,
@@ -82,7 +85,7 @@ const tokenFetchInFlight = new Map<
 >();
 
 @Injectable()
-export class ShipRocketService implements IShippingProvider {
+export class ShipRocketService {
   /**
    * Default Redis cache key for Shiprocket authentication.
    * Used when no company-specific credentials are provided.
@@ -91,6 +94,7 @@ export class ShipRocketService implements IShippingProvider {
   constructor(
     private configService: ConfigService,
     @Inject(CACHE_MANAGER) private cacheManager: Cache,
+    @Inject(DRIZZLE) private db: DrizzleService,
   ) {}
 
   /**
@@ -102,43 +106,30 @@ export class ShipRocketService implements IShippingProvider {
    * @throws InternalServerErrorException if the serviceability check fails.
    */
   async getServiceability(
-    data: {
-      pickup_pincode: string;
-      delivery_pincode: string;
-      breadth: number;
-      height: number;
-      weight: number;
-      qc_check: 0 | 1;
-      is_return: 0 | 1;
-      mode: string;
-      cod: 0 | 1;
-    },
+    data: ShipRocketCheckServiceabilityRequest,
     credentials?: { email?: string; password?: string },
     companyId?: string,
   ) {
     const token = await this.getToken(credentials, companyId);
-    console.log(
-      `\n\n\n\n[ShipRocketService.getServiceability] Token generated:`,
-      token,
-      '\n\n\n\nCompanyId:',
-      companyId,
-    );
+
     const url = SHIPROCKET_APIs.SERVICEABILITY;
-    const params = {
-      pickup_postcode: Number(data.pickup_pincode),
-      delivery_postcode: Number(data.delivery_pincode),
+    const params: Record<string, string | number> = {
+      pickup_postcode: Number(data.pickup_postcode),
+      delivery_postcode: Number(data.delivery_postcode),
       weight: String(data.weight),
-      cod: data.cod,
-      qc_check: data.qc_check as 1,
     };
 
-    console.log(
-      '\n\n[ShipRocket] Sending GET request to:',
-      url,
-      '\n[ShipRocket] With params:',
-      params,
-      '\n\n',
-    );
+    if (data.cod !== undefined) params.cod = data.cod;
+    if (data.declared_value !== undefined) params.declared_value = Number(data.declared_value);
+    if (data.qc_check !== undefined) params.qc_check = data.qc_check;
+    if (data.mode !== undefined) params.mode = data.mode;
+    if (data.is_return !== undefined) params.is_return = data.is_return;
+    if (data.length !== undefined) params.length = data.length;
+    if (data.breadth !== undefined) params.breadth = data.breadth;
+    if (data.height !== undefined) params.height = data.height;
+    if (data.couriers_type !== undefined) params.couriers_type = data.couriers_type;
+    if (data.only_local !== undefined) params.only_local = data.only_local;
+    if (data.order_id !== undefined) params.order_id = data.order_id;
 
     const res: ShiprocketCourierServiceabilityResponse = await got
       .get(url, {
@@ -148,24 +139,63 @@ export class ShipRocketService implements IShippingProvider {
       })
       .json();
 
-    const filteredCouriers = res.data.available_courier_companies?.map((c: any) => ({
-      courier_company_id: c.courier_company_id,
-      courier_name: c.courier_name,
-      rate: c.rate,
-      rating: c.rating,
-      estimated_delivery_days: c.estimated_delivery_days,
-      delivery_performance: c.delivery_performance,
-      pickup_performance: c.pickup_performance,
-      cod_charges: c.cod_charges,
-      is_surface: c.is_surface,
-    }));
-
-    console.log(
-      '[ShipRocket] Filtered Courier Options for Vendor Selection:',
-      JSON.stringify(filteredCouriers, null, 2),
-      '\n----------------------------------------------------------------------------------------\n[ShipRocket] Recommended by:',
-      res.data.recommended_by,
+    const filteredCouriers = res.data.available_courier_companies?.map(
+      (c: any) => ({
+        courier_company_id: c.courier_company_id,
+        courier_name: c.courier_name,
+        rate: c.rate,
+        rating: c.rating,
+        estimated_delivery_days: c.estimated_delivery_days,
+        delivery_performance: c.delivery_performance,
+        pickup_performance: c.pickup_performance,
+        cod_charges: c.cod_charges,
+        is_surface: c.is_surface,
+      }),
     );
+
+    // Fire-and-forget async update of logistic companies metadata in DB
+    if (res.data.available_courier_companies?.length) {
+      const recordsToUpsert = res.data.available_courier_companies.map(
+        (c: any) => ({
+          courier_company_id: c.courier_company_id,
+          courier_name: c.courier_name || 'Unknown',
+          is_cod_supported: c.cod === 1,
+          is_surface: c.is_surface === true,
+          delivery_score: Number(c.delivery_performance) || 0,
+          pickup_score: Number(c.pickup_performance) || 0,
+          rating: Number(c.rating) || 0,
+          min_weight: Number(c.min_weight) || null,
+          charge_weight: Number(c.charge_weight) || null,
+          volumetric_max_weight: c.volumetric_max_weight
+            ? Number(c.volumetric_max_weight)
+            : null,
+          last_seen: new Date(),
+        }),
+      );
+
+      // Non-blocking query execution to sync courier metrics
+      this.db
+        .insert(logistic_companies)
+        .values(recordsToUpsert)
+        .onConflictDoUpdate({
+          target: logistic_companies.courier_company_id,
+          set: {
+            courier_name: sql`EXCLUDED.courier_name`,
+            is_cod_supported: sql`EXCLUDED.is_cod_supported`,
+            is_surface: sql`EXCLUDED.is_surface`,
+            delivery_score: sql`EXCLUDED.delivery_score`,
+            pickup_score: sql`EXCLUDED.pickup_score`,
+            rating: sql`EXCLUDED.rating`,
+            min_weight: sql`EXCLUDED.min_weight`,
+            charge_weight: sql`EXCLUDED.charge_weight`,
+            volumetric_max_weight: sql`EXCLUDED.volumetric_max_weight`,
+            last_seen: sql`EXCLUDED.last_seen`,
+          },
+        })
+        .execute()
+        .catch((err) => {});
+    }
+
     return res;
   }
 

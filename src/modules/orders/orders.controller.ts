@@ -8,6 +8,7 @@ import {
   HttpStatus,
   Param,
   Patch,
+  Post,
   Query,
   UseGuards,
 } from '@nestjs/common';
@@ -146,4 +147,15 @@ export class OrdersController {
     // Send raw CSV string — no JSON wrapping.
     res.send(csv);
   }
+
+  @Post(':orderId/retry-shipping')
+  @HttpCode(HttpStatus.OK)
+  @Roles(Role.ADMIN, Role.VENDOR)
+  async retryFailedShipping(
+    @Param('orderId') orderId: string,
+    @Headers('company-domain') domain: string,
+  ) {
+    return this.ordersService.retryFailedShipping(orderId, domain);
+  }
 }
+

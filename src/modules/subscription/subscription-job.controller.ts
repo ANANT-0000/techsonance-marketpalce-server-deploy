@@ -16,6 +16,8 @@ import { SubscriptionService } from './subscription.service.js';
 import { MailService } from '../../common/services/mail/mail.service.js';
 import { SUBSCRIPTION_JOB_CONSTANTS } from './constants/subscription-job.constants.js';
 
+import { GatewaySyncService } from './gateway-sync.service.js';
+
 @Controller({
   version: SUBSCRIPTION_JOB_CONSTANTS.INTERNAL_VERSION,
   path: SUBSCRIPTION_JOB_CONSTANTS.INTERNAL_PATH,
@@ -28,6 +30,7 @@ export class SubscriptionJobController {
     private readonly subscriptionService: SubscriptionService,
     private readonly mailService: MailService,
     private readonly configService: ConfigService,
+    private readonly gatewaySyncService: GatewaySyncService,
   ) {
     const currentSigningKey = this.configService.get<string>(
       'QSTASH_CURRENT_SIGNING_KEY',
@@ -189,6 +192,42 @@ export class SubscriptionJobController {
       this.logger.error(`send-reminders job failed: ${err.message}`, err.stack);
       throw new HttpException(
         `send-reminders failed: ${err.message}`,
+        HttpStatus.INTERNAL_SERVER_ERROR,
+      );
+    }
+  }
+  // ─── Endpoint 4: Sync CMS Plan to Gateway ──────────────────────────────────
+  // Triggered dynamically by CmsSubscriptionService via QStash when a plan is published
+
+  @Public()
+  @Post('subscription-sync')
+  @HttpCode(HttpStatus.OK)
+  async syncSubscriptionPlan(@Req() req: Request) {
+    await this.verifySignature(req);
+    try {
+      // The body contains the payload sent from `publishJSON`
+      const rawBody = (req as any).rawBody;
+      const body = JSON.parse(rawBody.toString('utf-8'));
+
+      const { planId, jobId } = body;
+
+      if (!planId || !jobId) {
+        throw new HttpException(
+          'Missing planId or jobId in payload',
+          HttpStatus.BAD_REQUEST,
+        );
+      }
+
+      await this.gatewaySyncService.syncPlanToGateway(planId, jobId);
+
+      return { success: true };
+    } catch (err: any) {
+      this.logger.error(
+        `subscription-sync job failed: ${err.message}`,
+        err.stack,
+      );
+      throw new HttpException(
+        `subscription-sync failed: ${err.message}`,
         HttpStatus.INTERNAL_SERVER_ERROR,
       );
     }

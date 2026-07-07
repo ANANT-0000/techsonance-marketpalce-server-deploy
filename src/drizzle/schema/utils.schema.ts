@@ -4,18 +4,12 @@ import { address, user, vendor } from './users.schema.js';
 import { product_variants, orders } from './shop.schema.js';
 import {
   EntityStatus,
-  SupportTicketPriority,
-  SupportTicketStatus,
 } from '../types/types.js';
-import { EntityStatusEnum } from './enums.schema.js';
-export const support_tickets_status_enum = pg.pgEnum(
-  'support_tickets_status_enum',
-  SupportTicketStatus,
-);
-export const support_tickets_priority_enum = pg.pgEnum(
-  'support_tickets_priority_enum',
-  SupportTicketPriority,
-);
+import {
+  EntityStatusEnum,
+  support_tickets_priority_enum,
+  support_tickets_status_enum,
+} from './enums.schema.js';
 
 export const company_document = pg.pgTable('company_document', {
   id: pg.uuid('id').primaryKey().defaultRandom(),

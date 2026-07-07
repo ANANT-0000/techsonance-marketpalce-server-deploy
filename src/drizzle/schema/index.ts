@@ -11,10 +11,13 @@ export * from './subscription.schema.js';
 export * from './vendor_storefront.schema.js';
 export * from './nav_storefront.schema.js';
 export * from './outbox.schema.js';
-export * from './vendor-gateway.schema.js';
+export * from './payment-gateway.schema.js';
+export * from './logistics.schema.js';
+export * from './landing_page.schema.js';
 import { address, user, vendor } from './users.schema.js';
 import { vendor_storefront_sections } from './vendor_storefront.schema.js';
 import { nav_menus, nav_items } from './nav_storefront.schema.js';
+
 import {
   cart_items,
   carts,
@@ -84,7 +87,8 @@ import {
 } from './subscription.schema.js';
 import { gst_invoices } from './finance.schema.js';
 import { outbox_jobs } from './outbox.schema.js';
-import { vendor_gateways } from './vendor-gateway.schema.js';
+import { vendor_shipping_preferences } from './logistics.schema.js';
+import { vendor_payment_gateways } from './payment-gateway.schema.js';
 
 export const companyRelations = relations(company, ({ one, many }) => ({
   roles: many(user_roles),
@@ -140,10 +144,11 @@ export const companyRelations = relations(company, ({ one, many }) => ({
   subscriptionEvents: many(subscription_events),
   subscriptionPlans: many(subscription_plans),
   outbox_jobs: many(outbox_jobs),
-  vendorGateway: one(vendor_gateways, {
+  vendorGateway: one(vendor_payment_gateways, {
     fields: [company.id],
-    references: [vendor_gateways.company_id],
+    references: [vendor_payment_gateways.company_id],
   }),
+  shippingPreferences: many(vendor_shipping_preferences),
 }));
 
 export const outboxJobsRelations = relations(outbox_jobs, ({ one }) => ({
@@ -228,20 +233,37 @@ export const vendorRelations = relations(vendor, ({ one, many }) => ({
   }),
   documents: many(company_document),
   storefrontSections: many(vendor_storefront_sections),
-  vendorGateway: one(vendor_gateways, {
+  vendorGateway: one(vendor_payment_gateways, {
     fields: [vendor.id],
-    references: [vendor_gateways.vendor_id],
+    references: [vendor_payment_gateways.vendor_id],
+  }),
+  shippingPreference: one(vendor_shipping_preferences, {
+    fields: [vendor.id],
+    references: [vendor_shipping_preferences.vendor_id],
   }),
 }));
 export const vendorGatewaysRelations = relations(
-  vendor_gateways,
+  vendor_payment_gateways,
   ({ one }) => ({
     vendor: one(vendor, {
-      fields: [vendor_gateways.vendor_id],
+      fields: [vendor_payment_gateways.vendor_id],
       references: [vendor.id],
     }),
     company: one(company, {
-      fields: [vendor_gateways.company_id],
+      fields: [vendor_payment_gateways.company_id],
+      references: [company.id],
+    }),
+  }),
+);
+export const vendorShippingPreferencesRelations = relations(
+  vendor_shipping_preferences,
+  ({ one }) => ({
+    vendor: one(vendor, {
+      fields: [vendor_shipping_preferences.vendor_id],
+      references: [vendor.id],
+    }),
+    company: one(company, {
+      fields: [vendor_shipping_preferences.company_id],
       references: [company.id],
     }),
   }),

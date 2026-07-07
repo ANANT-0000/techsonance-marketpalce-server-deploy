@@ -82,7 +82,7 @@ interface SuppressionDates {
  * Represents a single courier company's availability, rates, and performance metrics.
  * Use Case: Displayed in the `available_courier_companies` list to help users select the best shipping option based on cost, speed, and reliability.
  */
-interface CourierCompany {
+export interface CourierCompany {
   /** Maximum weight limit for air shipment (string like "0.00") */
   air_max_weight: string;
   /** Maximum insured amount allowed (0 if not applicable) */
@@ -405,7 +405,7 @@ export interface ShipRocketCheckServiceabilityRequest {
    *
    * Example: 1
    */
-  couriers_type?: 1;
+  couriers_type?: 0 | 1;
 
   /**
    * Filter to show only hyperlocal couriers.
@@ -417,7 +417,7 @@ export interface ShipRocketCheckServiceabilityRequest {
    *
    * Example: 1
    */
-  only_local?: 1;
+  only_local?: 0 | 1;
 
   /**
    * Filter to show only QC-enabled couriers.
@@ -429,7 +429,7 @@ export interface ShipRocketCheckServiceabilityRequest {
    *
    * Example: 1
    */
-  qc_check?: 1;
+  qc_check?: 0 | 1;
 }
 /**
  * Main response interface for the courier rate and availability API.
@@ -741,10 +741,7 @@ export interface ShiprocketCreateOrderPayload {
    * SR_QUICK = 3 Hour Delivery
    */
   checkout_shipping_method?:
-    | 'SR_RUSH'
-    | 'SR_STANDARD'
-    | 'SR_EXPRESS'
-    | 'SR_QUICK';
+    'SR_RUSH' | 'SR_STANDARD' | 'SR_EXPRESS' | 'SR_QUICK';
 
   /** What3Words address */
   what3words_address?: string;
@@ -2173,8 +2170,7 @@ export interface ShipRocketUpdateReturnOrderRequest {
  * ShipRocket Update Return Order API.
  */
 export type ShipRocketUpdateReturnOrderAction =
-  | 'product_details'
-  | 'warehouse_address';
+  'product_details' | 'warehouse_address';
 /**
  * Response returned by the ShipRocket Update Return Order API.
  */

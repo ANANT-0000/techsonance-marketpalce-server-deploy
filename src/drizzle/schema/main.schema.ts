@@ -5,11 +5,18 @@ import {
   UserStatus,
   EntityStatus,
   LogisticsMode,
+  ShippingChargeStrategy,
 } from '../types/types.js';
-import { EntityStatusEnum, LogisticsModeEnum } from './enums.schema.js';
+import {
+  AccessStatusEnum,
+  companyEnum,
+  EntityStatusEnum,
+  LogisticsModeEnum,
+  ShippingChargeStrategyEnum,
+} from './enums.schema.js';
 import { user } from './users.schema.js';
 import { sql } from 'drizzle-orm';
-export const companyEnum = pg.pgEnum('company_enum', UserStatus);
+
 export const company = pg.pgTable(
   'company',
   {
@@ -17,11 +24,9 @@ export const company = pg.pgTable(
     company_name: pg.text('company_name').notNull(),
     company_domain: pg.text('company_domain').notNull(),
     company_structure: pg.text('company_structure').notNull(),
-
-    // SINGLE status field with clear semantics
     onboarding_status: companyEnum('onboarding_status')
       .notNull()
-      .default(UserStatus.PENDING),
+      .default(EntityStatus.PENDING),
     entity_status: EntityStatusEnum('entity_status')
       .notNull()
       .default(EntityStatus.ACTIVE),
@@ -59,6 +64,11 @@ export const company = pg.pgTable(
       .decimal('standard_delivery_charge', { precision: 10, scale: 2 })
       .notNull()
       .default('50.00'),
+    shipping_charge_strategy: ShippingChargeStrategyEnum(
+      'shipping_charge_strategy',
+    )
+      .notNull()
+      .default(ShippingChargeStrategy.STANDARD_FLAT_RATE),
 
     created_at: pg.timestamp('created_at').notNull().defaultNow(),
     updated_at: pg
@@ -84,11 +94,7 @@ export const company = pg.pgTable(
     ),
   ],
 );
-export const UserRoleEnum = pg.pgEnum('user_role_enum', [
-  UserRole.ADMIN,
-  UserRole.VENDOR,
-  UserRole.CUSTOMER,
-]);
+
 export const user_roles = pg.pgTable('user_roles', {
   id: pg.uuid('id').primaryKey().defaultRandom(),
   role_name: pg.text('role_name').notNull().default(UserRole.ADMIN).unique(),
@@ -100,7 +106,7 @@ export const user_roles = pg.pgTable('user_roles', {
     .defaultNow()
     .$onUpdate(() => new Date()),
 });
-export const AccessStatusEnum = pg.pgEnum('access_status_enum', AccessStatus);
+
 export const user_and_company = pg.pgTable(
   'user_and_company',
   {

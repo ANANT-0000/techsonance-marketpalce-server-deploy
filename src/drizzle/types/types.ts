@@ -1,5 +1,10 @@
 import { Role } from '../../enums/role.enum.js';
 
+export enum NavItemType {
+  CUSTOM_LINK = 'custom_link',
+  CATEGORY = 'category',
+}
+
 export enum NavLayoutType {
   NONE = 'none',
   DIRECTORY = 'directory',
@@ -24,6 +29,8 @@ export enum UserStatus {
 export enum EntityStatus {
   ACTIVE = 'active',
   INACTIVE = 'inactive',
+  SUSPENDED = 'suspended',
+  PENDING = 'pending',
   DELETED = 'deleted',
 }
 export enum AccessStatus {
@@ -432,12 +439,65 @@ export interface NavItemPayload {
 }
 
 export enum ShippingChargeStrategy {
-  DYNAMIC_CUSTOMER_RATE = 'DYNAMIC_CUSTOMER_RATE',
-  STANDARD_FLAT_RATE = 'STANDARD_FLAT_RATE',
+  DYNAMIC_CUSTOMER_RATE = 'dynamic_customer_rate',
+  STANDARD_FLAT_RATE = 'standard_flat_rate',
 }
 
 export enum PaymentRoutingStatus {
-  VAULTED = 'VAULTED',
-  ROTATED = 'ROTATED',
-  SUSPENDED = 'SUSPENDED',
+  VAULTED = 'vaulted',
+  ROTATED = 'rotated',
+  SUSPENDED = 'suspended',
+}
+
+export enum ShippingStrategy {
+  PRIORITY = 'priority',
+  LOWEST_COST = 'lowest_cost',
+  FASTEST = 'fastest',
+  HYBRID = 'hybrid',
+  NONE = 'none',
+}
+export enum CredentialType {
+  RAZORPAY_KEY_ID = 'razorpay_key_id',
+  RAZORPAY_KEY_SECRET = 'razorpay_key_secret',
+  RAZORPAY_WEBHOOK_SECRET = 'razorpay_webhook_secret',
+  STRIPE_PUBLISHABLE_KEY = 'stripe_publishable_key',
+  STRIPE_SECRET_KEY = 'stripe_secret_key',
+  STRIPE_WEBHOOK_SECRET = 'stripe_webhook_secret',
+  CUSTOM_API_KEY = 'custom_api_key',
+  CUSTOM_API_SECRET = 'custom_api_secret',
+}
+export enum PaymentGatewayProvider {
+  RAZORPAY = 'razorpay',
+  STRIPE = 'stripe',
+}
+
+export enum PlanStatus {
+  DRAFT = 'draft',
+  LIVE = 'live',
+  ARCHIVED = 'archived',
+}
+
+export enum PriceInterval {
+  MONTHLY = 'monthly',
+  YEARLY = 'yearly',
+  CUSTOM = 'custom',
+}
+
+export enum SyncStatus {
+  PENDING = 'pending',
+  SYNCED = 'synced',
+  ERROR = 'error',
+}
+
+export enum FeatureType {
+  BOOLEAN = 'boolean',
+  NUMBER = 'number',
+  TEXT = 'text',
+}
+
+export enum JobStatus {
+  PENDING = 'pending',
+  PROCESSING = 'processing',
+  COMPLETED = 'completed',
+  FAILED = 'failed',
 }

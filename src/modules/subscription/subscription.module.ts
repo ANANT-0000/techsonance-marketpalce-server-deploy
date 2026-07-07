@@ -9,6 +9,11 @@ import { SubscriptionGuard } from './subscription.guard.js';
 import { CompanyModule } from '../company/company.module.js';
 import { AuthModule } from '../auth/auth.module.js';
 
+import { AdminSubscriptionController } from './admin-subscription.controller.js';
+import { PublicSubscriptionController } from './public-subscription.controller.js';
+import { CmsSubscriptionService } from './cms-subscription.service.js';
+import { GatewaySyncService } from './gateway-sync.service.js';
+
 @Module({
   imports: [
     DrizzleModule,
@@ -17,9 +22,14 @@ import { AuthModule } from '../auth/auth.module.js';
     forwardRef(() => CompanyModule),
     forwardRef(() => AuthModule),
   ],
-  controllers: [SubscriptionController, SubscriptionJobController],
-  providers: [SubscriptionService, SubscriptionGuard],
-  exports: [SubscriptionService, SubscriptionGuard],
+  controllers: [
+    SubscriptionController,
+    SubscriptionJobController,
+    AdminSubscriptionController,
+    PublicSubscriptionController,
+  ],
+  providers: [SubscriptionService, SubscriptionGuard, CmsSubscriptionService, GatewaySyncService],
+  exports: [SubscriptionService, SubscriptionGuard, CmsSubscriptionService, GatewaySyncService],
 })
 export class SubscriptionModule {}
 

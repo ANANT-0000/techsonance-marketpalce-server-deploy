@@ -62,6 +62,8 @@ import { redisStore } from 'cache-manager-redis-yet';
 import { OutboxModule } from './modules/outbox/outbox.module.js';
 
 import { PaymentModule } from './modules/vendors/payment/payment.module.js';
+import { LandingPageModule } from './modules/landing-page/landing-page.module.js';
+
 export enum RATELIMIT_NAME {
   SHORT = 'short',
   MEDIUM = 'medium',
@@ -165,6 +167,7 @@ export enum RATELIMIT_LIMIT {
     ShipRocketModule,
     OutboxModule,
     PaymentModule,
+    LandingPageModule,
   ],
   controllers: [AppController, UsersController],
   providers: [

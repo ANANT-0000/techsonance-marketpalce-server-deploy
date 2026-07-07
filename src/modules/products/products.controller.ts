@@ -49,7 +49,7 @@ export class ProductsController {
     @Headers('company-domain') domain: string,
     @UploadedFiles() files?: ProductFiles,
   ) {
-    const vendorId = req.user.vendorId || req.user.id; 
+    const vendorId = req.user.vendorId;
     return await this.productsService.createProduct(
       productDto,
       vendorId,
@@ -159,7 +159,7 @@ export class ProductsController {
         parsedImagesToDelete = imagesToDelete;
       }
     }
-    const vendorId = req.user.vendorId || req.user.id;
+    const vendorId = req.user.vendorId;
     return await this.productsService.updateProduct(
       domain,
       id,
@@ -178,8 +178,12 @@ export class ProductsController {
     @Body('category_id') categoryId: string,
     @Req() req: any,
   ) {
-    const vendorId = req.user.vendorId || req.user.id;
-    return await this.productsService.UpdateProductCategory(categoryId, id, vendorId);
+    const vendorId = req.user.vendorId;
+    return await this.productsService.UpdateProductCategory(
+      categoryId,
+      id,
+      vendorId,
+    );
   }
 
   @Public()
@@ -205,23 +209,29 @@ export class ProductsController {
   @UseGuards(JwtAuthGuard, RoleGuard)
   @Roles(Role.ADMIN, Role.VENDOR)
   async deleteSelectedProduct(@Body('ids') ids: string[], @Req() req: any) {
-    const vendorId = req.user.vendorId || req.user.id;
+    const vendorId = req.user.vendorId;
     return await this.productsService.deleteSelectedProducts(ids, vendorId);
   }
 
   @Delete('delete-selected-variants')
   @UseGuards(JwtAuthGuard, RoleGuard)
   @Roles(Role.ADMIN, Role.VENDOR)
-  async deleteSelectedProductVariants(@Body('ids') ids: string[], @Req() req: any) {
-    const vendorId = req.user.vendorId || req.user.id;
-    return await this.productsService.deleteSelectedProductVariants(ids, vendorId);
+  async deleteSelectedProductVariants(
+    @Body('ids') ids: string[],
+    @Req() req: any,
+  ) {
+    const vendorId = req.user.vendorId;
+    return await this.productsService.deleteSelectedProductVariants(
+      ids,
+      vendorId,
+    );
   }
 
   @Delete(':id')
   @UseGuards(JwtAuthGuard, RoleGuard)
   @Roles(Role.ADMIN, Role.VENDOR)
   async deleteProduct(@Param('id') id: string, @Req() req: any) {
-    const vendorId = req.user.vendorId || req.user.id;
+    const vendorId = req.user.vendorId;
     return await this.productsService.deleteProduct(id, vendorId);
   }
 
@@ -229,7 +239,7 @@ export class ProductsController {
   @UseGuards(JwtAuthGuard, RoleGuard)
   @Roles(Role.ADMIN, Role.VENDOR)
   async deleteProductVariant(@Param('id') id: string, @Req() req: any) {
-    const vendorId = req.user.vendorId || req.user.id;
+    const vendorId = req.user.vendorId;
     return await this.productsService.deleteProductVariant(id, vendorId);
   }
 }

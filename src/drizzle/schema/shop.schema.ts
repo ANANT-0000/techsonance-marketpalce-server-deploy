@@ -1,6 +1,17 @@
 import * as pg from 'drizzle-orm/pg-core';
 import { company } from './main.schema.js';
-import { EntityStatusEnum, BillingAccountUsedEnum } from './enums.schema.js';
+import {
+  EntityStatusEnum,
+  BillingAccountUsedEnum,
+  productImageTypeEnum,
+  payment_status_enum,
+  refund_status_enum,
+  returnTypeEnum,
+  returnStatusEnum,
+  cancelledByEnum,
+  order_status_enum,
+  ProductStatusEnum,
+} from './enums.schema.js';
 import { address, user, vendor } from './users.schema.js';
 import {
   CancelledBy,
@@ -120,10 +131,6 @@ export const coupon_usage = pg.pgTable('coupon_usage', {
   deleted_at: pg.timestamp('deleted_at'),
 });
 
-export const ProductStatusEnum = pg.pgEnum(
-  'product_status_enum',
-  ProductStatus,
-);
 export const products = pg.pgTable(
   'products',
   {
@@ -164,7 +171,7 @@ export const products = pg.pgTable(
     pg.index('idx_products_status').on(table.status),
   ],
 );
-export const order_status_enum = pg.pgEnum('order_status_enum', OrderStatus);
+
 export const orders = pg.pgTable(
   'orders',
   {
@@ -206,11 +213,15 @@ export const order_items = pg.pgTable(
   'order_items',
   {
     id: pg.uuid('id').primaryKey().defaultRandom(),
-    order_id: pg.uuid('order_id').references(() => orders.id, { onDelete: 'restrict' }),
+    order_id: pg
+      .uuid('order_id')
+      .references(() => orders.id, { onDelete: 'restrict' }),
     product_variant_id: pg
       .uuid('product_variant_id')
       .references(() => product_variants.id, { onDelete: 'restrict' }),
-    company_id: pg.uuid('company_id').references(() => company.id, { onDelete: 'restrict' }),
+    company_id: pg
+      .uuid('company_id')
+      .references(() => company.id, { onDelete: 'restrict' }),
     quantity: pg.integer('quantity').notNull(),
     price: pg.decimal('price', { precision: 10, scale: 2 }).notNull(),
     order_status: order_status_enum('order_status').notNull(),
@@ -242,14 +253,14 @@ export const coupon_products = pg.pgTable(
   },
   (t) => [pg.uniqueIndex('unq_coupon_product').on(t.coupon_id, t.product_id)],
 );
-export const cancelled_by_enum = pg.pgEnum('canceled_by_enum', CancelledBy);
+
 export const order_item_cancelled = pg.pgTable('order_item_canceled', {
   id: pg.uuid('id').primaryKey().defaultRandom(),
   order_item_id: pg
     .uuid('order_item_id')
     .references(() => order_items.id, { onDelete: 'cascade' }),
   reason: pg.text('reason').notNull(),
-  cancelled_by: cancelled_by_enum('cancelled_by').notNull(),
+  cancelled_by: cancelledByEnum('cancelled_by').notNull(),
   created_at: pg.timestamp('created_at').notNull().defaultNow(),
   user_id: pg
     .uuid('user_id')
@@ -296,10 +307,7 @@ export const product_variants = pg.pgTable(
     pg.index('idx_product_variants_status').on(table.status),
   ],
 );
-export const productImageTypeEnum = pg.pgEnum(
-  'product_image_type_enum',
-  ProductImageType,
-);
+
 export const product_images = pg.pgTable('product_images', {
   id: pg.uuid('id').primaryKey().defaultRandom(),
   image_url: pg.text('image_url').notNull(),
@@ -387,10 +395,6 @@ export const wishlist_items = pg.pgTable(
   ],
 );
 
-export const payment_status_enum = pg.pgEnum(
-  'payment_status_enum',
-  PaymentStatus,
-);
 export const payments = pg.pgTable(
   'payments',
   {
@@ -409,8 +413,12 @@ export const payments = pg.pgTable(
       EntityStatus.ACTIVE,
     ),
     deleted_at: pg.timestamp('deleted_at'),
-    order_id: pg.uuid('order_id').references(() => orders.id, { onDelete: 'restrict' }),
-    company_id: pg.uuid('company_id').references(() => company.id, { onDelete: 'restrict' }),
+    order_id: pg
+      .uuid('order_id')
+      .references(() => orders.id, { onDelete: 'restrict' }),
+    company_id: pg
+      .uuid('company_id')
+      .references(() => company.id, { onDelete: 'restrict' }),
   },
   (table) => [
     pg.index('idx_payments_order_id').on(table.order_id),
@@ -420,10 +428,6 @@ export const payments = pg.pgTable(
   ],
 );
 
-export const shipping_status_enum = pg.pgEnum(
-  'shipping_status_enum',
-  ShippingStatus,
-);
 export const shipping_details = pg.pgTable('shipping_details', {
   id: pg.uuid('id').primaryKey().defaultRandom(),
   tracking_url: pg.text('tracking_url'),
@@ -436,7 +440,9 @@ export const shipping_details = pg.pgTable('shipping_details', {
   order_id: pg
     .uuid('order_id')
     .references(() => orders.id, { onDelete: 'restrict' }),
-  company_id: pg.uuid('company_id').references(() => company.id, { onDelete: 'restrict' }),
+  company_id: pg
+    .uuid('company_id')
+    .references(() => company.id, { onDelete: 'restrict' }),
   logistics_provider: pg
     .varchar('logistics_provider', { length: 50 })
     .default('SHIPROCKET')
@@ -461,7 +467,6 @@ export const shipping_details = pg.pgTable('shipping_details', {
   deleted_at: pg.timestamp('deleted_at'),
 });
 
-export const refund_status_enum = pg.pgEnum('refund_status_enum', RefundStatus);
 export const refunds = pg.pgTable(
   'refunds',
   {
@@ -479,9 +484,15 @@ export const refunds = pg.pgTable(
       EntityStatus.ACTIVE,
     ),
     deleted_at: pg.timestamp('deleted_at'),
-    order_id: pg.uuid('order_id').references(() => orders.id, { onDelete: 'restrict' }),
-    order_items_id: pg.uuid('order_items_id').references(() => order_items.id, { onDelete: 'restrict' }),
-    payment_id: pg.uuid('payment_id').references(() => payments.id, { onDelete: 'restrict' }),
+    order_id: pg
+      .uuid('order_id')
+      .references(() => orders.id, { onDelete: 'restrict' }),
+    order_items_id: pg
+      .uuid('order_items_id')
+      .references(() => order_items.id, { onDelete: 'restrict' }),
+    payment_id: pg
+      .uuid('payment_id')
+      .references(() => payments.id, { onDelete: 'restrict' }),
     company_id: pg
       .uuid('company_id')
       .references(() => company.id, { onDelete: 'restrict' }),
@@ -494,10 +505,6 @@ export const refunds = pg.pgTable(
     pg.index('idx_refunds_created_at').on(table.created_at),
   ],
 );
-
-export const returnTypeEnum = pg.pgEnum('return_type_enum', ReturnType);
-
-export const returnStatusEnum = pg.pgEnum('return_status_enum', ReturnStatus);
 
 export const return_requests = pg.pgTable(
   'return_requests',
@@ -532,7 +539,9 @@ export const return_requests = pg.pgTable(
       .notNull()
       .defaultNow()
       .$onUpdate(() => new Date()),
-    record_status: EntityStatusEnum('record_status').default(EntityStatus.ACTIVE),
+    record_status: EntityStatusEnum('record_status').default(
+      EntityStatus.ACTIVE,
+    ),
     deleted_at: pg.timestamp('deleted_at'),
   },
   (table) => [

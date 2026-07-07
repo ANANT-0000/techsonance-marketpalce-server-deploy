@@ -336,16 +336,6 @@ export class WarehouseService {
             );
           });
 
-        const isDefault =
-          updateWarehouseDto.is_default !== undefined
-            ? updateWarehouseDto.is_default
-            : await tx
-                .select({ is_default: address.is_default })
-                .from(address)
-                .where(eq(address.id, existingWarehouse.address_id))
-                .limit(1)
-                .then(([r]) => r?.is_default ?? false);
-
         const [currentAddress] = await tx
           .select()
           .from(address)

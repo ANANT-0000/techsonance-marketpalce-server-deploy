@@ -3,7 +3,15 @@ import { AnyPgColumn } from 'drizzle-orm/pg-core';
 import { company, site_maps } from './main.schema.js';
 import { categories } from './shop.schema.js';
 import { sql } from 'drizzle-orm';
-import { NavLayoutType } from '../types/types.js';
+import { NavLayoutType, NavItemType } from '../types/types.js';
+import {
+  NavItemColType,
+  NavItemDisplayType,
+  NavItemTypeEnum,
+  NavLayoutTypeEnum,
+  NavMenuLogoAlignment,
+  NavMenuPosition,
+} from './enums.schema.js';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // DESIGN PHILOSOPHY — Lean Hybrid Schema
@@ -42,40 +50,10 @@ import { NavLayoutType } from '../types/types.js';
  * Used in WHERE clauses by the admin UI to filter category-linked items.
  */
 
-export enum NavItemType {
-  CUSTOM_LINK = 'custom_link',
-  CATEGORY = 'category',
-}
-export enum NavItemDisplayType {
-  CATEGORY_LISTING = 'category_listing',
-  DYNAMIC_SUBCATEGORIES = 'dynamic_subcategories',
-  PRODUCT_RANGES = 'product_ranges',
-  CATEGORY_DIRECTORY = 'category_directory',
-  CATEGORY_LISTING_VISUAL = 'category_listing_visual',
-}
-export enum NavItemColType {
-  SUBCATEGORIES = 'subcategories',
-  BRANDS = 'brands',
-  PROMOTION = 'promotion',
-  PRODUCTS = 'products',
-}
-export enum NavMenuPosition {
-  STICKY = 'sticky',
-  RELATIVE = 'relative',
-}
-export enum NavMenuLogoAlignment {
-  LEFT = 'left',
-  CENTER = 'center',
-}
-export enum NavMenuType {
-  SIMPLE = 'simple',
-  MEGA = 'mega',
-}
-
-export const NavItemTypeEnum = pg.pgEnum('nav_item_type_enum', [
-  NavItemType.CUSTOM_LINK,
-  NavItemType.CATEGORY,
-]);
+/**
+ * L1 nav-item source type.
+ * Used in WHERE clauses by the admin UI to filter category-linked items.
+ */
 
 // ─────────────────────────────────────────────────────────────────────────────
 // TypeScript interfaces for the JSONB columns.
@@ -229,12 +207,6 @@ export const nav_menus = pg.pgTable(
 // Everything else (column headings, promo blocks, display modes) lives in
 // the `meta` JSONB so it stays future-proof without migrations.
 // ─────────────────────────────────────────────────────────────────────────────
-
-export const NavLayoutTypeEnum = pg.pgEnum('nav_layout_type_enum', [
-  NavLayoutType.NONE,
-  NavLayoutType.DIRECTORY,
-  NavLayoutType.GRID,
-]);
 
 export const nav_items = pg.pgTable(
   'nav_items',
@@ -394,7 +366,9 @@ export const nav_items = pg.pgTable(
      */
     pg.check(
       'layout_root_check',
-      sql.raw(`(layout_type = '${NavLayoutType.NONE}' AND root_category_id IS NULL) OR (layout_type IN ('${NavLayoutType.DIRECTORY}', '${NavLayoutType.GRID}'))`),
+      sql.raw(
+        `(layout_type = '${NavLayoutType.NONE}' AND root_category_id IS NULL) OR (layout_type IN ('${NavLayoutType.DIRECTORY}', '${NavLayoutType.GRID}'))`,
+      ),
     ),
   ],
 );
