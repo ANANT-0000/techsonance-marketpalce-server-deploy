@@ -4,7 +4,7 @@ import {
   NotFoundException,
   ConflictException,
 } from '@nestjs/common';
-import { eq, and } from 'drizzle-orm';
+import { eq, and, ne } from 'drizzle-orm';
 import { DRIZZLE, type DrizzleService } from '../../drizzle/drizzle.module.js';
 import {
   cms_plans,
@@ -13,6 +13,8 @@ import {
   cms_plan_features,
   cms_sync_jobs,
   subscription_plans,
+  vendor_subscriptions,
+  subscription_events,
 } from '../../drizzle/schema/subscription.schema.js';
 import {
   PlanStatus,
@@ -37,16 +39,26 @@ export class CmsSubscriptionService {
   }
 
   async getAdminPlans() {
-    return this.db.query.cms_plans.findMany({
+    const plans = await this.db.query.cms_plans.findMany({
+      where: ne(cms_plans.status, PlanStatus.ARCHIVED),
       with: {
         prices: true,
         features: true,
       },
     });
+
+    const planMap = new Map<string, (typeof plans)[0]>();
+    for (const p of plans) {
+      const existing = planMap.get(p.plan_key);
+      if (!existing || p.status === PlanStatus.DRAFT) {
+        planMap.set(p.plan_key, p);
+      }
+    }
+    return Array.from(planMap.values());
   }
 
   async getPublicPlans() {
-    return this.db.query.cms_plans.findMany({
+    return await this.db.query.cms_plans.findMany({
       where: eq(cms_plans.status, PlanStatus.LIVE),
       with: {
         prices: {
@@ -54,6 +66,59 @@ export class CmsSubscriptionService {
         },
         features: true,
       },
+    });
+  }
+
+  async createPlan(planKey: string, adminId: string) {
+    const normalizedKey = planKey.trim().toLowerCase().replace(/\s+/g, '-');
+
+    const existing = await this.db.query.cms_plans.findFirst({
+      where: and(
+        eq(cms_plans.plan_key, normalizedKey),
+        ne(cms_plans.status, PlanStatus.ARCHIVED),
+      ),
+    });
+    if (existing) {
+      throw new ConflictException(
+        `Plan template '${normalizedKey}' already exists.`,
+      );
+    }
+
+    return await this.db.transaction(async (tx) => {
+      const [newPlan] = await tx
+        .insert(cms_plans)
+        .values({
+          plan_key: normalizedKey,
+          status: PlanStatus.DRAFT,
+          version: 1,
+          created_by: adminId,
+          updated_by: adminId,
+        })
+        .returning();
+
+      // Seed with default prices (monthly & yearly)
+      await tx.insert(cms_plan_prices).values([
+        {
+          plan_id: newPlan.id,
+          currency: 'INR',
+          interval: PriceInterval.MONTHLY,
+          interval_count: null,
+          amount_minor_units: 0,
+          currency_exponent: 2,
+          sync_status: SyncStatus.PENDING,
+        },
+        {
+          plan_id: newPlan.id,
+          currency: 'INR',
+          interval: PriceInterval.YEARLY,
+          interval_count: null,
+          amount_minor_units: 0,
+          currency_exponent: 2,
+          sync_status: SyncStatus.PENDING,
+        },
+      ]);
+
+      return newPlan;
     });
   }
 
@@ -67,30 +132,34 @@ export class CmsSubscriptionService {
         ),
       });
 
-      if (draft) {
-        if (payload.version < draft.version) {
-          throw new ConflictException(
-            'Version mismatch: client version is older than server head.',
-          );
-        }
-        // Update draft version
-        [draft] = await tx
-          .update(cms_plans)
-          .set({ version: draft.version + 1, updated_by: adminId })
-          .where(eq(cms_plans.id, draft.id))
-          .returning();
-      } else {
-        // Create new draft
-        [draft] = await tx
-          .insert(cms_plans)
-          .values({
-            plan_key: planKey,
-            status: PlanStatus.DRAFT,
-            version: 1,
-            created_by: adminId,
-            updated_by: adminId,
-          })
-          .returning();
+      if (!draft) {
+        throw new NotFoundException(
+          `Draft plan template not found for key: ${planKey}`,
+        );
+      }
+
+      if (payload.version < draft.version) {
+        throw new ConflictException(
+          'Version mismatch: client version is older than server head.',
+        );
+      }
+
+      // Update draft version with optimistic locking check
+      [draft] = await tx
+        .update(cms_plans)
+        .set({ version: draft.version + 1, updated_by: adminId })
+        .where(
+          and(
+            eq(cms_plans.id, draft.id),
+            eq(cms_plans.version, payload.version),
+          ),
+        )
+        .returning();
+
+      if (!draft) {
+        throw new ConflictException(
+          'Version mismatch: plan was updated by another administrator. Please refresh the page.',
+        );
       }
 
       // Clear existing prices and features for the draft
@@ -108,8 +177,9 @@ export class CmsSubscriptionService {
             plan_id: draft.id,
             currency: p.currency,
             interval: p.interval as PriceInterval,
-            interval_count: p.intervalCount,
-            amount_cents: p.amountCents,
+            interval_count: p.interval_count ?? null,
+            amount_minor_units: p.amount_minor_units,
+            currency_exponent: p.currency_exponent,
             sync_status: SyncStatus.PENDING,
           })),
         );
@@ -120,7 +190,7 @@ export class CmsSubscriptionService {
         await tx.insert(cms_plan_features).values(
           payload.features.map((f) => ({
             plan_id: draft.id,
-            feature_key: f.key,
+            feature_key: f.feature_key,
             type: f.type as FeatureType,
             value: String(f.value),
           })),
@@ -176,18 +246,22 @@ export class CmsSubscriptionService {
       let priceMonthly = '0';
       let priceAnnual = '0';
       let annualTotal = '0';
-      
-      draft.prices.forEach(p => {
+
+      draft.prices.forEach((p) => {
         if (p.interval === PriceInterval.MONTHLY) {
-          priceMonthly = (p.amount_minor_units / Math.pow(10, p.currency_exponent)).toString();
+          priceMonthly = (
+            p.amount_minor_units / Math.pow(10, p.currency_exponent)
+          ).toString();
         } else if (p.interval === PriceInterval.YEARLY) {
-          annualTotal = (p.amount_minor_units / Math.pow(10, p.currency_exponent)).toString();
+          annualTotal = (
+            p.amount_minor_units / Math.pow(10, p.currency_exponent)
+          ).toString();
           priceAnnual = (parseFloat(annualTotal) / 12).toFixed(2);
         }
       });
 
       const capabilities: Record<string, unknown> = {};
-      draft.features.forEach(f => {
+      draft.features.forEach((f) => {
         if (f.type === FeatureType.BOOLEAN) {
           capabilities[f.feature_key] = f.value === 'true';
         } else if (f.type === FeatureType.NUMBER) {
@@ -202,14 +276,17 @@ export class CmsSubscriptionService {
       });
 
       if (existingSubPlan) {
-        await tx.update(subscription_plans).set({
-          display_name: planKey.charAt(0).toUpperCase() + planKey.slice(1), // Basic fallback if not defined
-          price_monthly: priceMonthly,
-          price_annual: priceAnnual,
-          annual_total: annualTotal,
-          capabilities,
-          is_active: true,
-        }).where(eq(subscription_plans.id, existingSubPlan.id));
+        await tx
+          .update(subscription_plans)
+          .set({
+            display_name: planKey.charAt(0).toUpperCase() + planKey.slice(1), // Basic fallback if not defined
+            price_monthly: priceMonthly,
+            price_annual: priceAnnual,
+            annual_total: annualTotal,
+            capabilities,
+            is_active: true,
+          })
+          .where(eq(subscription_plans.id, existingSubPlan.id));
       } else {
         await tx.insert(subscription_plans).values({
           plan_name: planKey,
@@ -238,17 +315,97 @@ export class CmsSubscriptionService {
 
       // Enqueue the job to our own webhook via QStash
       try {
+        const callbackUrl = `${process.env.PUBLIC_API_URL || process.env.QSTASH_CALLBACK_BASE_URL}/api/v1/internal/subscription/subscription-sync`;
         await this.qstashClient.publishJSON({
-          url: `${process.env.PUBLIC_API_URL}/v1/jobs/subscription-sync`,
+          url: callbackUrl,
           body: { jobId: idempotencyKey, planId: live.id },
         });
       } catch (err) {
         // Log error but don't fail the transaction.
         // A fallback cron job can sweep pending jobs.
-        console.error('Failed to enqueue QStash job', err);
       }
 
       return live;
+    });
+  }
+
+  async getAdminSubscriptions() {
+    return await this.db.query.vendor_subscriptions.findMany({
+      with: {
+        company: true,
+        plan: true,
+      },
+    });
+  }
+
+  async updateVendorSubscription(subscriptionId: string, payload: any) {
+    const updateData: any = {};
+    if (payload.plan_id !== undefined) updateData.plan_id = payload.plan_id;
+    if (payload.status !== undefined) updateData.status = payload.status;
+
+    if (payload.trial_starts_at !== undefined) {
+      updateData.trial_starts_at = payload.trial_starts_at
+        ? new Date(payload.trial_starts_at)
+        : null;
+    }
+    if (payload.trial_ends_at !== undefined) {
+      updateData.trial_ends_at = payload.trial_ends_at
+        ? new Date(payload.trial_ends_at)
+        : null;
+    }
+    if (payload.current_period_start !== undefined) {
+      updateData.current_period_start = payload.current_period_start
+        ? new Date(payload.current_period_start)
+        : null;
+    }
+    if (payload.current_period_end !== undefined) {
+      updateData.current_period_end = payload.current_period_end
+        ? new Date(payload.current_period_end)
+        : null;
+    }
+    if (payload.grace_period_ends_at !== undefined) {
+      updateData.grace_period_ends_at = payload.grace_period_ends_at
+        ? new Date(payload.grace_period_ends_at)
+        : null;
+    }
+    if (payload.cancelled_at !== undefined) {
+      updateData.cancelled_at = payload.cancelled_at
+        ? new Date(payload.cancelled_at)
+        : null;
+    }
+
+    updateData.updated_at = new Date();
+
+    const [updated] = await this.db
+      .update(vendor_subscriptions)
+      .set(updateData)
+      .where(eq(vendor_subscriptions.id, subscriptionId))
+      .returning();
+
+    if (!updated) {
+      throw new NotFoundException(
+        `Vendor subscription not found for ID: ${subscriptionId}`,
+      );
+    }
+
+    // Record audit event log
+    await this.db
+      .insert(subscription_events)
+      .values({
+        company_id: updated.company_id,
+        subscription_id: updated.id,
+        event_type: 'admin_updated',
+        plan_id: updated.plan_id,
+        metadata: payload,
+      })
+      .catch((err) => {});
+
+    return updated;
+  }
+
+  async getLiveSubscriptionPlans() {
+    return await this.db.query.subscription_plans.findMany({
+      where: eq(subscription_plans.is_active, true),
     });
   }
 }

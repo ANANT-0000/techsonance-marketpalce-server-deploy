@@ -4,5 +4,6 @@ export const SUBSCRIPTION_JOB_CONSTANTS = {
   ROUTE_EXPIRE_TRIALS: 'expire-trials',
   ROUTE_FINALIZE_GRACE: 'finalize-grace-periods',
   ROUTE_SEND_REMINDERS: 'send-reminders',
+  ROUTE_SWEEP_SYNCS: 'sweep-syncs',
   HEADER_UPSTASH_SIGNATURE: 'upstash-signature',
 } as const;

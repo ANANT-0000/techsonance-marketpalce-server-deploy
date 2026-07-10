@@ -54,7 +54,18 @@ export class SubscriptionJobController {
   // ─── Shared signature verification ────────────────────────────────────────
 
   private async verifySignature(req: Request): Promise<void> {
-    if (!this.receiver) return;
+    if (!this.receiver) {
+      const isProd = this.configService.get<string>('NODE_ENV') === 'production';
+      if (isProd) {
+        throw new UnauthorizedException(
+          'QStash signature verification failed: current signing key is not configured on the server in production environment.',
+        );
+      }
+      this.logger.warn(
+        'Bypassing QStash signature verification in development (QSTASH_CURRENT_SIGNING_KEY not set).',
+      );
+      return;
+    }
 
     const signature = req.headers[
       SUBSCRIPTION_JOB_CONSTANTS.HEADER_UPSTASH_SIGNATURE
@@ -228,6 +239,30 @@ export class SubscriptionJobController {
       );
       throw new HttpException(
         `subscription-sync failed: ${err.message}`,
+        HttpStatus.INTERNAL_SERVER_ERROR,
+      );
+    }
+  }
+
+  // ─── Endpoint 5: Sweep and Retry Failed Sync Jobs ──────────────────────────
+  // QStash Schedule: 0 * * * * (hourly)
+
+  @Public()
+  @Post(SUBSCRIPTION_JOB_CONSTANTS.ROUTE_SWEEP_SYNCS)
+  @HttpCode(HttpStatus.OK)
+  async sweepSyncJobs(@Req() req: Request) {
+    await this.verifySignature(req);
+
+    try {
+      const recoveredCount = await this.gatewaySyncService.sweepFailedSyncs();
+      this.logger.log(
+        `Sync job sweep completed: successfully retried ${recoveredCount} gateway sync(s)`,
+      );
+      return { success: true, recoveredCount };
+    } catch (err: any) {
+      this.logger.error(`sweep-syncs job failed: ${err.message}`, err.stack);
+      throw new HttpException(
+        `sweep-syncs failed: ${err.message}`,
         HttpStatus.INTERNAL_SERVER_ERROR,
       );
     }

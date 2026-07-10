@@ -19,16 +19,20 @@ export class PlanPriceDto {
 
   @IsOptional()
   @IsNumber()
-  intervalCount?: number;
+  interval_count?: number | null;
 
   @IsNumber()
   @Min(0)
-  amountCents!: number;
+  amount_minor_units!: number;
+
+  @IsNumber()
+  @Min(0)
+  currency_exponent!: number;
 }
 
 export class PlanFeatureDto {
   @IsString()
-  key!: string;
+  feature_key!: string;
 
   @IsEnum(FeatureType)
   type!: FeatureType;

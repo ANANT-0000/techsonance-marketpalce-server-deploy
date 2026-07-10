@@ -1,5 +1,5 @@
 import { Injectable, Inject, Logger } from '@nestjs/common';
-import { eq } from 'drizzle-orm';
+import { eq, or, and, lt } from 'drizzle-orm';
 import { DRIZZLE, type DrizzleService } from '../../drizzle/drizzle.module.js';
 import {
   cms_plans,
@@ -20,6 +20,8 @@ export class GatewaySyncService {
   async syncPlanToGateway(
     planId: string,
     idempotencyKey: string,
+
+    
   ): Promise<void> {
     this.logger.log(
       `Starting sync for plan ${planId} with idempotency key ${idempotencyKey}`,
@@ -122,5 +124,39 @@ export class GatewaySyncService {
         .where(eq(cms_sync_jobs.id, job.id));
       throw error;
     }
+  }
+
+  /**
+   * Periodically sweeps failed/pending sync jobs and retries them.
+   */
+  async sweepFailedSyncs(): Promise<number> {
+    this.logger.log('Starting sync job sweep...');
+    const thresholdDate = new Date(Date.now() - 5 * 60 * 1000); // 5 minutes ago
+    const jobs = await this.db.query.cms_sync_jobs.findMany({
+      where: and(
+        or(
+          eq(cms_sync_jobs.status, JobStatus.PENDING),
+          eq(cms_sync_jobs.status, JobStatus.FAILED),
+        ),
+        lt(cms_sync_jobs.attempts, 5),
+        lt(cms_sync_jobs.updated_at, thresholdDate),
+      ),
+    });
+
+    this.logger.log(`Found ${jobs.length} pending/failed sync jobs to retry.`);
+    let successCount = 0;
+
+    for (const job of jobs) {
+      try {
+        await this.syncPlanToGateway(job.plan_id, job.idempotency_key);
+        successCount++;
+      } catch (err: any) {
+        this.logger.error(
+          `Failed to retry sync job ${job.idempotency_key}: ${err.message}`,
+        );
+      }
+    }
+
+    return successCount;
   }
 }

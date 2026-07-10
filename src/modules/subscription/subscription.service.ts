@@ -283,22 +283,26 @@ export class SubscriptionService {
     };
   }
 
-  /**
-   * Fetches all available plans to display on the onboarding plan-selection step.
-   * If a companyId is supplied, returns only plans belonging to that company.
-   * Falls back to returning plans with no company_id (global plans) if none found.
-   */
-  async getAvailablePlans(companyId?: string) {
+  async getAvailablePlans(companyIdOrDomain?: string) {
     const baseWhere = eq(subscription_plans.is_active, true);
 
-    if (companyId) {
-      const plan = await this.db
-        .select()
-        .from(subscription_plans)
-        .where(and(baseWhere, eq(subscription_plans.company_id, companyId)))
-        .orderBy(asc(subscription_plans.display_order));
+    if (companyIdOrDomain) {
+      try {
+        const companyId = await this.resolveCompanyId(companyIdOrDomain);
+        if (companyId) {
+          const plan = await this.db
+            .select()
+            .from(subscription_plans)
+            .where(and(baseWhere, eq(subscription_plans.company_id, companyId)))
+            .orderBy(asc(subscription_plans.display_order));
 
-      if (plan.length > 0) return plan;
+          if (plan.length > 0) return plan;
+        }
+      } catch (err) {
+        this.logger.warn(
+          `Could not resolve company for plan selection: ${companyIdOrDomain}`,
+        );
+      }
     }
 
     const plan = await this.db
@@ -333,6 +337,12 @@ export class SubscriptionService {
       })
       .where(eq(vendor_subscriptions.company_id, companyId))
       .returning();
+
+    if (!updated) {
+      throw new InternalServerErrorException(
+        `Failed to upgrade: subscription record not found for company ${companyId}`,
+      );
+    }
 
     await this.logEvent(
       companyId,
