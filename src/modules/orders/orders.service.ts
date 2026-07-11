@@ -10,6 +10,7 @@ import {
   and,
   desc,
   eq,
+  ExtractTablesWithRelations,
   gt,
   gte,
   inArray,
@@ -75,11 +76,10 @@ import {
   OutboxJobType,
   OutboxJobStatus,
 } from '../outbox/constants/outbox.constants.js';
+import { PgSchema } from 'drizzle-orm/pg-core';
+// import { DrizzleTransaction } from '../../drizzle/drizzle.module.js';
 import { PgTransaction } from 'drizzle-orm/pg-core';
 import { NodePgQueryResultHKT } from 'drizzle-orm/node-postgres';
-import { PgSchema } from 'drizzle-orm/pg-core';
-import { ExtractTablesWithRelations } from 'drizzle-orm';
-
 @Injectable()
 export class OrdersService {
   constructor(
@@ -535,6 +535,7 @@ export class OrdersService {
     orderId: string,
     isSuccess: boolean,
     companyId?: string,
+    // txContext?: DrizzleTransaction,
     txContext?: PgTransaction<
       NodePgQueryResultHKT,
       typeof schema,
@@ -1155,14 +1156,14 @@ export class OrdersService {
         row.items.map((i) => i?.variant?.inventory?.warehouse_id ?? null),
       );
       const isSingleWarehouse = warehouseIds.size <= 1;
-      
+
       const outboxJob = await this.db.query.outbox_jobs.findFirst({
         where: and(
           eq(outbox_jobs.job_type, OutboxJobType.CREATE_SHIPROCKET_DRAFT_ORDER),
           sql`payload->>'orderId' = ${orderId}`,
         ),
       });
-      
+
       return {
         id: row.id,
         total_amount: row.total_amount,

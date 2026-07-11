@@ -11,9 +11,16 @@ import { ValidationPipe } from '@nestjs/common';
 import { json, urlencoded } from 'express';
 import { HttpExceptionFilter } from './common/filters/http-exception.filter.js';
 import { ResponseInterceptor } from './common/interceptors/response.interceptor.js';
+import { SlowRequestInterceptor } from './common/interceptors/slow-request.interceptor.js';
+import { AppLogger } from './common/logger/app-logger.js';
 
 async function bootstrap() {
-  const app = await NestFactory.create(AppModule, { rawBody: true });
+  const logger = new AppLogger();
+  const app = await NestFactory.create(AppModule, {
+    rawBody: true,
+    bufferLogs: true,   // buffer early logs until AppLogger is ready
+    logger,
+  });
   app.use(cookieParser());
   const globalPrefix = 'api';
   app.setGlobalPrefix(globalPrefix);
@@ -63,7 +70,7 @@ async function bootstrap() {
   );
   app.enableVersioning();
   app.useGlobalFilters(new HttpExceptionFilter());
-  app.useGlobalInterceptors(new ResponseInterceptor());
+  app.useGlobalInterceptors(new ResponseInterceptor(), new SlowRequestInterceptor());
   const config = new DocumentBuilder()
     .setTitle('Techsonance Marketplace API')
     .setDescription('API documentation for Techsonance Marketplace')

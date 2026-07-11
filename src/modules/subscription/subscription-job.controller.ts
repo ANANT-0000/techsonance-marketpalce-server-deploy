@@ -246,6 +246,9 @@ export class SubscriptionJobController {
 
   // ─── Endpoint 5: Sweep and Retry Failed Sync Jobs ──────────────────────────
   // QStash Schedule: 0 * * * * (hourly)
+  // Fan-out pattern: queries failed/stuck jobs and publishes one QStash message
+  // per job to /subscription-sync. Returns immediately — each job is handled in
+  // its own short serverless invocation, staying well within Vercel's 10s limit.
 
   @Public()
   @Post(SUBSCRIPTION_JOB_CONSTANTS.ROUTE_SWEEP_SYNCS)
@@ -254,11 +257,11 @@ export class SubscriptionJobController {
     await this.verifySignature(req);
 
     try {
-      const recoveredCount = await this.gatewaySyncService.sweepFailedSyncs();
+      const enqueuedCount = await this.gatewaySyncService.enqueueSweepJobs();
       this.logger.log(
-        `Sync job sweep completed: successfully retried ${recoveredCount} gateway sync(s)`,
+        `Sync job sweep completed: enqueued ${enqueuedCount} gateway sync job(s) via QStash`,
       );
-      return { success: true, recoveredCount };
+      return { success: true, enqueuedCount };
     } catch (err: any) {
       this.logger.error(`sweep-syncs job failed: ${err.message}`, err.stack);
       throw new HttpException(

@@ -12,7 +12,7 @@ import { CACHE_MANAGER } from '@nestjs/cache-manager';
 import { DRIZZLE, type DrizzleService } from '../../drizzle/drizzle.module.js';
 import { logistic_companies } from '../../drizzle/schema/logistics.schema.js';
 import { sql } from 'drizzle-orm';
-import got from 'got';
+const gotPromise = import('got').then((m) => m.default);
 
 import { SHIPROCKET_APIs } from './constants/ship-rocket.constants.js';
 import {
@@ -110,6 +110,7 @@ export class ShipRocketService {
     credentials?: { email?: string; password?: string },
     companyId?: string,
   ) {
+    const got = await gotPromise;
     const token = await this.getToken(credentials, companyId);
 
     const url = SHIPROCKET_APIs.SERVICEABILITY;
@@ -120,14 +121,16 @@ export class ShipRocketService {
     };
 
     if (data.cod !== undefined) params.cod = data.cod;
-    if (data.declared_value !== undefined) params.declared_value = Number(data.declared_value);
+    if (data.declared_value !== undefined)
+      params.declared_value = Number(data.declared_value);
     if (data.qc_check !== undefined) params.qc_check = data.qc_check;
     if (data.mode !== undefined) params.mode = data.mode;
     if (data.is_return !== undefined) params.is_return = data.is_return;
     if (data.length !== undefined) params.length = data.length;
     if (data.breadth !== undefined) params.breadth = data.breadth;
     if (data.height !== undefined) params.height = data.height;
-    if (data.couriers_type !== undefined) params.couriers_type = data.couriers_type;
+    if (data.couriers_type !== undefined)
+      params.couriers_type = data.couriers_type;
     if (data.only_local !== undefined) params.only_local = data.only_local;
     if (data.order_id !== undefined) params.order_id = data.order_id;
 
@@ -213,6 +216,7 @@ export class ShipRocketService {
     credentials?: { email?: string; password?: string },
     companyId?: string,
   ): Promise<ShiprocketCreateOrderResponse> {
+    const got = await gotPromise;
     const cacheKey = this._buildCacheKey(credentials, companyId);
     const token = await this.getToken(credentials, companyId);
     const url = SHIPROCKET_APIs.CREATE_ORDER;
@@ -277,6 +281,7 @@ export class ShipRocketService {
     credentials?: { email?: string; password?: string },
     companyId?: string,
   ): Promise<ShiprocketGenerateAWBforShipmentResponse> {
+    const got = await gotPromise;
     const cacheKey = this._buildCacheKey(credentials, companyId);
     const token = await this.getToken(credentials, companyId);
     const url = SHIPROCKET_APIs.ASSIGN_AWB;
@@ -418,6 +423,7 @@ export class ShipRocketService {
     last_name: string;
     token: string;
   }> {
+    const got = await gotPromise;
     const loginEmail =
       email || this.configService.get<string>('SHIP_ROCKET_EMAIL');
     const loginPassword =
@@ -480,6 +486,7 @@ export class ShipRocketService {
     credentials?: { email?: string; password?: string },
     companyId?: string,
   ): Promise<ShiprocketAddPickupAddressResponse> {
+    const got = await gotPromise;
     const token = await this.getToken(credentials, companyId);
     const url = SHIPROCKET_APIs.ADD_PICKUP;
     try {
@@ -527,6 +534,7 @@ export class ShipRocketService {
     credentials?: { email?: string; password?: string },
     companyId?: string,
   ): Promise<ShiprocketReturnOrderResponse> {
+    const got = await gotPromise;
     const cacheKey = this._buildCacheKey(credentials, companyId);
     const token = await this.getToken(credentials, companyId);
     const url = SHIPROCKET_APIs.CREATE_RETURN_ORDER;
@@ -582,6 +590,7 @@ export class ShipRocketService {
     credentials?: { email?: string; password?: string },
     companyId?: string,
   ): Promise<ShipRocketRequestForShipmentPickupResponse> {
+    const got = await gotPromise;
     const cacheKey = this._buildCacheKey(credentials, companyId);
     const token = await this.getToken(credentials, companyId);
     const url = SHIPROCKET_APIs.REQUEST_FOR_SHIPMENT_PICKUP;
@@ -637,6 +646,7 @@ export class ShipRocketService {
     credentials?: { email?: string; password?: string },
     companyId?: string,
   ): Promise<ShipRocketCancelShipmentResponse> {
+    const got = await gotPromise;
     const cacheKey = this._buildCacheKey(credentials, companyId);
     const token = await this.getToken(credentials, companyId);
     const url = SHIPROCKET_APIs.CANCEL_A_SHIPMENT;

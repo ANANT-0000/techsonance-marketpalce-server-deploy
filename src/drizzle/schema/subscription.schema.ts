@@ -35,6 +35,7 @@ export const subscription_plans = pg.pgTable('subscription_plans', {
   // { max_products: 50, max_orders_per_month: 500, storage_gb: 5,
   //   can_use_promotions: true, can_use_custom_domain: false }
   is_active: pg.boolean('is_active').default(true),
+  description: pg.text('description'),
   display_order: pg.integer('display_order').default(0),
   created_at: pg.timestamp('created_at').notNull().defaultNow(),
   company_id: pg
@@ -142,6 +143,7 @@ export const cms_plans = pg.pgTable(
   {
     id: pg.uuid('id').primaryKey().defaultRandom(),
     plan_key: pg.text('plan_key').notNull(),
+    description: pg.text('description'),
     status: planStatusEnum('status').notNull().default(PlanStatus.DRAFT),
     version: pg.integer('version').notNull().default(1),
     created_by: pg.uuid('created_by'),

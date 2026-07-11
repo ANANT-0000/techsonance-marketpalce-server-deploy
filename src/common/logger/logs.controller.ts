@@ -1,0 +1,98 @@
+import {
+  Controller,
+  Get,
+  Inject,
+  Query,
+  UnauthorizedException,
+} from '@nestjs/common';
+import { ApiTags, ApiOperation, ApiQuery } from '@nestjs/swagger';
+import { and, desc, gte, eq, ilike, sql } from 'drizzle-orm';
+import { DRIZZLE } from '../../drizzle/drizzle.module.js';
+import type { DrizzleService } from '../../drizzle/drizzle.module.js';
+import { system_logs } from '../../drizzle/schema/system_logs.schema.js';
+import { Public } from '../decorators/public.decorator.js';
+
+const ACCESS_SECRET = process.env.LOGS_ACCESS_SECRET ?? '';
+
+@ApiTags('admin')
+@Controller('v1/admin')
+export class LogsController {
+  constructor(@Inject(DRIZZLE) private readonly db: DrizzleService) {}
+
+  private guard(secret: string) {
+    if (!ACCESS_SECRET || secret !== ACCESS_SECRET) {
+      throw new UnauthorizedException('Invalid or missing secret.');
+    }
+  }
+
+  /**
+   * GET /api/v1/admin/logs?secret=xxx
+   * Optional: &level=ERROR  &context=SlowRequest  &since=2026-07-01  &limit=100
+   */
+  @Public()
+  @Get('logs')
+  @ApiOperation({ summary: 'Read persisted WARN/ERROR logs from Neon DB' })
+  @ApiQuery({ name: 'secret', required: true })
+  @ApiQuery({ name: 'level', required: false, example: 'ERROR' })
+  @ApiQuery({ name: 'context', required: false, example: 'SlowRequest' })
+  @ApiQuery({ name: 'since', required: false, example: '2026-07-01' })
+  @ApiQuery({ name: 'limit', required: false, example: 50 })
+  async getLogs(
+    @Query('secret') secret: string,
+    @Query('level') level?: string,
+    @Query('context') context?: string,
+    @Query('since') since?: string,
+    @Query('limit') limit = '50',
+  ) {
+    this.guard(secret);
+
+    const count = Math.min(Number(limit) || 50, 500);
+    const sinceDate = since
+      ? new Date(since)
+      : new Date(Date.now() - 7 * 24 * 60 * 60 * 1000); // default: last 7 days
+
+    const rows = await this.db
+      .select()
+      .from(system_logs)
+      .where(
+        and(
+          gte(system_logs.ts, sinceDate),
+          level ? eq(system_logs.level, level) : undefined,
+          context ? ilike(system_logs.context, `%${context}%`) : undefined,
+        ),
+      )
+      .orderBy(desc(system_logs.ts))
+      .limit(count);
+
+    return {
+      count: rows.length,
+      filters: { level, context, since: sinceDate.toISOString(), limit: count },
+      logs: rows,
+    };
+  }
+
+  /**
+   * GET /api/v1/admin/logs/stats?secret=xxx
+   * Returns daily WARN/ERROR counts for the last 30 days.
+   */
+  @Public()
+  @Get('logs/stats')
+  @ApiOperation({ summary: 'Daily WARN/ERROR counts for the last 30 days' })
+  @ApiQuery({ name: 'secret', required: true })
+  async getLogStats(@Query('secret') secret: string) {
+    this.guard(secret);
+
+    const rows = await this.db
+      .select({
+        day: sql<string>`DATE(${system_logs.ts})`,
+        level: system_logs.level,
+        count: sql<number>`COUNT(*)::int`,
+      })
+      .from(system_logs)
+      .where(gte(system_logs.ts, sql`now() - INTERVAL '30 days'`))
+      .groupBy(sql`DATE(${system_logs.ts})`, system_logs.level)
+      .orderBy(desc(sql`DATE(${system_logs.ts})`), system_logs.level);
+
+    return { stats: rows };
+  }
+}

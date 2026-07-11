@@ -14,6 +14,7 @@ export * from './outbox.schema.js';
 export * from './payment-gateway.schema.js';
 export * from './logistics.schema.js';
 export * from './landing_page.schema.js';
+export * from './system_logs.schema.js';
 import { address, user, vendor } from './users.schema.js';
 import { vendor_storefront_sections } from './vendor_storefront.schema.js';
 import { nav_menus, nav_items } from './nav_storefront.schema.js';

@@ -61,11 +61,11 @@ import {
   RazorpayWebhookEvent,
   RazorpayPaymentCapturedWebhook,
 } from './constants/razorpay.webhook.js';
+import { CACHE_MANAGER } from '@nestjs/cache-manager';
+// import { DrizzleTransaction } from '../../drizzle/drizzle.module.js';
+import { type Cache } from 'cache-manager';
 import { PgTransaction } from 'drizzle-orm/pg-core';
 import { NodePgQueryResultHKT } from 'drizzle-orm/node-postgres';
-import { CACHE_MANAGER } from '@nestjs/cache-manager';
-import { type Cache } from 'cache-manager';
-
 @Injectable()
 export class CheckoutService {
   constructor(
@@ -1097,6 +1097,7 @@ export class CheckoutService {
           orderId,
           true,
           existingOrder.company_id ?? undefined,
+          // tx as DrizzleTransaction,
           tx as PgTransaction<
             NodePgQueryResultHKT,
             typeof schema,

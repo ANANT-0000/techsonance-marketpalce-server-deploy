@@ -372,7 +372,7 @@ export class UsersService {
           HttpStatus.UNAUTHORIZED,
         );
       }
-      const [userAndCompanyRecord] = await this.db
+      let [userAndCompanyRecord] = await this.db
         .select()
         .from(user_and_company)
         .where(
@@ -381,6 +381,20 @@ export class UsersService {
             eq(user_and_company.company_id, companyId),
           ),
         );
+
+      if (!userAndCompanyRecord) {
+        const [insertedRecord] = await this.db
+          .insert(user_and_company)
+          .values({
+            user_id: records.userRecord.id,
+            company_id: companyId,
+            role_id: records.roleRecord.id,
+            access_status: AccessStatus.ACTIVE,
+          })
+          .returning();
+        userAndCompanyRecord = insertedRecord;
+      }
+
       if (userAndCompanyRecord.access_status === AccessStatus.INACTIVE) {
         throw new HttpException(
           UsersErrorKeyEnum.YOUR_ACCOUNT_HAS_BEEN_DEACTIVATED_PLEASE_ACTIVATE_YOUR_ACCOUNT,

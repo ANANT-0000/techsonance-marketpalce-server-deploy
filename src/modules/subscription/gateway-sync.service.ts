@@ -1,5 +1,7 @@
 import { Injectable, Inject, Logger } from '@nestjs/common';
 import { eq, or, and, lt } from 'drizzle-orm';
+import { ConfigService } from '@nestjs/config';
+import { Client } from '@upstash/qstash';
 import { DRIZZLE, type DrizzleService } from '../../drizzle/drizzle.module.js';
 import {
   cms_plans,
@@ -11,8 +13,19 @@ import { JobStatus, SyncStatus } from '../../drizzle/types/types.js';
 @Injectable()
 export class GatewaySyncService {
   private readonly logger = new Logger(GatewaySyncService.name);
+  private readonly qstashClient: Client;
+  private readonly callbackBaseUrl: string;
 
-  constructor(@Inject(DRIZZLE) private db: DrizzleService) {}
+  constructor(
+    @Inject(DRIZZLE) private db: DrizzleService,
+    private readonly configService: ConfigService,
+  ) {
+    this.qstashClient = new Client({
+      token: this.configService.get<string>('QSTASH_TOKEN') ?? 'mock-token',
+    });
+    this.callbackBaseUrl =
+      this.configService.get<string>('QSTASH_CALLBACK_BASE_URL') ?? '';
+  }
 
   /**
    * Idempotently syncs a plan's prices to the Payment Gateway (Stripe/Paddle).
@@ -20,11 +33,10 @@ export class GatewaySyncService {
   async syncPlanToGateway(
     planId: string,
     idempotencyKey: string,
-
-    
+    force: boolean = false,
   ): Promise<void> {
     this.logger.log(
-      `Starting sync for plan ${planId} with idempotency key ${idempotencyKey}`,
+      `Starting sync for plan ${planId} with idempotency key ${idempotencyKey}${force ? ' (forced retry)' : ''}`,
     );
 
     // 1. Fetch the job and verify it's still pending (idempotency check)
@@ -41,6 +53,11 @@ export class GatewaySyncService {
 
     if (job.status === JobStatus.COMPLETED) {
       this.logger.log(`Job ${idempotencyKey} already completed. Skipping.`);
+      return;
+    }
+
+    if (job.status === JobStatus.PROCESSING && !force) {
+      this.logger.log(`Job ${idempotencyKey} is already processing. Skipping.`);
       return;
     }
 
@@ -127,7 +144,70 @@ export class GatewaySyncService {
   }
 
   /**
-   * Periodically sweeps failed/pending sync jobs and retries them.
+   * Fan-out pattern: queries all failed/stuck sync jobs and publishes one
+   * individual QStash message per job to the subscription-sync endpoint.
+   * Returns immediately — Vercel will handle each job in its own short invocation.
+   * Used by the sweep-syncs cron endpoint (replaces the sequential loop).
+   */
+  async enqueueSweepJobs(): Promise<number> {
+    this.logger.log(
+      'Sweep: querying for failed/stuck sync jobs to re-enqueue...',
+    );
+
+    const thresholdDate = new Date(Date.now() - 5 * 60 * 1000); // 5 minutes ago
+
+    const jobs = await this.db.query.cms_sync_jobs.findMany({
+      where: and(
+        or(
+          eq(cms_sync_jobs.status, JobStatus.PENDING),
+          eq(cms_sync_jobs.status, JobStatus.PROCESSING),
+          eq(cms_sync_jobs.status, JobStatus.FAILED),
+        ),
+        lt(cms_sync_jobs.attempts, 5),
+        lt(cms_sync_jobs.updated_at, thresholdDate),
+      ),
+    });
+
+    if (jobs.length === 0) {
+      this.logger.log('Sweep: no failed/stuck jobs found. Nothing to enqueue.');
+      return 0;
+    }
+
+    this.logger.log(
+      `Sweep: found ${jobs.length} job(s) to re-enqueue individually via QStash.`,
+    );
+
+    const callbackUrl = `${this.callbackBaseUrl}/api/v1/internal/subscription/subscription-sync`;
+    let enqueuedCount = 0;
+
+    for (const job of jobs) {
+      try {
+        await this.qstashClient.publishJSON({
+          url: callbackUrl,
+          body: { jobId: job.idempotency_key, planId: job.plan_id },
+        });
+        enqueuedCount++;
+        this.logger.log(
+          `Sweep: enqueued job ${job.idempotency_key} for plan ${job.plan_id}.`,
+        );
+      } catch (err: any) {
+        this.logger.error(
+          `Sweep: failed to enqueue job ${job.idempotency_key}: ${err.message}`,
+        );
+        // Continue with remaining jobs — don't let one failure abort the sweep
+      }
+    }
+
+    this.logger.log(
+      `Sweep: enqueued ${enqueuedCount}/${jobs.length} job(s) successfully.`,
+    );
+    return enqueuedCount;
+  }
+
+  /**
+   * Synchronously retries all failed/pending sync jobs in sequence.
+   * NOTE: Only use in local development — this will timeout on Vercel Hobby (10s limit).
+   * In production, use enqueueSweepJobs() instead.
    */
   async sweepFailedSyncs(): Promise<number> {
     this.logger.log('Starting sync job sweep...');
@@ -136,6 +216,7 @@ export class GatewaySyncService {
       where: and(
         or(
           eq(cms_sync_jobs.status, JobStatus.PENDING),
+          eq(cms_sync_jobs.status, JobStatus.PROCESSING),
           eq(cms_sync_jobs.status, JobStatus.FAILED),
         ),
         lt(cms_sync_jobs.attempts, 5),
@@ -143,12 +224,14 @@ export class GatewaySyncService {
       ),
     });
 
-    this.logger.log(`Found ${jobs.length} pending/failed sync jobs to retry.`);
+    this.logger.log(
+      `Found ${jobs.length} pending/failed/stuck sync jobs to retry.`,
+    );
     let successCount = 0;
 
     for (const job of jobs) {
       try {
-        await this.syncPlanToGateway(job.plan_id, job.idempotency_key);
+        await this.syncPlanToGateway(job.plan_id, job.idempotency_key, true);
         successCount++;
       } catch (err: any) {
         this.logger.error(

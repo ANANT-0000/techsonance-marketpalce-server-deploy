@@ -481,6 +481,9 @@ export enum PriceInterval {
   MONTHLY = 'monthly',
   YEARLY = 'yearly',
   CUSTOM = 'custom',
+  DAILY = 'daily',
+  WEEKLY = 'weekly',
+  QUARTERLY = 'quarterly',
 }
 
 export enum SyncStatus {

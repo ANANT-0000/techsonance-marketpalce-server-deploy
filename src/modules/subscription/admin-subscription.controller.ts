@@ -55,6 +55,14 @@ export class AdminSubscriptionController {
     return this.cmsSubscriptionService.publishDraft(planKey, req.user.id);
   }
 
+  @Post(':planKey/unpublish')
+  unpublishPlan(
+    @Param('planKey') planKey: string,
+    @Req() req: any,
+  ) {
+    return this.cmsSubscriptionService.unpublishPlan(planKey, req.user.id);
+  }
+
   @Get('vendors')
   getVendorSubscriptions() {
     return this.cmsSubscriptionService.getAdminSubscriptions();

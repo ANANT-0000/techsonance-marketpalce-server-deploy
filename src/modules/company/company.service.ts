@@ -4,12 +4,15 @@ import {
   Injectable,
   InternalServerErrorException,
 } from '@nestjs/common';
-import { eq } from 'drizzle-orm';
+import { eq, sql } from 'drizzle-orm';
 import { DRIZZLE, type DrizzleService } from '../../drizzle/drizzle.module.js';
 import {
   company,
   user_and_company,
   vendor,
+  products,
+  categories,
+  landing_page_content,
 } from '../../drizzle/schema/index.js';
 import {
   AccessStatus,
@@ -67,7 +70,38 @@ export class CompanyService {
       );
     }
 
-    return companyProfile;
+    const [productCountResult] = await this.db
+      .select({ count: sql<number>`count(*)::int` })
+      .from(products)
+      .where(eq(products.company_id, companyId));
+
+    const [categoryCountResult] = await this.db
+      .select({ count: sql<number>`count(*)::int` })
+      .from(categories)
+      .where(eq(categories.company_id, companyId));
+
+    const contentRow = await this.db.query.landing_page_content.findFirst({
+      where: eq(landing_page_content.company_id, companyId),
+    });
+
+    const hasProducts = (productCountResult?.count ?? 0) > 0;
+    const hasCategories = (categoryCountResult?.count ?? 0) > 0;
+    const hasLandingPageContent = !!contentRow?.content && Object.keys(contentRow.content).length > 0;
+    const isPublished = contentRow?.is_published ?? false;
+
+    const hasAnyContent = hasProducts || hasCategories || hasLandingPageContent;
+    const siteStatus = hasAnyContent || isPublished ? 'active' : 'not_started';
+
+    return {
+      ...companyProfile,
+      siteStatus,
+      siteData: {
+        hasProducts,
+        hasCategories,
+        hasLandingPageContent,
+        isPublished,
+      },
+    };
   }
 
   async listCompanies() {

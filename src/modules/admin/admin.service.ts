@@ -15,11 +15,12 @@ import {
   product_variants,
   products,
   user,
+  user_and_company,
   user_roles,
   vendor,
 } from '../../drizzle/schema/index.js';
 import { type DrizzleDB } from '../../drizzle/types/drizzle.js';
-import { OrderStatus, UserRole } from '../../drizzle/types/types.js';
+import { AccessStatus, OrderStatus, UserRole } from '../../drizzle/types/types.js';
 import { ConfigService } from '@nestjs/config';
 import { AdminErrorKeyEnum } from './constants/admin.enums.js';
 @Injectable()
@@ -59,25 +60,32 @@ export class AdminService {
         );
       }
 
-      //--------------------------------------
-      // for bypass Admin login ,uncommit in production
-      //--------------------------------------
-      // const [userAndCompany] = await this.db.select().from(user_and_company).where(eq(user_and_company.user_id, existingUser.id)).limit(1);
-      // if (!userAndCompany) {
-      //   throw new HttpException(
-      //     'User and company not found',
-      //     HttpStatus.UNAUTHORIZED,
-      //   );
-      // }
-      // const [companyRecord] = await this.db.select().from(company).where(eq(company.id, userAndCompany.company_id)).limit(1);
-      // if (!companyRecord) {
-      //   throw new HttpException(
-      //     'Company not found',
-      //     HttpStatus.UNAUTHORIZED,
-      //   );
-      // }
+      let [userAndCompany] = await this.db
+        .select()
+        .from(user_and_company)
+        .where(eq(user_and_company.user_id, existingUser.id))
+        .limit(1);
 
-      //--------------------------------------
+      if (!userAndCompany) {
+        const [firstCompany] = await this.db
+          .select()
+          .from(company)
+          .limit(1);
+
+        if (firstCompany) {
+          const [insertedRecord] = await this.db
+            .insert(user_and_company)
+            .values({
+              user_id: existingUser.id,
+              company_id: firstCompany.id,
+              role_id: adminRole.id,
+              access_status: AccessStatus.ACTIVE,
+            })
+            .returning();
+          userAndCompany = insertedRecord;
+        }
+      }
+
       const isPasswordValid: boolean =
         password === this.configService.get('ADMIN_PASSWORD');
       if (!isPasswordValid) {
@@ -87,11 +95,16 @@ export class AdminService {
         sub: string;
         email: string;
         role: string;
+        company_id?: string;
       } = {
         sub: existingUser.id,
         email: existingUser.email,
         role: adminRole.role_name,
       };
+
+      if (userAndCompany) {
+        payload.company_id = userAndCompany.company_id;
+      }
 
       const expiresIn: any = process.env.JWT_EXPIRES_IN
         ? (isNaN(Number(process.env.JWT_EXPIRES_IN)) ? process.env.JWT_EXPIRES_IN : parseInt(process.env.JWT_EXPIRES_IN, 10))

@@ -45,6 +45,7 @@ import {
 import {
   AccessStatus,
   ProductStatus,
+  SubscriptionStatus,
   UserRole,
   UserStatus,
 } from '../../drizzle/types/types.js';
@@ -429,33 +430,59 @@ export class VendorsService {
                 },
               );
             });
-          // uncomment in future
-          // const [userAndCompanyRecord] = await tx
-          //   .select()
-          //   .from(user_and_company)
-          //   .where(eq(user_and_company.user_id, userRecord.id));
-          // ('vendorRecord', vendorRecord);
-          if (!userRecord) {
+
+          if (!vendorRecord) {
+            throw new UnauthorizedException(
+              VendorsErrorKeyEnum.VENDOR_NOT_FOUND,
+            );
+          }
+
+          let [userAndCompanyRecord] = await tx
+            .select()
+            .from(user_and_company)
+            .where(eq(user_and_company.user_id, userRecord.id));
+
+          if (!userAndCompanyRecord) {
+            // Find role record first to map correctly
+            const [roleRec] = await tx
+              .select()
+              .from(user_rolesTable)
+              .where(eq(user_rolesTable.role_name, UserRole.VENDOR))
+              .limit(1);
+
+            if (!roleRec) {
+              throw new UnauthorizedException(
+                VendorsErrorKeyEnum.USER_ROLE_NOT_FOUND,
+              );
+            }
+
+            if (vendorRecord.company_id) {
+              const [insertedRecord] = await tx
+                .insert(user_and_company)
+                .values({
+                  user_id: userRecord.id,
+                  company_id: vendorRecord.company_id,
+                  role_id: roleRec.id,
+                  access_status:
+                    vendorRecord.vendor_status === UserStatus.ACTIVE
+                      ? AccessStatus.ACTIVE
+                      : AccessStatus.PENDING,
+                })
+                .returning();
+              userAndCompanyRecord = insertedRecord;
+            }
+          }
+
+          if (!userAndCompanyRecord) {
             throw new UnauthorizedException(
               VendorsErrorKeyEnum.USER_ROLE_NOT_FOUND,
             );
           }
-          // ('userAndCompanyRecord', userAndCompanyRecord)
-          //------------------------------------------------------
-          // uncomment in future
-          //------------------------------------------------------
-          // const [roleRecord] = await tx
-          //   .select({ role_name: user_rolesTable.role_name })
-          //   .from(user_rolesTable)
-          //   .where(eq(user_rolesTable.id, userAndCompanyRecord.role_id)).limit(1);
 
-          //-----------------------------------------------------
-          // for bypassing the role check in future comment this and uncomment above
-          //-----------------------------------------------------
           const [roleRecord] = await tx
             .select({ role_name: user_rolesTable.role_name })
             .from(user_rolesTable)
-            .where(eq(user_rolesTable.role_name, UserRole.VENDOR))
+            .where(eq(user_rolesTable.id, userAndCompanyRecord.role_id))
             .limit(1)
             .catch((error) => {
               throw new InternalServerErrorException(
@@ -465,13 +492,10 @@ export class VendorsService {
                 },
               );
             });
-          if (!vendorRecord)
-            throw new UnauthorizedException(
-              VendorsErrorKeyEnum.VENDOR_NOT_FOUND,
-            );
+
           const isVendorApproved =
-            vendorRecord.vendor_status === UserStatus.ACTIVE;
-          // const isVendorApproved = vendorRecord.vendor_status === UserStatus.ACTIVE &&  userAndCompanyRecord.access_status === AccessStatus.ACTIVE;
+            vendorRecord.vendor_status === UserStatus.ACTIVE &&
+            userAndCompanyRecord.access_status === AccessStatus.ACTIVE;
           if (!isVendorApproved)
             throw new HttpException(
               VendorsErrorKeyEnum.VENDOR_APPLICATION_IS_STILL_UNDER_REVIEW,
@@ -497,6 +521,19 @@ export class VendorsService {
       const user = existingUser?.user;
       const vendor = existingUser?.vendor;
       const role = existingUser?.role;
+
+      if (vendor?.company_id) {
+        const subStatus = await this.subscriptionService.getSubscriptionStatus(
+          vendor.company_id,
+        );
+        if (subStatus && subStatus.status === SubscriptionStatus.EXPIRED) {
+          throw new HttpException(
+            VendorsErrorKeyEnum.VENDOR_SUBSCRIPTION_EXPIRED,
+            HttpStatus.FORBIDDEN,
+          );
+        }
+      }
+
       const payload: {
         sub: string | undefined;
         vendor_id: string | undefined;

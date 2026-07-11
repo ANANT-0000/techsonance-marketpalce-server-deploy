@@ -63,6 +63,7 @@ import { OutboxModule } from './modules/outbox/outbox.module.js';
 
 import { PaymentModule } from './modules/vendors/payment/payment.module.js';
 import { LandingPageModule } from './modules/landing-page/landing-page.module.js';
+import { LogsController } from './common/logger/logs.controller.js';
 
 export enum RATELIMIT_NAME {
   SHORT = 'short',
@@ -169,7 +170,7 @@ export enum RATELIMIT_LIMIT {
     PaymentModule,
     LandingPageModule,
   ],
-  controllers: [AppController, UsersController],
+  controllers: [AppController, UsersController, LogsController],
   providers: [
     AppService,
     UsersService,
