@@ -48,7 +48,10 @@ export class SubscriptionController {
 
   @Post('start-trial')
   @SkipSubscription()
-  startTrial(@Headers('company-domain') domain: string) {
-    return this.subscriptionService.startTrial(domain);
+  startTrial(
+    @Headers('company-domain') domain: string,
+    @Body() body: { plan_id?: string },
+  ) {
+    return this.subscriptionService.startTrial(domain, body?.plan_id);
   }
 }

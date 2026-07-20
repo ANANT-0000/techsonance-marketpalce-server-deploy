@@ -41,6 +41,10 @@ import {
   SyncStatus,
   FeatureType,
   JobStatus,
+  FeatureValueType,
+  ResetInterval,
+  EnforcementMode,
+  DomainType,
 } from '../types/types.js';
 export enum NavItemDisplayType {
   CATEGORY_LISTING = 'category_listing',
@@ -69,6 +73,10 @@ export enum NavMenuType {
 }
 
 export const EntityStatusEnum = pg.pgEnum('entity_status_enum', EntityStatus);
+export const DomainTypeEnum = pg.pgEnum('domain_type_enum', [
+  DomainType.SUBDOMAIN,
+  DomainType.CUSTOM,
+]);
 export const LogisticsModeEnum = pg.pgEnum('logistics_mode_enum', [
   LogisticsMode.PLATFORM_PROXY,
   LogisticsMode.STANDALONE,
@@ -167,6 +175,16 @@ export const subscriptionStatusEnum = pg.pgEnum(
   'subscription_status_enum',
   SubscriptionStatus,
 );
+
+export const featureValueTypeEnum = pg.pgEnum(
+  'feature_value_type',
+  FeatureValueType,
+);
+export const enforcementModeEnum = pg.pgEnum(
+  'enforcement_mode',
+  EnforcementMode,
+);
+export const resetIntervalEnum = pg.pgEnum('reset_interval', ResetInterval);
 
 export const UserStatusEnum = pg.pgEnum('user_status_enum', UserStatus);
 export const support_tickets_status_enum = pg.pgEnum(

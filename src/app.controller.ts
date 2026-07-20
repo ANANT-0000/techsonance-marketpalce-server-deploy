@@ -1,4 +1,11 @@
-import { Controller, Get, Res, Query, UnauthorizedException } from '@nestjs/common';
+import {
+  Controller,
+  Get,
+  Res,
+  Query,
+  UnauthorizedException,
+} from '@nestjs/common';
+import { isUUID } from 'class-validator';
 import { AppService } from './app.service.js';
 import express from 'express';
 import { HealthCheck, HealthCheckService } from '@nestjs/terminus';
@@ -6,9 +13,7 @@ import { DrizzleHealthIndicator } from './drizzle/drizzle.health.js';
 import { Public } from './common/decorators/public.decorator.js';
 @Controller()
 export class AppController {
-  constructor(
-    private readonly appService: AppService,
-  ) {}
+  constructor(private readonly appService: AppService) {}
   @Public()
   @Get('/test')
   getHello() {

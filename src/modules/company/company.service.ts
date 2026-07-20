@@ -4,7 +4,8 @@ import {
   Injectable,
   InternalServerErrorException,
 } from '@nestjs/common';
-import { eq, sql } from 'drizzle-orm';
+import { isUUID } from 'class-validator';
+import { eq, sql, and, isNull } from 'drizzle-orm';
 import { DRIZZLE, type DrizzleService } from '../../drizzle/drizzle.module.js';
 import {
   company,
@@ -25,6 +26,7 @@ import {
   CompanyEnvironmentEnum,
   CompanyOperationEnum,
   CompanyOperationResultEnum,
+  SiteStatusEnum,
 } from './constants/company.enums.js';
 
 @Injectable()
@@ -70,18 +72,37 @@ export class CompanyService {
       );
     }
 
-    const [productCountResult] = await this.db
-      .select({ count: sql<number>`count(*)::int` })
-      .from(products)
-      .where(eq(products.company_id, companyId));
-
-    const [categoryCountResult] = await this.db
-      .select({ count: sql<number>`count(*)::int` })
-      .from(categories)
-      .where(eq(categories.company_id, companyId));
-
-    const contentRow = await this.db.query.landing_page_content.findFirst({
-      where: eq(landing_page_content.company_id, companyId),
+    const [productCountResult, categoryCountResult, contentRow] = await Promise.all([
+      this.db
+        .select({ count: sql<number>`count(*)::int` })
+        .from(products)
+        .where(
+          and(
+            eq(products.company_id, companyId),
+            isNull(products.deleted_at),
+            eq(products.record_status, EntityStatus.ACTIVE),
+          ),
+        )
+        .then((rows) => rows[0]),
+      this.db
+        .select({ count: sql<number>`count(*)::int` })
+        .from(categories)
+        .where(
+          and(
+            eq(categories.company_id, companyId),
+            isNull(categories.deleted_at),
+            eq(categories.record_status, EntityStatus.ACTIVE),
+          ),
+        )
+        .then((rows) => rows[0]),
+      this.db.query.landing_page_content.findFirst({
+        where: eq(landing_page_content.company_id, companyId),
+      })
+    ]).catch((error) => {
+      throw new InternalServerErrorException(
+        COMPANY_MESSAGES.PROFILE_FIND_FAILED(domain),
+        { cause: error },
+      );
     });
 
     const hasProducts = (productCountResult?.count ?? 0) > 0;
@@ -90,7 +111,7 @@ export class CompanyService {
     const isPublished = contentRow?.is_published ?? false;
 
     const hasAnyContent = hasProducts || hasCategories || hasLandingPageContent;
-    const siteStatus = hasAnyContent || isPublished ? 'active' : 'not_started';
+    const siteStatus: SiteStatusEnum = hasAnyContent || isPublished ? SiteStatusEnum.ACTIVE : SiteStatusEnum.NOT_STARTED;
 
     return {
       ...companyProfile,
@@ -414,8 +435,10 @@ export class CompanyService {
 
   async find(domain: string) {
     try {
-      const whereClause =
-        process.env.NODE_ENV === CompanyEnvironmentEnum.PRODUCTION
+      const isUuid = isUUID(domain);
+      const whereClause = isUuid 
+        ? eq(company.id, domain)
+        : process.env.NODE_ENV === CompanyEnvironmentEnum.PRODUCTION
           ? eq(company.company_domain, domain)
           : eq(company.id, domain);
 

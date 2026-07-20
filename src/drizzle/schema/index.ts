@@ -15,7 +15,7 @@ export * from './payment-gateway.schema.js';
 export * from './logistics.schema.js';
 export * from './landing_page.schema.js';
 export * from './system_logs.schema.js';
-import { address, user, vendor } from './users.schema.js';
+import { address, user, vendor, vendor_preferences } from './users.schema.js';
 import { vendor_storefront_sections } from './vendor_storefront.schema.js';
 import { nav_menus, nav_items } from './nav_storefront.schema.js';
 
@@ -242,7 +242,20 @@ export const vendorRelations = relations(vendor, ({ one, many }) => ({
     fields: [vendor.id],
     references: [vendor_shipping_preferences.vendor_id],
   }),
+  preferences: one(vendor_preferences, {
+    fields: [vendor.id],
+    references: [vendor_preferences.vendor_id],
+  }),
 }));
+export const vendorPreferencesRelations = relations(
+  vendor_preferences,
+  ({ one }) => ({
+    vendor: one(vendor, {
+      fields: [vendor_preferences.vendor_id],
+      references: [vendor.id],
+    }),
+  }),
+);
 export const vendorGatewaysRelations = relations(
   vendor_payment_gateways,
   ({ one }) => ({

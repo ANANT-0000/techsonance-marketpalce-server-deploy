@@ -6,6 +6,7 @@ import {
   EntityStatus,
   LogisticsMode,
   ShippingChargeStrategy,
+  DomainType,
 } from '../types/types.js';
 import {
   AccessStatusEnum,
@@ -13,6 +14,7 @@ import {
   EntityStatusEnum,
   LogisticsModeEnum,
   ShippingChargeStrategyEnum,
+  DomainTypeEnum,
 } from './enums.schema.js';
 import { user } from './users.schema.js';
 import { sql } from 'drizzle-orm';
@@ -23,6 +25,7 @@ export const company = pg.pgTable(
     id: pg.uuid('id').primaryKey().defaultRandom(),
     company_name: pg.text('company_name').notNull(),
     company_domain: pg.text('company_domain').notNull(),
+    domain_type: DomainTypeEnum('domain_type').notNull().default(DomainType.SUBDOMAIN),
     company_structure: pg.text('company_structure').notNull(),
     onboarding_status: companyEnum('onboarding_status')
       .notNull()

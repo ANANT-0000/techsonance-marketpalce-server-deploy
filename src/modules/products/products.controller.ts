@@ -28,16 +28,23 @@ import { Roles } from '../../common/decorators/roles.decorator.js';
 import { Role } from '../../enums/role.enum.js';
 import { GetProductsQueryDto } from './dto/get-products-query.dto.js';
 import { Public } from '../../common/decorators/public.decorator.js';
+import { SkipSubscription } from '../../common/decorators/skip-subscription.decorator.js';
+import { FeatureAccessGuard } from '../entitlements/guards/feature-access.guard.js';
+import { RequireFeature } from '../entitlements/decorators/require-feature.decorator.js';
+import { VendorActiveGuard } from '../../guards/vendor-status.guard.js';
 
 @Controller({
   version: '1',
   path: 'products',
 })
 export class ProductsController {
-  constructor(private productsService: ProductsService) {}
+  constructor(
+    private productsService: ProductsService,
+  ) {}
 
   @Post('create')
-  @UseGuards(JwtAuthGuard, RoleGuard)
+  @UseGuards(JwtAuthGuard, RoleGuard, FeatureAccessGuard, VendorActiveGuard)
+  @RequireFeature('max_products', { consume: true })
   @Roles(Role.ADMIN, Role.VENDOR)
   @UploadToCloud([
     { name: 'product', maxCount: 1 },
@@ -57,6 +64,7 @@ export class ProductsController {
       files,
     );
   }
+  @SkipSubscription()
   @Get('vendor-products')
   async getVendorProducts(
     @Headers('company-domain') domain: string,
@@ -101,7 +109,7 @@ export class ProductsController {
   }
 
   @Get('active')
-  @UseGuards(RoleGuard)
+  @UseGuards(RoleGuard, VendorActiveGuard)
   @Roles(Role.ADMIN, Role.VENDOR)
   async getActiveProducts(
     @Headers('company-domain') domain: string,
@@ -133,7 +141,7 @@ export class ProductsController {
   }
 
   @Patch(':id')
-  @UseGuards(JwtAuthGuard, RoleGuard)
+  @UseGuards(JwtAuthGuard, RoleGuard, VendorActiveGuard)
   @Roles(Role.ADMIN, Role.VENDOR)
   @UploadToCloud([
     { name: 'product', maxCount: 1 },
@@ -171,7 +179,7 @@ export class ProductsController {
   }
 
   @Patch('update-product-category/:id')
-  @UseGuards(JwtAuthGuard, RoleGuard)
+  @UseGuards(JwtAuthGuard, RoleGuard, VendorActiveGuard)
   @Roles(Role.ADMIN, Role.VENDOR)
   async updateProductCategory(
     @Param('id') id: string,
@@ -206,15 +214,20 @@ export class ProductsController {
   }
 
   @Delete('delete-selected')
-  @UseGuards(JwtAuthGuard, RoleGuard)
+  @UseGuards(JwtAuthGuard, RoleGuard, VendorActiveGuard)
   @Roles(Role.ADMIN, Role.VENDOR)
   async deleteSelectedProduct(@Body('ids') ids: string[], @Req() req: any) {
     const vendorId = req.user.vendorId;
-    return await this.productsService.deleteSelectedProducts(ids, vendorId);
+    const result = await this.productsService.deleteSelectedProducts(
+      ids,
+      vendorId,
+      req.user?.companyId
+    );
+    return result;
   }
 
   @Delete('delete-selected-variants')
-  @UseGuards(JwtAuthGuard, RoleGuard)
+  @UseGuards(JwtAuthGuard, RoleGuard, VendorActiveGuard)
   @Roles(Role.ADMIN, Role.VENDOR)
   async deleteSelectedProductVariants(
     @Body('ids') ids: string[],
@@ -228,15 +241,20 @@ export class ProductsController {
   }
 
   @Delete(':id')
-  @UseGuards(JwtAuthGuard, RoleGuard)
+  @UseGuards(JwtAuthGuard, RoleGuard, VendorActiveGuard)
   @Roles(Role.ADMIN, Role.VENDOR)
   async deleteProduct(@Param('id') id: string, @Req() req: any) {
     const vendorId = req.user.vendorId;
-    return await this.productsService.deleteProduct(id, vendorId);
+    const result = await this.productsService.deleteProduct(
+      id,
+      vendorId,
+      req.user?.companyId
+    );
+    return result;
   }
 
   @Delete('delete-variant/:id')
-  @UseGuards(JwtAuthGuard, RoleGuard)
+  @UseGuards(JwtAuthGuard, RoleGuard, VendorActiveGuard)
   @Roles(Role.ADMIN, Role.VENDOR)
   async deleteProductVariant(@Param('id') id: string, @Req() req: any) {
     const vendorId = req.user.vendorId;

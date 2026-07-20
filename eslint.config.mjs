@@ -4,7 +4,6 @@ import eslintPluginPrettierRecommended from 'eslint-plugin-prettier/recommended'
 import globals from 'globals';
 import tseslint from 'typescript-eslint';
 import tsParser from '@typescript-eslint/parser';
-import tsPlugin from '@typescript-eslint/eslint-plugin';
 import { fixupPluginRules } from '@eslint/compat';
 import * as drizzlePlugin from 'eslint-plugin-drizzle';
 export default tseslint.config(
@@ -29,7 +28,6 @@ export default tseslint.config(
   },
   {
     plugins: {
-      '@typescript-eslint': tsPlugin,
       drizzle: fixupPluginRules(drizzlePlugin),
     },
     rules: {

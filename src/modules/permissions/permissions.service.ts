@@ -15,12 +15,28 @@ export class PermissionsService {
   constructor(@Inject(DRIZZLE) private readonly db: DrizzleDB) {}
   async getAllPermissions() {
     try {
-      const allPermissions = await this.db.select().from(permissions);
+      const allPermissions = await this.db
+        .select()
+        .from(permissions)
+        .catch((error) => {
+          throw new InternalServerErrorException(
+            'Failed to fetch system permissions list',
+            {
+              cause: error,
+            },
+          );
+        });
       return allPermissions;
     } catch (error) {
-      throw new InternalServerErrorException(PermissionsErrorKeyEnum.FAILED_TO_FETCH_PERMISSIONS, {
-        cause: error,
-      });
+      if (error instanceof InternalServerErrorException) {
+        throw error;
+      }
+      throw new InternalServerErrorException(
+        PermissionsErrorKeyEnum.FAILED_TO_FETCH_PERMISSIONS,
+        {
+          cause: error,
+        },
+      );
     }
   }
   async createPermission(permissionName: string) {
@@ -29,32 +45,70 @@ export class PermissionsService {
         .select()
         .from(permissions)
         .where(eq(permissions.permission_name, permissionName))
-        .limit(1);
+        .limit(1)
+        .catch((error) => {
+          throw new InternalServerErrorException(
+            'Failed to check existing permission name',
+            {
+              cause: error,
+            },
+          );
+        });
       if (existing.length > 0) {
         throw new Error(
           `${permissionName} Permission already exists :${JSON.stringify(existing)}`,
         );
       }
-      const permission = await this.db.insert(permissions).values({
-        permission_name: permissionName,
-      });
+      const permission = await this.db
+        .insert(permissions)
+        .values({
+          permission_name: permissionName,
+        })
+        .catch((error) => {
+          throw new InternalServerErrorException(
+            'Failed to create new permission definition',
+            {
+              cause: error,
+            },
+          );
+        });
       return permission;
     } catch (error) {
-      throw new InternalServerErrorException(PermissionsErrorKeyEnum.FAILED_TO_CREATE_PERMISSION, {
-        cause: error,
-      });
+      if (error instanceof InternalServerErrorException) {
+        throw error;
+      }
+      throw new InternalServerErrorException(
+        PermissionsErrorKeyEnum.FAILED_TO_CREATE_PERMISSION,
+        {
+          cause: error,
+        },
+      );
     }
   }
   async removePermission(permissionId: string) {
     try {
       const removed = await this.db
         .delete(permissions)
-        .where(eq(permissions.id, permissionId));
+        .where(eq(permissions.id, permissionId))
+        .catch((error) => {
+          throw new InternalServerErrorException(
+            'Failed to delete permission record',
+            {
+              cause: error,
+            },
+          );
+        });
       return removed;
     } catch (error) {
-      throw new InternalServerErrorException(PermissionsErrorKeyEnum.FAILED_TO_REMOVE_PERMISSION, {
-        cause: error,
-      });
+      if (error instanceof InternalServerErrorException) {
+        throw error;
+      }
+      throw new InternalServerErrorException(
+        PermissionsErrorKeyEnum.FAILED_TO_REMOVE_PERMISSION,
+        {
+          cause: error,
+        },
+      );
     }
   }
   async updatePermission(permissionId: string, permissionName: string) {
@@ -63,19 +117,41 @@ export class PermissionsService {
         .select()
         .from(permissions)
         .where(eq(permissions.id, permissionId))
-        .limit(1);
+        .limit(1)
+        .catch((error) => {
+          throw new InternalServerErrorException(
+            'Failed to check permission existence for update',
+            {
+              cause: error,
+            },
+          );
+        });
       if (existing.length === 0) {
         throw new Error('Permission not found');
       }
       const updated = await this.db
         .update(permissions)
-        .set({ permission_name: permissionName });
+        .set({ permission_name: permissionName })
+        .catch((error) => {
+          throw new InternalServerErrorException(
+            'Failed to update permission details',
+            {
+              cause: error,
+            },
+          );
+        });
 
       return updated;
     } catch (error) {
-      throw new InternalServerErrorException(PermissionsErrorKeyEnum.FAILED_TO_UPDATE_PERMISSION, {
-        cause: error,
-      });
+      if (error instanceof InternalServerErrorException) {
+        throw error;
+      }
+      throw new InternalServerErrorException(
+        PermissionsErrorKeyEnum.FAILED_TO_UPDATE_PERMISSION,
+        {
+          cause: error,
+        },
+      );
     }
   }
 }

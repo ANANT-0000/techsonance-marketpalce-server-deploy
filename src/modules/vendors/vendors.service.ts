@@ -28,6 +28,9 @@ import {
   vendor,
   vendor as vendorTable,
   company_document as vendor_documentTable,
+  vendor_preferences,
+  vendor_subscriptions,
+  subscription_plans,
 } from '../../drizzle/schema/index.js';
 import {
   and,
@@ -39,6 +42,7 @@ import {
   ilike,
   like,
   lte,
+  inArray,
   SQL,
   sql,
 } from 'drizzle-orm';
@@ -61,9 +65,10 @@ import { AddressType } from '../../common/Types/index.type.js';
 import { CompanyService } from '../company/company.service.js';
 import { domainExtractor } from '../../common/filters/domainExtractor.filter.js';
 import { randomBytes } from 'crypto';
+import { generateSecurePassword } from '../../utils/securePassword.js';
 import { extractCloudinaryPublicId } from '../../common/filters/extractCloudinaryPublicId.filter.js';
 import { SubscriptionService } from '../subscription/subscription.service.js';
-import { VendorsErrorKeyEnum } from './constants/vendors.enums.js';
+import { VendorsError } from './constants/vendors.constant.js';
 
 const SALT_ROUNDS = 10;
 type UserType = typeof userTable.$inferSelect;
@@ -112,10 +117,33 @@ export class VendorsService {
         .select({ id: userTable.id })
         .from(userTable)
         .where(eq(userTable.email, vendorData.email))
-        .limit(1);
+        .limit(1)
+        .catch((error) => {
+          throw new InternalServerErrorException(
+            VendorsError.FAILED_TO_CHECK_EMAIL_EXISTS,
+            { cause: error },
+          );
+        });
       if (existingEmail) {
         throw new HttpException(
-          VendorsErrorKeyEnum.EMAIL_ALREADY_IN_USE_PLEASE_USE_A_DIFFERENT_EMAIL_OR_LOGIN,
+          VendorsError.EMAIL_ALREADY_IN_USE_PLEASE_USE_A_DIFFERENT_EMAIL_OR_LOGIN,
+          HttpStatus.CONFLICT,
+        );
+      }
+      const [existingPhone] = await this.db
+        .select({ id: userTable.id })
+        .from(userTable)
+        .where(eq(userTable.phone_number, vendorData.phone_number))
+        .limit(1)
+        .catch((error) => {
+          throw new InternalServerErrorException(
+            VendorsError.FAILED_TO_CHECK_PHONE_EXISTS,
+            { cause: error },
+          );
+        });
+      if (existingPhone) {
+        throw new HttpException(
+          VendorsError.PHONE_NUMBER_ALREADY_IN_USE_PLEASE_USE_A_DIFFERENT_PHONE_NUMBER_OR_LOGIN,
           HttpStatus.CONFLICT,
         );
       }
@@ -123,21 +151,27 @@ export class VendorsService {
         .select({ id: companyTable.id })
         .from(companyTable)
         .where(eq(companyTable.company_domain, companyDomainToCheck))
-        .limit(1);
+        .limit(1)
+        .catch((error) => {
+          throw new InternalServerErrorException(
+            'FAILED TO CHECK COMPANY DOMAIN',
+            { cause: error },
+          );
+        });
       if (existingDomain) {
         throw new HttpException(
-          VendorsErrorKeyEnum.COMPANY_DOMAIN_ALREADY_REGISTERED_PLEASE_CHOOSE_A_DIFFERENT_DOMAIN,
+          VendorsError.COMPANY_DOMAIN_ALREADY_REGISTERED_PLEASE_CHOOSE_A_DIFFERENT_DOMAIN,
           HttpStatus.CONFLICT,
         );
       }
 
       const result = await this.db.transaction(async (tx) => {
-        const password = randomBytes(9).toString('base64').slice(0, 12);
+        const password = vendorData.password;
         const hashedPassword = await bcrypt
           .hash(password, SALT_ROUNDS)
           .catch((error) => {
             throw new InternalServerErrorException(
-              VendorsErrorKeyEnum.FAILED_TO_HASH_PASSWORD,
+              VendorsError.FAILED_TO_HASH_PASSWORD,
               {
                 cause: error,
               },
@@ -155,7 +189,7 @@ export class VendorsService {
           .returning({ id: user_rolesTable.id })
           .catch((error) => {
             throw new InternalServerErrorException(
-              VendorsErrorKeyEnum.FAILED_TO_CREATE_VENDOR_ROLE,
+              VendorsError.FAILED_TO_CREATE_VENDOR_ROLE,
               {
                 cause: error,
               },
@@ -168,12 +202,13 @@ export class VendorsService {
           .values({
             company_name: vendorData.company_name,
             company_domain: companyDomain,
+            domain_type: vendorData.domain_type,
             company_structure: vendorData.company_structure,
           })
           .returning({ id: companyTable.id })
           .catch((error) => {
             throw new InternalServerErrorException(
-              VendorsErrorKeyEnum.FAILED_TO_CREATE_COMPANY_FOR_VENDOR,
+              VendorsError.FAILED_TO_CREATE_COMPANY_FOR_VENDOR,
               {
                 cause: error,
               },
@@ -181,7 +216,7 @@ export class VendorsService {
           });
         if (!newCompany || !newCompany.id) {
           throw new HttpException(
-            VendorsErrorKeyEnum.FAILED_TO_CREATE_COMPANY_FOR_VENDOR,
+            VendorsError.FAILED_TO_CREATE_COMPANY_FOR_VENDOR,
             HttpStatus.INTERNAL_SERVER_ERROR,
           );
         }
@@ -194,12 +229,11 @@ export class VendorsService {
             country_code: vendorData.country_code,
             phone_number: vendorData.phone_number,
             password_hash: hashedPassword,
-            password_change_required: true,
           })
           .returning({ id: userTable.id, email: userTable.email })
           .catch((error) => {
             throw new InternalServerErrorException(
-              VendorsErrorKeyEnum.FAILED_TO_CREATE_USER_FOR_VENDOR,
+              VendorsError.FAILED_TO_CREATE_USER_FOR_VENDOR,
               {
                 cause: error,
               },
@@ -215,7 +249,7 @@ export class VendorsService {
           })
           .catch((error) => {
             throw new InternalServerErrorException(
-              VendorsErrorKeyEnum.FAILED_TO_CREATE_USER_AND_COMPANY_FOR_VENDOR,
+              VendorsError.FAILED_TO_CREATE_USER_AND_COMPANY_FOR_VENDOR,
               {
                 cause: error,
               },
@@ -223,7 +257,7 @@ export class VendorsService {
           });
         if (!newUser || !newUser.id) {
           throw new HttpException(
-            VendorsErrorKeyEnum.FAILED_TO_CREATE_USER_FOR_VENDOR,
+            VendorsError.FAILED_TO_CREATE_USER_FOR_VENDOR,
             HttpStatus.INTERNAL_SERVER_ERROR,
           );
         }
@@ -241,7 +275,7 @@ export class VendorsService {
           .returning({ id: vendorTable.id })
           .catch((error) => {
             throw new InternalServerErrorException(
-              VendorsErrorKeyEnum.FAILED_TO_CREATE_VENDOR_RECORD,
+              VendorsError.FAILED_TO_CREATE_VENDOR_RECORD,
               {
                 cause: error,
               },
@@ -249,7 +283,7 @@ export class VendorsService {
           });
         if (!newVendor || !newVendor.id) {
           throw new HttpException(
-            VendorsErrorKeyEnum.FAILED_TO_CREATE_VENDOR_RECORD,
+            VendorsError.FAILED_TO_CREATE_VENDOR_RECORD,
             HttpStatus.INTERNAL_SERVER_ERROR,
           );
         }
@@ -271,7 +305,7 @@ export class VendorsService {
             })
             .catch((error) => {
               throw new InternalServerErrorException(
-                VendorsErrorKeyEnum.FAILED_TO_INSERT_VENDOR_DOCUMENT,
+                VendorsError.FAILED_TO_INSERT_VENDOR_DOCUMENT,
                 { cause: error },
               );
             });
@@ -322,7 +356,42 @@ export class VendorsService {
             })
             .catch((error) => {
               throw new InternalServerErrorException(
-                VendorsErrorKeyEnum.FAILED_TO_INSERT_COMPANY_COMPLIANCE,
+                VendorsError.FAILED_TO_INSERT_COMPANY_COMPLIANCE,
+                { cause: error },
+              );
+            });
+        }
+
+        let planIdToAssign = vendorData.plan_id;
+        if (!planIdToAssign) {
+          const fallbackPlan = await tx
+            .select()
+            .from(subscription_plans)
+            .where(eq(subscription_plans.is_active, true))
+            .orderBy(asc(subscription_plans.display_order))
+            .limit(1)
+            .catch((error) => {
+              throw new InternalServerErrorException(
+                'Failed to fetch default subscription plan',
+                { cause: error },
+              );
+            });
+          if (fallbackPlan.length > 0) {
+            planIdToAssign = fallbackPlan[0].id;
+          }
+        }
+
+        if (planIdToAssign) {
+          await tx
+            .insert(vendor_subscriptions)
+            .values({
+              company_id: newCompany.id,
+              plan_id: planIdToAssign,
+              status: SubscriptionStatus.TRIAL,
+            })
+            .catch((error) => {
+              throw new InternalServerErrorException(
+                'Failed to assign subscription plan to vendor',
                 { cause: error },
               );
             });
@@ -341,11 +410,10 @@ export class VendorsService {
           .sendVendorRegistrationEmail(
             result.vendorMail,
             result.vendorCompany_name,
-            result.randomPassword,
           )
           .catch((error) => {
             throw new InternalServerErrorException(
-              VendorsErrorKeyEnum.FAILED_TO_SEND_REGISTRATION_EMAIL,
+              VendorsError.FAILED_TO_SEND_REGISTRATION_EMAIL,
               {
                 cause: error,
               },
@@ -371,7 +439,7 @@ export class VendorsService {
         throw error;
       }
       throw new InternalServerErrorException(
-        VendorsErrorKeyEnum.FAILED_TO_REGISTER_VENDOR,
+        VendorsError.FAILED_TO_REGISTER_VENDOR,
         {
           cause: error,
         },
@@ -390,7 +458,7 @@ export class VendorsService {
         .transaction(async (tx) => {
           if (!loginDto.email || !loginDto.password) {
             throw new HttpException(
-              VendorsErrorKeyEnum.EMAIL_AND_PASSWORD_ARE_REQUIRED,
+              VendorsError.EMAIL_AND_PASSWORD_ARE_REQUIRED,
               HttpStatus.BAD_REQUEST,
             );
           }
@@ -400,23 +468,21 @@ export class VendorsService {
             .where(eq(userTable.email, loginDto.email))
             .catch((error) => {
               throw new InternalServerErrorException(
-                VendorsErrorKeyEnum.USER_NOT_FOUND,
+                VendorsError.USER_NOT_FOUND,
                 {
                   cause: error,
                 },
               );
             });
           if (!userRecord || !userRecord.id || !userRecord.password_hash) {
-            throw new UnauthorizedException(VendorsErrorKeyEnum.USER_NOT_FOUND);
+            throw new UnauthorizedException(VendorsError.USER_NOT_FOUND);
           }
           const isPasswordValid = await bcrypt.compare(
             loginDto.password,
             userRecord.password_hash,
           );
           if (!isPasswordValid) {
-            throw new UnauthorizedException(
-              VendorsErrorKeyEnum.INVALID_PASSWORD,
-            );
+            throw new UnauthorizedException(VendorsError.INVALID_PASSWORD);
           }
           const [vendorRecord] = await tx
             .select()
@@ -424,7 +490,7 @@ export class VendorsService {
             .where(eq(vendorTable.user_id, userRecord.id))
             .catch((error) => {
               throw new InternalServerErrorException(
-                VendorsErrorKeyEnum.VENDOR_NOT_FOUND,
+                VendorsError.VENDOR_NOT_FOUND,
                 {
                   cause: error,
                 },
@@ -432,9 +498,7 @@ export class VendorsService {
             });
 
           if (!vendorRecord) {
-            throw new UnauthorizedException(
-              VendorsErrorKeyEnum.VENDOR_NOT_FOUND,
-            );
+            throw new UnauthorizedException(VendorsError.VENDOR_NOT_FOUND);
           }
 
           let [userAndCompanyRecord] = await tx
@@ -451,9 +515,7 @@ export class VendorsService {
               .limit(1);
 
             if (!roleRec) {
-              throw new UnauthorizedException(
-                VendorsErrorKeyEnum.USER_ROLE_NOT_FOUND,
-              );
+              throw new UnauthorizedException(VendorsError.USER_ROLE_NOT_FOUND);
             }
 
             if (vendorRecord.company_id) {
@@ -474,9 +536,7 @@ export class VendorsService {
           }
 
           if (!userAndCompanyRecord) {
-            throw new UnauthorizedException(
-              VendorsErrorKeyEnum.USER_ROLE_NOT_FOUND,
-            );
+            throw new UnauthorizedException(VendorsError.USER_ROLE_NOT_FOUND);
           }
 
           const [roleRecord] = await tx
@@ -486,21 +546,13 @@ export class VendorsService {
             .limit(1)
             .catch((error) => {
               throw new InternalServerErrorException(
-                VendorsErrorKeyEnum.USER_ROLE_NOT_FOUND,
+                VendorsError.USER_ROLE_NOT_FOUND,
                 {
                   cause: error,
                 },
               );
             });
 
-          const isVendorApproved =
-            vendorRecord.vendor_status === UserStatus.ACTIVE &&
-            userAndCompanyRecord.access_status === AccessStatus.ACTIVE;
-          if (!isVendorApproved)
-            throw new HttpException(
-              VendorsErrorKeyEnum.VENDOR_APPLICATION_IS_STILL_UNDER_REVIEW,
-              HttpStatus.UNAUTHORIZED,
-            );
           return { user: userRecord, vendor: vendorRecord, role: roleRecord };
         })
         .catch((error) => {
@@ -508,7 +560,7 @@ export class VendorsService {
             throw error;
           }
           throw new InternalServerErrorException(
-            VendorsErrorKeyEnum.FAILED_TO_LOGIN_VENDOR,
+            VendorsError.FAILED_TO_LOGIN_VENDOR,
             {
               cause: error,
             },
@@ -528,7 +580,7 @@ export class VendorsService {
         );
         if (subStatus && subStatus.status === SubscriptionStatus.EXPIRED) {
           throw new HttpException(
-            VendorsErrorKeyEnum.VENDOR_SUBSCRIPTION_EXPIRED,
+            VendorsError.VENDOR_SUBSCRIPTION_EXPIRED,
             HttpStatus.FORBIDDEN,
           );
         }
@@ -540,14 +592,16 @@ export class VendorsService {
         email: string | undefined;
         role: string | undefined;
         company_id: string | undefined;
-        password_change_required: boolean | undefined;
+
+        vendor_status: string | undefined;
       } = {
         sub: user.id,
         vendor_id: vendor.id,
         email: user.email,
         role: role?.role_name,
         company_id: vendor.company_id ?? undefined,
-        password_change_required: user.password_change_required,
+
+        vendor_status: vendor.vendor_status ?? undefined,
       };
 
       const expiresIn: any = process.env.JWT_EXPIRES_IN
@@ -578,7 +632,8 @@ export class VendorsService {
         category: vendor.category,
         vendor_status: vendor.vendor_status,
         joined_at: vendor.created_at,
-        password_change_required: user.password_change_required,
+
+        is_verified: vendor.is_verified,
       };
       const response = {
         user: responseData,
@@ -596,13 +651,137 @@ export class VendorsService {
         throw error;
       }
       throw new InternalServerErrorException(
-        VendorsErrorKeyEnum.FAILED_TO_LOGIN_VENDOR,
+        VendorsError.FAILED_TO_LOGIN_VENDOR,
         {
           cause: error,
         },
       );
     }
   }
+  async resendTempPassword(email: string) {
+    if (!email) {
+      throw new HttpException('Email is required', HttpStatus.BAD_REQUEST);
+    }
+
+    const [userRecord] = await this.db
+      .select()
+      .from(userTable)
+      .where(eq(userTable.email, email))
+      .limit(1)
+      .catch((error) => {
+        throw new InternalServerErrorException('Failed to query user records', {
+          cause: error,
+        });
+      });
+
+    if (!userRecord || !userRecord.id) {
+      throw new HttpException(
+        'Vendor account not found with this email',
+        HttpStatus.NOT_FOUND,
+      );
+    }
+
+    const [vendorRecord] = await this.db
+      .select()
+      .from(vendorTable)
+      .where(eq(vendorTable.user_id, userRecord.id))
+      .limit(1)
+      .catch((error) => {
+        throw new InternalServerErrorException(
+          'Failed to retrieve vendor profile',
+          { cause: error },
+        );
+      });
+
+    if (!vendorRecord) {
+      throw new HttpException(
+        'Vendor profile not found for this account',
+        HttpStatus.NOT_FOUND,
+      );
+    }
+
+    const password = generateSecurePassword();
+    const hashedPassword = await bcrypt
+      .hash(password, SALT_ROUNDS)
+      .catch((error) => {
+        throw new InternalServerErrorException(
+          'Failed to hash the generated password',
+          { cause: error },
+        );
+      });
+
+    await this.db
+      .update(userTable)
+      .set({
+        password_hash: hashedPassword,
+      })
+      .where(eq(userTable.id, userRecord.id))
+      .catch((error) => {
+        throw new InternalServerErrorException(
+          'Failed to update vendor password',
+          { cause: error },
+        );
+      });
+
+    try {
+      await this.mailService.sendVendorRegistrationEmail(
+        userRecord.email,
+        vendorRecord.store_name,
+        password,
+      );
+    } catch (emailError) {
+      throw new InternalServerErrorException(
+        'Failed to send registration email with new password',
+        { cause: emailError },
+      );
+    }
+
+    return {
+      message:
+        'New generated password has been sent to your email successfully',
+    };
+  }
+  // async checkGeneratedPassword(email: string) {
+  //   if (!email) {
+  //     return { hasGeneratedPassword: false };
+  //   }
+
+  //   const [userRecord] = await this.db
+  //     .select({
+  //       id: userTable.id,
+  //     })
+  //     .from(userTable)
+  //     .where(eq(userTable.email, email))
+  //     .limit(1)
+  //     .catch((error) => {
+  //       throw new InternalServerErrorException(
+  //         'Failed to check user password status',
+  //         { cause: error },
+  //       );
+  //     });
+
+  //   if (!userRecord || !userRecord.id) {
+  //     return { hasGeneratedPassword: false };
+  //   }
+
+  //   const [vendorRecord] = await this.db
+  //     .select()
+  //     .from(vendorTable)
+  //     .where(eq(vendorTable.user_id, userRecord.id))
+  //     .limit(1)
+  //     .catch((error) => {
+  //       throw new InternalServerErrorException(
+  //         'Failed to retrieve vendor profile',
+  //         { cause: error },
+  //       );
+  //     });
+
+  //   if (!vendorRecord) {
+  //     return { hasGeneratedPassword: false };
+  //   }
+
+  //   return;
+  // }
   async findVendorByEmail(email: string) {
     try {
       const [vendorRecord] = await this.db
@@ -612,7 +791,7 @@ export class VendorsService {
         .where(eq(userTable.email, email))
         .limit(1);
       if (!vendorRecord) {
-        return new UnauthorizedException(VendorsErrorKeyEnum.VENDOR_NOT_FOUND);
+        return new UnauthorizedException(VendorsError.VENDOR_NOT_FOUND);
       }
       return vendorRecord;
     } catch (error) {
@@ -623,7 +802,7 @@ export class VendorsService {
         throw error;
       }
       throw new InternalServerErrorException(
-        VendorsErrorKeyEnum.FAILED_TO_FIND_VENDOR_BY_EMAIL,
+        VendorsError.FAILED_TO_FIND_VENDOR_BY_EMAIL,
         {
           cause: error,
         },
@@ -643,7 +822,7 @@ export class VendorsService {
         .where(eq(vendorTable.id, vendorId))
         .limit(1);
       if (!isVendorExists || !isVendorExists.user_id) {
-        return new UnauthorizedException(VendorsErrorKeyEnum.VENDOR_NOT_FOUND);
+        return new UnauthorizedException(VendorsError.VENDOR_NOT_FOUND);
       }
       await this.db
         .update(vendorTable)
@@ -651,7 +830,7 @@ export class VendorsService {
         .where(eq(vendorTable.id, vendorId))
         .catch((error) => {
           throw new InternalServerErrorException(
-            VendorsErrorKeyEnum.FAILED_TO_UPDATE_VENDOR_STATUS_IN_DATABASE,
+            VendorsError.FAILED_TO_UPDATE_VENDOR_STATUS_IN_DATABASE,
             {
               cause: error,
             },
@@ -687,7 +866,7 @@ export class VendorsService {
         throw error;
       }
       throw new InternalServerErrorException(
-        VendorsErrorKeyEnum.FAILED_TO_APPROVE_VENDOR,
+        VendorsError.FAILED_TO_APPROVE_VENDOR,
         {
           cause: error,
         },
@@ -743,7 +922,7 @@ export class VendorsService {
         throw error;
       }
       throw new InternalServerErrorException(
-        VendorsErrorKeyEnum.FAILED_TO_REJECT_VENDOR,
+        VendorsError.FAILED_TO_REJECT_VENDOR,
         {
           cause: error,
         },
@@ -758,7 +937,7 @@ export class VendorsService {
         .where(eq(vendorTable.id, vendorId))
         .limit(1);
       if (!vendorRow || !vendorRow.user_id) {
-        throw new UnauthorizedException(VendorsErrorKeyEnum.VENDOR_NOT_FOUND);
+        throw new UnauthorizedException(VendorsError.VENDOR_NOT_FOUND);
       }
       const deleteUserResult = await this.db
         .delete(userTable)
@@ -774,7 +953,7 @@ export class VendorsService {
         throw error;
       }
       throw new InternalServerErrorException(
-        VendorsErrorKeyEnum.FAILED_TO_REMOVE_VENDOR,
+        VendorsError.FAILED_TO_REMOVE_VENDOR,
         {
           cause: error,
         },
@@ -830,12 +1009,42 @@ export class VendorsService {
         throw error;
       }
       throw new InternalServerErrorException(
-        VendorsErrorKeyEnum.FAILED_TO_SUSPEND_VENDOR,
+        VendorsError.FAILED_TO_SUSPEND_VENDOR,
         {
           cause: error,
         },
       );
     }
+  }
+
+  async checkEmail(email: string): Promise<{ exists: boolean }> {
+    const [existingEmail] = await this.db
+      .select({ id: userTable.id })
+      .from(userTable)
+      .where(eq(userTable.email, email))
+      .limit(1)
+      .catch((error) => {
+        throw new InternalServerErrorException(
+          VendorsError.FAILED_TO_CHECK_EMAIL_EXISTS,
+          { cause: error },
+        );
+      });
+    return { exists: !!existingEmail };
+  }
+
+  async checkPhone(phone: string): Promise<{ exists: boolean }> {
+    const [existingPhone] = await this.db
+      .select({ id: userTable.id })
+      .from(userTable)
+      .where(eq(userTable.phone_number, phone))
+      .limit(1)
+      .catch((error) => {
+        throw new InternalServerErrorException(
+          VendorsError.FAILED_TO_CHECK_PHONE_EXISTS,
+          { cause: error },
+        );
+      });
+    return { exists: !!existingPhone };
   }
 
   async vendorApplicationCount() {
@@ -847,7 +1056,7 @@ export class VendorsService {
         .where(eq(vendor.vendor_status, UserStatus.PENDING))
         .catch((error) => {
           throw new InternalServerErrorException(
-            VendorsErrorKeyEnum.FAILED_TO_COUNT_VENDOR_APPLICATIONS,
+            VendorsError.FAILED_TO_COUNT_VENDOR_APPLICATIONS,
             {
               cause: error,
             },
@@ -859,7 +1068,7 @@ export class VendorsService {
         throw error;
       }
       throw new InternalServerErrorException(
-        VendorsErrorKeyEnum.FAILED_TO_COUNT_VENDOR_APPLICATIONS,
+        VendorsError.FAILED_TO_COUNT_VENDOR_APPLICATIONS,
         {
           cause: error,
         },
@@ -902,7 +1111,7 @@ export class VendorsService {
         })
         .catch((error) => {
           throw new InternalServerErrorException(
-            VendorsErrorKeyEnum.FAILED_TO_RETRIEVE_VENDOR_APPLICATIONS,
+            VendorsError.FAILED_TO_RETRIEVE_VENDOR_APPLICATIONS,
             {
               cause: error,
             },
@@ -917,7 +1126,7 @@ export class VendorsService {
         throw error;
       }
       throw new InternalServerErrorException(
-        VendorsErrorKeyEnum.FAILED_TO_RETRIEVE_VENDOR_APPLICATIONS,
+        VendorsError.FAILED_TO_RETRIEVE_VENDOR_APPLICATIONS,
         {
           cause: error,
         },
@@ -955,7 +1164,7 @@ export class VendorsService {
         throw error;
       }
       throw new InternalServerErrorException(
-        VendorsErrorKeyEnum.FAILED_TO_UPDATE_VENDOR_STATUS,
+        VendorsError.FAILED_TO_UPDATE_VENDOR_STATUS,
         {
           cause: error,
         },
@@ -988,10 +1197,37 @@ export class VendorsService {
           user: true,
         },
       });
-      return vendors;
+
+      const companyIds = vendors
+        .map((v) => v.company_id)
+        .filter(Boolean) as string[];
+
+      const salesMap: Record<string, number> = {};
+
+      if (companyIds.length > 0) {
+        const salesData = await this.db
+          .select({
+            company_id: orders.company_id,
+            total_sales: sql<number>`SUM(${orders.total_amount})`.mapWith(Number),
+          })
+          .from(orders)
+          .where(inArray(orders.company_id, companyIds))
+          .groupBy(orders.company_id);
+
+        salesData.forEach((sd) => {
+          if (sd.company_id) {
+            salesMap[sd.company_id] = sd.total_sales || 0;
+          }
+        });
+      }
+
+      return vendors.map((v) => ({
+        ...v,
+        total_sales: v.company_id ? salesMap[v.company_id] || 0 : 0,
+      }));
     } catch (error) {
       throw new InternalServerErrorException(
-        VendorsErrorKeyEnum.FAILED_TO_RETRIEVE_VENDORS,
+        VendorsError.FAILED_TO_RETRIEVE_VENDORS,
         {
           cause: error,
         },
@@ -1007,7 +1243,7 @@ export class VendorsService {
       return vendors;
     } catch (error) {
       throw new InternalServerErrorException(
-        VendorsErrorKeyEnum.FAILED_TO_RETRIEVE_UNVERIFIED_VENDORS,
+        VendorsError.FAILED_TO_RETRIEVE_UNVERIFIED_VENDORS,
         {
           cause: error,
         },
@@ -1022,14 +1258,14 @@ export class VendorsService {
         .where(eq(vendorTable.is_verified, true));
       if (!vendors) {
         throw new HttpException(
-          VendorsErrorKeyEnum.NO_VERIFIED_VENDORS_FOUND,
+          VendorsError.NO_VERIFIED_VENDORS_FOUND,
           HttpStatus.NOT_FOUND,
         );
       }
       return vendors;
     } catch (error) {
       throw new InternalServerErrorException(
-        VendorsErrorKeyEnum.FAILED_TO_RETRIEVE_VERIFIED_VENDORS,
+        VendorsError.FAILED_TO_RETRIEVE_VERIFIED_VENDORS,
         {
           cause: error,
         },
@@ -1049,12 +1285,12 @@ export class VendorsService {
         .where(eq(vendorTable.id, vendorId))
         .limit(1);
       if (!existingVendor) {
-        throw new UnauthorizedException(VendorsErrorKeyEnum.VENDOR_NOT_FOUND);
+        throw new UnauthorizedException(VendorsError.VENDOR_NOT_FOUND);
       }
       return existingVendor;
     } catch (error) {
       throw new InternalServerErrorException(
-        VendorsErrorKeyEnum.FAILED_TO_RETRIEVE_VENDOR,
+        VendorsError.FAILED_TO_RETRIEVE_VENDOR,
         {
           cause: error,
         },
@@ -1096,7 +1332,7 @@ export class VendorsService {
         })
         .catch((error) => {
           throw new InternalServerErrorException(
-            VendorsErrorKeyEnum.FAILED_TO_RETRIEVE_VENDOR_DETAILS,
+            VendorsError.FAILED_TO_RETRIEVE_VENDOR_DETAILS,
             {
               cause: error,
             },
@@ -1109,7 +1345,7 @@ export class VendorsService {
         !vendorDetails.company
       ) {
         throw new HttpException(
-          VendorsErrorKeyEnum.VENDOR_NOT_FOUND,
+          VendorsError.VENDOR_NOT_FOUND,
           HttpStatus.NOT_FOUND,
         );
       }
@@ -1156,7 +1392,7 @@ export class VendorsService {
       return response;
     } catch (error) {
       throw new InternalServerErrorException(
-        VendorsErrorKeyEnum.FAILED_TO_RETRIEVE_VENDOR,
+        VendorsError.FAILED_TO_RETRIEVE_VENDOR,
         {
           cause: error,
         },
@@ -1191,7 +1427,7 @@ export class VendorsService {
         .returning({ id: addressTable.id })
         .catch((error) => {
           throw new InternalServerErrorException(
-            VendorsErrorKeyEnum.FAILED_TO_CREATE_REGISTRATION_ADDRESS,
+            VendorsError.FAILED_TO_CREATE_REGISTRATION_ADDRESS,
             {
               cause: error,
             },
@@ -1200,7 +1436,7 @@ export class VendorsService {
 
       if (!createdAddress || !createdAddress.id) {
         throw new HttpException(
-          VendorsErrorKeyEnum.FAILED_TO_CREATE_REGISTRATION_ADDRESS,
+          VendorsError.FAILED_TO_CREATE_REGISTRATION_ADDRESS,
           HttpStatus.INTERNAL_SERVER_ERROR,
         );
       }
@@ -1216,7 +1452,7 @@ export class VendorsService {
         throw error;
       }
       throw new InternalServerErrorException(
-        VendorsErrorKeyEnum.FAILED_TO_CREATE_REGISTRATION_ADDRESS,
+        VendorsError.FAILED_TO_CREATE_REGISTRATION_ADDRESS,
         {
           cause: error,
         },
@@ -1233,7 +1469,7 @@ export class VendorsService {
         .where(eq(addressTable.company_id, companyId))
         .catch((error) => {
           throw new InternalServerErrorException(
-            VendorsErrorKeyEnum.FAILED_TO_RETRIEVE_COMPANY_ADDRESSES,
+            VendorsError.FAILED_TO_RETRIEVE_COMPANY_ADDRESSES,
             {
               cause: error,
             },
@@ -1248,7 +1484,7 @@ export class VendorsService {
         throw error;
       }
       throw new InternalServerErrorException(
-        VendorsErrorKeyEnum.FAILED_TO_RETRIEVE_COMPANY_ADDRESSES,
+        VendorsError.FAILED_TO_RETRIEVE_COMPANY_ADDRESSES,
         {
           cause: error,
         },
@@ -1264,7 +1500,7 @@ export class VendorsService {
 
       if (!companyId) {
         throw new UnauthorizedException(
-          VendorsErrorKeyEnum.COMPANY_NOT_FOUND_FOR_THE_PROVIDED_DOMAIN,
+          VendorsError.COMPANY_NOT_FOUND_FOR_THE_PROVIDED_DOMAIN,
         );
       }
 
@@ -1381,7 +1617,7 @@ export class VendorsService {
     } catch (error) {
       if (error instanceof HttpException) throw error;
       throw new InternalServerErrorException(
-        VendorsErrorKeyEnum.FAILED_TO_RETRIEVE_VENDOR_ANALYTICS_DATA,
+        VendorsError.FAILED_TO_RETRIEVE_VENDOR_ANALYTICS_DATA,
         {
           cause: error,
         },
@@ -1398,7 +1634,7 @@ export class VendorsService {
 
       if (!companyId) {
         throw new UnauthorizedException(
-          VendorsErrorKeyEnum.COMPANY_NOT_FOUND_FOR_THE_PROVIDED_DOMAIN,
+          VendorsError.COMPANY_NOT_FOUND_FOR_THE_PROVIDED_DOMAIN,
         );
       }
 
@@ -1578,8 +1814,50 @@ export class VendorsService {
     } catch (error) {
       if (error instanceof HttpException) throw error;
       throw new InternalServerErrorException(
-        VendorsErrorKeyEnum.FAILED_TO_RETRIEVE_PDF_ANALYTICS_DATA,
+        VendorsError.FAILED_TO_RETRIEVE_PDF_ANALYTICS_DATA,
         { cause: error },
+      );
+    }
+  }
+
+  async markTourAsComplete(vendorId: string, tourId: string) {
+    if (!vendorId || !tourId) {
+      throw new HttpException(
+        'Vendor ID and Tour ID are required',
+        HttpStatus.BAD_REQUEST,
+      );
+    }
+    try {
+      // First, see if the preference record exists
+      const [existingPref] = await this.db
+        .select()
+        .from(vendor_preferences)
+        .where(eq(vendor_preferences.vendor_id, vendorId))
+        .limit(1);
+
+      if (existingPref) {
+        const uiSettings = existingPref.ui_settings || { completed_tours: [] };
+        if (!uiSettings.completed_tours.includes(tourId)) {
+          uiSettings.completed_tours.push(tourId);
+          await this.db
+            .update(vendor_preferences)
+            .set({ ui_settings: uiSettings })
+            .where(eq(vendor_preferences.id, existingPref.id));
+        }
+      } else {
+        await this.db.insert(vendor_preferences).values({
+          vendor_id: vendorId,
+          ui_settings: { completed_tours: [tourId] },
+        });
+      }
+
+      return { message: `Tour ${tourId} marked as complete successfully` };
+    } catch (error) {
+      throw new InternalServerErrorException(
+        'Failed to mark tour as complete',
+        {
+          cause: error,
+        },
       );
     }
   }

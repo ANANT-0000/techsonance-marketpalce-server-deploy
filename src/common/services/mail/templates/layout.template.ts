@@ -1,3 +1,5 @@
+import { EMAIL_PLATFORM_THEME } from '../../../constants.js';
+
 export const emailLayout = (
   content: string,
   title: string = 'Techsonance Marketplace',
@@ -17,7 +19,7 @@ export const emailLayout = (
             padding: 0 !important;
             height: 100% !important;
             width: 100% !important;
-            background-color: #eef7f6;
+            background-color: ${EMAIL_PLATFORM_THEME.bg_base};
             font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
         }
         * { -ms-text-size-adjust: 100%; -webkit-text-size-adjust: 100%; }
@@ -25,7 +27,7 @@ export const emailLayout = (
         table, td { mso-table-lspace: 0pt !important; mso-table-rspace: 0pt !important; }
         table { border-spacing: 0 !important; border-collapse: collapse !important; table-layout: fixed !important; margin: 0 auto !important; }
         img { -ms-interpolation-mode: bicubic; }
-        a { color: #0d9488; }
+        a { color: ${EMAIL_PLATFORM_THEME.primary}; }
 
         @media screen and (max-width: 600px) {
             .mobile-padding  { padding: 24px 20px !important; }
@@ -36,11 +38,11 @@ export const emailLayout = (
     </style>
 </head>
 
-<body width="100%" bgcolor="#eef7f6" style="margin: 0; padding: 0; mso-line-height-rule: exactly; background-color: #eef7f6;">
-<center style="width: 100%; background-color: #eef7f6; text-align: left;">
+<body width="100%" bgcolor="${EMAIL_PLATFORM_THEME.bg_base}" style="margin: 0; padding: 0; mso-line-height-rule: exactly; background-color: ${EMAIL_PLATFORM_THEME.bg_base};">
+<center style="width: 100%; background-color: ${EMAIL_PLATFORM_THEME.bg_base}; text-align: left;">
 
     <!-- Outer wrapper -->
-    <table align="center" role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%" style="background-color: #eef7f6;">
+    <table align="center" role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%" style="background-color: ${EMAIL_PLATFORM_THEME.bg_base};">
         <tr>
             <td style="padding: 28px 16px;">
 
@@ -49,7 +51,7 @@ export const emailLayout = (
 
                     <!-- ═══ HEADER BAND ═══ -->
                     <tr>
-                        <td class="mobile-header" style="padding: 36px 48px 32px; background: linear-gradient(135deg, #0d9488 0%, #0f766e 100%); position: relative;">
+                        <td class="mobile-header" style="padding: 36px 48px 32px; background: linear-gradient(135deg, ${EMAIL_PLATFORM_THEME.primary} 0%, ${EMAIL_PLATFORM_THEME.secondary} 100%); position: relative;">
 
                             <!-- Brand name -->
                             <table role="presentation" border="0" cellpadding="0" cellspacing="0" width="100%">
@@ -83,43 +85,43 @@ export const emailLayout = (
                     <!-- ═══ DIVIDER ═══ -->
                     <tr>
                         <td style="padding: 0 48px;">
-                            <div style="height: 1px; background: linear-gradient(90deg, transparent, #e2e8f0 20%, #e2e8f0 80%, transparent); width: 100%;"></div>
+                            <div style="height: 1px; background: linear-gradient(90deg, transparent, ${EMAIL_PLATFORM_THEME.border_base} 20%, ${EMAIL_PLATFORM_THEME.border_base} 80%, transparent); width: 100%;"></div>
                         </td>
                     </tr>
 
                     <!-- ═══ FOOTER ═══ -->
                     <tr>
-                        <td class="mobile-padding" style="padding: 28px 48px 36px; background-color: #f8fffe;">
+                        <td class="mobile-padding" style="padding: 28px 48px 36px; background-color: ${EMAIL_PLATFORM_THEME.bg_surface};">
 
                             <!-- Social row -->
                             <table role="presentation" border="0" cellpadding="0" cellspacing="0" width="100%" style="margin-bottom: 20px;">
                                 <tr>
                                     <td valign="middle">
-                                        <p style="margin: 0; font-family: Georgia, 'Times New Roman', serif; font-size: 15px; font-weight: bold; color: #0f766e;">Techsonance</p>
-                                        <p style="margin: 2px 0 0; font-size: 12px; color: #94a3b8; font-family: Helvetica, Arial, sans-serif;">Your trusted marketplace</p>
+                                        <p style="margin: 0; font-family: Georgia, 'Times New Roman', serif; font-size: 15px; font-weight: bold; color: ${EMAIL_PLATFORM_THEME.secondary};">Techsonance</p>
+                                        <p style="margin: 2px 0 0; font-size: 12px; color: ${EMAIL_PLATFORM_THEME.text_muted}; font-family: Helvetica, Arial, sans-serif;">Your trusted marketplace</p>
                                     </td>
                                     <td align="right" valign="middle">
                                         <!-- Social icons as styled text links for max email compatibility -->
-                                        <a href="#" style="display: inline-block; margin-left: 8px; width: 32px; height: 32px; border-radius: 8px; background-color: #e6f4f3; text-align: center; line-height: 32px; text-decoration: none; font-size: 14px; color: #0d9488;" title="Facebook">f</a>
-                                        <a href="#" style="display: inline-block; margin-left: 8px; width: 32px; height: 32px; border-radius: 8px; background-color: #e6f4f3; text-align: center; line-height: 32px; text-decoration: none; font-size: 14px; color: #0d9488;" title="Instagram">in</a>
-                                        <a href="#" style="display: inline-block; margin-left: 8px; width: 32px; height: 32px; border-radius: 8px; background-color: #e6f4f3; text-align: center; line-height: 32px; text-decoration: none; font-size: 12px; font-weight: bold; color: #0d9488;" title="X / Twitter">𝕏</a>
+                                        <a href="#" style="display: inline-block; margin-left: 8px; width: 32px; height: 32px; border-radius: 8px; background-color: ${EMAIL_PLATFORM_THEME.bg_muted}; text-align: center; line-height: 32px; text-decoration: none; font-size: 14px; color: ${EMAIL_PLATFORM_THEME.primary};" title="Facebook">f</a>
+                                        <a href="#" style="display: inline-block; margin-left: 8px; width: 32px; height: 32px; border-radius: 8px; background-color: ${EMAIL_PLATFORM_THEME.bg_muted}; text-align: center; line-height: 32px; text-decoration: none; font-size: 14px; color: ${EMAIL_PLATFORM_THEME.primary};" title="Instagram">in</a>
+                                        <a href="#" style="display: inline-block; margin-left: 8px; width: 32px; height: 32px; border-radius: 8px; background-color: ${EMAIL_PLATFORM_THEME.bg_muted}; text-align: center; line-height: 32px; text-decoration: none; font-size: 12px; font-weight: bold; color: ${EMAIL_PLATFORM_THEME.primary};" title="X / Twitter">𝕏</a>
                                     </td>
                                 </tr>
                             </table>
 
                             <!-- Legal text -->
-                            <p style="margin: 0 0 12px; font-size: 12px; line-height: 1.7; color: #94a3b8; font-family: Helvetica, Arial, sans-serif;">
+                            <p style="margin: 0 0 12px; font-size: 12px; line-height: 1.7; color: ${EMAIL_PLATFORM_THEME.text_muted}; font-family: Helvetica, Arial, sans-serif;">
                                 You received this email because you are registered on Techsonance Marketplace.
                                 Manage your notification preferences to choose which emails you receive.
                             </p>
 
                             <!-- Links -->
                             <p style="margin: 0; font-size: 12px; font-family: Helvetica, Arial, sans-serif;">
-                                <a href="#" style="color: #0d9488; text-decoration: none; font-weight: 600;">Unsubscribe</a>
-                                <span style="color: #cbd5e1; margin: 0 8px;">|</span>
-                                <a href="#" style="color: #0d9488; text-decoration: none; font-weight: 600;">View in browser</a>
-                                <span style="color: #cbd5e1; margin: 0 8px;">|</span>
-                                <a href="#" style="color: #0d9488; text-decoration: none; font-weight: 600;">Privacy Policy</a>
+                                <a href="#" style="color: ${EMAIL_PLATFORM_THEME.primary}; text-decoration: none; font-weight: 600;">Unsubscribe</a>
+                                <span style="color: ${EMAIL_PLATFORM_THEME.border_base}; margin: 0 8px;">|</span>
+                                <a href="#" style="color: ${EMAIL_PLATFORM_THEME.primary}; text-decoration: none; font-weight: 600;">View in browser</a>
+                                <span style="color: ${EMAIL_PLATFORM_THEME.border_base}; margin: 0 8px;">|</span>
+                                <a href="#" style="color: ${EMAIL_PLATFORM_THEME.primary}; text-decoration: none; font-weight: 600;">Privacy Policy</a>
                             </p>
 
                         </td>
@@ -127,7 +129,7 @@ export const emailLayout = (
 
                     <!-- ═══ BOTTOM ACCENT BAR ═══ -->
                     <tr>
-                        <td style="height: 5px; background: linear-gradient(90deg, #0d9488, #14b8a6, #0d9488);"></td>
+                        <td style="height: 5px; background: linear-gradient(90deg, ${EMAIL_PLATFORM_THEME.primary}, ${EMAIL_PLATFORM_THEME.secondary}, ${EMAIL_PLATFORM_THEME.primary});"></td>
                     </tr>
 
                 </table>
@@ -137,7 +139,7 @@ export const emailLayout = (
                 <table align="center" role="presentation" border="0" cellpadding="0" cellspacing="0" width="600" style="max-width: 600px; width: 100%; margin: 0 auto;">
                     <tr>
                         <td style="padding: 16px 0; text-align: center;">
-                            <p style="margin: 0; font-size: 11px; color: #94a3b8; font-family: Helvetica, Arial, sans-serif;">
+                            <p style="margin: 0; font-size: 11px; color: ${EMAIL_PLATFORM_THEME.text_muted}; font-family: Helvetica, Arial, sans-serif;">
                                 © ${new Date().getFullYear()} Techsonance. All rights reserved.
                             </p>
                         </td>

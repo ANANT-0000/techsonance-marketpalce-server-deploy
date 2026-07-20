@@ -1,5 +1,5 @@
-import { Injectable, Inject, Logger } from '@nestjs/common';
-import { eq, or, and, lt } from 'drizzle-orm';
+import { Injectable, Inject, Logger, InternalServerErrorException } from '@nestjs/common';
+import { eq, or, and, lt, ne } from 'drizzle-orm';
 import { ConfigService } from '@nestjs/config';
 import { Client } from '@upstash/qstash';
 import { DRIZZLE, type DrizzleService } from '../../drizzle/drizzle.module.js';
@@ -20,11 +20,23 @@ export class GatewaySyncService {
     @Inject(DRIZZLE) private db: DrizzleService,
     private readonly configService: ConfigService,
   ) {
-    this.qstashClient = new Client({
-      token: this.configService.get<string>('QSTASH_TOKEN') ?? 'mock-token',
-    });
-    this.callbackBaseUrl =
-      this.configService.get<string>('QSTASH_CALLBACK_BASE_URL') ?? '';
+    const qstashToken = this.configService.get<string>('QSTASH_TOKEN');
+    const callbackBaseUrl =
+      this.configService.get<string>('QSTASH_CALLBACK_BASE_URL') ||
+      this.configService.get<string>('PUBLIC_API_URL');
+
+    if (!qstashToken) {
+      throw new Error('QSTASH_TOKEN must be configured for GatewaySyncService');
+    }
+
+    if (!callbackBaseUrl) {
+      throw new Error(
+        'PUBLIC_API_URL or QSTASH_CALLBACK_BASE_URL must be configured for GatewaySyncService',
+      );
+    }
+
+    this.qstashClient = new Client({ token: qstashToken });
+    this.callbackBaseUrl = callbackBaseUrl;
   }
 
   /**
@@ -42,6 +54,10 @@ export class GatewaySyncService {
     // 1. Fetch the job and verify it's still pending (idempotency check)
     const job = await this.db.query.cms_sync_jobs.findFirst({
       where: eq(cms_sync_jobs.idempotency_key, idempotencyKey),
+    }).catch((error) => {
+      throw new InternalServerErrorException('Failed to fetch sync job details', {
+        cause: error,
+      });
     });
 
     if (!job) {
@@ -61,6 +77,30 @@ export class GatewaySyncService {
       return;
     }
 
+    // Atomically claim the job before any gateway work
+    const claimConditions = force
+      ? eq(cms_sync_jobs.id, job.id)
+      : and(
+          eq(cms_sync_jobs.id, job.id),
+          ne(cms_sync_jobs.status, JobStatus.PROCESSING),
+        );
+
+    const [updatedJobs] = await this.db
+      .update(cms_sync_jobs)
+      .set({ status: JobStatus.PROCESSING, attempts: job.attempts + 1 })
+      .where(claimConditions)
+      .returning({ id: cms_sync_jobs.id })
+      .catch((error) => {
+        throw new InternalServerErrorException('Failed to claim sync job', {
+          cause: error,
+        });
+      });
+
+    if (!updatedJobs || !updatedJobs.id) {
+      this.logger.log(`Job ${idempotencyKey} is already processing. Skipping.`);
+      return;
+    }
+
     // 2. Fetch the live plan and its pending prices
     const plan = await this.db.query.cms_plans.findFirst({
       where: eq(cms_plans.id, planId),
@@ -69,6 +109,10 @@ export class GatewaySyncService {
           where: eq(cms_plan_prices.sync_status, SyncStatus.PENDING),
         },
       },
+    }).catch((error) => {
+      throw new InternalServerErrorException('Failed to fetch plan prices for sync', {
+        cause: error,
+      });
     });
 
     if (!plan || plan.prices.length === 0) {
@@ -76,16 +120,17 @@ export class GatewaySyncService {
       await this.db
         .update(cms_sync_jobs)
         .set({ status: JobStatus.COMPLETED })
-        .where(eq(cms_sync_jobs.id, job.id));
+        .where(eq(cms_sync_jobs.id, job.id))
+        .catch((error) => {
+          throw new InternalServerErrorException('Failed to complete empty sync job', {
+            cause: error,
+          });
+        });
       return;
     }
 
     try {
-      // 3. Mark job as processing
-      await this.db
-        .update(cms_sync_jobs)
-        .set({ status: JobStatus.PROCESSING, attempts: job.attempts + 1 })
-        .where(eq(cms_sync_jobs.id, job.id));
+      // 3. Job is already marked as processing
 
       const simulatedGatewayResponses = [];
 
@@ -113,7 +158,12 @@ export class GatewaySyncService {
             gateway_price_id: mockGatewayPriceId,
             sync_status: SyncStatus.SYNCED,
           })
-          .where(eq(cms_plan_prices.id, price.id));
+          .where(eq(cms_plan_prices.id, price.id))
+          .catch((error) => {
+            throw new InternalServerErrorException('Failed to update plan price sync status', {
+              cause: error,
+            });
+          });
       }
 
       // 5. Mark job as completed
@@ -123,7 +173,12 @@ export class GatewaySyncService {
           status: JobStatus.COMPLETED,
           gateway_response_json: simulatedGatewayResponses,
         })
-        .where(eq(cms_sync_jobs.id, job.id));
+        .where(eq(cms_sync_jobs.id, job.id))
+        .catch((error) => {
+          throw new InternalServerErrorException('Failed to complete sync job', {
+            cause: error,
+          });
+        });
 
       this.logger.log(`Successfully synced plan ${planId} to gateway.`);
     } catch (error: any) {
@@ -138,7 +193,12 @@ export class GatewaySyncService {
           status: JobStatus.FAILED,
           last_error: error.message,
         })
-        .where(eq(cms_sync_jobs.id, job.id));
+        .where(eq(cms_sync_jobs.id, job.id))
+        .catch((dbError) => {
+          throw new InternalServerErrorException('Failed to update sync job failure status', {
+            cause: dbError,
+          });
+        });
       throw error;
     }
   }
@@ -166,6 +226,11 @@ export class GatewaySyncService {
         lt(cms_sync_jobs.attempts, 5),
         lt(cms_sync_jobs.updated_at, thresholdDate),
       ),
+      limit: 50,
+    }).catch((error) => {
+      throw new InternalServerErrorException('Failed to fetch stuck sync jobs', {
+        cause: error,
+      });
     });
 
     if (jobs.length === 0) {
@@ -180,22 +245,32 @@ export class GatewaySyncService {
     const callbackUrl = `${this.callbackBaseUrl}/api/v1/internal/subscription/subscription-sync`;
     let enqueuedCount = 0;
 
-    for (const job of jobs) {
-      try {
-        await this.qstashClient.publishJSON({
-          url: callbackUrl,
-          body: { jobId: job.idempotency_key, planId: job.plan_id },
-        });
-        enqueuedCount++;
-        this.logger.log(
-          `Sweep: enqueued job ${job.idempotency_key} for plan ${job.plan_id}.`,
-        );
-      } catch (err: any) {
-        this.logger.error(
-          `Sweep: failed to enqueue job ${job.idempotency_key}: ${err.message}`,
-        );
-        // Continue with remaining jobs — don't let one failure abort the sweep
-      }
+    const concurrencyLimit = 10;
+    for (let i = 0; i < jobs.length; i += concurrencyLimit) {
+      const batch = jobs.slice(i, i + concurrencyLimit);
+      await Promise.all(
+        batch.map(async (job) => {
+          try {
+            await this.qstashClient.publishJSON({
+              url: callbackUrl,
+              body: {
+                jobId: job.idempotency_key,
+                planId: job.plan_id,
+                force: true,
+              },
+            });
+            enqueuedCount++;
+            this.logger.log(
+              `Sweep: enqueued job ${job.idempotency_key} for plan ${job.plan_id}.`,
+            );
+          } catch (err: any) {
+            this.logger.error(
+              `Sweep: failed to enqueue job ${job.idempotency_key}: ${err.message}`,
+            );
+            // Continue with remaining jobs — don't let one failure abort the sweep
+          }
+        }),
+      );
     }
 
     this.logger.log(
@@ -222,6 +297,10 @@ export class GatewaySyncService {
         lt(cms_sync_jobs.attempts, 5),
         lt(cms_sync_jobs.updated_at, thresholdDate),
       ),
+    }).catch((error) => {
+      throw new InternalServerErrorException('Failed to fetch failed sync jobs', {
+        cause: error,
+      });
     });
 
     this.logger.log(

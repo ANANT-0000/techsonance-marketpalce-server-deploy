@@ -18,10 +18,7 @@ export const user = pg.pgTable(
     otp: pg.varchar('otp', { length: 6 }),
     otp_expires: pg.timestamp('otp_expires'),
     otp_attempts: pg.integer('otp_attempts').default(0).notNull(),
-    password_change_required: pg
-      .boolean('password_change_required')
-      .notNull()
-      .default(false),
+
     created_at: pg.timestamp('created_at').notNull().defaultNow(),
     updated_at: pg
       .timestamp('updated_at')
@@ -64,6 +61,31 @@ export const vendor = pg.pgTable('vendor', {
     .uuid('user_id')
     .references(() => user.id, { onDelete: 'restrict' }),
 });
+
+export interface VendorUiSettings {
+  completed_tours: string[];
+  [key: string]: any;
+}
+
+export const vendor_preferences = pg.pgTable('vendor_preferences', {
+  id: pg.uuid('id').primaryKey().defaultRandom(),
+  vendor_id: pg
+    .uuid('vendor_id')
+    .references(() => vendor.id, { onDelete: 'cascade' })
+    .unique()
+    .notNull(),
+  ui_settings: pg
+    .jsonb('ui_settings')
+    .$type<VendorUiSettings>()
+    .default({ completed_tours: [] }),
+  created_at: pg.timestamp('created_at').notNull().defaultNow(),
+  updated_at: pg
+    .timestamp('updated_at')
+    .notNull()
+    .defaultNow()
+    .$onUpdate(() => new Date()),
+});
+
 export const address = pg.pgTable(
   'address',
   {

@@ -11,13 +11,14 @@ import {
 import { RoleGuard } from '../../guards/role.guard.js';
 import { Role } from '../../enums/role.enum.js';
 import { Roles } from '../../common/decorators/roles.decorator.js';
+import { VendorActiveGuard } from '../../guards/vendor-status.guard.js';
 import { ShippingService } from './shipping.service.js';
 
 @Controller({
   version: '1',
   path: 'vendor/shipping',
 })
-@UseGuards(RoleGuard)
+@UseGuards(RoleGuard, VendorActiveGuard)
 @Roles(Role.VENDOR)
 export class VendorShippingController {
   constructor(private readonly shippingService: ShippingService) {}

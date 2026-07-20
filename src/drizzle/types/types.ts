@@ -1,5 +1,15 @@
 import { Role } from '../../enums/role.enum.js';
 
+export enum EnforcementMode {
+  HARD = 'hard',
+  SOFT = 'soft',
+}
+
+export enum DomainType {
+  SUBDOMAIN = 'subdomain',
+  CUSTOM = 'custom',
+}
+
 export enum NavItemType {
   CUSTOM_LINK = 'custom_link',
   CATEGORY = 'category',
@@ -260,6 +270,20 @@ export enum SubscriptionStatus {
   EXPIRED = 'expired',
   CANCELLED = 'cancelled',
   GRACE_PERIOD = 'grace_period',
+}
+
+export enum FeatureValueType {
+  BOOLEAN = 'boolean',
+  COUNTER = 'counter',
+  RATE = 'rate',
+  GAUGE = 'gauge',
+}
+
+export enum ResetInterval {
+  HOURLY = 'hourly',
+  DAILY = 'daily',
+  MONTHLY = 'monthly',
+  BILLING_CYCLE = 'billing_cycle',
 }
 
 /**

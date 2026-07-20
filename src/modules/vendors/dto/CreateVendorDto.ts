@@ -3,12 +3,14 @@ import {
   IsArray,
   IsBoolean,
   IsEmail,
+  IsEnum,
   IsNotEmpty,
   IsOptional,
   IsString,
   Length,
   ValidateNested,
 } from 'class-validator';
+import { DomainType } from '../../../drizzle/types/types.js';
 
 export class CompanyComplianceDetailsDto {
   @IsOptional()
@@ -98,6 +100,9 @@ export class CreateVendorDto {
   @Length(2, 100)
   @Transform(({ value }: { value: string }) => value.trim())
   company_domain!: string;
+  @IsEnum(DomainType)
+  @IsNotEmpty()
+  domain_type!: DomainType;
   @IsArray()
   @ValidateNested({ each: true })
   @Type(() => CompanyComplianceItemDto)
@@ -115,4 +120,8 @@ export class CreateVendorDto {
   @Length(8, 128)
   @Transform(({ value }: { value: string }) => value.trim())
   confirm_password!: string;
+
+  @IsString()
+  @IsOptional()
+  plan_id?: string;
 }

@@ -22,7 +22,9 @@ import { returnRequestedTemplate } from './templates/return-requested.template.j
 import { replacementRequestedTemplate } from './templates/replacement-requested.template.js';
 import { orderShippedTemplate } from './templates/order-shipped.template.js';
 import { passwordResetOtpTemplate } from './templates/password-reset-otp.template.js';
+import { vendorPasswordResetOtpTemplate } from './templates/vendor-password-reset-otp.template.js';
 import { vendorApprovalTemplate } from './templates/vendor-approval.template.js';
+import { vendorEmailVerificationOtpTemplate } from './templates/vendor-email-verification.template.js';
 import { deactivateAccountOtpTemplate } from './templates/account-deactivation-otp.template.js';
 import { reactivateAccountOtpTemplate } from './templates/account-reactivate-otp.template.js';
 import * as nodemailer from 'nodemailer';
@@ -173,8 +175,8 @@ export class MailService {
         const html = userRegistrationTemplate(userName, verificationUrl);
     return this.sendEmail(email, 'Welcome to Techsonance Marketplace!', html);
   }
-  public async sendVendorRegistrationEmail(email: string, storeName: string, randomPassword: string) {
-        const html = vendorRegistrationTemplate(storeName, randomPassword);
+  public async sendVendorRegistrationEmail(email: string, storeName: string, randomPassword?: string) {
+    const html = vendorRegistrationTemplate(storeName, randomPassword || '');
     return await this.sendEmail(
       email,
       'Vendor Registration Received - Techsonance',
@@ -265,8 +267,38 @@ export class MailService {
     expireAt: string,
     companyName: string,
   ) {
-        const html = passwordResetOtpTemplate(name, otp, expireAt, companyName);
+    const html = passwordResetOtpTemplate(name, otp, expireAt, companyName);
     return this.sendEmail(email, `Password Reset OTP - ${companyName}`, html);
+  }
+
+  async sendVendorEmailVerificationOtp(
+    email: string,
+    otpCode: string,
+    userName: string,
+    expireAt: string,
+    companyName: string,
+  ) {
+    const html = vendorEmailVerificationOtpTemplate(
+      userName,
+      otpCode,
+      expireAt,
+      companyName,
+    );
+    return this.sendEmail(
+      email,
+      `Verify Your Email Address - ${companyName}`,
+      html,
+    );
+  }
+  async sendVendorPasswordResetOtp(
+    email: string,
+    otp: string,
+    name: string,
+    expireAt: string,
+    companyName: string,
+  ) {
+        const html = vendorPasswordResetOtpTemplate(name, otp, expireAt, companyName);
+    return this.sendEmail(email, `Vendor Password Reset OTP - ${companyName}`, html);
   }
   async sendAccountDeactivationOtp(
     email: string,

@@ -1,11 +1,14 @@
 import {
+  BadRequestException,
   Controller,
   Get,
+  Headers,
   Inject,
   Query,
   UnauthorizedException,
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiQuery } from '@nestjs/swagger';
+import * as crypto from 'crypto';
 import { and, desc, gte, eq, ilike, sql } from 'drizzle-orm';
 import { DRIZZLE } from '../../drizzle/drizzle.module.js';
 import type { DrizzleService } from '../../drizzle/drizzle.module.js';
@@ -19,8 +22,13 @@ const ACCESS_SECRET = process.env.LOGS_ACCESS_SECRET ?? '';
 export class LogsController {
   constructor(@Inject(DRIZZLE) private readonly db: DrizzleService) {}
 
-  private guard(secret: string) {
-    if (!ACCESS_SECRET || secret !== ACCESS_SECRET) {
+  private guard(secret?: string) {
+    if (!ACCESS_SECRET || !secret) {
+      throw new UnauthorizedException('Invalid or missing secret.');
+    }
+    const secretBuffer = Buffer.from(secret);
+    const expectedBuffer = Buffer.from(ACCESS_SECRET);
+    if (secretBuffer.length !== expectedBuffer.length || !crypto.timingSafeEqual(secretBuffer, expectedBuffer)) {
       throw new UnauthorizedException('Invalid or missing secret.');
     }
   }
@@ -32,13 +40,12 @@ export class LogsController {
   @Public()
   @Get('logs')
   @ApiOperation({ summary: 'Read persisted WARN/ERROR logs from Neon DB' })
-  @ApiQuery({ name: 'secret', required: true })
   @ApiQuery({ name: 'level', required: false, example: 'ERROR' })
   @ApiQuery({ name: 'context', required: false, example: 'SlowRequest' })
   @ApiQuery({ name: 'since', required: false, example: '2026-07-01' })
   @ApiQuery({ name: 'limit', required: false, example: 50 })
   async getLogs(
-    @Query('secret') secret: string,
+    @Headers('x-logs-secret') secret: string,
     @Query('level') level?: string,
     @Query('context') context?: string,
     @Query('since') since?: string,
@@ -50,6 +57,9 @@ export class LogsController {
     const sinceDate = since
       ? new Date(since)
       : new Date(Date.now() - 7 * 24 * 60 * 60 * 1000); // default: last 7 days
+    if (isNaN(sinceDate.getTime())) {
+      throw new BadRequestException('Invalid "since" date format. Use ISO-8601, e.g. 2026-07-01.');
+    }
 
     const rows = await this.db
       .select()
@@ -78,8 +88,7 @@ export class LogsController {
   @Public()
   @Get('logs/stats')
   @ApiOperation({ summary: 'Daily WARN/ERROR counts for the last 30 days' })
-  @ApiQuery({ name: 'secret', required: true })
-  async getLogStats(@Query('secret') secret: string) {
+  async getLogStats(@Headers('x-logs-secret') secret: string) {
     this.guard(secret);
 
     const rows = await this.db

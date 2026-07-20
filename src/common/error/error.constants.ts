@@ -37,4 +37,14 @@ export const ERROR_MAPPING: Record<InternalErrorCode, ErrorMappingConfig> = {
     message: "An unexpected event has occurred on our end. Our technical team has been notified. Please contact support if the issue persists.",
     action: ClientActionCode.CONTACT_SUPPORT,
   },
+  [InternalErrorCode.UNAUTHORIZED]: {
+    statusCode: HttpStatus.UNAUTHORIZED,
+    message: "You must be logged in to perform this action.",
+    action: ClientActionCode.UPDATE_INPUT,
+  },
+  [InternalErrorCode.FORBIDDEN]: {
+    statusCode: HttpStatus.FORBIDDEN,
+    message: "You do not have permission to perform this action.",
+    action: ClientActionCode.UPDATE_INPUT,
+  },
 };

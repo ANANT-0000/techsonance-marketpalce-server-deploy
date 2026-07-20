@@ -40,6 +40,7 @@ import { domainExtractor } from '../../common/filters/domainExtractor.filter.js'
 import { GetProductsQueryDto, SortBy } from './dto/get-products-query.dto.js';
 import { extractCloudinaryPublicId } from '../../common/filters/extractCloudinaryPublicId.filter.js';
 import { ProductsErrorKeyEnum } from './constants/products.enums.js';
+import { UsageTrackerService } from '../entitlements/usage-tracker.service.js';
 
 @Injectable()
 export class ProductsService {
@@ -49,6 +50,7 @@ export class ProductsService {
     private uploadToCloudService: UploadToCloudService,
     private inventoryService: InventoryService,
     private readonly companyService: CompanyService,
+    private usageTracker: UsageTrackerService,
   ) {}
   private async resolveCompanyId(domain: string): Promise<string> {
     const filterDomain = domainExtractor(domain);
@@ -1249,7 +1251,7 @@ export class ProductsService {
     }
   }
 
-  async deleteProduct(productId: string, vendorId?: string) {
+  async deleteProduct(productId: string, vendorId?: string, companyId?: string) {
     if (!productId) {
       return new HttpException(
         ProductsErrorKeyEnum.PRODUCT_ID_IS_REQUIRED,
@@ -1257,9 +1259,10 @@ export class ProductsService {
       );
     }
     try {
-      await this.db
+      const deletedRows = await this.db
         .delete(products)
         .where(and(eq(products.id, productId), vendorId ? eq(products.vendor_id, vendorId) : sql`TRUE`))
+        .returning({ id: products.id })
         .catch((error) => {
           throw new InternalServerErrorException(
             ProductsErrorKeyEnum.FAILED_TO_DELETE_PRODUCT,
@@ -1268,9 +1271,18 @@ export class ProductsService {
             },
           );
         });
+      if (companyId && deletedRows.length > 0) {
+        await this.usageTracker.decrement(
+          companyId,
+          'max_products',
+          deletedRows.length,
+        );
+      }
+      
       return {
         message: 'Product deleted successfully',
         status: HttpStatus.OK,
+        deletedCount: deletedRows.length,
       };
     } catch (error) {
       throw new InternalServerErrorException(
@@ -1307,7 +1319,7 @@ export class ProductsService {
     }
   }
 
-  async deleteSelectedProducts(productIds: string[], vendorId?: string) {
+  async deleteSelectedProducts(productIds: string[], vendorId?: string, companyId?: string) {
     if (!productIds || productIds.length === 0) {
       return new HttpException(
         ProductsErrorKeyEnum.PRODUCT_IDS_ARE_REQUIRED,
@@ -1315,10 +1327,19 @@ export class ProductsService {
       );
     }
     try {
-      await this.db.delete(products).where(and(inArray(products.id, productIds), vendorId ? eq(products.vendor_id, vendorId) : sql`TRUE`));
+      const deletedRows = await this.db.delete(products).where(and(inArray(products.id, productIds), vendorId ? eq(products.vendor_id, vendorId) : sql`TRUE`)).returning({ id: products.id });
+      if (companyId && deletedRows.length > 0) {
+        await this.usageTracker.decrement(
+          companyId,
+          'max_products',
+          deletedRows.length,
+        );
+      }
+
       return {
         message: 'Selected products deleted successfully',
         status: HttpStatus.OK,
+        deletedCount: deletedRows.length,
       };
     } catch (error) {
       throw new InternalServerErrorException(

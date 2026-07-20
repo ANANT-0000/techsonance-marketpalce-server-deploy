@@ -21,6 +21,16 @@ async function bootstrap() {
     bufferLogs: true,   // buffer early logs until AppLogger is ready
     logger,
   });
+  app.use((req: any, res: any, next: any) => {
+    const id = req.headers['company-id'];
+    const domain = req.headers['company-domain'];
+    if (id && !domain) {
+      req.headers['company-domain'] = id;
+    } else if (domain && !id) {
+      req.headers['company-id'] = domain;
+    }
+    next();
+  });
   app.use(cookieParser());
   const globalPrefix = 'api';
   app.setGlobalPrefix(globalPrefix);

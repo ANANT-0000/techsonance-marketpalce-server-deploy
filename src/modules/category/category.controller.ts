@@ -20,6 +20,7 @@ import { RoleGuard } from '../../guards/role.guard.js';
 import { Role } from '../../enums/role.enum.js';
 import { Roles } from '../../common/decorators/roles.decorator.js';
 import { Public } from '../../common/decorators/public.decorator.js';
+import { VendorActiveGuard } from '../../guards/vendor-status.guard.js';
 
 @Controller({
   version: '1',
@@ -58,7 +59,7 @@ export class CategoryController {
 
   @Post()
   @HttpCode(HttpStatus.CREATED)
-  @UseGuards(RoleGuard)
+  @UseGuards(RoleGuard, VendorActiveGuard)
   @Roles(Role.ADMIN, Role.VENDOR)
   create(
     @Headers('company-domain') domain: string,
@@ -77,7 +78,7 @@ export class CategoryController {
   }
 
   @Patch(':id')
-  @UseGuards(RoleGuard)
+  @UseGuards(RoleGuard, VendorActiveGuard)
   @Roles(Role.ADMIN, Role.VENDOR)
   update(
     @Headers('company-domain') domain: string,
@@ -88,7 +89,7 @@ export class CategoryController {
   }
 
   @Delete(':id')
-  @UseGuards(RoleGuard)
+  @UseGuards(RoleGuard, VendorActiveGuard)
   @Roles(Role.ADMIN, Role.VENDOR)
   delete(@Headers('company-domain') domain: string, @Param('id') id: string) {
     return this.categoryService.delete(id, domain);

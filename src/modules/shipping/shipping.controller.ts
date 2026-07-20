@@ -9,6 +9,7 @@ import {
   Headers,
 } from '@nestjs/common';
 import { ShippingService } from './shipping.service.js';
+import { Public } from '../../common/decorators/public.decorator.js';
 
 @Controller({
   version: '1',
@@ -25,6 +26,7 @@ export class ShippingController {
   ) {
     return this.shippingService.addTrackingUrl(orderId, trackingUrl, domain);
   }
+  @Public()
   @Get('settings')
   async getShippingSettings(@Headers('company-domain') domain: string) {
     return this.shippingService.getShippingSettings(domain);

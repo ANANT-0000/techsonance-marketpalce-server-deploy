@@ -1,4 +1,4 @@
-import { Module } from '@nestjs/common';
+import { Module, Logger } from '@nestjs/common';
 import { AppController } from './app.controller.js';
 import { AppService } from './app.service.js';
 import { DrizzleModule } from './drizzle/drizzle.module.js';
@@ -58,12 +58,14 @@ import { CustomersModule } from './modules/customers/customers.module.js';
 import { SiteMapsModule } from './modules/site-maps/site-maps.module.js';
 import { ShipRocketModule } from './modules/ship-rocket/ship-rocket.module.js';
 import { CacheModule } from '@nestjs/cache-manager';
-import { redisStore } from 'cache-manager-redis-yet';
+import { createUpstashStore } from './utils/upstash-cache-store.js';
+import { Redis } from '@upstash/redis';
 import { OutboxModule } from './modules/outbox/outbox.module.js';
 
 import { PaymentModule } from './modules/vendors/payment/payment.module.js';
 import { LandingPageModule } from './modules/landing-page/landing-page.module.js';
 import { LogsController } from './common/logger/logs.controller.js';
+import { EntitlementsModule } from './modules/entitlements/entitlements.module.js';
 
 export enum RATELIMIT_NAME {
   SHORT = 'short',
@@ -106,21 +108,19 @@ export enum RATELIMIT_LIMIT {
       imports: [ConfigModule],
       inject: [ConfigService],
       useFactory: async (config: ConfigService) => {
-        const store = await redisStore({
-          // socket: {
-          // host: config.get<string>('REDIS_HOST', 'localhost') as string,
-          // port: config.get<number>('REDIS_PORT', 6379) as number,
-          // tls: (
-          //   config.get<string>('REDIS_HOST', 'localhost') as string
-          // ).includes('localhost')
-          //   ? undefined
-          //   : true,
-          // },
-          // password: config.get<string>('REDIS_PASSWORD') as string,
-          url: config.get<string>('REDIS_URL'),
+        const redisClient = new Redis({
+          url: config.get<string>('UPSTASH_REDIS_REST_URL') || '',
+          token: config.get<string>('UPSTASH_REDIS_REST_TOKEN') || '',
         });
 
-        store.client.on('error', () => {});
+        try {
+          await redisClient.ping();
+          Logger.log('✅ Successfully connected to Upstash Redis via HTTP REST API', 'RedisCache');
+        } catch (error) {
+          Logger.error('❌ Failed to connect to Upstash Redis REST API:', error instanceof Error ? error.message : String(error), 'RedisCache');
+        }
+
+        const store = createUpstashStore(redisClient);
 
         return { store };
       },
@@ -169,6 +169,7 @@ export enum RATELIMIT_LIMIT {
     OutboxModule,
     PaymentModule,
     LandingPageModule,
+    EntitlementsModule,
   ],
   controllers: [AppController, UsersController, LogsController],
   providers: [

@@ -40,9 +40,9 @@ async function persistToDB(
   context?: string,
   stack?: string,
 ): Promise<void> {
-  const sql = getSql();
-  if (!sql) return;
   try {
+    const sql = getSql();
+    if (!sql) return;
     await sql`
       INSERT INTO system_logs (level, context, msg, stack)
       VALUES (

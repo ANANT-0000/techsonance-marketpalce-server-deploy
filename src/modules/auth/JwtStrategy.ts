@@ -3,12 +3,14 @@ import { PassportStrategy } from '@nestjs/passport';
 import { Inject, Injectable, UnauthorizedException } from '@nestjs/common';
 import { JWT_GUARD } from './jwt-auth.guard.js';
 import { DRIZZLE, type DrizzleService } from '../../drizzle/drizzle.module.js';
-import { user } from '../../drizzle/schema/index.js';
+import { user, vendor } from '../../drizzle/schema/index.js';
 import { eq } from 'drizzle-orm';
 import { UserStatus } from '../../drizzle/types/types.js';
 
 interface CacheEntry {
   status: UserStatus;
+  vendor_status?: UserStatus;
+
   expiresAt: number;
 }
 
@@ -50,9 +52,12 @@ export class JwtStrategy extends PassportStrategy(Strategy, JWT_GUARD) {
       throw new UnauthorizedException();
     }
 
-    const userStatus = await this.getUserStatus(payload.sub);
+    const cachedUser = await this.getUserStatus(payload.sub);
 
-    if (userStatus !== UserStatus.ACTIVE) {
+    if (
+      cachedUser.status !== UserStatus.ACTIVE &&
+      cachedUser.status !== UserStatus.PENDING
+    ) {
       throw new UnauthorizedException('User account is suspended or inactive.');
     }
 
@@ -62,21 +67,27 @@ export class JwtStrategy extends PassportStrategy(Strategy, JWT_GUARD) {
       email: payload.email,
       role: payload.role,
       company_id: payload.company_id,
-      password_change_required: payload.password_change_required,
+
+      vendor_status: cachedUser.vendor_status,
     };
   }
 
-  private async getUserStatus(userId: string): Promise<UserStatus> {
+  private async getUserStatus(userId: string): Promise<CacheEntry> {
     const now = Date.now();
     const cached = this.statusCache.get(userId);
 
     if (cached && cached.expiresAt > now) {
-      return cached.status;
+      return cached;
     }
 
     const [dbUser] = await this.db
-      .select({ id: user.id, user_status: user.user_status })
+      .select({
+        id: user.id,
+        user_status: user.user_status,
+        vendor_status: vendor.vendor_status,
+      })
       .from(user)
+      .leftJoin(vendor, eq(vendor.user_id, user.id))
       .where(eq(user.id, userId))
       .limit(1)
       .catch(() => {
@@ -99,12 +110,16 @@ export class JwtStrategy extends PassportStrategy(Strategy, JWT_GUARD) {
       if (firstKey) this.statusCache.delete(firstKey);
     }
 
-    this.statusCache.set(userId, {
+    const cacheEntry: CacheEntry = {
       status,
-      expiresAt: now + this.CACHE_TTL_MS,
-    });
+      vendor_status: dbUser.vendor_status ?? undefined,
 
-    return status;
+      expiresAt: now + this.CACHE_TTL_MS,
+    };
+
+    this.statusCache.set(userId, cacheEntry);
+
+    return cacheEntry;
   }
 
   /** Call this from your UserService/AdminService when suspending/activating a user */

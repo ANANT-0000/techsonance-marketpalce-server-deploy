@@ -220,7 +220,7 @@ export class SubscriptionJobController {
       const rawBody = (req as any).rawBody;
       const body = JSON.parse(rawBody.toString('utf-8'));
 
-      const { planId, jobId } = body;
+      const { planId, jobId, force } = body;
 
       if (!planId || !jobId) {
         throw new HttpException(
@@ -229,7 +229,7 @@ export class SubscriptionJobController {
         );
       }
 
-      await this.gatewaySyncService.syncPlanToGateway(planId, jobId);
+      await this.gatewaySyncService.syncPlanToGateway(planId, jobId, Boolean(force));
 
       return { success: true };
     } catch (err: any) {

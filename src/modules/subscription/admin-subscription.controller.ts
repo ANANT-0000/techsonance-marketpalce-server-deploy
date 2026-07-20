@@ -5,6 +5,7 @@ import {
   Body,
   Param,
   Put,
+  Delete,
   UseGuards,
   ValidationPipe,
   Req,
@@ -12,6 +13,9 @@ import {
 import { CmsSubscriptionService } from './cms-subscription.service.js';
 import { PlanPayloadDto } from './dto/plan.dto.js';
 import { UpdateVendorSubscriptionDto } from './dto/update-vendor-subscription.dto.js';
+import { UpdateFeatureLimitDto } from './dto/update-feature-limit.dto.js';
+import { CreateFeatureDefinitionDto } from './dto/create-feature-definition.dto.js';
+import { UpdateFeatureDefinitionDto } from './dto/update-feature-definition.dto.js';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard.js';
 import { Roles } from '../../common/decorators/roles.decorator.js';
 import { Role } from '../../enums/role.enum.js';
@@ -79,5 +83,48 @@ export class AdminSubscriptionController {
     @Body(new ValidationPipe({ transform: true })) payload: UpdateVendorSubscriptionDto,
   ) {
     return this.cmsSubscriptionService.updateVendorSubscription(subscriptionId, payload);
+  }
+
+  @Get(':planKey/feature-limits')
+  getPlanFeatureLimits(
+    @Param('planKey') planKey: string,
+  ) {
+    return this.cmsSubscriptionService.getPlanFeatureLimits(planKey);
+  }
+
+  @Put(':planKey/feature-limits/:featureId')
+  updatePlanFeatureLimit(
+    @Param('planKey') planKey: string,
+    @Param('featureId') featureId: string,
+    @Body(new ValidationPipe({ transform: true })) payload: UpdateFeatureLimitDto,
+  ) {
+    return this.cmsSubscriptionService.updatePlanFeatureLimit(planKey, featureId, payload);
+  }
+
+  @Get('feature-definitions')
+  getFeatureDefinitions() {
+    return this.cmsSubscriptionService.getFeatureDefinitions();
+  }
+
+  @Post('feature-definitions')
+  createFeatureDefinition(
+    @Body(new ValidationPipe({ transform: true })) payload: CreateFeatureDefinitionDto,
+  ) {
+    return this.cmsSubscriptionService.createFeatureDefinition(payload);
+  }
+
+  @Put('feature-definitions/:id')
+  updateFeatureDefinition(
+    @Param('id') id: string,
+    @Body(new ValidationPipe({ transform: true })) payload: UpdateFeatureDefinitionDto,
+  ) {
+    return this.cmsSubscriptionService.updateFeatureDefinition(id, payload);
+  }
+
+  @Delete('feature-definitions/:id')
+  deleteFeatureDefinition(
+    @Param('id') id: string,
+  ) {
+    return this.cmsSubscriptionService.deleteFeatureDefinition(id);
   }
 }

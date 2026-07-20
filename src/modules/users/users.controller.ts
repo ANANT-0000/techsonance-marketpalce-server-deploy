@@ -89,7 +89,7 @@ export class UsersController {
   @HttpCode(HttpStatus.OK)
   async changePassword(
     @Param('user_id') userId: string,
-    @Body() body: { currentPassword: string, newPassword: string },
+    @Body() body: { currentPassword?: string, newPassword: string },
     @Headers('company-domain') domain: string,
   ) {
     return this.userService.changePassword(userId, body.currentPassword, body.newPassword, domain);

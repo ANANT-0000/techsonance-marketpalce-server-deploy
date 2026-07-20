@@ -147,6 +147,32 @@ export class ProductVariantService {
             }
           }
         }
+        
+        const copyMainImages: { image_url: string; alt_text: string | null }[] = [];
+        if (!files?.product || files.product.length === 0) {
+          const existingMainImages = await tx
+            .select({
+              image_url: product_images.image_url,
+              alt_text: product_images.alt_text,
+            })
+            .from(product_images)
+            .where(
+              and(
+                eq(product_images.product_id, productId.id),
+                eq(product_images.imgType, ProductImageType.MAIN),
+              ),
+            );
+          const uniqueUrls = new Set<string>();
+          for (const img of existingMainImages) {
+            if (img.image_url && !uniqueUrls.has(img.image_url)) {
+              uniqueUrls.add(img.image_url);
+              copyMainImages.push({
+                image_url: img.image_url,
+                alt_text: img.alt_text,
+              });
+            }
+          }
+        }
 
         if (!variantRecord.id) {
           throw new InternalServerErrorException(
@@ -164,6 +190,19 @@ export class ProductVariantService {
             imgType: image.type,
           };
         });
+
+        if (copyMainImages.length > 0) {
+          copyMainImages.forEach((img, index) => {
+            imageInserts.push({
+              product_id: productId.id,
+              variant_id: variantRecord.id,
+              image_url: img.image_url,
+              alt_text: img.alt_text || `MAIN Image Copy ${index + 1}`,
+              is_primary: true,
+              imgType: ProductImageType.MAIN,
+            });
+          });
+        }
 
         if (copySpecImages.length > 0) {
           copySpecImages.forEach((img, index) => {

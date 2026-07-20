@@ -21,6 +21,7 @@ import { Public } from '../../common/decorators/public.decorator.js';
 import { RoleGuard } from '../../guards/role.guard.js';
 import { Role } from '../../enums/role.enum.js';
 import { Roles } from '../../common/decorators/roles.decorator.js';
+import { VendorActiveGuard } from '../../guards/vendor-status.guard.js';
 
 @Controller({
   version: '1',
@@ -35,7 +36,7 @@ export class ProductVariantController {
     { name: 'product_spec', maxCount: 10 },
   ])
   @HttpCode(HttpStatus.CREATED)
-  @UseGuards(RoleGuard)
+  @UseGuards(RoleGuard, VendorActiveGuard)
   @Roles(Role.ADMIN, Role.VENDOR)
   create(
     @Body('variant_data', ParseJsonPipe) createProductVariantDto: any,
@@ -52,14 +53,14 @@ export class ProductVariantController {
   // Add this new route
   @Get('stock-manager')
   @HttpCode(HttpStatus.OK)
-  @UseGuards(RoleGuard)
+  @UseGuards(RoleGuard, VendorActiveGuard)
   @Roles(Role.ADMIN, Role.VENDOR)
   getStockManagerVariants(@Headers('company-domain') domain: string) {
     return this.productVariantService.getVariantsForStockManager(domain);
   }
   @Get('vendor-products-variants/:vendorId')
   @HttpCode(HttpStatus.OK)
-  @UseGuards(RoleGuard)
+  @UseGuards(RoleGuard, VendorActiveGuard)
   @Roles(Role.ADMIN, Role.VENDOR)
   findAll(@Param('vendorId') vendorId: string) {
     return this.productVariantService.findAll(vendorId);
@@ -89,7 +90,7 @@ export class ProductVariantController {
     { name: 'product_spec', maxCount: 10 },
   ])
   @HttpCode(HttpStatus.OK)
-  @UseGuards(RoleGuard)
+  @UseGuards(RoleGuard, VendorActiveGuard)
   @Roles(Role.ADMIN, Role.VENDOR)
   async update(
     @Param('id') id: string,
@@ -109,7 +110,7 @@ export class ProductVariantController {
     );
   }
   @Patch('update-status/:id')
-  @UseGuards(RoleGuard)
+  @UseGuards(RoleGuard, VendorActiveGuard)
   @Roles(Role.ADMIN, Role.VENDOR)
   async updateProductStatus(
     @Param('id') id: string,
@@ -123,7 +124,7 @@ export class ProductVariantController {
     );
   }
   @Delete(':id')
-  @UseGuards(RoleGuard)
+  @UseGuards(RoleGuard, VendorActiveGuard)
   @Roles(Role.ADMIN, Role.VENDOR)
   async delete(
     @Param('id') id: string,

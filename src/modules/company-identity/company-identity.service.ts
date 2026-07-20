@@ -367,10 +367,22 @@ export class CompanyIdentityService {
         .select()
         .from(company_compliance)
         .where(eq(company_compliance.company_id, companyId))
-        .orderBy(company_compliance.country_code);
+        .orderBy(company_compliance.country_code)
+        .catch((error) => {
+          throw new InternalServerErrorException(
+            COMPANY_IDENTITY_MESSAGES.FETCH_FAILED(
+              CompanyIdentityErrorKeyEnum.COMPLIANCE_RECORDS,
+            ),
+            { cause: error },
+          );
+        });
       return records;
     } catch (error) {
-      if (error instanceof HttpException) throw error;
+      if (
+        error instanceof HttpException ||
+        error instanceof InternalServerErrorException
+      )
+        throw error;
       throw new InternalServerErrorException(
         COMPANY_IDENTITY_MESSAGES.FETCH_FAILED(
           CompanyIdentityErrorKeyEnum.COMPLIANCE_RECORDS,
@@ -390,10 +402,18 @@ export class CompanyIdentityService {
         .select()
         .from(company_document_config)
         .where(eq(company_document_config.company_id, companyId))
-        .limit(1);
+        .limit(1)
+        .catch((error) => {
+          throw new InternalServerErrorException(
+            COMPANY_IDENTITY_MESSAGES.FETCH_FAILED(
+              CompanyIdentityErrorKeyEnum.DOCUMENT_CONFIG,
+            ),
+            { cause: error },
+          );
+        });
       return record ?? null;
     } catch (error) {
-      if (error instanceof HttpException) throw error;
+      if (error instanceof InternalServerErrorException) throw error;
       throw new InternalServerErrorException(
         COMPANY_IDENTITY_MESSAGES.FETCH_FAILED(
           CompanyIdentityErrorKeyEnum.DOCUMENT_CONFIG,
@@ -512,7 +532,11 @@ export class CompanyIdentityService {
         });
       return created;
     } catch (error) {
-      if (error instanceof HttpException) throw error;
+      if (
+        error instanceof HttpException ||
+        error instanceof InternalServerErrorException
+      )
+        throw error;
       throw new InternalServerErrorException(
         COMPANY_IDENTITY_MESSAGES.UPSERT_FAILED(
           CompanyIdentityErrorKeyEnum.DOCUMENT_CONFIG,

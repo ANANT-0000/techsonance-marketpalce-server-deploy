@@ -62,7 +62,15 @@ export class UsersService {
         })
         .from(user)
         .where(and(eq(user.id, id), eq(user.user_status, UserStatus.ACTIVE)))
-        .limit(1);
+        .limit(1)
+        .catch((error) => {
+          throw new InternalServerErrorException(
+            'Failed to fetch user record',
+            {
+              cause: error,
+            },
+          );
+        });
       if (!userRecord) {
         throw new HttpException(
           UsersErrorKeyEnum.USER_NOT_FOUND_OR_DEACTIVATED,
@@ -73,7 +81,15 @@ export class UsersService {
         .select()
         .from(user_and_company)
         .where(eq(user_and_company.user_id, userRecord.id))
-        .limit(1);
+        .limit(1)
+        .catch((error) => {
+          throw new InternalServerErrorException(
+            'Failed to fetch user-company association',
+            {
+              cause: error,
+            },
+          );
+        });
       if (!userAndCompanyRecord) {
         throw new HttpException(
           UsersErrorKeyEnum.USER_AND_COMPANY_NOT_FOUND,
@@ -84,7 +100,15 @@ export class UsersService {
         .select()
         .from(user_roles)
         .where(eq(user_roles.id, userAndCompanyRecord.role_id))
-        .limit(1);
+        .limit(1)
+        .catch((error) => {
+          throw new InternalServerErrorException(
+            'Failed to fetch user role details',
+            {
+              cause: error,
+            },
+          );
+        });
       if (!roleRecord) {
         throw new HttpException(
           UsersErrorKeyEnum.USER_ROLE_NOT_FOUND,
@@ -96,6 +120,9 @@ export class UsersService {
         role: roleRecord.role_name,
       };
     } catch (error) {
+      if (error instanceof InternalServerErrorException) {
+        throw error;
+      }
       throw new InternalServerErrorException(
         UsersErrorKeyEnum.FAILED_TO_FIND_USER,
         {
@@ -111,32 +138,52 @@ export class UsersService {
         .select()
         .from(user_roles)
         .where(eq(user_roles.role_name, UserRole.CUSTOMER))
-        .limit(1);
+        .limit(1)
+        .catch((error) => {
+          throw new InternalServerErrorException(
+            'Failed to fetch customer role record',
+            {
+              cause: error,
+            },
+          );
+        });
       if (!customerRole) {
         throw new InternalServerErrorException(
           UsersErrorKeyEnum.CUSTOMER_ROLE_NOT_FOUND,
         );
       }
-      const customers = await this.db.query.user_and_company.findMany({
-        where: eq(user_and_company.role_id, customerRole?.id),
-        columns: {
-          id: true,
-          user_id: true,
-          company_id: true,
-          role_id: true,
-        },
-        with: {
-          user: {
-            columns: {
-              id: true,
-              first_name: true,
+      const customers = await this.db.query.user_and_company
+        .findMany({
+          where: eq(user_and_company.role_id, customerRole?.id),
+          columns: {
+            id: true,
+            user_id: true,
+            company_id: true,
+            role_id: true,
+          },
+          with: {
+            user: {
+              columns: {
+                id: true,
+                first_name: true,
+              },
             },
           },
-        },
-      });
+        })
+        .catch((error) => {
+          throw new InternalServerErrorException(
+            UsersErrorKeyEnum.FAILED_TO_RETRIEVE_CUSTOMERS,
+            {
+              cause: error,
+            },
+          );
+        });
 
       return customers;
     } catch (error) {
+      if (error instanceof InternalServerErrorException) {
+        throw error;
+      }
       throw new InternalServerErrorException(
         UsersErrorKeyEnum.FAILED_TO_RETRIEVE_CUSTOMERS,
         {
@@ -163,9 +210,20 @@ export class UsersService {
           first_name: user.first_name,
           last_name: user.last_name,
           email: user.email,
+        })
+        .catch((error) => {
+          throw new InternalServerErrorException(
+            'Failed to update user profile record',
+            {
+              cause: error,
+            },
+          );
         });
       return userRecord;
     } catch (error) {
+      if (error instanceof InternalServerErrorException) {
+        throw error;
+      }
       throw new InternalServerErrorException(
         UsersErrorKeyEnum.FAILED_TO_UPDATE_PROFILE,
         {
@@ -189,7 +247,15 @@ export class UsersService {
         .select()
         .from(user)
         .where(eq(user.id, userId))
-        .limit(1);
+        .limit(1)
+        .catch((error) => {
+          throw new InternalServerErrorException(
+            'Failed to fetch user credentials',
+            {
+              cause: error,
+            },
+          );
+        });
       if (!userRecord) {
         throw new UnauthorizedException(UsersErrorKeyEnum.USER_NOT_FOUND);
       }
@@ -206,8 +272,19 @@ export class UsersService {
       await this.db
         .update(user)
         .set({ password_hash: hashedNewPassword })
-        .where(eq(user.id, userId));
+        .where(eq(user.id, userId))
+        .catch((error) => {
+          throw new InternalServerErrorException(
+            'Failed to set user new password',
+            {
+              cause: error,
+            },
+          );
+        });
     } catch (error) {
+      if (error instanceof InternalServerErrorException) {
+        throw error;
+      }
       throw new InternalServerErrorException(
         UsersErrorKeyEnum.FAILED_TO_UPDATE_PASSWORD,
         {
@@ -271,11 +348,21 @@ export class UsersService {
 
         // User exists but NOT in this company → just link them
         const [userRole] = await this.getCustomerRole();
-        await this.db.insert(user_and_company).values({
-          user_id: existingUser.id,
-          company_id: companyId,
-          role_id: userRole.id,
-        });
+        await this.db
+          .insert(user_and_company)
+          .values({
+            user_id: existingUser.id,
+            company_id: companyId,
+            role_id: userRole.id,
+          })
+          .catch((error) => {
+            throw new InternalServerErrorException(
+              'Failed to create user-company link record',
+              {
+                cause: error,
+              },
+            );
+          });
 
         return existingUser; // Return early, no welcome email (already registered)
       }
@@ -302,11 +389,21 @@ export class UsersService {
           );
         });
 
-      await this.db.insert(user_and_company).values({
-        user_id: userRecord.id,
-        company_id: companyId,
-        role_id: userRole.id,
-      });
+      await this.db
+        .insert(user_and_company)
+        .values({
+          user_id: userRecord.id,
+          company_id: companyId,
+          role_id: userRole.id,
+        })
+        .catch((error) => {
+          throw new InternalServerErrorException(
+            'Failed to create user-company association record',
+            {
+              cause: error,
+            },
+          );
+        });
 
       // ── 5. Send welcome email (non-blocking on failure) ──────────────
       await this.mailService.sendUserWelcomeEmail(
@@ -380,7 +477,15 @@ export class UsersService {
             eq(user_and_company.user_id, records.userRecord.id),
             eq(user_and_company.company_id, companyId),
           ),
-        );
+        )
+        .catch((error) => {
+          throw new InternalServerErrorException(
+            'Failed to fetch user-company link record',
+            {
+              cause: error,
+            },
+          );
+        });
 
       if (!userAndCompanyRecord) {
         const [insertedRecord] = await this.db
@@ -391,7 +496,15 @@ export class UsersService {
             role_id: records.roleRecord.id,
             access_status: AccessStatus.ACTIVE,
           })
-          .returning();
+          .returning()
+          .catch((error) => {
+            throw new InternalServerErrorException(
+              'Failed to create user-company mapping',
+              {
+                cause: error,
+              },
+            );
+          });
         userAndCompanyRecord = insertedRecord;
       }
 
@@ -411,7 +524,15 @@ export class UsersService {
             eq(user_and_company.company_id, companyId),
           ),
         )
-        .limit(1);
+        .limit(1)
+        .catch((error) => {
+          throw new InternalServerErrorException(
+            'Failed to verify user-company mapping existence',
+            {
+              cause: error,
+            },
+          );
+        });
       if (!existingCompanyUser) {
         throw new ConflictException('User is not registered to this company');
       }
@@ -443,7 +564,6 @@ export class UsersService {
         email: userRecord?.email,
         role: roleRecord.role_name,
         company_id: userAndCompanyRecord.company_id,
-        password_change_required: userRecord.password_change_required,
       };
       const expiresIn: any = process.env.JWT_EXPIRES_IN
         ? isNaN(Number(process.env.JWT_EXPIRES_IN))
@@ -565,7 +685,15 @@ export class UsersService {
         .select()
         .from(user)
         .where(eq(user.email, email))
-        .limit(1);
+        .limit(1)
+        .catch((error) => {
+          throw new InternalServerErrorException(
+            'Failed to fetch user details by email',
+            {
+              cause: error,
+            },
+          );
+        });
       if (!userRecord) {
         return null;
       }
@@ -573,7 +701,15 @@ export class UsersService {
         .select()
         .from(user_and_company)
         .where(eq(user_and_company.user_id, userRecord.id))
-        .limit(1);
+        .limit(1)
+        .catch((error) => {
+          throw new InternalServerErrorException(
+            'Failed to fetch company link for email lookup',
+            {
+              cause: error,
+            },
+          );
+        });
       if (!userAndCompanyRecord) {
         return null;
       }
@@ -581,12 +717,23 @@ export class UsersService {
         .select()
         .from(user_roles)
         .where(eq(user_roles.id, userAndCompanyRecord.role_id))
-        .limit(1);
+        .limit(1)
+        .catch((error) => {
+          throw new InternalServerErrorException(
+            'Failed to fetch user role details by email',
+            {
+              cause: error,
+            },
+          );
+        });
       if (!roleRecord) {
         return null;
       }
       return { userRecord, roleRecord };
     } catch (error) {
+      if (error instanceof InternalServerErrorException) {
+        throw error;
+      }
       throw new InternalServerErrorException(
         UsersErrorKeyEnum.FAILED_TO_FIND_USER_BY_EMAIL,
         {
@@ -602,12 +749,23 @@ export class UsersService {
         .select()
         .from(user)
         .where(and(eq(user.id, payload.sub), eq(user.email, payload.email)))
-        .limit(1);
+        .limit(1)
+        .catch((error) => {
+          throw new InternalServerErrorException(
+            'Failed to fetch user details by payload info',
+            {
+              cause: error,
+            },
+          );
+        });
       if (!userRecord) {
         return null;
       }
       return userRecord;
     } catch (error) {
+      if (error instanceof InternalServerErrorException) {
+        throw error;
+      }
       throw new InternalServerErrorException(
         UsersErrorKeyEnum.FAILED_TO_FIND_USER_BY_PAYLOAD,
         {
@@ -661,7 +819,15 @@ export class UsersService {
       const [companyDetails] = await this.db
         .select()
         .from(company)
-        .where(eq(company.id, companyId));
+        .where(eq(company.id, companyId))
+        .catch((error) => {
+          throw new InternalServerErrorException(
+            'Failed to fetch company details for OTP request',
+            {
+              cause: error,
+            },
+          );
+        });
       if (!companyId || !companyDetails) {
         throw new HttpException(
           UsersErrorKeyEnum.DOMAIN_NOT_FOUND,
@@ -673,7 +839,15 @@ export class UsersService {
       await this.db
         .update(user)
         .set({ otp: otp, otp_expires: otpExpires })
-        .where(eq(user.id, userRecord.id));
+        .where(eq(user.id, userRecord.id))
+        .catch((error) => {
+          throw new InternalServerErrorException(
+            'Failed to update user OTP code',
+            {
+              cause: error,
+            },
+          );
+        });
       const formattedExpireTime = new Intl.DateTimeFormat('en-US', {
         hour: 'numeric',
         minute: '2-digit',
@@ -703,7 +877,10 @@ export class UsersService {
             : 'Confirm Account Reactivation OTP sent to email',
       };
     } catch (error) {
-      if (error instanceof HttpException) {
+      if (
+        error instanceof HttpException ||
+        error instanceof InternalServerErrorException
+      ) {
         throw error;
       }
       throw new InternalServerErrorException(
@@ -786,7 +963,15 @@ export class UsersService {
             eq(user_and_company.company_id, companyId),
           ),
         )
-        .limit(1);
+        .limit(1)
+        .catch((error) => {
+          throw new InternalServerErrorException(
+            'Failed to fetch user-company link record',
+            {
+              cause: error,
+            },
+          );
+        });
       if (!userAndCompany) {
         throw new HttpException(
           UsersErrorKeyEnum.USER_NOT_FOUND,
@@ -806,11 +991,27 @@ export class UsersService {
             eq(user_and_company.user_id, userRecord.id),
             eq(user_and_company.company_id, companyId),
           ),
-        );
+        )
+        .catch((error) => {
+          throw new InternalServerErrorException(
+            'Failed to update user-company access status',
+            {
+              cause: error,
+            },
+          );
+        });
       await this.db
         .update(user)
         .set({ otp: null, otp_expires: null })
-        .where(eq(user.id, userRecord.id));
+        .where(eq(user.id, userRecord.id))
+        .catch((error) => {
+          throw new InternalServerErrorException(
+            'Failed to clear user OTP code',
+            {
+              cause: error,
+            },
+          );
+        });
       return {
         message:
           actionType === UserStatus.INACTIVE
@@ -818,6 +1019,9 @@ export class UsersService {
             : 'User reactivated successfully',
       };
     } catch (error) {
+      if (error instanceof InternalServerErrorException) {
+        throw error;
+      }
       throw new InternalServerErrorException(
         UsersErrorKeyEnum.FAILED_TO_DEACTIVATE_USER,
         {
@@ -829,7 +1033,7 @@ export class UsersService {
 
   async changePassword(
     userId: string,
-    currentPassword: string,
+    currentPassword: string | undefined,
     newPassword: string,
     domain: string,
   ) {
@@ -856,17 +1060,6 @@ export class UsersService {
         );
       }
 
-      const isCurrentPasswordValid = await bcrypt.compare(
-        currentPassword,
-        userRecord.password_hash,
-      );
-
-      if (!isCurrentPasswordValid) {
-        throw new UnauthorizedException(
-          UsersErrorKeyEnum.INVALID_CURRENT_PASSWORD,
-        );
-      }
-
       // 2. Hash new password
       const hashedPassword = await bcrypt.hash(newPassword, 10).catch((err) => {
         throw new InternalServerErrorException(
@@ -881,7 +1074,6 @@ export class UsersService {
         .update(user)
         .set({
           password_hash: hashedPassword,
-          password_change_required: false,
         })
         .where(eq(user.id, userId))
         .catch((err) => {

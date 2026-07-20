@@ -1,11 +1,14 @@
 import * as pg from 'drizzle-orm/pg-core';
-import { relations } from 'drizzle-orm';
+import { relations, sql } from 'drizzle-orm';
 import { company } from './main.schema.js';
 import {
+  EnforcementMode,
   FeatureType,
+  FeatureValueType,
   JobStatus,
   PlanStatus,
   PriceInterval,
+  ResetInterval,
   SubscriptionStatus,
   SyncStatus,
 } from '../types/types.js';
@@ -16,6 +19,9 @@ import {
   syncStatusEnum,
   featureTypeEnum,
   jobStatusEnum,
+  featureValueTypeEnum,
+  resetIntervalEnum,
+  enforcementModeEnum,
 } from './enums.schema.js';
 export const subscription_plans = pg.pgTable('subscription_plans', {
   id: pg.uuid('id').primaryKey().defaultRandom(),
@@ -291,3 +297,181 @@ export const cmsSyncJobRelations = relations(cms_sync_jobs, ({ one }) => ({
     references: [cms_plans.id],
   }),
 }));
+
+// ==========================================
+// FEATURE VALIDATION & QUOTA ENFORCEMENT
+// ==========================================
+
+// ---------------------------------------------------------------
+// 1. CATALOG: what features exist in the system at all
+// ---------------------------------------------------------------
+export const feature_definitions = pg.pgTable(
+  'feature_definitions',
+  {
+    id: pg.uuid('id').primaryKey().defaultRandom(),
+    feature_key: pg.text('feature_key').notNull().unique(), // 'max_products', 'api_calls_per_day', 'custom_domain'
+    display_name: pg.text('display_name').notNull(),
+    description: pg.text('description'),
+
+    /** Determines how `plan_feature_limits.limit_value` / `feature_usage.used_value` are interpreted. */
+    value_type: featureValueTypeEnum('value_type')
+      .notNull()
+      .default(FeatureValueType.BOOLEAN),
+
+    /** Whether hitting the cap should hard-block (403/429) or just flag for billing/analytics. */
+    enforcement_mode: enforcementModeEnum().default(EnforcementMode.HARD),
+
+    is_active: pg.boolean('is_active').default(true),
+    created_at: pg.timestamp('created_at').notNull().defaultNow(),
+    updated_at: pg
+      .timestamp('updated_at')
+      .notNull()
+      .defaultNow()
+      .$onUpdate(() => new Date()),
+  },
+  (table) => [pg.index('idx_feature_def_key').on(table.feature_key)],
+);
+
+// ---------------------------------------------------------------
+// 2. ENTITLEMENT: what a specific plan grants for each feature
+// ---------------------------------------------------------------
+export const plan_feature_limits = pg.pgTable(
+  'plan_feature_limits',
+  {
+    id: pg.uuid('id').primaryKey().defaultRandom(),
+    plan_id: pg
+      .uuid('plan_id')
+      .notNull()
+      .references(() => subscription_plans.id, { onDelete: 'cascade' }),
+    feature_id: pg
+      .uuid('feature_id')
+      .notNull()
+      .references(() => feature_definitions.id, { onDelete: 'cascade' }),
+
+    is_enabled: pg.boolean('is_enabled').notNull().default(true),
+
+    /** Numeric cap. NULL is meaningless on its own — always check `is_unlimited` first. */
+    limit_value: pg.integer('limit_value'),
+
+    /** Explicit unlimited flag avoids the classic "NULL vs 0 vs -1 means unlimited" ambiguity. */
+    is_unlimited: pg.boolean('is_unlimited').notNull().default(false),
+
+    /** Only relevant for value_type = RATE. NULL for COUNTER/GAUGE (lifetime, no reset). */
+    reset_interval: resetIntervalEnum('reset_interval'),
+
+    created_at: pg.timestamp('created_at').notNull().defaultNow(),
+    updated_at: pg
+      .timestamp('updated_at')
+      .notNull()
+      .defaultNow()
+      .$onUpdate(() => new Date()),
+  },
+  (table) => [
+    pg
+      .uniqueIndex('idx_plan_feature_unique')
+      .on(table.plan_id, table.feature_id),
+    pg.index('idx_plan_feature_plan').on(table.plan_id),
+  ],
+);
+
+// ---------------------------------------------------------------
+// 3. LEDGER: what a company has actually consumed
+// ---------------------------------------------------------------
+export const feature_usage = pg.pgTable(
+  'feature_usage',
+  {
+    id: pg.uuid('id').primaryKey().defaultRandom(),
+    company_id: pg
+      .uuid('company_id')
+      .notNull()
+      .references(() => company.id, { onDelete: 'cascade' }),
+    feature_id: pg
+      .uuid('feature_id')
+      .notNull()
+      .references(() => feature_definitions.id, { onDelete: 'cascade' }),
+
+    used_value: pg.integer('used_value').notNull().default(0),
+
+    /** Start of the current counting window. NULL for COUNTER/GAUGE (lifetime) features. */
+    window_start: pg.timestamp('window_start'),
+    /** Precomputed next reset time — lets the sweep job and lazy-checks agree on expiry. */
+    window_end: pg.timestamp('window_end'),
+
+    updated_at: pg
+      .timestamp('updated_at')
+      .notNull()
+      .defaultNow()
+      .$onUpdate(() => new Date()),
+  },
+  (table) => [
+    pg
+      .uniqueIndex('idx_usage_company_feature')
+      .on(table.company_id, table.feature_id),
+    pg.index('idx_usage_window_end').on(table.window_end),
+    pg.check('chk_usage_non_negative', sql`${table.used_value} >= 0`),
+  ],
+);
+
+// ---------------------------------------------------------------
+// 4. AUDIT: enforcement decisions that resulted in a denial
+// ---------------------------------------------------------------
+export const feature_access_denials = pg.pgTable(
+  'feature_access_denials',
+  {
+    id: pg.uuid('id').primaryKey().defaultRandom(),
+    company_id: pg
+      .uuid('company_id')
+      .notNull()
+      .references(() => company.id, { onDelete: 'cascade' }),
+    feature_key: pg.text('feature_key').notNull(),
+    reason: pg.text('reason').notNull(), // 'quota_exceeded' | 'feature_disabled' | 'no_subscription' | 'plan_downgraded'
+    request_path: pg.text('request_path'),
+    created_at: pg.timestamp('created_at').notNull().defaultNow(),
+  },
+  (table) => [
+    pg.index('idx_denials_company').on(table.company_id, table.created_at),
+  ],
+);
+
+export const featureDefinitionRelations = relations(
+  feature_definitions,
+  ({ many }) => ({
+    planLimits: many(plan_feature_limits),
+    usageRecords: many(feature_usage),
+  }),
+);
+
+export const planFeatureLimitRelations = relations(
+  plan_feature_limits,
+  ({ one }) => ({
+    plan: one(subscription_plans, {
+      fields: [plan_feature_limits.plan_id],
+      references: [subscription_plans.id],
+    }),
+    feature: one(feature_definitions, {
+      fields: [plan_feature_limits.feature_id],
+      references: [feature_definitions.id],
+    }),
+  }),
+);
+
+export const featureUsageRelations = relations(feature_usage, ({ one }) => ({
+  company: one(company, {
+    fields: [feature_usage.company_id],
+    references: [company.id],
+  }),
+  feature: one(feature_definitions, {
+    fields: [feature_usage.feature_id],
+    references: [feature_definitions.id],
+  }),
+}));
+
+export const featureAccessDenialRelations = relations(
+  feature_access_denials,
+  ({ one }) => ({
+    company: one(company, {
+      fields: [feature_access_denials.company_id],
+      references: [company.id],
+    }),
+  }),
+);

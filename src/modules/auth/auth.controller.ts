@@ -26,6 +26,10 @@ import { GoogleOAuthGuard } from './google-oauth.guard.js';
 import { AdminService } from '../admin/admin.service.js';
 import { Throttle } from '@nestjs/throttler';
 import { Public } from '../../common/decorators/public.decorator.js';
+import { JwtAuthGuard } from './jwt-auth.guard.js';
+import { RoleGuard } from '../../guards/role.guard.js';
+import { Role } from '../../enums/role.enum.js';
+import { Roles } from '../../common/decorators/roles.decorator.js';
 
 @Controller({ version: '1', path: 'auth' })
 export class AuthController {
@@ -158,6 +162,20 @@ export class AuthController {
   }
   @Public()
   @Throttle({ short: { limit: 5, ttl: 60_000 } })
+  @Post('vendor/resend-temp-password')
+  @HttpCode(HttpStatus.OK)
+  async resendVendorTempPassword(@Body() body: { email: string }) {
+    return await this.vendorService.resendTempPassword(body.email);
+  }
+  // @Public()
+  // @Throttle({ short: { limit: 10, ttl: 60_000 } })
+  // @Post('vendor/check-generated-password')
+  // @HttpCode(HttpStatus.OK)
+  // async checkVendorGeneratedPassword(@Body() body: { email: string }) {
+  //   return await this.vendorService.checkGeneratedPassword(body.email);
+  // }
+  @Public()
+  @Throttle({ short: { limit: 5, ttl: 60_000 } })
   @Post('register-user')
   @HttpCode(HttpStatus.CREATED)
   async signUpUser(
@@ -201,6 +219,20 @@ export class AuthController {
 
   @Public()
   @Throttle({ short: { limit: 5, ttl: 60_000 } })
+  @Post('vendor/request-password-reset')
+  @HttpCode(HttpStatus.OK)
+  async requestVendorPasswordReset(
+    @Body() body: { email: string },
+    @Headers('company-domain') domain: string,
+  ) {
+    return await this.authService.requestVendorPasswordReset(
+      body.email,
+      domain,
+    );
+  }
+
+  @Public()
+  @Throttle({ short: { limit: 5, ttl: 60_000 } })
   @Get('verify-mail')
   @HttpCode(HttpStatus.OK)
   async verifyMail(@Query('email') email: string) {
@@ -218,5 +250,31 @@ export class AuthController {
       body.otp,
       body.newPassword,
     );
+  }
+
+  @UseGuards(JwtAuthGuard, RoleGuard)
+  @Roles(Role.VENDOR)
+  @Throttle({ short: { limit: 5, ttl: 60_000 } })
+  @Post('vendor/send-verification-otp')
+  @HttpCode(HttpStatus.OK)
+  async sendVendorVerificationOtp(
+    @Req() req: express.Request & { user: { id: string } },
+    @Headers('company-domain') domain: string,
+  ) {
+    const userId = req.user.id;
+    return await this.authService.sendVendorVerificationOtp(userId, domain);
+  }
+
+  @UseGuards(JwtAuthGuard, RoleGuard)
+  @Roles(Role.VENDOR)
+  @Throttle({ short: { limit: 5, ttl: 60_000 } })
+  @Post('vendor/verify-email')
+  @HttpCode(HttpStatus.OK)
+  async verifyVendorEmailOtp(
+    @Req() req: express.Request & { user: { id: string } },
+    @Body() body: { otp: string },
+  ) {
+    const userId = req.user.id;
+    return await this.authService.verifyVendorEmailOtp(userId, body.otp);
   }
 }

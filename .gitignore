@@ -23,3 +23,6 @@ lerna-debug.log*
 .tmp
 src/drizzle/migrations/*
 .vercel
+
+
+graphify-out

@@ -16,6 +16,7 @@ import {
   user,
   user_and_company,
   user_roles,
+  vendor,
 } from '../../drizzle/schema/index.js';
 import { and, eq } from 'drizzle-orm';
 import { MailService } from '../../common/services/mail/mail.service.js';
@@ -23,7 +24,11 @@ import express from 'express';
 import { CompanyService } from '../company/company.service.js';
 import { randomInt, randomBytes } from 'crypto';
 import bcrypt from 'bcrypt';
-import { AccessStatus, UserRole, UserStatus } from '../../drizzle/types/types.js';
+import {
+  AccessStatus,
+  UserRole,
+  UserStatus,
+} from '../../drizzle/types/types.js';
 import { domainExtractor } from '../../common/filters/domainExtractor.filter.js';
 import { AuthErrorKeyEnum } from './constants/auth.enums.js';
 
@@ -80,21 +85,26 @@ export class AuthService {
     }
 
     try {
-      const mailExists = await this.db
+      const [mailExists] = await this.db
         .select()
         .from(user)
         .where(eq(user.email, email));
-      if (!mailExists || mailExists.length === 0) {
-        await new Promise((resolve) => setTimeout(resolve, 250 + Math.random() * 100));
+      if (!mailExists) {
+        await new Promise((resolve) =>
+          setTimeout(resolve, 250 + Math.random() * 100),
+        );
         return {
           status: 'success',
-          message: 'Verification instructions have been dispatched if the account exists.',
+          message:
+            'Verification instructions have been dispatched if the account exists.',
         };
       }
+
       await this.mail.sendResetPasswordEmail(email);
       return {
         status: 'success',
-        message: 'Verification instructions have been dispatched if the account exists.',
+        message:
+          'Verification instructions have been dispatched if the account exists.',
       };
     } catch (error) {
       throw new InternalServerErrorException(
@@ -144,11 +154,31 @@ export class AuthService {
         .from(user)
         .where(eq(user.email, email));
       if (!userExists) {
-        await new Promise((resolve) => setTimeout(resolve, 250 + Math.random() * 100));
+        await new Promise((resolve) =>
+          setTimeout(resolve, 250 + Math.random() * 100),
+        );
         return {
           status: 'success',
-          message: 'Verification instructions have been dispatched if the account exists.',
+          message:
+            'Verification instructions have been dispatched if the account exists.',
         };
+      }
+      const [vendorRecord] = await this.db
+        .select()
+        .from(vendor)
+        .where(eq(vendor.user_id, userExists.id))
+        .catch((error) => {
+          throw new InternalServerErrorException(
+            'Failed to check vendor account status',
+            { cause: error },
+          );
+        });
+
+      if (vendorRecord) {
+        throw new HttpException(
+          'This email is associated with a vendor account. Please use the vendor portal to reset your password.',
+          HttpStatus.FORBIDDEN,
+        );
       }
       const otp = randomInt(100000, 999999).toString();
       const companyId = await this.resolveCompanyId(domain);
@@ -183,9 +213,116 @@ export class AuthService {
       );
       return {
         status: 'success',
-        message: 'Verification instructions have been dispatched if the account exists.',
+        message:
+          'Verification instructions have been dispatched if the account exists.',
       };
     } catch (error) {
+      if (error instanceof HttpException) throw error;
+      throw new InternalServerErrorException(
+        AuthErrorKeyEnum.FAILED_TO_RESET_PASSWORD,
+        {
+          cause: error,
+        },
+      );
+    }
+  }
+
+  async requestVendorPasswordReset(email: string, domain: string) {
+    if (!email) {
+      throw new HttpException(
+        AuthErrorKeyEnum.EMAIL_IS_REQUIRED,
+        HttpStatus.BAD_REQUEST,
+      );
+    }
+    try {
+      const [userExists] = await this.db
+        .select()
+        .from(user)
+        .where(eq(user.email, email));
+      if (!userExists) {
+        await new Promise((resolve) =>
+          setTimeout(resolve, 250 + Math.random() * 100),
+        );
+        return {
+          status: 'success',
+          message:
+            'Verification instructions have been dispatched if the account exists.',
+        };
+      }
+      const [vendorRecord] = await this.db
+        .select()
+        .from(vendor)
+        .where(eq(vendor.user_id, userExists.id))
+        .catch((error) => {
+          throw new InternalServerErrorException(
+            'Failed to check vendor account status',
+            { cause: error },
+          );
+        });
+
+      if (!vendorRecord) {
+        throw new HttpException(
+          'This email is associated with a customer account. Please use the customer portal to reset your password.',
+          HttpStatus.FORBIDDEN,
+        );
+      }
+
+      if (
+        vendorRecord.vendor_status === UserStatus.PENDING ||
+        vendorRecord.vendor_status === UserStatus.INACTIVE
+      ) {
+        throw new HttpException(
+          'Forgot password is not allowed for pending or inactive vendors.',
+          HttpStatus.FORBIDDEN,
+        );
+      }
+
+      const oneDayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
+      if (vendorRecord.created_at > oneDayAgo) {
+        throw new HttpException(
+          'Recently registered vendors cannot reset password. Please try again after 24 hours of account creation.',
+          HttpStatus.FORBIDDEN,
+        );
+      }
+
+      const otp = randomInt(100000, 999999).toString();
+      const companyId = await this.resolveCompanyId(domain);
+      const [companyDetails] = await this.db
+        .select()
+        .from(company)
+        .where(eq(company.id, companyId));
+      if (!companyId || !companyDetails) {
+        throw new HttpException(
+          AuthErrorKeyEnum.DOMAIN_NOT_FOUND,
+          HttpStatus.NOT_FOUND,
+        );
+      }
+      const otpExpires = new Date();
+      otpExpires.setMinutes(otpExpires.getMinutes() + 15); //15 minutes from now
+      await this.db
+        .update(user)
+        .set({ otp: otp, otp_expires: otpExpires, otp_attempts: 0 })
+        .where(eq(user.id, userExists.id));
+      const formattedExpireTime = new Intl.DateTimeFormat('en-US', {
+        hour: 'numeric',
+        minute: '2-digit',
+        hour12: true,
+        timeZone: 'Asia/Kolkata',
+      }).format(otpExpires);
+      await this.mail.sendVendorPasswordResetOtp(
+        email,
+        otp,
+        userExists.first_name + ' ' + userExists.last_name,
+        formattedExpireTime,
+        companyDetails.company_name,
+      );
+      return {
+        status: 'success',
+        message:
+          'Verification instructions have been dispatched if the account exists.',
+      };
+    } catch (error) {
+      if (error instanceof HttpException) throw error;
       throw new InternalServerErrorException(
         AuthErrorKeyEnum.FAILED_TO_RESET_PASSWORD,
         {
@@ -244,6 +381,7 @@ export class AuthService {
       .update(user)
       .set({
         password_hash: hashedPassword,
+
         otp: null,
         otp_expires: null,
         otp_attempts: 0,
@@ -251,6 +389,181 @@ export class AuthService {
       .where(eq(user.id, userRecord.id));
 
     return { message: 'Password reset successfully!' };
+  }
+
+  async sendVendorVerificationOtp(userId: string, domain: string) {
+    const [userRecord] = await this.db
+      .select()
+      .from(user)
+      .where(eq(user.id, userId))
+      .catch((e) => {
+        throw new InternalServerErrorException('Failed to fetch user record', {
+          cause: e,
+        });
+      });
+
+    if (!userRecord) {
+      throw new HttpException(
+        AuthErrorKeyEnum.USER_NOT_FOUND,
+        HttpStatus.NOT_FOUND,
+      );
+    }
+
+    const companyId = await this.resolveCompanyId(domain);
+    const [companyDetails] = await this.db
+      .select()
+      .from(company)
+      .where(eq(company.id, companyId))
+      .catch((e) => {
+        throw new InternalServerErrorException(
+          'Failed to fetch company details',
+          { cause: e },
+        );
+      });
+
+    if (!companyId || !companyDetails) {
+      throw new HttpException(
+        AuthErrorKeyEnum.DOMAIN_NOT_FOUND,
+        HttpStatus.NOT_FOUND,
+      );
+    }
+
+    const otp = randomInt(100000, 999999).toString();
+    const otpExpires = new Date();
+    otpExpires.setMinutes(otpExpires.getMinutes() + 15);
+
+    await this.db
+      .update(user)
+      .set({ otp, otp_expires: otpExpires, otp_attempts: 0 })
+      .where(eq(user.id, userId))
+      .catch((e) => {
+        throw new InternalServerErrorException(
+          'Failed to save OTP to user record',
+          { cause: e },
+        );
+      });
+
+    const formattedExpireTime = new Intl.DateTimeFormat('en-US', {
+      hour: 'numeric',
+      minute: '2-digit',
+      hour12: true,
+      timeZone: 'Asia/Kolkata',
+    }).format(otpExpires);
+
+    await this.mail.sendVendorEmailVerificationOtp(
+      userRecord.email,
+      otp,
+      userRecord.first_name + ' ' + userRecord.last_name,
+      formattedExpireTime,
+      companyDetails.company_name,
+    );
+
+    return {
+      status: 'success',
+      message: 'Verification code has been sent to your email.',
+    };
+  }
+
+  async verifyVendorEmailOtp(userId: string, otp: string) {
+    const [userRecord] = await this.db
+      .select()
+      .from(user)
+      .where(eq(user.id, userId))
+      .catch((e) => {
+        throw new InternalServerErrorException('Failed to fetch user record', {
+          cause: e,
+        });
+      });
+
+    if (!userRecord) {
+      throw new HttpException(
+        AuthErrorKeyEnum.USER_NOT_FOUND,
+        HttpStatus.NOT_FOUND,
+      );
+    }
+
+    if (!userRecord.otp || userRecord.otp !== otp) {
+      const newAttempts = (userRecord.otp_attempts || 0) + 1;
+      if (newAttempts >= 3) {
+        await this.db
+          .update(user)
+          .set({ otp: null, otp_expires: null, otp_attempts: 0 })
+          .where(eq(user.id, userId))
+          .catch((e) => {
+            throw new InternalServerErrorException(
+              'Failed to reset user OTP after max attempts',
+              { cause: e },
+            );
+          });
+        throw new HttpException(
+          'Verification token has expired or is invalid. Please request a new code.',
+          HttpStatus.BAD_REQUEST,
+        );
+      } else {
+        await this.db
+          .update(user)
+          .set({ otp_attempts: newAttempts })
+          .where(eq(user.id, userId))
+          .catch((e) => {
+            throw new InternalServerErrorException(
+              'Failed to update user OTP attempts',
+              { cause: e },
+            );
+          });
+        throw new UnauthorizedException(AuthErrorKeyEnum.INVALID_OTP);
+      }
+    }
+
+    if (
+      !userRecord.otp_expires ||
+      new Date() > new Date(userRecord.otp_expires)
+    ) {
+      await this.db
+        .update(user)
+        .set({ otp: null, otp_expires: null, otp_attempts: 0 })
+        .where(eq(user.id, userId))
+        .catch((e) => {
+          throw new InternalServerErrorException(
+            'Failed to reset user expired OTP',
+            { cause: e },
+          );
+        });
+      throw new UnauthorizedException(
+        AuthErrorKeyEnum.OTP_HAS_EXPIRED_PLEASE_REQUEST_A_NEW_ONE,
+      );
+    }
+
+    // Update user status
+    await this.db
+      .update(user)
+      .set({
+        user_status: UserStatus.ACTIVE,
+        otp: null,
+        otp_expires: null,
+        otp_attempts: 0,
+      })
+      .where(eq(user.id, userId))
+      .catch((e) => {
+        throw new InternalServerErrorException('Failed to update user status', {
+          cause: e,
+        });
+      });
+
+    // Update vendor status
+    await this.db
+      .update(vendor)
+      .set({ vendor_status: UserStatus.ACTIVE })
+      .where(eq(vendor.user_id, userId))
+      .catch((e) => {
+        throw new InternalServerErrorException(
+          'Failed to update vendor status',
+          { cause: e },
+        );
+      });
+
+    return {
+      message: 'Email verified successfully! Your account is now active.',
+    };
   }
 
   async validateOAuthLogin(

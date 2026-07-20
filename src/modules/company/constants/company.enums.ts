@@ -13,3 +13,8 @@ export enum CompanyOperationResultEnum {
 export enum CompanyEnvironmentEnum {
   PRODUCTION = 'production',
 }
+
+export enum SiteStatusEnum {
+  ACTIVE = 'active',
+  NOT_STARTED = 'not_started',
+}

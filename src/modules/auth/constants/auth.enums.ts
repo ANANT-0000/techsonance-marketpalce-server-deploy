@@ -13,4 +13,5 @@ export enum AuthErrorKeyEnum {
   FAILED_TO_CREATE_USER_ACCOUNT = 'Failed to create user account',
   FAILED_TO_PROCESS_OAUTH_LOGIN = 'Failed to process OAuth login',
   FAILED_TO_VERIFY_EMAIL = 'Failed to verify email',
+  VENDOR_PENDING_FORGOT_PASSWORD_BLOCKED = 'VENDOR_PENDING_FORGOT_PASSWORD_BLOCKED',
 }

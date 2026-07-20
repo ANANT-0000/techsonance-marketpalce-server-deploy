@@ -22,6 +22,7 @@ import {
 import { Roles } from '../../common/decorators/roles.decorator.js';
 import { Role } from '../../enums/role.enum.js';
 import { RoleGuard } from '../../guards/role.guard.js';
+import { VendorActiveGuard } from '../../guards/vendor-status.guard.js';
 
 @Controller({ version: '1', path: 'cms' })
 export class CmsController {
@@ -54,7 +55,7 @@ export class CmsController {
     return this.cmsService.upsertPage(domain, dto);
   }
   @Delete('delete-cloudinary-image')
-  @UseGuards(RoleGuard)
+  @UseGuards(RoleGuard, VendorActiveGuard)
   @Roles(Role.ADMIN, Role.VENDOR)
   async deleteCloudinaryImage(
     @Headers('company-domain') domain: string,

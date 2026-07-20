@@ -12,11 +12,12 @@ import { Roles } from '../../common/decorators/roles.decorator.js';
 import { RoleGuard } from '../../guards/role.guard.js';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard.js';
 import { Role } from '../../enums/role.enum.js';
+import { VendorActiveGuard } from '../../guards/vendor-status.guard.js';
 @Controller({ version: '1', path: 'invoice' })
 export class InvoiceController {
   constructor(private readonly invoiceService: InvoiceService) {}
   @Post('bulk-download')
-  @UseGuards(RoleGuard)
+  @UseGuards(RoleGuard, VendorActiveGuard)
   @Roles(Role.ADMIN, Role.VENDOR)
   async getBulkInvoiceUrls(
     @Headers('company-domain') domain: string,
@@ -25,13 +26,13 @@ export class InvoiceController {
     return this.invoiceService.getBulkInvoiceUrls(domain, payload.orderIds);
   }
   @Get('templates')
-  @UseGuards(RoleGuard)
+  @UseGuards(RoleGuard, VendorActiveGuard)
   @Roles(Role.ADMIN)
   listTemplates() {
     // return this.invoiceService.listAvailableTemplates();
   }
   @Get('payload/:orderId')
-  @UseGuards(RoleGuard)
+  @UseGuards(RoleGuard, VendorActiveGuard)
   @Roles(Role.ADMIN, Role.VENDOR, Role.CUSTOMER)
   async getInvoicePayload(
     @Param('orderId') orderId: string,

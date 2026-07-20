@@ -1,3 +1,4 @@
+import { SkipSubscription } from '../../common/decorators/skip-subscription.decorator.js';
 import {
   Body,
   Controller,
@@ -18,19 +19,21 @@ import { JwtAuthGuard } from '../auth/jwt-auth.guard.js';
 import { RoleGuard } from '../../guards/role.guard.js';
 import { Role } from '../../enums/role.enum.js';
 import { Roles } from '../../common/decorators/roles.decorator.js';
+import { VendorActiveGuard } from '../../guards/vendor-status.guard.js';
 import { ProductPoliciesService } from '../product-policies/product-policies.service.js';
 import type { Response } from 'express';
 @Controller({
   version: '1',
   path: 'orders',
 })
-@UseGuards(RoleGuard)
+@UseGuards(RoleGuard, VendorActiveGuard)
 export class OrdersController {
   constructor(
     private readonly ordersService: OrdersService,
     private readonly productPoliciesService: ProductPoliciesService,
   ) {}
 
+  @SkipSubscription()
   @Get()
   @Roles(Role.ADMIN, Role.VENDOR)
   async getOrdersList(
@@ -47,6 +50,7 @@ export class OrdersController {
     );
   }
 
+  @SkipSubscription()
   @Get('pending')
   @Roles(Role.ADMIN, Role.VENDOR)
   async getPendingOrders(
@@ -68,6 +72,7 @@ export class OrdersController {
     });
   }
 
+  @SkipSubscription()
   @Get(':orderId')
   @Roles(Role.CUSTOMER, Role.ADMIN, Role.VENDOR)
   async getUserOrderDetails(
@@ -84,6 +89,7 @@ export class OrdersController {
   ) {
     return this.ordersService.getOrdersCount(userId, domain);
   }
+  @SkipSubscription()
   @Get(':orderid/details')
   @Roles(Role.ADMIN, Role.VENDOR)
   async getOrderDetails(
@@ -105,6 +111,7 @@ export class OrdersController {
   async getWarrantyUrl(@Param('orderId') orderId: string) {
     return this.productPoliciesService.getWarrantyUrl(orderId);
   }
+  @SkipSubscription()
   @Get('analytics/revenue')
   @Roles(Role.ADMIN, Role.VENDOR)
   async getSalesAnalytics(
@@ -116,12 +123,14 @@ export class OrdersController {
       days ? Number(days) : 30,
     );
   }
+  @SkipSubscription()
   @Get('analytics/top-products')
   @HttpCode(HttpStatus.OK)
   @Roles(Role.ADMIN, Role.VENDOR)
   async getTopProducts(@Headers('company-domain') domain: string) {
     return this.ordersService.getTopSellingProducts(domain, 5);
   }
+  @SkipSubscription()
   @Get('analytics/conversion')
   @HttpCode(HttpStatus.OK)
   @Roles(Role.ADMIN, Role.VENDOR)
@@ -129,6 +138,7 @@ export class OrdersController {
     return this.ordersService.getConversionMetrics(domain);
   }
 
+  @SkipSubscription()
   @Get('analytics/export')
   @Roles(Role.ADMIN, Role.VENDOR)
   async exportAnalytics(

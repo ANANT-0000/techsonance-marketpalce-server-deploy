@@ -46,13 +46,22 @@ export class AdminService {
         .select()
         .from(user_roles)
         .where(eq(user_roles.role_name, UserRole.ADMIN))
-        .limit(1);
+        .limit(1)
+        .catch((error) => {
+          throw new InternalServerErrorException('Failed to fetch admin role details', {
+            cause: error,
+          });
+        });
       const [existingUser] = await this.db
-
         .select()
         .from(user)
         .where(eq(user.email, email))
-        .limit(1);
+        .limit(1)
+        .catch((error) => {
+          throw new InternalServerErrorException('Failed to fetch user account details', {
+            cause: error,
+          });
+        });
       if (!existingUser) {
         throw new HttpException(
           AdminErrorKeyEnum.ADMIN_USER_NOT_FOUND,
@@ -64,13 +73,23 @@ export class AdminService {
         .select()
         .from(user_and_company)
         .where(eq(user_and_company.user_id, existingUser.id))
-        .limit(1);
+        .limit(1)
+        .catch((error) => {
+          throw new InternalServerErrorException('Failed to fetch user-company mapping', {
+            cause: error,
+          });
+        });
 
       if (!userAndCompany) {
         const [firstCompany] = await this.db
           .select()
           .from(company)
-          .limit(1);
+          .limit(1)
+          .catch((error) => {
+            throw new InternalServerErrorException('Failed to fetch system companies', {
+              cause: error,
+            });
+          });
 
         if (firstCompany) {
           const [insertedRecord] = await this.db
@@ -81,7 +100,12 @@ export class AdminService {
               role_id: adminRole.id,
               access_status: AccessStatus.ACTIVE,
             })
-            .returning();
+            .returning()
+            .catch((error) => {
+              throw new InternalServerErrorException('Failed to create user-company mapping record', {
+                cause: error,
+              });
+            });
           userAndCompany = insertedRecord;
         }
       }
@@ -129,6 +153,9 @@ export class AdminService {
         refresh_token: refreshToken,
       };
     } catch (error) {
+      if (error instanceof HttpException) {
+        throw error;
+      }
       throw new InternalServerErrorException(AdminErrorKeyEnum.FAILED_TO_LOGIN, {
         cause: error,
       });
@@ -157,7 +184,12 @@ export class AdminService {
         )
         .groupBy(vendor.id, user.first_name)
         .orderBy(sql`SUM(${order_items.price} * ${order_items.quantity}) DESC`)
-        .limit(limit);
+        .limit(limit)
+        .catch((error) => {
+          throw new InternalServerErrorException('Failed to fetch top vendors data', {
+            cause: error,
+          });
+        });
 
       return topVendors;
     } catch (error) {
@@ -172,7 +204,12 @@ export class AdminService {
       .from(audit_logs)
       .innerJoin(user, eq(audit_logs.admin_id, user.id))
       .orderBy(sql`${audit_logs.created_at} DESC`)
-      .limit(limit);
+      .limit(limit)
+      .catch((error) => {
+        throw new InternalServerErrorException('Failed to fetch admin audit logs', {
+          cause: error,
+        });
+      });
     // return await this.db.query.audit_logs.findMany({
 
     //   with: { admin: { columns: { name: true, email: true } } },

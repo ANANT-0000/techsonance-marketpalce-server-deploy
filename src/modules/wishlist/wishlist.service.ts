@@ -1,4 +1,10 @@
-import { HttpException, HttpStatus, Inject, Injectable } from '@nestjs/common';
+import {
+  HttpException,
+  HttpStatus,
+  Inject,
+  Injectable,
+  InternalServerErrorException,
+} from '@nestjs/common';
 
 import { DRIZZLE, type DrizzleService } from '../../drizzle/drizzle.module.js';
 import {
@@ -35,7 +41,15 @@ export class WishlistService {
       .select({ id: product_variants.id })
       .from(product_variants)
       .where(eq(product_variants.id, productVariantId))
-      .limit(1);
+      .limit(1)
+      .catch((error) => {
+        throw new InternalServerErrorException(
+          'Failed to check product variant existence',
+          {
+            cause: error,
+          },
+        );
+      });
 
     if (!variantExists) {
       throw new HttpException(
@@ -49,21 +63,81 @@ export class WishlistService {
         .from(wishlist)
         .where(eq(wishlist.user_id, customerId))
         .catch((error) => {
-          throw new HttpException(
+          throw new InternalServerErrorException(
             WishlistErrorKeyEnum.FAILED_TO_CHECK_EXISTING_WISHLIST,
-            HttpStatus.INTERNAL_SERVER_ERROR,
+            {
+              cause: error,
+            },
           );
         });
 
-      const response = await this.db.transaction(async (tx) => {
-        if (!companyId) {
-          throw new HttpException(WishlistErrorKeyEnum.COMPANY_NOT_FOUND, HttpStatus.NOT_FOUND);
-        }
-        if (wishlistExists && wishlistExists?.id) {
+      const response = await this.db
+        .transaction(async (tx) => {
+          if (!companyId) {
+            throw new HttpException(
+              WishlistErrorKeyEnum.COMPANY_NOT_FOUND,
+              HttpStatus.NOT_FOUND,
+            );
+          }
+          if (wishlistExists && wishlistExists?.id) {
+            const [createdWishlistItem] = await tx
+              .insert(wishlist_items)
+              .values({
+                wishlist_id: wishlistExists.id,
+                product_variant_id: productVariantId,
+              })
+              .onConflictDoUpdate({
+                target: [
+                  wishlist_items.wishlist_id,
+                  wishlist_items.product_variant_id,
+                ],
+                set: {
+                  updated_at: new Date(),
+                },
+              })
+              .returning({
+                id: wishlist_items.id,
+                wishlist_id: wishlist_items.wishlist_id,
+                product_variant_id: wishlist_items.product_variant_id,
+                created_at: wishlist_items.created_at,
+                updated_at: wishlist_items.updated_at,
+              })
+              .catch((error) => {
+                throw new InternalServerErrorException(
+                  WishlistErrorKeyEnum.FAILED_TO_ADD_ITEM_TO_WISHLIST,
+                  {
+                    cause: error,
+                  },
+                );
+              });
+            return createdWishlistItem;
+          }
+          const [wishlistRecord] = await tx
+            .insert(wishlist)
+            .values({
+              company_id: companyId,
+              user_id: customerId,
+            })
+            .returning({ id: wishlist.id })
+            .catch((error) => {
+              throw new InternalServerErrorException(
+                WishlistErrorKeyEnum.FAILED_TO_CREATE_WISHLIST,
+                {
+                  cause: error,
+                },
+              );
+            });
+          if (!wishlistRecord) {
+            throw new HttpException(
+              WishlistErrorKeyEnum.FAILED_TO_CREATE_WISHLIST,
+              HttpStatus.INTERNAL_SERVER_ERROR,
+            );
+          }
+
           const [createdWishlistItem] = await tx
             .insert(wishlist_items)
             .values({
-              wishlist_id: wishlistExists.id,
+              wishlist_id: wishlistRecord.id,
               product_variant_id: productVariantId,
             })
             .onConflictDoUpdate({
@@ -83,60 +157,32 @@ export class WishlistService {
               updated_at: wishlist_items.updated_at,
             })
             .catch((error) => {
-              throw new HttpException(
+              throw new InternalServerErrorException(
                 WishlistErrorKeyEnum.FAILED_TO_ADD_ITEM_TO_WISHLIST,
-                HttpStatus.INTERNAL_SERVER_ERROR,
+                {
+                  cause: error,
+                },
               );
             });
           return createdWishlistItem;
-        }
-        const [wishlistRecord] = await tx
-          .insert(wishlist)
-          .values({
-            company_id: companyId,
-            user_id: customerId,
-          })
-          .returning({ id: wishlist.id });
-        if (!wishlistRecord) {
-          throw new HttpException(
-            WishlistErrorKeyEnum.FAILED_TO_CREATE_WISHLIST,
-            HttpStatus.INTERNAL_SERVER_ERROR,
-          );
-        }
-
-        const [createdWishlistItem] = await tx
-          .insert(wishlist_items)
-          .values({
-            wishlist_id: wishlistRecord.id,
-            product_variant_id: productVariantId,
-          })
-          .onConflictDoUpdate({
-            target: [
-              wishlist_items.wishlist_id,
-              wishlist_items.product_variant_id,
-            ],
-            set: {
-              updated_at: new Date(),
+        })
+        .catch((error) => {
+          throw new InternalServerErrorException(
+            'Failed to complete wishlist creation transaction',
+            {
+              cause: error,
             },
-          })
-          .returning({
-            id: wishlist_items.id,
-            wishlist_id: wishlist_items.wishlist_id,
-            product_variant_id: wishlist_items.product_variant_id,
-            created_at: wishlist_items.created_at,
-            updated_at: wishlist_items.updated_at,
-          });
-        return createdWishlistItem;
-      });
+          );
+        });
       return response;
-    } catch (err) {
-      if (err instanceof HttpException) {
-        throw new HttpException(
-          WishlistErrorKeyEnum.FAILED_TO_ADD_ITEM_TO_WISHLIST,
-          HttpStatus.CONFLICT,
-        );
+    } catch (error) {
+      if (error instanceof InternalServerErrorException) {
+        throw error;
       }
-      throw err;
+      throw new HttpException(
+        WishlistErrorKeyEnum.FAILED_TO_ADD_ITEM_TO_WISHLIST,
+        HttpStatus.CONFLICT,
+      );
     }
   }
 
@@ -149,25 +195,37 @@ export class WishlistService {
     }
     try {
       const companyId = await this.resolveCompanyId(domain);
-      const wishlistData = await this.db.query.wishlist.findMany({
-        where: and(
-          eq(wishlist.user_id, customerId),
-          eq(wishlist.company_id, companyId),
-        ),
-        with: {
-          items: {
-            with: {
-              productVariant: {
-                with: {
-                  images: true,
+      const wishlistData = await this.db.query.wishlist
+        .findMany({
+          where: and(
+            eq(wishlist.user_id, customerId),
+            eq(wishlist.company_id, companyId),
+          ),
+          with: {
+            items: {
+              with: {
+                productVariant: {
+                  with: {
+                    images: true,
+                  },
                 },
               },
             },
           },
-        },
-      });
+        })
+        .catch((error) => {
+          throw new InternalServerErrorException(
+            WishlistErrorKeyEnum.FAILED_TO_FETCH_WISHLIST_INFORMATION,
+            {
+              cause: error,
+            },
+          );
+        });
       return wishlistData;
     } catch (error) {
+      if (error instanceof InternalServerErrorException) {
+        throw error;
+      }
       throw new HttpException(
         WishlistErrorKeyEnum.FAILED_TO_FETCH_WISHLIST_INFORMATION,
         HttpStatus.INTERNAL_SERVER_ERROR,
@@ -205,14 +263,33 @@ export class WishlistService {
             eq(wishlist.company_id, companyId),
           ),
         )
-        .limit(1);
+        .limit(1)
+        .catch((error) => {
+          throw new InternalServerErrorException(
+            'Failed to fetch wishlist record for deletion',
+            {
+              cause: error,
+            },
+          );
+        });
       if (!wishlistRecord) {
-        throw new HttpException(WishlistErrorKeyEnum.WISHLIST_NOT_FOUND, HttpStatus.NOT_FOUND);
+        throw new HttpException(
+          WishlistErrorKeyEnum.WISHLIST_NOT_FOUND,
+          HttpStatus.NOT_FOUND,
+        );
       }
       const isExit = await this.db
         .select()
         .from(wishlist_items)
-        .where(eq(wishlist_items.product_variant_id, productVariantId));
+        .where(eq(wishlist_items.product_variant_id, productVariantId))
+        .catch((error) => {
+          throw new InternalServerErrorException(
+            'Failed to check if item is in wishlist',
+            {
+              cause: error,
+            },
+          );
+        });
       const deleteResponse = await this.db
         .delete(wishlist_items)
         .where(
@@ -227,6 +304,17 @@ export class WishlistService {
           product_variant_id: wishlist_items.product_variant_id,
           created_at: wishlist_items.created_at,
           updated_at: wishlist_items.updated_at,
+        })
+        .catch((error) => {
+          if (error instanceof InternalServerErrorException) {
+            throw error;
+          }
+          throw new InternalServerErrorException(
+            'Failed to delete item from wishlist',
+            {
+              cause: error,
+            },
+          );
         });
       return deleteResponse;
     } catch (error) {

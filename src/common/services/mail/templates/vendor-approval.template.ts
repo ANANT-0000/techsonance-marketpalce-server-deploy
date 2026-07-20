@@ -1,3 +1,4 @@
+import { EMAIL_PLATFORM_THEME } from '../../../constants.js';
 import { emailLayout } from './layout.template.js';
 
 export function vendorApprovalTemplate(storeName: string): string {
@@ -8,20 +9,20 @@ export function vendorApprovalTemplate(storeName: string): string {
             <table align="center" role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%" style="margin: 0 auto;">
                 <tr>
                     <td style="padding: 0 40px 10px 40px;" class="mobile-padding">
-                        <p style="margin: 0 0 10px 0; color: #64748b; font-size: 16px; font-weight: 500; font-family: Helvetica, Arial, sans-serif;">Dear ${storeName},</p>
-                        <h1 class="mobile-header" style="margin: 0 0 15px 0; color: #0D9488; font-size: 28px; font-weight: 800; letter-spacing: -0.5px; line-height: 1.2; font-family: Helvetica, Arial, sans-serif;">Store Approved! 🎉</h1>
+                        <p style="margin: 0 0 10px 0; color: ${EMAIL_PLATFORM_THEME.text_muted}; font-size: 16px; font-weight: 500; font-family: Helvetica, Arial, sans-serif;">Dear ${storeName},</p>
+                        <h1 class="mobile-header" style="margin: 0 0 15px 0; color: ${EMAIL_PLATFORM_THEME.success}; font-size: 28px; font-weight: 800; letter-spacing: -0.5px; line-height: 1.2; font-family: Helvetica, Arial, sans-serif;">Store Approved! 🎉</h1>
                     </td>
                 </tr>
                 
                 <!-- Main Body Text -->
                 <tr>
                     <td style="padding: 0 40px 40px 40px;" class="mobile-padding">
-                        <p style="margin: 0 0 20px 0; color: #475569; font-size: 16px; line-height: 1.6; font-family: Helvetica, Arial, sans-serif;">
+                        <p style="margin: 0 0 20px 0; color: ${EMAIL_PLATFORM_THEME.text_body}; font-size: 16px; line-height: 1.6; font-family: Helvetica, Arial, sans-serif;">
                             Great news! Your vendor application has been successfully reviewed and your store is now approved on Techsonance.
                         </p>
                         
                         <!-- Success Box -->
-                         <div style="background-color: #f0fdf4; border-left: 4px solid #0D9488; padding: 20px; border-radius: 4px; margin: 25px 0; color: #166534;">
+                         <div style="background-color: #f0fdf4; border-left: 4px solid ${EMAIL_PLATFORM_THEME.success}; padding: 20px; border-radius: 4px; margin: 25px 0; color: #166534;">
                             <p style="margin: 0; font-size: 15px; line-height: 1.5; font-family: Helvetica, Arial, sans-serif;">
                                 You can now log into your vendor dashboard, complete your business profile, and start listing your products to our customers.
                             </p>
@@ -33,8 +34,8 @@ export function vendorApprovalTemplate(storeName: string): string {
                                 <td align="left">
                                     <table role="presentation" cellspacing="0" cellpadding="0" border="0" style="margin: 0;">
                                         <tr>
-                                            <td style="border-radius: 6px; background: #0D9488;">
-                                                <a href="${dashboardUrl}" target="_blank" style="background: #0D9488; border: 1px solid #0D9488; font-family: sans-serif; font-size: 16px; line-height: 1.1; text-align: center; text-decoration: none; display: block; border-radius: 6px; font-weight: bold; padding: 14px 28px; color: #ffffff;">
+                                            <td style="border-radius: 6px; background: ${EMAIL_PLATFORM_THEME.cta_bg};">
+                                                <a href="${dashboardUrl}" target="_blank" style="background: ${EMAIL_PLATFORM_THEME.cta_bg}; border: 1px solid ${EMAIL_PLATFORM_THEME.cta_bg}; font-family: sans-serif; font-size: 16px; line-height: 1.1; text-align: center; text-decoration: none; display: block; border-radius: 6px; font-weight: bold; padding: 14px 28px; color: ${EMAIL_PLATFORM_THEME.cta_text};">
                                                     Go to Dashboard &nbsp; &rarr;
                                                 </a>
                                             </td>
@@ -44,7 +45,7 @@ export function vendorApprovalTemplate(storeName: string): string {
                             </tr>
                         </table>
 
-                        <p style="margin: 40px 0 0 0; color: #64748b; font-size: 16px; line-height: 1.5; font-family: Helvetica, Arial, sans-serif;">
+                        <p style="margin: 40px 0 0 0; color: ${EMAIL_PLATFORM_THEME.text_muted}; font-size: 16px; line-height: 1.5; font-family: Helvetica, Arial, sans-serif;">
                             We are excited to partner with you!<br><br>Best regards,<br><strong>The Techsonance Team</strong>
                         </p>
                     </td>

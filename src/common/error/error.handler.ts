@@ -64,6 +64,12 @@ export class SecureErrorHandler {
       if (status === 400) {
         return InternalErrorCode.FOREIGN_KEY_VIOLATION; // Default to update input / validation action
       }
+      if (status === 401) {
+        return InternalErrorCode.UNAUTHORIZED;
+      }
+      if (status === 403) {
+        return InternalErrorCode.FORBIDDEN;
+      }
     }
 
     const messageString = String(rawError.message || "").toLowerCase();

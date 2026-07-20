@@ -10,6 +10,7 @@ import {
 import { RoleGuard } from '../../../guards/role.guard.js';
 import { Role } from '../../../enums/role.enum.js';
 import { Roles } from '../../../common/decorators/roles.decorator.js';
+import { VendorActiveGuard } from '../../../guards/vendor-status.guard.js';
 import { PaymentService } from './payment.service.js';
 import { SavePaymentConfigDto } from './dto/save-config.dto.js';
 
@@ -17,7 +18,7 @@ import { SavePaymentConfigDto } from './dto/save-config.dto.js';
   version: '1',
   path: 'vendor/payment',
 })
-@UseGuards(RoleGuard)
+@UseGuards(RoleGuard, VendorActiveGuard)
 @Roles(Role.VENDOR)
 export class PaymentController {
   constructor(private readonly paymentService: PaymentService) {}

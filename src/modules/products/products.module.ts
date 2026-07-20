@@ -5,9 +5,16 @@ import { DrizzleModule } from '../../drizzle/drizzle.module.js';
 import { UploadToCloudModule } from '../../utils/upload-to-cloud/upload-to-cloud.module.js';
 import { CompanyModule } from '../company/company.module.js';
 import { InventoryModule } from '../inventory/inventory.module.js';
+import { EntitlementsModule } from '../entitlements/entitlements.module.js';
 
 @Module({
-  imports: [DrizzleModule, UploadToCloudModule, CompanyModule, InventoryModule],
+  imports: [
+    DrizzleModule,
+    UploadToCloudModule,
+    CompanyModule,
+    InventoryModule,
+    EntitlementsModule,
+  ],
   controllers: [ProductsController],
   providers: [ProductsService],
   exports: [ProductsService],
