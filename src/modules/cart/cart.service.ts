@@ -19,12 +19,14 @@ import { and, eq, or, sql } from 'drizzle-orm';
 import { CompanyService } from '../company/company.service.js';
 import { domainExtractor } from '../../common/filters/domainExtractor.filter.js';
 import { CartErrorKeyEnum } from './constants/cart.enums.js';
+import { PricingService } from '../pricing/pricing.service.js';
 
 @Injectable()
 export class CartService {
   constructor(
     @Inject(DRIZZLE) private readonly db: DrizzleService,
     private readonly companyService: CompanyService,
+    private readonly pricingService: PricingService,
   ) {}
   private async resolveCompanyId(domain: string): Promise<string> {
     const filterDomain = domainExtractor(domain);
@@ -169,6 +171,9 @@ export class CartService {
                 variant_name: true,
                 id: true,
                 price: true,
+                compare_at_price: true,
+                sale_starts_at: true,
+                sale_ends_at: true,
                 product_id: true,
                 sku: true,
               },
@@ -196,7 +201,21 @@ export class CartService {
           if (!cartItem || cartItem.length === 0) {
             throw new NotFoundException(CartErrorKeyEnum.CART_ITEMS_NOT_FOUND);
           }
-          return cartItem;
+          return cartItem.map((item) => {
+            if (!item.productVariant) {
+              return item;
+            }
+            const pricing = this.pricingService.resolveVariantPrice(item.productVariant as any);
+            return {
+              ...item,
+              productVariant: {
+                ...item.productVariant,
+                price: pricing.price,
+                compare_at_price: pricing.compareAtPrice,
+                discount_percent: pricing.discountPercent,
+              },
+            };
+          });
         })
         .catch((error) => {
           if (

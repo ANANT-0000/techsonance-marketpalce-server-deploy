@@ -4,7 +4,7 @@ import {
   Injectable,
   InternalServerErrorException,
   NotFoundException,
-  UnauthorizedException,
+  ForbiddenException,
 } from '@nestjs/common';
 import { CreateProductReviewDto } from './dto/create-product-review.dto.js';
 import { UpdateProductReviewDto } from './dto/update-product-review.dto.js';
@@ -155,7 +155,7 @@ export class ProductReviewService {
       .returning();
 
     if (!updatedReview) {
-      throw new UnauthorizedException(
+      throw new ForbiddenException(
         ProductReviewErrorKeyEnum.YOU_CAN_ONLY_UPDATE_YOUR_OWN_REVIEWS_OR_THE_REVIEW_DOES_NOT_EXIST,
       );
     }
@@ -172,7 +172,7 @@ export class ProductReviewService {
       .returning();
 
     if (!deletedReview) {
-      throw new UnauthorizedException(ProductReviewErrorKeyEnum.YOU_CAN_ONLY_DELETE_YOUR_OWN_REVIEWS);
+      throw new ForbiddenException(ProductReviewErrorKeyEnum.YOU_CAN_ONLY_DELETE_YOUR_OWN_REVIEWS);
     }
 
     return { success: true, message: 'Product review removed successfully' };

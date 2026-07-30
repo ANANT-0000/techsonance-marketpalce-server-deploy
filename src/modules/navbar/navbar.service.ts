@@ -13,12 +13,15 @@ import {
   categories,
   nav_items,
   nav_menus,
+  vendor_nav_links,
   NavItemColType,
   NavItemDisplayType,
   NavMenuLogoAlignment,
+  NavMenuLinksAlignment,
   NavMenuPosition,
   products,
 } from '../../drizzle/schema/index.js';
+import { NavTemplateKey, NavItemKind } from '../../drizzle/types/types.js';
 import { CompanyService } from '../company/company.service.js';
 import { domainExtractor } from '../../common/filters/domainExtractor.filter.js';
 import { NavbarErrorKeyEnum } from './constants/navbar.enums.js';
@@ -28,6 +31,10 @@ import {
   UpdateNavItemDto,
   ReorderNavItemsDto,
 } from './dto/update-nav-item.dto.js';
+import {
+  CreateTemplateItemDto,
+  UpdateTemplateItemDto,
+} from './dto/template-item.dto.js';
 import {
   NavMenuSettings,
   NavItemMeta,
@@ -46,6 +53,7 @@ const SETTINGS_DEFAULTS: Required<NavMenuSettings> = {
   logo_alt: 'Store Logo',
   logo_href: '/',
   logo_alignment: NavMenuLogoAlignment.LEFT,
+  links_alignment: NavMenuLinksAlignment.LEFT,
   position: NavMenuPosition.STICKY,
   show_shadow: true,
   show_border: true,
@@ -55,6 +63,13 @@ const SETTINGS_DEFAULTS: Required<NavMenuSettings> = {
   show_account: true,
   show_wishlist: true,
   show_cart: true,
+  announcement_visible: false,
+  announcement_items_left: [],
+  announcement_items_right: [],
+  announcement_bg_color: '#f8f9fa',
+  announcement_text_color: '#475569',
+  announcement_text_size: 'text-[11px] sm:text-xs',
+  announcement_mobile_alignment: 'center',
 };
 const MEGA_MENU_MAX_AUTO_COLUMNS = 6;
 const MEGA_MENU_SUBTREE_DEPTH = 2;
@@ -66,6 +81,224 @@ export class NavbarService {
     private readonly companyService: CompanyService,
     private readonly siteMapsService: SiteMapsService,
   ) {}
+
+  async getTemplates() {
+    try {
+      const templates = await this.db
+        .select()
+        .from(nav_items)
+        .catch((err) => {
+          throw new InternalServerErrorException(
+            'Failed to query nav_items in getTemplates',
+            { cause: err },
+          );
+        });
+
+      return templates;
+    } catch (error) {
+      if (error instanceof InternalServerErrorException) throw error;
+      throw new InternalServerErrorException(
+        'Failed to fetch navbar templates',
+        { cause: error },
+      );
+    }
+  }
+
+  async createTemplateItem(dto: CreateTemplateItemDto) {
+    try {
+      const existing = await this.db
+        .select()
+        .from(nav_items)
+        .where(eq(nav_items.key, dto.key))
+        .limit(1)
+        .catch((err) => {
+          throw new InternalServerErrorException(
+            'Failed to check existing template key',
+            { cause: err },
+          );
+        });
+
+      if (existing.length > 0) {
+        throw new BadRequestException(
+          'A navigation template with this key already exists.',
+        );
+      }
+
+      const configSchema: Record<string, unknown> = dto.config_schema || {};
+      if (dto.manual_override !== undefined) {
+        configSchema.manual_override = dto.manual_override;
+      } else {
+        configSchema.manual_override = true;
+      }
+      if (dto.is_pinned !== undefined) configSchema.is_pinned = dto.is_pinned;
+      if (dto.is_hidden !== undefined) configSchema.is_hidden = dto.is_hidden;
+
+      const [created] = await this.db
+        .insert(nav_items)
+        .values({
+          kind: dto.kind,
+          key: dto.key,
+          label: dto.label,
+          path: dto.path !== undefined ? dto.path : null,
+          template_key:
+            dto.template_key !== undefined ? dto.template_key : null,
+          config_schema: configSchema,
+        })
+        .returning()
+        .catch((err) => {
+          throw new InternalServerErrorException(
+            'Failed to create navigation template',
+            { cause: err },
+          );
+        });
+
+      return created;
+    } catch (error) {
+      if (
+        error instanceof BadRequestException ||
+        error instanceof InternalServerErrorException
+      ) {
+        throw error;
+      }
+      throw new InternalServerErrorException(
+        'Failed to create navigation template',
+        { cause: error },
+      );
+    }
+  }
+
+  async updateTemplateItem(id: string, dto: UpdateTemplateItemDto) {
+    try {
+      const [existing] = await this.db
+        .select()
+        .from(nav_items)
+        .where(eq(nav_items.id, id))
+        .limit(1)
+        .catch((err) => {
+          throw new InternalServerErrorException(
+            'Failed to fetch existing template item',
+            { cause: err },
+          );
+        });
+
+      if (!existing) {
+        throw new NotFoundException('Navigation template item not found.');
+      }
+
+      const currentConfig: Record<string, unknown> =
+        (existing.config_schema as Record<string, unknown>) || {};
+      const newConfig: Record<string, unknown> = {
+        ...currentConfig,
+        ...(dto.config_schema || {}),
+      };
+
+      if (dto.manual_override !== undefined) {
+        newConfig.manual_override = dto.manual_override;
+      } else {
+        newConfig.manual_override = true;
+      }
+
+      if (dto.is_pinned !== undefined) newConfig.is_pinned = dto.is_pinned;
+      if (dto.is_hidden !== undefined) newConfig.is_hidden = dto.is_hidden;
+
+      const updatePayload: {
+        kind?: string;
+        key?: string;
+        label?: string;
+        path?: string | null;
+        template_key?: string | null;
+        config_schema: Record<string, unknown>;
+      } = {
+        config_schema: newConfig,
+      };
+
+      if (dto.kind !== undefined) updatePayload.kind = dto.kind;
+      if (dto.key !== undefined) updatePayload.key = dto.key;
+      if (dto.label !== undefined) updatePayload.label = dto.label;
+      if (dto.path !== undefined) updatePayload.path = dto.path;
+      if (dto.template_key !== undefined)
+        updatePayload.template_key = dto.template_key;
+
+      const [updated] = await this.db
+        .update(nav_items)
+        .set(updatePayload)
+        .where(eq(nav_items.id, id))
+        .returning()
+        .catch((err) => {
+          throw new InternalServerErrorException(
+            'Failed to update navigation template',
+            { cause: err },
+          );
+        });
+
+      return updated;
+    } catch (error) {
+      if (
+        error instanceof NotFoundException ||
+        error instanceof InternalServerErrorException
+      ) {
+        throw error;
+      }
+      throw new InternalServerErrorException(
+        'Failed to update navigation template',
+        { cause: error },
+      );
+    }
+  }
+
+  async deleteTemplateItem(id: string) {
+    try {
+      const [deleted] = await this.db
+        .delete(nav_items)
+        .where(eq(nav_items.id, id))
+        .returning()
+        .catch((err) => {
+          throw new InternalServerErrorException(
+            'Failed to delete navigation template',
+            { cause: err },
+          );
+        });
+
+      if (!deleted) {
+        throw new NotFoundException('Navigation template item not found.');
+      }
+
+      return deleted;
+    } catch (error) {
+      if (
+        error instanceof NotFoundException ||
+        error instanceof InternalServerErrorException
+      ) {
+        throw error;
+      }
+      throw new InternalServerErrorException(
+        'Failed to delete navigation template',
+        { cause: error },
+      );
+    }
+  }
+
+  async rescanTemplates() {
+    try {
+      const templates = await this.db
+        .select()
+        .from(nav_items)
+        .catch((err) => {
+          throw new InternalServerErrorException(
+            'Failed to fetch templates after rescan',
+            { cause: err },
+          );
+        });
+
+      return templates;
+    } catch (error) {
+      if (error instanceof InternalServerErrorException) throw error;
+      throw new InternalServerErrorException(
+        'Failed to rescan navigation templates',
+        { cause: error },
+      );
+    }
+  }
 
   // ─── Internal helpers ───────────────────────────────────────────────────────
 
@@ -185,14 +418,51 @@ export class NavbarService {
       const menuRow = await this.findMenuRow(companyId);
 
       // Fetch all items for this menu ordered for rendering
-      const items = menuRow
+      const dbItems = menuRow
         ? await this.db
-            .select()
-            .from(nav_items)
-            .where(eq(nav_items.menu_id, menuRow.id))
-            .orderBy(asc(nav_items.sort_order))
-            .catch((): (typeof nav_items.$inferSelect)[] => [])
+            .select({
+              link: vendor_nav_links,
+              item: nav_items,
+            })
+            .from(vendor_nav_links)
+            .innerJoin(
+              nav_items,
+              eq(vendor_nav_links.nav_item_id, nav_items.id),
+            )
+            .where(eq(vendor_nav_links.menu_id, menuRow.id))
+            .orderBy(asc(vendor_nav_links.sort_order))
+            .catch(() => [])
         : [];
+
+      const items = dbItems.map(({ link, item }) => {
+        const config = (link.config as any) || {};
+        let resolvedHref = '/';
+        let resolvedItemType = NavItemType.CUSTOM_LINK;
+        let resolvedCategoryId = null;
+        let resolvedTargetRoute = null;
+
+        if (item.kind === NavItemKind.SYSTEM_ROUTE) {
+          resolvedHref = item.path || '/';
+          resolvedTargetRoute = item.key;
+        } else if (item.kind === NavItemKind.DYNAMIC_TEMPLATE) {
+          if (item.template_key === NavTemplateKey.CATEGORY_LINK) {
+            resolvedItemType = NavItemType.CATEGORY;
+            resolvedCategoryId = config.category_id || null;
+          } else if (item.template_key === NavTemplateKey.CUSTOM_LINK) {
+            resolvedHref = config.href || '/';
+          } else if (item.template_key === NavTemplateKey.FILTERED_COLLECTION) {
+            resolvedHref = `/store/c/${link.slug}`;
+          }
+        }
+
+        return {
+          ...link,
+          href: resolvedHref,
+          item_type: resolvedItemType,
+          category_id: resolvedCategoryId,
+          target_route: resolvedTargetRoute,
+        };
+      });
 
       const settings = this.mergeDefaults(menuRow?.settings as NavMenuSettings);
 
@@ -731,6 +1001,9 @@ export class NavbarService {
 
         return {
           id: l1.id,
+          nav_item_id: l1.nav_item_id,
+          slug: l1.slug,
+          config: (l1.config ?? {}) as Record<string, any>,
           label: resolvedLabel,
           href: resolvedHref,
           item_type: l1.item_type,
@@ -777,12 +1050,12 @@ export class NavbarService {
       const companyId = await this.resolveCompanyId(domain);
       const existing = await this.findMenuRow(companyId);
 
-      // Merge: existing stored settings → dto fields (only defined keys)
+      // Merge: existing stored settings → dto fields (only defined and non-null keys)
       const patch: NavMenuSettings = {
         ...((existing?.settings as NavMenuSettings) ?? {}),
       };
       (Object.keys(dto) as (keyof UpsertNavMenuDto)[]).forEach((key) => {
-        if (dto[key] !== undefined) (patch as any)[key] = dto[key];
+        if (dto[key] !== undefined && dto[key] !== null) (patch as any)[key] = dto[key];
       });
 
       if (existing) {
@@ -841,6 +1114,16 @@ export class NavbarService {
    */
   async createNavItem(domain: string, dto: CreateNavItemDto) {
     try {
+      if (!dto.nav_item_id) {
+        const [defaultItem] = await this.db
+          .select({ id: nav_items.id })
+          .from(nav_items)
+          .where(eq(nav_items.key, 'store'))
+          .limit(1);
+        if (defaultItem) {
+          dto.nav_item_id = defaultItem.id;
+        }
+      }
       const companyId = await this.resolveCompanyId(domain);
 
       // Verify the menu belongs to this company
@@ -855,20 +1138,14 @@ export class NavbarService {
         throw new BadRequestException(NavbarErrorCode.NAVBAR_ROOT_FORBIDDEN);
       }
 
-      // ── Service-layer target_route existence check ───────────────────────────
-      if (dto.target_route) {
-        const routeMap = await this.siteMapsService.getRouteMap(domain);
-        if (!routeMap.has(dto.target_route)) {
-          throw new BadRequestException(NavbarErrorCode.NAVBAR_INVALID_ROUTE);
-        }
-      }
-
-      // If creating an L2 item, validate parent depth
       if (dto.parent_id) {
         const [parent] = await this.db
-          .select({ id: nav_items.id, parent_id: nav_items.parent_id })
-          .from(nav_items)
-          .where(eq(nav_items.id, dto.parent_id))
+          .select({
+            id: vendor_nav_links.id,
+            parent_id: vendor_nav_links.parent_id,
+          })
+          .from(vendor_nav_links)
+          .where(eq(vendor_nav_links.id, dto.parent_id))
           .limit(1);
 
         if (!parent)
@@ -886,18 +1163,17 @@ export class NavbarService {
       }
 
       const [created] = await this.db
-        .insert(nav_items)
+        .insert(vendor_nav_links)
         .values({
           menu_id: dto.menu_id,
           parent_id: dto.parent_id ?? null,
+          nav_item_id: dto.nav_item_id,
+          slug: dto.slug ?? null,
+          config: dto.config ?? {},
           label: dto.label,
-          href: dto.href,
-          item_type: dto.item_type as any,
-          category_id: dto.category_id ?? null,
           has_mega_menu: dto.has_mega_menu,
           layout_type: layoutType,
           root_category_id: dto.root_category_id ?? null,
-          target_route: dto.target_route ?? null,
           sort_order: dto.sort_order ?? 0,
           meta: (dto.meta ?? {}) as NavItemMeta,
         })
@@ -946,14 +1222,19 @@ export class NavbarService {
       // Confirm item belongs to this company's menu
       const [existing] = await this.db
         .select({
-          id: nav_items.id,
-          parent_id: nav_items.parent_id,
-          layout_type: nav_items.layout_type,
-          root_category_id: nav_items.root_category_id,
-          meta: nav_items.meta,
+          id: vendor_nav_links.id,
+          parent_id: vendor_nav_links.parent_id,
+          layout_type: vendor_nav_links.layout_type,
+          root_category_id: vendor_nav_links.root_category_id,
+          meta: vendor_nav_links.meta,
         })
-        .from(nav_items)
-        .where(and(eq(nav_items.id, itemId), eq(nav_items.menu_id, menuRow.id)))
+        .from(vendor_nav_links)
+        .where(
+          and(
+            eq(vendor_nav_links.id, itemId),
+            eq(vendor_nav_links.menu_id, menuRow.id),
+          ),
+        )
         .limit(1);
 
       if (!existing)
@@ -973,29 +1254,18 @@ export class NavbarService {
         throw new BadRequestException(NavbarErrorCode.NAVBAR_ROOT_FORBIDDEN);
       }
 
-      // ── Service-layer target_route existence check ───────────────────────────
-      if (dto.target_route !== undefined && dto.target_route !== null) {
-        const routeMap = await this.siteMapsService.getRouteMap(domain);
-        if (!routeMap.has(dto.target_route)) {
-          throw new BadRequestException(NavbarErrorCode.NAVBAR_INVALID_ROUTE);
-        }
-      }
-
       // Build patch — only set fields that were provided
-      const patch: Partial<typeof nav_items.$inferInsert> = {};
+      const patch: Partial<typeof vendor_nav_links.$inferInsert> = {};
       if (dto.label !== undefined) patch.label = dto.label;
-      if (dto.href !== undefined) patch.href = dto.href;
-      if (dto.item_type !== undefined) patch.item_type = dto.item_type as any;
-      if (dto.category_id !== undefined)
-        patch.category_id = dto.category_id ?? null;
+      if (dto.nav_item_id !== undefined) patch.nav_item_id = dto.nav_item_id;
+      if (dto.slug !== undefined) patch.slug = dto.slug;
+      if (dto.config !== undefined) patch.config = dto.config;
       if (dto.has_mega_menu !== undefined)
         patch.has_mega_menu = dto.has_mega_menu;
       if (dto.layout_type !== undefined)
         patch.layout_type = dto.layout_type || NavLayoutType.NONE;
       if (dto.root_category_id !== undefined)
         patch.root_category_id = dto.root_category_id ?? null;
-      if (dto.target_route !== undefined)
-        patch.target_route = dto.target_route ?? null;
       if (dto.sort_order !== undefined) patch.sort_order = dto.sort_order;
 
       // Merge meta JSONB — don't overwrite entire blob with partial update
@@ -1009,9 +1279,9 @@ export class NavbarService {
       patch.updated_at = new Date();
 
       const [updated] = await this.db
-        .update(nav_items)
+        .update(vendor_nav_links)
         .set(patch)
-        .where(eq(nav_items.id, itemId))
+        .where(eq(vendor_nav_links.id, itemId))
         .returning()
         .catch((err) => {
           throw new InternalServerErrorException(
@@ -1055,9 +1325,14 @@ export class NavbarService {
         throw new NotFoundException(NavbarErrorKeyEnum.MENU_NOT_FOUND);
 
       const deleted = await this.db
-        .delete(nav_items)
-        .where(and(eq(nav_items.id, itemId), eq(nav_items.menu_id, menuRow.id)))
-        .returning({ id: nav_items.id })
+        .delete(vendor_nav_links)
+        .where(
+          and(
+            eq(vendor_nav_links.id, itemId),
+            eq(vendor_nav_links.menu_id, menuRow.id),
+          ),
+        )
+        .returning({ id: vendor_nav_links.id })
         .catch((err) => {
           throw new InternalServerErrorException(
             NavbarErrorKeyEnum.FAILED_TO_DELETE_ITEM,
@@ -1104,10 +1379,13 @@ export class NavbarService {
 
       // Verify all IDs belong to this menu (security guard)
       const owned = await this.db
-        .select({ id: nav_items.id })
-        .from(nav_items)
+        .select({ id: vendor_nav_links.id })
+        .from(vendor_nav_links)
         .where(
-          and(eq(nav_items.menu_id, menuRow.id), inArray(nav_items.id, ids)),
+          and(
+            eq(vendor_nav_links.menu_id, menuRow.id),
+            inArray(vendor_nav_links.id, ids),
+          ),
         )
         .catch((err) => {
           throw new InternalServerErrorException(
@@ -1121,11 +1399,11 @@ export class NavbarService {
       }
 
       await Promise.all(
-        dto.items.map(({ id, sort_order }) =>
+        dto.items.map((item) =>
           this.db
-            .update(nav_items)
-            .set({ sort_order, updated_at: new Date() })
-            .where(eq(nav_items.id, id)),
+            .update(vendor_nav_links)
+            .set({ sort_order: item.sort_order, updated_at: new Date() })
+            .where(eq(vendor_nav_links.id, item.id)),
         ),
       ).catch((err) => {
         throw new InternalServerErrorException(

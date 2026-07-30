@@ -47,4 +47,9 @@ export const ERROR_MAPPING: Record<InternalErrorCode, ErrorMappingConfig> = {
     message: "You do not have permission to perform this action.",
     action: ClientActionCode.UPDATE_INPUT,
   },
+  [InternalErrorCode.PAYLOAD_TOO_LARGE]: {
+    statusCode: HttpStatus.PAYLOAD_TOO_LARGE,
+    message: "The uploaded files or data exceed the maximum allowed size of 50MB. Please reduce the size and try again.",
+    action: ClientActionCode.UPDATE_INPUT,
+  },
 };

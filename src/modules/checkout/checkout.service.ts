@@ -62,6 +62,7 @@ import {
   RazorpayPaymentCapturedWebhook,
 } from './constants/razorpay.webhook.js';
 import { CACHE_MANAGER } from '@nestjs/cache-manager';
+import { PricingService } from '../pricing/pricing.service.js';
 // import { DrizzleTransaction } from '../../drizzle/drizzle.module.js';
 import { type Cache } from 'cache-manager';
 import { PgTransaction } from 'drizzle-orm/pg-core';
@@ -80,6 +81,7 @@ export class CheckoutService {
     private readonly paymentSplitterService: PaymentSplitterService,
     private readonly paymentService: PaymentService,
     private readonly shippingPreferenceEngineService: ShippingPreferenceEngineService,
+    private readonly pricingService: PricingService,
   ) {}
 
   private getRazorpayInstance(): Razorpay {
@@ -1136,6 +1138,9 @@ export class CheckoutService {
         .select({
           id: product_variants.id,
           price: product_variants.price,
+          compare_at_price: product_variants.compare_at_price,
+          sale_starts_at: product_variants.sale_starts_at,
+          sale_ends_at: product_variants.sale_ends_at,
           name: products.name,
           weight_kg: product_variants.weight_kg,
         })
@@ -1149,10 +1154,11 @@ export class CheckoutService {
           HttpStatus.NOT_FOUND,
         );
       }
+      const pricing = this.pricingService.resolveVariantPrice(variant);
       return [
         {
           variantId: variant.id,
-          price: Number(variant.price),
+          price: pricing.price,
           quantity: qty ?? 1,
           name: variant.name,
           weight_kg: Number(variant.weight_kg || 0.5),
@@ -1175,6 +1181,9 @@ export class CheckoutService {
         .select({
           variantId: cart_items.product_variant_id,
           price: product_variants.price,
+          compare_at_price: product_variants.compare_at_price,
+          sale_starts_at: product_variants.sale_starts_at,
+          sale_ends_at: product_variants.sale_ends_at,
           quantity: cart_items.quantity,
           name: products.name,
           weight_kg: product_variants.weight_kg,
@@ -1186,13 +1195,16 @@ export class CheckoutService {
         )
         .innerJoin(products, eq(product_variants.product_id, products.id))
         .where(eq(cart_items.cart_id, cartRecord.id));
-      return cartItems.map((item) => ({
-        variantId: item.variantId ?? '',
-        price: Number(item.price),
-        quantity: item.quantity,
-        name: item.name,
-        weight_kg: Number(item.weight_kg || 0.5),
-      }));
+      return cartItems.map((item) => {
+        const pricing = this.pricingService.resolveVariantPrice(item as any);
+        return {
+          variantId: item.variantId ?? '',
+          price: pricing.price,
+          quantity: item.quantity,
+          name: item.name,
+          weight_kg: Number(item.weight_kg || 0.5),
+        };
+      });
     }
   }
 

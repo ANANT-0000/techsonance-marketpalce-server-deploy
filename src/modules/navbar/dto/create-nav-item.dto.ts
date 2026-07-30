@@ -95,6 +95,16 @@ export class NavItemMetaDto {
   product_ids?: string[];
 }
 
+export class NavConfigDto {
+  @IsOptional()
+  @IsUUID()
+  filter_id?: string;
+
+  @IsOptional()
+  @IsUUID()
+  category_id?: string;
+}
+
 export class CreateNavItemDto {
   /** UUID of the nav_menus row this item belongs to. */
   @IsUUID()
@@ -114,17 +124,19 @@ export class CreateNavItemDto {
   @MaxLength(120)
   label!: string;
 
-  @IsString()
-  @IsNotEmpty()
-  href!: string;
-
-  @IsEnum(NavItemType)
-  item_type!: NavItemType;
-
-  /** FK to categories — required when item_type = 'category'. */
-  @ValidateIf((o) => o.item_type === NavItemType.CATEGORY)
   @IsUUID()
-  category_id?: string;
+  @IsNotEmpty()
+  nav_item_id!: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(150)
+  slug?: string;
+
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => NavConfigDto)
+  config?: NavConfigDto;
 
   @IsBoolean()
   has_mega_menu!: boolean;
@@ -132,10 +144,6 @@ export class CreateNavItemDto {
   @IsOptional()
   @IsEnum(NavLayoutType)
   layout_type?: NavLayoutType;
-
-  @IsOptional()
-  @IsString()
-  target_route?: string;
 
   @IsOptional()
   @IsUUID()

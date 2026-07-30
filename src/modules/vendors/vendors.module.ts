@@ -1,4 +1,5 @@
 import { forwardRef, Module } from '@nestjs/common';
+import { EntitlementsModule } from '../entitlements/entitlements.module.js';
 import { VendorsService } from './vendors.service.js';
 import { VendorsController } from './vendors.controller.js';
 import { DrizzleModule } from '../../drizzle/drizzle.module.js';
@@ -18,6 +19,7 @@ import { SubscriptionModule } from '../subscription/subscription.module.js';
     forwardRef(() => OrdersModule),
     forwardRef(() => CompanyModule),
     SubscriptionModule,
+    EntitlementsModule,
   ],
   controllers: [VendorsController],
   providers: [VendorsService],

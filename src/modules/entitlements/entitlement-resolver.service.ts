@@ -87,8 +87,14 @@ export class EntitlementResolverService {
 
     const usability = this.classifySubscription(subscription);
 
+    const metadata = subscription ? {
+      status: subscription.status as any,
+      trial_ends_at: subscription.trial_ends_at,
+      grace_period_ends_at: subscription.grace_period_ends_at,
+    } : undefined;
+
     if (usability === 'none' || !subscription) {
-      const empty = EntitlementMap.empty(usability);
+      const empty = EntitlementMap.empty(usability, metadata);
       await this.cache.set(
         this.cacheKey(companyId),
         empty,
@@ -102,7 +108,7 @@ export class EntitlementResolverService {
       with: { feature: true },
     });
 
-    const map = EntitlementMap.fromRows(limitRows as any, usability);
+    const map = EntitlementMap.fromRows(limitRows as any, usability, metadata);
     await this.cache.set(
       this.cacheKey(companyId),
       map,
@@ -127,6 +133,24 @@ export class EntitlementResolverService {
    */
   async invalidate(companyId: string): Promise<void> {
     await this.cache.del(this.cacheKey(companyId));
+  }
+
+  /**
+   * Busts the cached `EntitlementMap` for all companies on a specific plan.
+   *
+   * @param planId — UUID of the subscription_plans row.
+   */
+  async invalidateByPlan(planId: string): Promise<void> {
+    const subscriptions = await this.db.query.vendor_subscriptions.findMany({
+      where: eq(vendor_subscriptions.plan_id, planId),
+      columns: { company_id: true },
+    });
+    
+    if (subscriptions.length === 0) return;
+    
+    await Promise.all(
+      subscriptions.map((s) => this.invalidate(s.company_id))
+    );
   }
 
   /**

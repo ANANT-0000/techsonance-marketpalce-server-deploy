@@ -24,6 +24,9 @@ import { RoleGuard } from '../../guards/role.guard.js';
 import { CompanyService } from '../company/company.service.js';
 
 import { UploadToCloud } from '../../common/decorators/upload.decorator.js';
+import { Public } from '../../common/decorators/public.decorator.js';
+import { Throttle } from '@nestjs/throttler';
+import express from 'express';
 
 @Controller({
   version: '1',
@@ -42,6 +45,29 @@ export class AdminController {
   @Get('test')
   test() {
     return 'Admin controller is working';
+  }
+
+  @Public()
+  @Throttle({ short: { limit: 5, ttl: 60_000 } })
+  @Post('login')
+  @HttpCode(HttpStatus.OK)
+  async adminLogin(
+    @Body() body: { email: string; password: string },
+    @Res({ passthrough: true }) res: express.Response,
+  ): Promise<Record<string, unknown>> {
+    const result = await this.adminService.adminLogin(
+      body.email,
+      body.password,
+    );
+    if (result.access_token) {
+      res.cookie('accessToken', result.access_token as string, {
+        httpOnly: true,
+        secure: process.env.NODE_ENV === 'production',
+        sameSite: 'strict',
+        maxAge: 7 * 24 * 60 * 60 * 1000,
+      });
+    }
+    return result;
   }
 
   @Post('create-vendor')

@@ -15,9 +15,14 @@ export * from './payment-gateway.schema.js';
 export * from './logistics.schema.js';
 export * from './landing_page.schema.js';
 export * from './system_logs.schema.js';
+export * from './filters.schema.js';
 import { address, user, vendor, vendor_preferences } from './users.schema.js';
 import { vendor_storefront_sections } from './vendor_storefront.schema.js';
-import { nav_menus, nav_items } from './nav_storefront.schema.js';
+import {
+  nav_menus,
+  nav_items,
+  vendor_nav_links,
+} from './nav_storefront.schema.js';
 
 import {
   cart_items,
@@ -40,6 +45,8 @@ import {
   shipping_details,
   wishlist,
   wishlist_items,
+  product_price_history,
+  product_categories,
 } from './shop.schema.js';
 import { relations } from 'drizzle-orm';
 import {
@@ -179,6 +186,7 @@ export const userRelations = relations(user, ({ one, many }) => ({
   coupon_usage: many(coupon_usage),
   segment_memberships: many(segment_members),
   promotion_usage: many(promotion_usage),
+  price_history: many(product_price_history),
 }));
 
 export const userAndCompanyRelations = relations(
@@ -293,10 +301,7 @@ export const documentRelations = relations(company_document, ({ one }) => ({
   }),
 }));
 export const productsRelations = relations(products, ({ one, many }) => ({
-  category: one(categories, {
-    fields: [products.category_id],
-    references: [categories.id],
-  }),
+  productCategories: many(product_categories),
   variants: many(product_variants),
   images: many(product_images),
   reviews: many(product_reviews),
@@ -326,8 +331,22 @@ export const categoriesRelations = relations(categories, ({ one, many }) => ({
   children: many(categories, {
     relationName: 'subCategories',
   }),
-  products: many(products),
+  productCategories: many(product_categories),
 }));
+
+export const productCategoriesRelations = relations(
+  product_categories,
+  ({ one }) => ({
+    product: one(products, {
+      fields: [product_categories.product_id],
+      references: [products.id],
+    }),
+    category: one(categories, {
+      fields: [product_categories.category_id],
+      references: [categories.id],
+    }),
+  }),
+);
 
 export const productVariantsRelations = relations(
   product_variants,
@@ -344,8 +363,24 @@ export const productVariantsRelations = relations(
       fields: [product_variants.id],
       references: [inventory.product_variant_id],
     }),
+    price_history: many(product_price_history),
   }),
 );
+
+export const productPriceHistoryRelations = relations(
+  product_price_history,
+  ({ one }) => ({
+    variant: one(product_variants, {
+      fields: [product_price_history.product_variant_id],
+      references: [product_variants.id],
+    }),
+    changedBy: one(user, {
+      fields: [product_price_history.changed_by],
+      references: [user.id],
+    }),
+  }),
+);
+
 export const productReviewRelations = relations(product_reviews, ({ one }) => ({
   user: one(user, {
     fields: [product_reviews.user_id],
@@ -813,27 +848,30 @@ export const navMenusRelations = relations(nav_menus, ({ one, many }) => ({
   items: many(nav_items),
 }));
 
-export const navItemsRelations = relations(nav_items, ({ one, many }) => ({
-  menu: one(nav_menus, {
-    fields: [nav_items.menu_id],
-    references: [nav_menus.id],
-  }),
+export const navItemsRelations = relations(
+  vendor_nav_links,
+  ({ one, many }) => ({
+    menu: one(nav_menus, {
+      fields: [vendor_nav_links.menu_id],
+      references: [nav_menus.id],
+    }),
 
-  parent: one(nav_items, {
-    fields: [nav_items.parent_id],
-    references: [nav_items.id],
-    relationName: 'navItemChildren',
-  }),
+    parent: one(vendor_nav_links, {
+      fields: [vendor_nav_links.parent_id],
+      references: [vendor_nav_links.id],
+      relationName: 'navItemChildren',
+    }),
 
-  children: many(nav_items, {
-    relationName: 'navItemChildren',
-  }),
+    children: many(vendor_nav_links, {
+      relationName: 'navItemChildren',
+    }),
 
-  category: one(categories, {
-    fields: [nav_items.category_id],
-    references: [categories.id],
+    category: one(categories, {
+      fields: [vendor_nav_links.category_id],
+      references: [categories.id],
+    }),
   }),
-}));
+);
 
 export const siteMappingsRelations = relations(site_maps, ({ one }) => ({
   company: one(company, {

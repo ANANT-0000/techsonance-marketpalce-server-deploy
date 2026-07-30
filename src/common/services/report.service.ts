@@ -5,6 +5,7 @@ import {
   product_variants,
   products,
   categories,
+  product_categories,
   refunds,
 } from '../../drizzle/schema/index.js';
 import { gst_invoices } from '../../drizzle/schema/finance.schema.js';
@@ -110,7 +111,8 @@ export async function getVendorDashboardData({
       eq(order_items.product_variant_id, product_variants.id),
     )
     .innerJoin(products, eq(product_variants.product_id, products.id)) // product_id is snake_case here
-    .innerJoin(categories, eq(products.category_id, categories.id))
+    .innerJoin(product_categories, and(eq(products.id, product_categories.product_id), eq(product_categories.is_primary, true)))
+    .innerJoin(categories, eq(product_categories.category_id, categories.id))
     .where(baseFilter)
     .groupBy(categories.name);
   

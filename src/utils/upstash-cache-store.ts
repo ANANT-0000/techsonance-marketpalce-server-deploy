@@ -1,5 +1,18 @@
 import { Redis } from '@upstash/redis';
 
+/**
+ * ⚠️ WARNING: CACHE-MANAGER COMPLIANCE PITFALL ⚠️
+ * 
+ * NestJS `CacheModule` relies on `cache-manager`. In `cache-manager` v5+, custom cache adapters 
+ * require a very specific object shape and constructor format to be recognized properly.
+ * 
+ * If this `createUpstashStore` does not perfectly comply with the expected `CacheStore` interface, 
+ * NestJS will silently ignore it and fallback to an IN-MEMORY cache. 
+ * 
+ * Be extremely careful about serialization and deserialization bugs! When objects fall back to the 
+ * in-memory cache, they are passed by reference. Deserializers (like `EntitlementMap.fromJSON`) 
+ * will receive LIVE class instances instead of JSON strings. 
+ */
 export function createUpstashStore(redis: Redis) {
   return {
     async get<T>(key: string): Promise<T | undefined> {

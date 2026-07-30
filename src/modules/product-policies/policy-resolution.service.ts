@@ -1,5 +1,5 @@
 import { Injectable, Inject, Logger } from '@nestjs/common';
-import { eq } from 'drizzle-orm';
+import { eq, and } from 'drizzle-orm';
 import { DRIZZLE, type DrizzleService } from '../../drizzle/drizzle.module.js';
 import {
   category_policy,
@@ -7,6 +7,7 @@ import {
   product_policy_override,
   products,
   product_variants,
+  product_categories,
 } from '../../drizzle/schema/index.js';
 
 export interface PolicyResolutionResult {
@@ -94,9 +95,14 @@ export class PolicyResolutionService {
 
     // ── Step 3: category-level policy (fallback) ─────────────────────
     const [product] = await db
-      .select({ category_id: products.category_id })
-      .from(products)
-      .where(eq(products.id, productId))
+      .select({ category_id: product_categories.category_id })
+      .from(product_categories)
+      .where(
+        and(
+          eq(product_categories.product_id, productId),
+          eq(product_categories.is_primary, true)
+        )
+      )
       .limit(1);
 
     if (!product?.category_id) {

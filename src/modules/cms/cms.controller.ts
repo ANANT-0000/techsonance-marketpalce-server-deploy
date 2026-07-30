@@ -28,11 +28,7 @@ import { VendorActiveGuard } from '../../guards/vendor-status.guard.js';
 export class CmsController {
   constructor(private readonly cmsService: CmsService) {}
 
-  @Post('upload')
-  @UseInterceptors(FileInterceptor('file'))
-  async uploadCmsImage(@UploadedFile() file: Express.Multer.File) {
-    return this.cmsService.uploadCmsImage(file);
-  }
+
   @Public()
   @Get(':type')
   getPage(
@@ -54,13 +50,5 @@ export class CmsController {
   ) {
     return this.cmsService.upsertPage(domain, dto);
   }
-  @Delete('delete-cloudinary-image')
-  @UseGuards(RoleGuard, VendorActiveGuard)
-  @Roles(Role.ADMIN, Role.VENDOR)
-  async deleteCloudinaryImage(
-    @Headers('company-domain') domain: string,
-    @Query('url') url: string,
-  ) {
-    return this.cmsService.deleteCloudinaryImage(domain, url);
-  }
+
 }

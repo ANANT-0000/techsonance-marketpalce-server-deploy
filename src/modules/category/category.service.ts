@@ -158,27 +158,12 @@ export class CategoryService {
         orderBy: orderBy,
         limit: filters?.limit ?? 20,
         offset: filters?.offset ?? 0,
-        with: {
-          products: {
-            limit: 1,
-            with: {
-              variants: {
-                limit: 1,
-                with: {
-                  images: {
-                    limit: 1,
-                    where: (img) => eq(img.is_primary, true),
-                  },
-                },
-              },
-            },
-          },
-        },
       });
 
-      return allCategories.map((category: any) => {
-        const imageUrl =
-          category.products?.[0]?.variants?.[0]?.images?.[0]?.image_url || null;
+      // Instead of deeply nested lateral joins which crash Postgres on scale,
+      // we map the flat categories directly. If a fallback product image is strictly
+      // required in the future, it should be fetched via a separate flat db.select() query.
+      return allCategories.map((category) => {
         return {
           id: category.id,
           name: category.name,
@@ -188,7 +173,7 @@ export class CategoryService {
           company_id: category.company_id,
           created_at: category.created_at,
           updated_at: category.updated_at,
-          product_image: imageUrl,
+          product_image: category.icon_url || null, // Default to icon_url
           icon_url: category.icon_url,
           show_in_nav: category.show_in_nav,
         };
@@ -215,37 +200,17 @@ export class CategoryService {
     try {
       const allCategories = await this.db.query.categories.findMany({
         where: eq(categories.company_id, companyId),
-        with: {
-          products: {
-            limit: 1,
-            with: {
-              variants: {
-                limit: 1,
-                with: {
-                  images: {
-                    limit: 1,
-                    where: (img) => eq(img.is_primary, true),
-                  },
-                },
-              },
-            },
-          },
-        },
       });
 
-      const mapped = allCategories.map((category: any) => {
-        const imageUrl =
-          category.icon_url ||
-          category.products?.[0]?.variants?.[0]?.images?.[0]?.image_url ||
-          null;
+      const mapped = allCategories.map((category) => {
         return {
           id: category.id,
           name: category.name,
-          product_image: imageUrl,
+          product_image: category.icon_url || null,
         };
       });
 
-      // Filter out categories that do not have any image (icon_url or product image)
+      // Filter out categories that do not have an icon
       const filtered = mapped.filter(
         (cat) => cat.product_image !== null && cat.product_image !== '',
       );
@@ -425,16 +390,6 @@ export class CategoryService {
 
     const descendantIds = await this.collectDescendantIds(id, companyId);
     const allCategoryIds = [id, ...descendantIds];
-
-    await this.db
-      .update(products)
-      .set({ category_id: null })
-      .where(
-        and(
-          inArray(products.category_id, allCategoryIds),
-          eq(products.company_id, companyId),
-        ),
-      );
 
     try {
       await this.db

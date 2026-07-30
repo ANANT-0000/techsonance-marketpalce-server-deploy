@@ -70,6 +70,9 @@ export class SecureErrorHandler {
       if (status === 403) {
         return InternalErrorCode.FORBIDDEN;
       }
+      if (status === 413) {
+        return InternalErrorCode.PAYLOAD_TOO_LARGE;
+      }
     }
 
     const messageString = String(rawError.message || "").toLowerCase();
@@ -123,6 +126,16 @@ export class SecureErrorHandler {
     // Timeout
     if (messageString.includes("timeout") || messageString.includes("deadline")) {
       return InternalErrorCode.TRANSACTION_TIMEOUT;
+    }
+
+    // Payload Too Large
+    if (
+      codeString === "LIMIT_FILE_SIZE" ||
+      messageString.includes("request entity too large") ||
+      messageString.includes("payload too large") ||
+      messageString.includes("file too large")
+    ) {
+      return InternalErrorCode.PAYLOAD_TOO_LARGE;
     }
 
     return InternalErrorCode.UNKNOWN_SYSTEM_ERROR;

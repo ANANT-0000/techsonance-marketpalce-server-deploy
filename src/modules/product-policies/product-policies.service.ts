@@ -520,10 +520,14 @@ export class ProductPoliciesService {
               with: {
                 category: {
                   with: {
-                    products: {
-                      columns: {
-                        id: true,
-                        name: true,
+                    productCategories: {
+                      with: {
+                        product: {
+                          columns: {
+                            id: true,
+                            name: true,
+                          },
+                        },
                       },
                     },
                   },
@@ -561,13 +565,15 @@ export class ProductPoliciesService {
         const { categoryAssignments, productOverrides, ...policy } =
           policyRecord;
         const inheritedProducts = categoryAssignments.flatMap((ca) => {
-          if (!ca.category || !ca.category.products) return [];
+          if (!ca.category || !ca.category.productCategories) return [];
 
-          return ca.category.products.map((p) => ({
-            id: p.id,
-            name: p.name,
-            category_name: ca.category.name,
-          }));
+          return ca.category.productCategories
+            .filter((pc) => pc.product)
+            .map((pc) => ({
+              id: pc.product.id,
+              name: pc.product.name,
+              category_name: ca.category.name,
+            }));
         });
         return {
           policy,

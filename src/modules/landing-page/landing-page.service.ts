@@ -34,6 +34,9 @@ export class LandingPageService {
     try {
       return await this.companyService.find(domainExtractor(domain));
     } catch (err) {
+      if (err instanceof NotFoundException) {
+        throw err;
+      }
       throw new InternalServerErrorException(
         `Unable to resolve company for domain "${domain}".`,
         { cause: err },
@@ -74,7 +77,6 @@ export class LandingPageService {
         price_annual: schema.subscription_plans.price_annual,
         annual_total: schema.subscription_plans.annual_total,
         trial_days: schema.subscription_plans.trial_days,
-        capabilities: schema.subscription_plans.capabilities,
         display_order: schema.subscription_plans.display_order,
       })
       .from(schema.subscription_plans)

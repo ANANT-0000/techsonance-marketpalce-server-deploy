@@ -32,36 +32,29 @@ import { SkipSubscription } from '../../common/decorators/skip-subscription.deco
 import { FeatureAccessGuard } from '../entitlements/guards/feature-access.guard.js';
 import { RequireFeature } from '../entitlements/decorators/require-feature.decorator.js';
 import { VendorActiveGuard } from '../../guards/vendor-status.guard.js';
+import { UpdateProductDto } from './dto/updatedProduct.dto.js';
 
 @Controller({
   version: '1',
   path: 'products',
 })
 export class ProductsController {
-  constructor(
-    private productsService: ProductsService,
-  ) {}
+  constructor(private productsService: ProductsService) {}
 
   @Post('create')
   @UseGuards(JwtAuthGuard, RoleGuard, FeatureAccessGuard, VendorActiveGuard)
-  @RequireFeature('max_products', { consume: true })
+  @RequireFeature('max_products', { consume: false })
   @Roles(Role.ADMIN, Role.VENDOR)
-  @UploadToCloud([
-    { name: 'product', maxCount: 1 },
-    { name: 'product_spec', maxCount: 20 },
-  ])
   async createProduct(
-    @Body('product_data', ParseJsonPipe) productDto: any,
+    @Body('product_data') productDto: CreateProductDto,
     @Req() req: any,
     @Headers('company-domain') domain: string,
-    @UploadedFiles() files?: ProductFiles,
   ) {
     const vendorId = req.user.vendorId;
     return await this.productsService.createProduct(
       productDto,
       vendorId,
       domain,
-      files,
     );
   }
   @SkipSubscription()
@@ -143,17 +136,12 @@ export class ProductsController {
   @Patch(':id')
   @UseGuards(JwtAuthGuard, RoleGuard, VendorActiveGuard)
   @Roles(Role.ADMIN, Role.VENDOR)
-  @UploadToCloud([
-    { name: 'product', maxCount: 1 },
-    { name: 'product_spec', maxCount: 20 },
-  ])
   async updateProduct(
     @Param('id') id: string,
-    @Body('product_data', ParseJsonPipe) product: any,
+    @Body('product_data') product: UpdateProductDto,
     @Headers('company-domain') domain: string,
     @Req() req: any,
     @Body('imagesToDelete') imagesToDelete?: string | string[],
-    @UploadedFiles() files?: ProductFiles,
   ) {
     let parsedImagesToDelete: string[] | undefined;
     if (imagesToDelete) {
@@ -173,7 +161,6 @@ export class ProductsController {
       id,
       product,
       parsedImagesToDelete,
-      files,
       vendorId,
     );
   }
@@ -195,12 +182,66 @@ export class ProductsController {
   }
 
   @Public()
+  @Get(':id/related')
+  async getRelatedProducts(
+    @Param('id') id: string,
+    @Headers('company-domain') domain: string,
+    @Query('limit') limit?: number,
+  ) {
+    return await this.productsService.getRelatedProducts(
+      domain,
+      id,
+      limit ? Number(limit) : 8,
+    );
+  }
+
+  @Public()
   @Get(':id/details')
   async getProductDetailsById(
     @Param('id') id: string,
     @Headers('company-domain') domain: string,
   ) {
     return await this.productsService.getProductDetailsById(id, domain);
+  }
+
+  @Public()
+  @Get('special/on-sale')
+  async getOnSaleProducts(
+    @Headers('company-domain') domain: string,
+    @Query('limit') limit?: number,
+  ) {
+    return await this.productsService.getOnSaleProducts(
+      domain,
+      limit ? Number(limit) : 8,
+    );
+  }
+
+  @Public()
+  @Get('collection/:slug')
+  async getCollectionProducts(
+    @Headers('company-domain') domain: string,
+    @Param('slug') slug: string,
+    @Query('limit') limit?: number,
+  ) {
+    return await this.productsService.getCollectionProducts(
+      domain,
+      slug,
+      limit ? Number(limit) : 8,
+    );
+  }
+
+  @Public()
+  @Get(':id/recommended')
+  async getRecommendedProducts(
+    @Param('id') id: string,
+    @Headers('company-domain') domain: string,
+    @Query('limit') limit?: number,
+  ) {
+    return await this.productsService.getRecommendedProducts(
+      domain,
+      id,
+      limit ? Number(limit) : 8,
+    );
   }
 
   @Public()
@@ -221,7 +262,7 @@ export class ProductsController {
     const result = await this.productsService.deleteSelectedProducts(
       ids,
       vendorId,
-      req.user?.companyId
+      req.user?.companyId,
     );
     return result;
   }
@@ -248,7 +289,7 @@ export class ProductsController {
     const result = await this.productsService.deleteProduct(
       id,
       vendorId,
-      req.user?.companyId
+      req.user?.companyId,
     );
     return result;
   }

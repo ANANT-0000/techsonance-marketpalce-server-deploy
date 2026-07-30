@@ -4,7 +4,7 @@ import {
   Inject,
   Injectable,
   InternalServerErrorException,
-  UnauthorizedException,
+  BadRequestException,
 } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { DRIZZLE, type DrizzleService } from '../../drizzle/drizzle.module.js';
@@ -18,6 +18,7 @@ import {
   orders,
   product_variants,
   products,
+  product_categories,
   promotions,
   promotion_usage,
   refunds,
@@ -69,6 +70,7 @@ import { generateSecurePassword } from '../../utils/securePassword.js';
 import { extractCloudinaryPublicId } from '../../common/filters/extractCloudinaryPublicId.filter.js';
 import { SubscriptionService } from '../subscription/subscription.service.js';
 import { VendorsError } from './constants/vendors.constant.js';
+import { EntitlementResolverService } from '../entitlements/entitlement-resolver.service.js';
 
 const SALT_ROUNDS = 10;
 type UserType = typeof userTable.$inferSelect;
@@ -84,6 +86,7 @@ export class VendorsService {
     private readonly companyService: CompanyService,
     private readonly uploadToCloudService: UploadToCloudService,
     private readonly subscriptionService: SubscriptionService,
+    private readonly entitlementResolverService: EntitlementResolverService,
   ) {}
   async vendorRegister(
     vendorData: CreateVendorDto,
@@ -397,6 +400,8 @@ export class VendorsService {
             });
         }
 
+        await this.entitlementResolverService.invalidate(newCompany.id);
+
         return {
           vendorMail: newUser.email,
           randomPassword: password,
@@ -475,14 +480,14 @@ export class VendorsService {
               );
             });
           if (!userRecord || !userRecord.id || !userRecord.password_hash) {
-            throw new UnauthorizedException(VendorsError.USER_NOT_FOUND);
+            throw new BadRequestException(VendorsError.USER_NOT_FOUND);
           }
           const isPasswordValid = await bcrypt.compare(
             loginDto.password,
             userRecord.password_hash,
           );
           if (!isPasswordValid) {
-            throw new UnauthorizedException(VendorsError.INVALID_PASSWORD);
+            throw new BadRequestException(VendorsError.INVALID_PASSWORD);
           }
           const [vendorRecord] = await tx
             .select()
@@ -498,13 +503,19 @@ export class VendorsService {
             });
 
           if (!vendorRecord) {
-            throw new UnauthorizedException(VendorsError.VENDOR_NOT_FOUND);
+            throw new BadRequestException(VendorsError.VENDOR_NOT_FOUND);
           }
 
           let [userAndCompanyRecord] = await tx
             .select()
             .from(user_and_company)
-            .where(eq(user_and_company.user_id, userRecord.id));
+            .where(eq(user_and_company.user_id, userRecord.id))
+            .catch((error) => {
+              throw new InternalServerErrorException(
+                'Failed to query user and company record',
+                { cause: error },
+              );
+            });
 
           if (!userAndCompanyRecord) {
             // Find role record first to map correctly
@@ -512,10 +523,16 @@ export class VendorsService {
               .select()
               .from(user_rolesTable)
               .where(eq(user_rolesTable.role_name, UserRole.VENDOR))
-              .limit(1);
+              .limit(1)
+              .catch((error) => {
+                throw new InternalServerErrorException(
+                  'Failed to query vendor role',
+                  { cause: error },
+                );
+              });
 
             if (!roleRec) {
-              throw new UnauthorizedException(VendorsError.USER_ROLE_NOT_FOUND);
+              throw new BadRequestException(VendorsError.USER_ROLE_NOT_FOUND);
             }
 
             if (vendorRecord.company_id) {
@@ -530,13 +547,19 @@ export class VendorsService {
                       ? AccessStatus.ACTIVE
                       : AccessStatus.PENDING,
                 })
-                .returning();
+                .returning()
+                .catch((error) => {
+                  throw new InternalServerErrorException(
+                    'Failed to insert user and company record',
+                    { cause: error },
+                  );
+                });
               userAndCompanyRecord = insertedRecord;
             }
           }
 
           if (!userAndCompanyRecord) {
-            throw new UnauthorizedException(VendorsError.USER_ROLE_NOT_FOUND);
+            throw new BadRequestException(VendorsError.USER_ROLE_NOT_FOUND);
           }
 
           const [roleRecord] = await tx
@@ -645,7 +668,7 @@ export class VendorsService {
     } catch (error) {
       if (
         error instanceof HttpException ||
-        error instanceof UnauthorizedException ||
+        error instanceof BadRequestException ||
         error instanceof InternalServerErrorException
       ) {
         throw error;
@@ -741,47 +764,7 @@ export class VendorsService {
         'New generated password has been sent to your email successfully',
     };
   }
-  // async checkGeneratedPassword(email: string) {
-  //   if (!email) {
-  //     return { hasGeneratedPassword: false };
-  //   }
 
-  //   const [userRecord] = await this.db
-  //     .select({
-  //       id: userTable.id,
-  //     })
-  //     .from(userTable)
-  //     .where(eq(userTable.email, email))
-  //     .limit(1)
-  //     .catch((error) => {
-  //       throw new InternalServerErrorException(
-  //         'Failed to check user password status',
-  //         { cause: error },
-  //       );
-  //     });
-
-  //   if (!userRecord || !userRecord.id) {
-  //     return { hasGeneratedPassword: false };
-  //   }
-
-  //   const [vendorRecord] = await this.db
-  //     .select()
-  //     .from(vendorTable)
-  //     .where(eq(vendorTable.user_id, userRecord.id))
-  //     .limit(1)
-  //     .catch((error) => {
-  //       throw new InternalServerErrorException(
-  //         'Failed to retrieve vendor profile',
-  //         { cause: error },
-  //       );
-  //     });
-
-  //   if (!vendorRecord) {
-  //     return { hasGeneratedPassword: false };
-  //   }
-
-  //   return;
-  // }
   async findVendorByEmail(email: string) {
     try {
       const [vendorRecord] = await this.db
@@ -789,15 +772,21 @@ export class VendorsService {
         .from(vendorTable)
         .innerJoin(userTable, eq(vendorTable.user_id, userTable.id))
         .where(eq(userTable.email, email))
-        .limit(1);
+        .limit(1)
+        .catch((error) => {
+          throw new InternalServerErrorException(
+            'Failed to query vendor by email',
+            { cause: error },
+          );
+        });
       if (!vendorRecord) {
-        return new UnauthorizedException(VendorsError.VENDOR_NOT_FOUND);
+        throw new BadRequestException(VendorsError.VENDOR_NOT_FOUND);
       }
       return vendorRecord;
     } catch (error) {
       if (
         error instanceof HttpException ||
-        error instanceof UnauthorizedException
+        error instanceof BadRequestException
       ) {
         throw error;
       }
@@ -820,9 +809,15 @@ export class VendorsService {
         })
         .from(vendorTable)
         .where(eq(vendorTable.id, vendorId))
-        .limit(1);
+        .limit(1)
+        .catch((error) => {
+          throw new InternalServerErrorException(
+            'Failed to verify vendor existence',
+            { cause: error },
+          );
+        });
       if (!isVendorExists || !isVendorExists.user_id) {
-        return new UnauthorizedException(VendorsError.VENDOR_NOT_FOUND);
+        throw new BadRequestException(VendorsError.VENDOR_NOT_FOUND);
       }
       await this.db
         .update(vendorTable)
@@ -841,12 +836,24 @@ export class VendorsService {
         .update(user_and_company)
         .set({ access_status: AccessStatus.ACTIVE })
         .where(eq(user_and_company.user_id, isVendorExists.user_id))
-        .returning({ company_id: user_and_company.company_id });
+        .returning({ company_id: user_and_company.company_id })
+        .catch((error) => {
+          throw new InternalServerErrorException(
+            'Failed to update user and company access status',
+            { cause: error },
+          );
+        });
       const [companyDetails] = await this.db
         .select({ company_name: company.company_name })
         .from(company)
         .where(eq(company.id, updatedUserAndCompany.company_id))
-        .limit(1);
+        .limit(1)
+        .catch((error) => {
+          throw new InternalServerErrorException(
+            'Failed to retrieve company details',
+            { cause: error },
+          );
+        });
 
       await this.subscriptionService.startTrial(
         updatedUserAndCompany.company_id,
@@ -881,28 +888,46 @@ export class VendorsService {
           .from(vendorTable)
           .innerJoin(userTable, eq(vendorTable.user_id, userTable.id))
           .where(eq(vendorTable.id, vendorId))
-          .limit(1);
+          .limit(1)
+          .catch((error) => {
+            throw new InternalServerErrorException(
+              'Failed to retrieve vendor user details',
+              { cause: error },
+            );
+          });
         if (!vendorUser) {
-          throw new UnauthorizedException(
+          throw new BadRequestException(
             `Failed to retrieve vendor user details for vendor ID ${vendorId}.`,
           );
         }
         await tx
           .update(vendorTable)
           .set({ vendor_status: UserStatus.REJECTED })
-          .where(eq(vendorTable.id, vendorId));
+          .where(eq(vendorTable.id, vendorId))
+          .catch((error) => {
+            throw new InternalServerErrorException(
+              'Failed to update vendor status to rejected',
+              { cause: error },
+            );
+          });
 
         if (!vendorUser.email) {
-          throw new UnauthorizedException(
+          throw new BadRequestException(
             `User linked to vendor with ID ${vendorId} has no email.`,
           );
         }
         return {
           email: vendorUser.email,
         };
+      }).catch((error) => {
+        if (error instanceof HttpException) throw error;
+        throw new InternalServerErrorException(
+          'Failed to reject vendor transaction',
+          { cause: error },
+        );
       });
       if (!vendorUser || !vendorUser.email) {
-        throw new UnauthorizedException(
+        throw new BadRequestException(
           `Failed to retrieve vendor user email for vendor ID ${vendorId}.`,
         );
       }
@@ -917,7 +942,7 @@ export class VendorsService {
     } catch (error) {
       if (
         error instanceof HttpException ||
-        error instanceof UnauthorizedException
+        error instanceof BadRequestException
       ) {
         throw error;
       }
@@ -935,20 +960,32 @@ export class VendorsService {
         .select({ user_id: vendorTable.user_id })
         .from(vendorTable)
         .where(eq(vendorTable.id, vendorId))
-        .limit(1);
+        .limit(1)
+        .catch((error) => {
+          throw new InternalServerErrorException(
+            'Failed to retrieve vendor user ID',
+            { cause: error },
+          );
+        });
       if (!vendorRow || !vendorRow.user_id) {
-        throw new UnauthorizedException(VendorsError.VENDOR_NOT_FOUND);
+        throw new BadRequestException(VendorsError.VENDOR_NOT_FOUND);
       }
       const deleteUserResult = await this.db
         .delete(userTable)
-        .where(eq(userTable.id, vendorRow.user_id));
+        .where(eq(userTable.id, vendorRow.user_id))
+        .catch((error) => {
+          throw new InternalServerErrorException(
+            'Failed to delete vendor user',
+            { cause: error },
+          );
+        });
       return {
         message: 'Vendor and associated user removed successfully',
       };
     } catch (error) {
       if (
         error instanceof HttpException ||
-        error instanceof UnauthorizedException
+        error instanceof BadRequestException
       ) {
         throw error;
       }
@@ -972,30 +1009,60 @@ export class VendorsService {
           .from(vendorTable)
           .innerJoin(userTable, eq(vendorTable.user_id, userTable.id))
           .where(eq(vendorTable.id, vendorId))
-          .limit(1);
+          .limit(1)
+          .catch((error) => {
+            throw new InternalServerErrorException(
+              'Failed to retrieve vendor user details',
+              { cause: error },
+            );
+          });
         if (!vendorUser) {
-          throw new UnauthorizedException(
+          throw new BadRequestException(
             `Failed to retrieve vendor details for vendor ID ${vendorId}.`,
           );
         }
         await tx
           .update(vendorTable)
           .set({ vendor_status: UserStatus.SUSPENDED })
-          .where(eq(vendorTable.id, vendorId));
+          .where(eq(vendorTable.id, vendorId))
+          .catch((error) => {
+            throw new InternalServerErrorException(
+              'Failed to suspend vendor',
+              { cause: error },
+            );
+          });
         await tx
           .update(userTable)
           .set({ user_status: UserStatus.SUSPENDED })
           .where(eq(userTable.id, vendorUser.user_id))
-          .returning({ user_id: userTable.id });
+          .returning({ user_id: userTable.id })
+          .catch((error) => {
+            throw new InternalServerErrorException(
+              'Failed to suspend user',
+              { cause: error },
+            );
+          });
         await tx
           .update(user_and_company)
           .set({ access_status: AccessStatus.SUSPENDED })
           .where(eq(user_and_company.user_id, vendorUser.user_id))
-          .returning({ user_id: user_and_company.user_id });
+          .returning({ user_id: user_and_company.user_id })
+          .catch((error) => {
+            throw new InternalServerErrorException(
+              'Failed to suspend user access',
+              { cause: error },
+            );
+          });
         return {
           email: vendorUser.email,
           store_name: vendorUser.store_name,
         };
+      }).catch((error) => {
+        if (error instanceof HttpException) throw error;
+        throw new InternalServerErrorException(
+          'Failed to suspend vendor transaction',
+          { cause: error },
+        );
       });
       // await this.mailService.sendVendorSuspendedEmail(suspendedVendor.email, suspendedVendor.store_name);
       return {
@@ -1004,7 +1071,7 @@ export class VendorsService {
     } catch (error) {
       if (
         error instanceof HttpException ||
-        error instanceof UnauthorizedException
+        error instanceof BadRequestException
       ) {
         throw error;
       }
@@ -1139,7 +1206,13 @@ export class VendorsService {
         .select()
         .from(vendorTable)
         .where(eq(vendorTable.id, vendorId))
-        .limit(1);
+        .limit(1)
+        .catch((error) => {
+          throw new InternalServerErrorException(
+            'Failed to check existing vendor',
+            { cause: error },
+          );
+        });
       if (!existingVendor) {
         return {
           success: false,
@@ -1150,7 +1223,13 @@ export class VendorsService {
       await this.db
         .update(vendorTable)
         .set({ vendor_status: status })
-        .where(eq(vendorTable.id, vendorId));
+        .where(eq(vendorTable.id, vendorId))
+        .catch((error) => {
+          throw new InternalServerErrorException(
+            'Failed to update vendor status',
+            { cause: error },
+          );
+        });
       return {
         success: true,
         status: HttpStatus.OK,
@@ -1159,7 +1238,7 @@ export class VendorsService {
     } catch (error) {
       if (
         error instanceof HttpException ||
-        error instanceof UnauthorizedException
+        error instanceof BadRequestException
       ) {
         throw error;
       }
@@ -1196,6 +1275,11 @@ export class VendorsService {
           company: true,
           user: true,
         },
+      }).catch((error) => {
+        throw new InternalServerErrorException(
+          'Failed to retrieve vendors',
+          { cause: error },
+        );
       });
 
       const companyIds = vendors
@@ -1212,7 +1296,13 @@ export class VendorsService {
           })
           .from(orders)
           .where(inArray(orders.company_id, companyIds))
-          .groupBy(orders.company_id);
+          .groupBy(orders.company_id)
+          .catch((error) => {
+            throw new InternalServerErrorException(
+              'Failed to retrieve vendor sales data',
+              { cause: error },
+            );
+          });
 
         salesData.forEach((sd) => {
           if (sd.company_id) {
@@ -1239,7 +1329,13 @@ export class VendorsService {
       const vendors = await this.db
         .select()
         .from(vendorTable)
-        .where(eq(vendorTable.is_verified, false));
+        .where(eq(vendorTable.is_verified, false))
+        .catch((error) => {
+          throw new InternalServerErrorException(
+            'Failed to query unverified vendors',
+            { cause: error },
+          );
+        });
       return vendors;
     } catch (error) {
       throw new InternalServerErrorException(
@@ -1255,7 +1351,13 @@ export class VendorsService {
       const vendors = await this.db
         .select()
         .from(vendorTable)
-        .where(eq(vendorTable.is_verified, true));
+        .where(eq(vendorTable.is_verified, true))
+        .catch((error) => {
+          throw new InternalServerErrorException(
+            'Failed to query verified vendors',
+            { cause: error },
+          );
+        });
       if (!vendors) {
         throw new HttpException(
           VendorsError.NO_VERIFIED_VENDORS_FOUND,
@@ -1283,12 +1385,21 @@ export class VendorsService {
           eq(vendorTable.id, vendor_documentTable.vendor_id),
         )
         .where(eq(vendorTable.id, vendorId))
-        .limit(1);
+        .limit(1)
+        .catch((error) => {
+          throw new InternalServerErrorException(
+            'Failed to fetch vendor by ID',
+            { cause: error },
+          );
+        });
       if (!existingVendor) {
-        throw new UnauthorizedException(VendorsError.VENDOR_NOT_FOUND);
+        throw new BadRequestException(VendorsError.VENDOR_NOT_FOUND);
       }
       return existingVendor;
     } catch (error) {
+      if (error instanceof HttpException) {
+        throw error;
+      }
       throw new InternalServerErrorException(
         VendorsError.FAILED_TO_RETRIEVE_VENDOR,
         {
@@ -1355,7 +1466,13 @@ export class VendorsService {
           totalOrders: sql<number>`COUNT(${orders.id})`,
         })
         .from(orders)
-        .where(eq(orders.company_id, vendorDetails.company_id));
+        .where(eq(orders.company_id, vendorDetails.company_id))
+        .catch((error) => {
+          throw new InternalServerErrorException(
+            'Failed to retrieve vendor order stats',
+            { cause: error },
+          );
+        });
       const [activeProducts] = await this.db
         .select({ count: countDistinct(product_variants.id) })
         .from(products)
@@ -1367,7 +1484,13 @@ export class VendorsService {
           ),
         )
         .where(eq(products.company_id, vendorDetails.company_id))
-        .limit(1);
+        .limit(1)
+        .catch((error) => {
+          throw new InternalServerErrorException(
+            'Failed to retrieve active products count',
+            { cause: error },
+          );
+        });
       const response = {
         owner: {
           ...vendorDetails,
@@ -1499,7 +1622,7 @@ export class VendorsService {
       const companyId = await this.companyService.find(filteredDomain);
 
       if (!companyId) {
-        throw new UnauthorizedException(
+        throw new BadRequestException(
           VendorsError.COMPANY_NOT_FOUND_FOR_THE_PROVIDED_DOMAIN,
         );
       }
@@ -1523,7 +1646,10 @@ export class VendorsService {
           totalOrders: sql<number>`COUNT(DISTINCT ${orders.id})::int`,
         })
         .from(orders)
-        .where(baseFilter);
+        .where(baseFilter)
+        .catch((error) => {
+          throw new InternalServerErrorException('Failed to retrieve sales stats', { cause: error });
+        });
 
       // 3B. Tax Collected
       const [taxStats] = await this.db
@@ -1532,7 +1658,10 @@ export class VendorsService {
         })
         .from(gst_invoices)
         .innerJoin(orders, eq(gst_invoices.order_id, orders.id))
-        .where(baseFilter);
+        .where(baseFilter)
+        .catch((error) => {
+          throw new InternalServerErrorException('Failed to retrieve tax stats', { cause: error });
+        });
 
       // 3C. Refunds
       const [refundStats] = await this.db
@@ -1541,7 +1670,10 @@ export class VendorsService {
         })
         .from(refunds)
         .innerJoin(orders, eq(refunds.order_id, orders.id))
-        .where(baseFilter);
+        .where(baseFilter)
+        .catch((error) => {
+          throw new InternalServerErrorException('Failed to retrieve refund stats', { cause: error });
+        });
 
       // 3D. Calculate Net Earnings
       const platformFees = 0; // Replace with actual logic if platform fees are added to schema later
@@ -1565,7 +1697,13 @@ export class VendorsService {
           sql`TO_CHAR(${orders.created_at}, 'Mon YYYY')`,
           sql`TO_CHAR(${orders.created_at}, 'YYYY-MM')`,
         )
-        .orderBy(sql`TO_CHAR(${orders.created_at}, 'YYYY-MM')`);
+        .orderBy(sql`TO_CHAR(${orders.created_at}, 'YYYY-MM')`)
+        .catch((error) => {
+          throw new InternalServerErrorException(
+            'Failed to retrieve monthly trend for analytics',
+            { cause: error },
+          );
+        });
 
       // 5. Top Selling Products
       const topProducts = await this.db
@@ -1582,7 +1720,13 @@ export class VendorsService {
         .where(baseFilter)
         .groupBy(product_variants.sku)
         .orderBy(desc(sql`SUM(${order_items.price} * ${order_items.quantity})`))
-        .limit(5);
+        .limit(5)
+        .catch((error) => {
+          throw new InternalServerErrorException(
+            'Failed to retrieve top products for analytics',
+            { cause: error },
+          );
+        });
 
       // 6. Category Performance
       const categoryPerformance = await this.db
@@ -1597,9 +1741,22 @@ export class VendorsService {
           eq(order_items.product_variant_id, product_variants.id),
         )
         .innerJoin(products, eq(product_variants.product_id, products.id))
-        .innerJoin(categories, eq(products.category_id, categories.id))
+        .innerJoin(
+          product_categories,
+          and(
+            eq(products.id, product_categories.product_id),
+            eq(product_categories.is_primary, true)
+          )
+        )
+        .innerJoin(categories, eq(product_categories.category_id, categories.id))
         .where(baseFilter)
-        .groupBy(categories.name);
+        .groupBy(categories.name)
+        .catch((error) => {
+          throw new InternalServerErrorException(
+            'Failed to retrieve category performance for analytics',
+            { cause: error },
+          );
+        });
 
       return {
         summary: {
@@ -1633,7 +1790,7 @@ export class VendorsService {
       const companyId = await this.companyService.find(filteredDomain);
 
       if (!companyId) {
-        throw new UnauthorizedException(
+        throw new BadRequestException(
           VendorsError.COMPANY_NOT_FOUND_FOR_THE_PROVIDED_DOMAIN,
         );
       }
@@ -1656,7 +1813,10 @@ export class VendorsService {
           totalOrders: sql<number>`COUNT(DISTINCT ${orders.id})::int`,
         })
         .from(orders)
-        .where(baseFilter);
+        .where(baseFilter)
+        .catch((error) => {
+          throw new InternalServerErrorException('Failed to retrieve sales stats', { cause: error });
+        });
 
       const [taxStats] = await this.db
         .select({
@@ -1664,7 +1824,10 @@ export class VendorsService {
         })
         .from(gst_invoices)
         .innerJoin(orders, eq(gst_invoices.order_id, orders.id))
-        .where(baseFilter);
+        .where(baseFilter)
+        .catch((error) => {
+          throw new InternalServerErrorException('Failed to retrieve tax stats', { cause: error });
+        });
 
       const [refundStats] = await this.db
         .select({
@@ -1672,7 +1835,10 @@ export class VendorsService {
         })
         .from(refunds)
         .innerJoin(orders, eq(refunds.order_id, orders.id))
-        .where(baseFilter);
+        .where(baseFilter)
+        .catch((error) => {
+          throw new InternalServerErrorException('Failed to retrieve refund stats', { cause: error });
+        });
 
       const platformFees = 0;
       const netEarnings =
@@ -1695,7 +1861,10 @@ export class VendorsService {
           sql`TO_CHAR(${orders.created_at}, 'Mon YYYY')`,
           sql`TO_CHAR(${orders.created_at}, 'YYYY-MM')`,
         )
-        .orderBy(sql`TO_CHAR(${orders.created_at}, 'YYYY-MM')`);
+        .orderBy(sql`TO_CHAR(${orders.created_at}, 'YYYY-MM')`)
+        .catch((error) => {
+          throw new InternalServerErrorException('Failed to retrieve monthly trend', { cause: error });
+        });
 
       // ── 3. Top Selling Products (by units sold) ──────────────────────────────
       const topProducts = await this.db
@@ -1718,7 +1887,10 @@ export class VendorsService {
           product_variants.sku,
         )
         .orderBy(desc(sql`SUM(${order_items.quantity})`))
-        .limit(8);
+        .limit(8)
+        .catch((error) => {
+          throw new InternalServerErrorException('Failed to retrieve top products', { cause: error });
+        });
 
       // ── 4. Category Revenue Breakdown ────────────────────────────────────────
       const categoryBreakdown = await this.db
@@ -1734,12 +1906,22 @@ export class VendorsService {
           eq(order_items.product_variant_id, product_variants.id),
         )
         .innerJoin(products, eq(product_variants.product_id, products.id))
-        .innerJoin(categories, eq(products.category_id, categories.id))
+        .innerJoin(
+          product_categories,
+          and(
+            eq(products.id, product_categories.product_id),
+            eq(product_categories.is_primary, true)
+          )
+        )
+        .innerJoin(categories, eq(product_categories.category_id, categories.id))
         .where(baseFilter)
         .groupBy(categories.name)
         .orderBy(
           desc(sql`SUM(${order_items.price} * ${order_items.quantity})`),
-        );
+        )
+        .catch((error) => {
+          throw new InternalServerErrorException('Failed to retrieve category breakdown', { cause: error });
+        });
 
       // ── 5. Order Status Distribution ─────────────────────────────────────────
       const orderStatusBreakdown = await this.db
@@ -1750,7 +1932,10 @@ export class VendorsService {
         .from(order_items)
         .innerJoin(orders, eq(order_items.order_id, orders.id))
         .where(baseFilter)
-        .groupBy(order_items.order_status);
+        .groupBy(order_items.order_status)
+        .catch((error) => {
+          throw new InternalServerErrorException('Failed to retrieve order status breakdown', { cause: error });
+        });
 
       // ── 6. Top Promotions by Discount Given ─────────────────────────────────
       const topPromotions = await this.db
@@ -1772,7 +1957,10 @@ export class VendorsService {
           promotions.status,
         )
         .orderBy(desc(sql`SUM(${promotion_usage.discount_amount})`))
-        .limit(5);
+        .limit(5)
+        .catch((error) => {
+          throw new InternalServerErrorException('Failed to retrieve top promotions', { cause: error });
+        });
 
       // ── 7. Daily Revenue for the period (for sparkline / area chart) ─────────
       const dailyRevenue = await this.db
@@ -1784,7 +1972,10 @@ export class VendorsService {
         .from(orders)
         .where(baseFilter)
         .groupBy(sql`TO_CHAR(${orders.created_at}, 'YYYY-MM-DD')`)
-        .orderBy(sql`TO_CHAR(${orders.created_at}, 'YYYY-MM-DD')`);
+        .orderBy(sql`TO_CHAR(${orders.created_at}, 'YYYY-MM-DD')`)
+        .catch((error) => {
+          throw new InternalServerErrorException('Failed to retrieve daily revenue', { cause: error });
+        });
 
       return {
         meta: {
@@ -1833,7 +2024,10 @@ export class VendorsService {
         .select()
         .from(vendor_preferences)
         .where(eq(vendor_preferences.vendor_id, vendorId))
-        .limit(1);
+        .limit(1)
+        .catch((error) => {
+          throw new InternalServerErrorException('Failed to retrieve vendor preferences', { cause: error });
+        });
 
       if (existingPref) {
         const uiSettings = existingPref.ui_settings || { completed_tours: [] };
@@ -1842,12 +2036,17 @@ export class VendorsService {
           await this.db
             .update(vendor_preferences)
             .set({ ui_settings: uiSettings })
-            .where(eq(vendor_preferences.id, existingPref.id));
+            .where(eq(vendor_preferences.id, existingPref.id))
+            .catch((error) => {
+              throw new InternalServerErrorException('Failed to update vendor preferences', { cause: error });
+            });
         }
       } else {
         await this.db.insert(vendor_preferences).values({
           vendor_id: vendorId,
           ui_settings: { completed_tours: [tourId] },
+        }).catch((error) => {
+          throw new InternalServerErrorException('Failed to insert vendor preferences', { cause: error });
         });
       }
 

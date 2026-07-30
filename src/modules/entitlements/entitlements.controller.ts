@@ -4,7 +4,7 @@ import { RoleGuard } from '../../guards/role.guard.js';
 import { EntitlementResolverService } from './entitlement-resolver.service.js';
 import { UsageTrackerService } from './usage-tracker.service.js';
 
-@Controller('entitlements')
+@Controller({ version: '1', path: 'entitlements' })
 export class EntitlementsController {
   constructor(
     private readonly resolver: EntitlementResolverService,

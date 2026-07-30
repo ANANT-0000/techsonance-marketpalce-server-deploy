@@ -9,7 +9,7 @@ import {
   IsDefined,
 } from 'class-validator';
 import { Type } from 'class-transformer';
-import { PriceInterval, FeatureType } from '../../../drizzle/types/types.js';
+import { PriceInterval, FeatureValueType } from '../../../drizzle/types/types.js';
 
 export class PlanPriceDto {
   @IsOptional()
@@ -67,8 +67,8 @@ export class PlanFeatureDto {
   @IsString()
   feature_key!: string;
 
-  @IsEnum(FeatureType)
-  type!: FeatureType;
+  @IsEnum(FeatureValueType)
+  type!: FeatureValueType;
 
   // Since value can be boolean, number, or string, we don't enforce a strict primitive here
   // But we can check that it's defined. In a real app, custom validators can check value against type.

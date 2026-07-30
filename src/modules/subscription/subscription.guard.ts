@@ -1,4 +1,3 @@
-// ../../modules/subscription/subscription.guard.ts
 import {
   CanActivate,
   ExecutionContext,
@@ -7,19 +6,16 @@ import {
   InternalServerErrorException,
 } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
-import { DRIZZLE, type DrizzleService } from '../../drizzle/drizzle.module.js';
-import { Inject } from '@nestjs/common';
-import { vendor_subscriptions } from '../../drizzle/schema/index.js';
-import { eq } from 'drizzle-orm';
 import { SKIP_SUBSCRIPTION_KEY } from '../../common/decorators/skip-subscription.decorator.js';
 import { IS_PUBLIC_KEY } from '../../common/decorators/public.decorator.js';
 import { SubscriptionStatus, UserRole } from '../../drizzle/types/types.js';
+import { EntitlementResolverService } from '../entitlements/entitlement-resolver.service.js';
 
 @Injectable()
 export class SubscriptionGuard implements CanActivate {
   constructor(
     private reflector: Reflector,
-    @Inject(DRIZZLE) private db: DrizzleService,
+    private readonly entitlementResolverService: EntitlementResolverService,
   ) {}
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
@@ -53,21 +49,14 @@ export class SubscriptionGuard implements CanActivate {
     if (!companyId)
       throw new ForbiddenException('No company associated with this account');
 
-    // 5. Query the subscription fresh from DB
-    const [subscription] = await this.db
-      .select({
-        status: vendor_subscriptions.status,
-        grace_period_ends_at: vendor_subscriptions.grace_period_ends_at,
-        trial_ends_at: vendor_subscriptions.trial_ends_at,
-      })
-      .from(vendor_subscriptions)
-      .where(eq(vendor_subscriptions.company_id, companyId))
-      .limit(1)
-      .catch((error) => {
-        throw new InternalServerErrorException('Failed to fetch subscription status details', {
-          cause: error,
-        });
+    // 5. Read the cached subscription from EntitlementResolverService
+    const map = await this.entitlementResolverService.resolve(companyId).catch((error) => {
+      throw new InternalServerErrorException('Failed to fetch subscription status details', {
+        cause: error,
       });
+    });
+
+    const subscription = map.metadata;
 
     // 6. No subscription row at all — vendor was never onboarded properly
     if (!subscription) {

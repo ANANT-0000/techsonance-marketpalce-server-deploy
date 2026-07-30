@@ -6,6 +6,7 @@ import {
 } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
 import { IS_PUBLIC_KEY } from '../common/decorators/public.decorator.js';
+import { ALLOW_CLEANUP_KEY } from '../common/decorators/allow-cleanup.decorator.js';
 import { UserStatus } from '../drizzle/types/types.js';
 import { Role } from '../enums/role.enum.js';
 
@@ -20,7 +21,15 @@ export class VendorActiveGuard implements CanActivate {
     ]);
     if (isPublic) return true;
 
+    const allowCleanup = this.reflector.getAllAndOverride<boolean>(
+      ALLOW_CLEANUP_KEY,
+      [context.getHandler(), context.getClass()],
+    );
     const request = context.switchToHttp().getRequest();
+    if (allowCleanup && request.isCleanupAllowed) {
+      return true;
+    }
+
     const user = request.user;
 
     if (!user) {

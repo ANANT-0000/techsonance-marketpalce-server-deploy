@@ -4,6 +4,7 @@ import {
   Inject,
   Injectable,
   InternalServerErrorException,
+  NotFoundException,
 } from '@nestjs/common';
 import { DRIZZLE, type DrizzleService } from '../../drizzle/drizzle.module.js';
 import { CreateProductDto } from './dto/createProduct.dto.js';
@@ -12,8 +13,13 @@ import {
   product_images,
   product_variants,
   products,
+  product_categories,
 } from '../../drizzle/schema/shop.schema.js';
-import { ProductImageType, ProductStatus } from '../../drizzle/types/types.js';
+import {
+  ProductImageType,
+  ProductStatus,
+  PlatformFilterName,
+} from '../../drizzle/types/types.js';
 import {
   and,
   asc,
@@ -35,12 +41,21 @@ import { UpdateProductDto } from './dto/updatedProduct.dto.js';
 import { type ProductFiles } from '../../common/Types/index.type.js';
 import { CompanyService } from '../company/company.service.js';
 import { InventoryService } from '../inventory/inventory.service.js';
-import { product_tax, warehouse } from '../../drizzle/schema/index.js';
+import {
+  inventory,
+  nav_menus,
+  product_filters,
+  product_tax,
+  vendor_nav_links,
+  warehouse,
+} from '../../drizzle/schema/index.js';
 import { domainExtractor } from '../../common/filters/domainExtractor.filter.js';
 import { GetProductsQueryDto, SortBy } from './dto/get-products-query.dto.js';
 import { extractCloudinaryPublicId } from '../../common/filters/extractCloudinaryPublicId.filter.js';
 import { ProductsErrorKeyEnum } from './constants/products.enums.js';
 import { UsageTrackerService } from '../entitlements/usage-tracker.service.js';
+import { PricingService } from '../pricing/pricing.service.js';
+import { FilterEvaluatorService } from './filter-evaluator.service.js';
 
 @Injectable()
 export class ProductsService {
@@ -51,6 +66,8 @@ export class ProductsService {
     private inventoryService: InventoryService,
     private readonly companyService: CompanyService,
     private usageTracker: UsageTrackerService,
+    private pricingService: PricingService,
+    private filterEvaluatorService: FilterEvaluatorService,
   ) {}
   private async resolveCompanyId(domain: string): Promise<string> {
     const filterDomain = domainExtractor(domain);
@@ -69,11 +86,19 @@ export class ProductsService {
       })
       .from(categories)
       .where(eq(categories.company_id, companyId))
-      .catch((): any[] => []);
+      .catch((error) => {
+        throw new InternalServerErrorException(
+          ProductsErrorKeyEnum.FAILED_TO_FETCH_CATEGORY,
+          { cause: error },
+        );
+      });
 
     if (dbCategories.length === 0) return [];
 
-    const isUuid = /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/.test(categoryIdentifier);
+    const isUuid =
+      /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/.test(
+        categoryIdentifier,
+      );
     const target = dbCategories.find((c) =>
       isUuid
         ? c.id === categoryIdentifier
@@ -123,16 +148,33 @@ export class ProductsService {
       // ── Build WHERE conditions ──────────────────────────────────────────────
       const conditions: SQL[] = [eq(products.company_id, companyId)];
 
-      if (status && status.trim() !== '' && status !== 'all' && status !== 'null' && status !== 'undefined') {
+      if (
+        status &&
+        status.trim() !== '' &&
+        status !== 'all' &&
+        status !== 'null' &&
+        status !== 'undefined'
+      ) {
         conditions.push(eq(products.status, status as any));
       }
 
-      if (search && search.trim() !== '' && search !== 'null' && search !== 'undefined') {
+      if (
+        search &&
+        search.trim() !== '' &&
+        search !== 'null' &&
+        search !== 'undefined'
+      ) {
         const term: string = `%${search.trim()}%`;
         const matchingVariants = await this.db
           .select({ product_id: product_variants.product_id })
           .from(product_variants)
-          .where(ilike(product_variants.sku, term));
+          .where(ilike(product_variants.sku, term))
+          .catch((error) => {
+            throw new InternalServerErrorException(
+              ProductsErrorKeyEnum.FAILED_TO_FETCH_PRODUCTS,
+              { cause: error },
+            );
+          });
         const matchingProductIds = matchingVariants
           .map((v) => v.product_id)
           .filter((id): id is string => !!id);
@@ -152,22 +194,44 @@ export class ProductsService {
         }
       }
 
-      if (category && category.trim() !== '' && category !== 'null' && category !== 'undefined') {
-        const targetCategoryIds = await this.getCategoryAndDescendantIds(companyId, category);
+      if (
+        category &&
+        category.trim() !== '' &&
+        category !== 'null' &&
+        category !== 'undefined'
+      ) {
+        const targetCategoryIds = await this.getCategoryAndDescendantIds(
+          companyId,
+          category,
+        );
         if (targetCategoryIds.length > 0) {
-          conditions.push(inArray(products.category_id, targetCategoryIds));
+          conditions.push(
+            inArray(
+              products.id,
+              this.db
+                .select({ product_id: product_categories.product_id })
+                .from(product_categories)
+                .where(
+                  inArray(product_categories.category_id, targetCategoryIds),
+                ),
+            ),
+          );
         } else {
           // If category is selected but not found, we ensure the query matches nothing
-          conditions.push(eq(products.category_id, '00000000-0000-0000-0000-000000000000'));
+          conditions.push(sql`1 = 0`);
         }
       }
 
-      if (min_price !== undefined) {
-        conditions.push(gte(products.base_price, String(min_price)));
+      if (min_price !== undefined && min_price > 0) {
+        conditions.push(
+          gte(sql`CAST(${products.base_price} AS NUMERIC)`, min_price),
+        );
       }
 
-      if (max_price !== undefined) {
-        conditions.push(lte(products.base_price, String(max_price)));
+      if (max_price !== undefined && max_price > 0) {
+        conditions.push(
+          lte(sql`CAST(${products.base_price} AS NUMERIC)`, max_price),
+        );
       }
 
       const whereCause = and(...conditions);
@@ -210,7 +274,12 @@ export class ProductsService {
           limit: limit,
           offset: offset,
           with: {
-            category: true,
+            productCategories: {
+              columns: { is_primary: true },
+              with: {
+                category: true,
+              },
+            },
             variants: {
               columns: {
                 id: true,
@@ -241,7 +310,7 @@ export class ProductsService {
           );
         });
       return {
-        data: productList,
+        data: productList.map((p) => this.resolveProductPricing(p)),
         total: Number(total),
         offset,
         limit,
@@ -278,7 +347,12 @@ export class ProductsService {
       // ── Build WHERE conditions ──────────────────────────────────────────────
       const conditions: SQL[] = [eq(products.company_id, companyId)];
 
-      if (search && search.trim() !== '' && search !== 'null' && search !== 'undefined') {
+      if (
+        search &&
+        search.trim() !== '' &&
+        search !== 'null' &&
+        search !== 'undefined'
+      ) {
         const term: string = `%${search.trim()}%`;
         const matchingVariants = await this.db
           .select({ product_id: product_variants.product_id })
@@ -303,22 +377,44 @@ export class ProductsService {
         }
       }
 
-      if (category && category.trim() !== '' && category !== 'null' && category !== 'undefined') {
-        const targetCategoryIds = await this.getCategoryAndDescendantIds(companyId, category);
+      if (
+        category &&
+        category.trim() !== '' &&
+        category !== 'null' &&
+        category !== 'undefined'
+      ) {
+        const targetCategoryIds = await this.getCategoryAndDescendantIds(
+          companyId,
+          category,
+        );
         if (targetCategoryIds.length > 0) {
-          conditions.push(inArray(products.category_id, targetCategoryIds));
+          conditions.push(
+            inArray(
+              products.id,
+              this.db
+                .select({ product_id: product_categories.product_id })
+                .from(product_categories)
+                .where(
+                  inArray(product_categories.category_id, targetCategoryIds),
+                ),
+            ),
+          );
         } else {
           // If category is selected but not found, we ensure the query matches nothing
-          conditions.push(eq(products.category_id, '00000000-0000-0000-0000-000000000000'));
+          conditions.push(sql`1 = 0`);
         }
       }
 
-      if (min_price !== undefined) {
-        conditions.push(gte(products.base_price, String(min_price)));
+      if (min_price !== undefined && min_price > 0) {
+        conditions.push(
+          gte(sql`CAST(${products.base_price} AS NUMERIC)`, min_price),
+        );
       }
 
-      if (max_price !== undefined) {
-        conditions.push(lte(products.base_price, String(max_price)));
+      if (max_price !== undefined && max_price > 0) {
+        conditions.push(
+          lte(sql`CAST(${products.base_price} AS NUMERIC)`, max_price),
+        );
       }
 
       const whereCause = and(
@@ -364,7 +460,12 @@ export class ProductsService {
           limit: limit,
           offset: offset,
           with: {
-            category: true,
+            productCategories: {
+              columns: { is_primary: true },
+              with: {
+                category: true,
+              },
+            },
             variants: {
               columns: {
                 id: true,
@@ -395,7 +496,7 @@ export class ProductsService {
           );
         });
       return {
-        data: productList,
+        data: productList.map((p) => this.resolveProductPricing(p)),
         total: Number(total),
         offset,
         limit,
@@ -440,7 +541,13 @@ export class ProductsService {
         )
         .groupBy(products.id, products.name)
         .limit(8)
-        .orderBy(asc(products.name));
+        .orderBy(asc(products.name))
+        .catch((error) => {
+          throw new InternalServerErrorException(
+            ProductsErrorKeyEnum.FAILED_TO_FETCH_SUGGESTIONS,
+            { cause: error },
+          );
+        });
       return { data: suggestions };
     } catch (error) {
       throw new InternalServerErrorException(
@@ -456,8 +563,11 @@ export class ProductsService {
         .select({ id: products.id, name: products.name })
         .from(products)
         .where(eq(products.company_id, companyId))
-        .catch((e) => {
-          return [];
+        .catch((error) => {
+          throw new InternalServerErrorException(
+            ProductsErrorKeyEnum.FAILED_TO_FETCH_PRODUCTS,
+            { cause: error },
+          );
         });
       return productOptions;
     } catch (error) {
@@ -479,9 +589,14 @@ export class ProductsService {
             name: true,
           },
           with: {
-            category: {
-              columns: {
-                name: true,
+            productCategories: {
+              columns: { is_primary: true },
+              with: {
+                category: {
+                  columns: {
+                    name: true,
+                  },
+                },
               },
             },
           },
@@ -500,7 +615,16 @@ export class ProductsService {
           HttpStatus.NOT_FOUND,
         );
       }
-      return productRecord;
+      const { productCategories, ...rest } = productRecord;
+      return {
+        ...rest,
+        categories: productCategories
+          ? (productCategories as any[]).map((pc) => ({
+              ...(pc.category || {}),
+              is_primary: pc.is_primary,
+            }))
+          : [],
+      };
     } catch (error) {
       throw new InternalServerErrorException(
         ProductsErrorKeyEnum.FAILED_TO_FETCH_PRODUCT,
@@ -525,7 +649,13 @@ export class ProductsService {
           .select({ product_id: product_variants.product_id })
           .from(product_variants)
           .where(eq(product_variants.sku, productId))
-          .limit(1);
+          .limit(1)
+          .catch((error) => {
+            throw new InternalServerErrorException(
+              ProductsErrorKeyEnum.FAILED_TO_FETCH_PRODUCT,
+              { cause: error },
+            );
+          });
 
         if (variantRecords.length > 0 && variantRecords[0].product_id) {
           condition = [eq(products.id, variantRecords[0].product_id)];
@@ -556,7 +686,12 @@ export class ProductsService {
                 },
               },
             },
-            category: true,
+            productCategories: {
+              columns: { is_primary: true },
+              with: {
+                category: true,
+              },
+            },
           },
         })
         .catch((error) => {
@@ -574,7 +709,7 @@ export class ProductsService {
           HttpStatus.NOT_FOUND,
         );
       }
-      return productRecord;
+      return this.resolveProductPricing(productRecord);
     } catch (error) {
       if (error instanceof HttpException) throw error;
       throw new InternalServerErrorException(
@@ -595,6 +730,7 @@ export class ProductsService {
         .catch((error) => {
           throw new InternalServerErrorException(
             ProductsErrorKeyEnum.FAILED_TO_CHECK_PRODUCT_VARIANT_EXISTENCE,
+            { cause: error },
           );
         });
 
@@ -604,7 +740,12 @@ export class ProductsService {
           .from(product_variants)
           .where(eq(product_variants.product_id, productVariantId))
           .limit(1)
-          .catch(() => []);
+          .catch((error) => {
+            throw new InternalServerErrorException(
+              ProductsErrorKeyEnum.FAILED_TO_FETCH_PRODUCT,
+              { cause: error },
+            );
+          });
         if (fallbackVariants.length > 0) {
           resolvedVariantId = fallbackVariants[0].id;
         }
@@ -614,7 +755,9 @@ export class ProductsService {
         .findFirst({
           where: eq(product_variants.id, resolvedVariantId),
           with: {
-            images: true,
+            images: {
+              orderBy: (images, { asc }) => [asc(images.display_order)],
+            },
             product: {
               columns: {
                 id: true,
@@ -622,9 +765,22 @@ export class ProductsService {
                 description: true,
                 features: true,
                 base_price: true,
-                discount_percent: true,
+                compare_at_price: true,
                 status: true,
-                category_id: true,
+                sale_starts_at: true,
+                sale_ends_at: true,
+                created_at: true,
+                updated_at: true,
+                company_id: true,
+                vendor_id: true,
+              },
+              with: {
+                productCategories: {
+                  columns: { is_primary: true },
+                  with: {
+                    category: true,
+                  },
+                },
               },
             },
             inventory: {
@@ -644,18 +800,43 @@ export class ProductsService {
           },
         })
         .then(async (res) => {
-          if (res && res.product_id) {
+          if (!res) return res;
+
+          if (res.product_id) {
             const taxMapping = await this.db
               .select({ tax_slab_id: product_tax.tax_slab_id })
               .from(product_tax)
               .where(eq(product_tax.product_id, res.product_id))
               .limit(1)
-              .catch(() => []);
+              .catch((error) => {
+                throw new InternalServerErrorException(
+                  ProductsErrorKeyEnum.FAILED_TO_FETCH_PRODUCT,
+                  { cause: error },
+                );
+              });
             if (res.product) {
-              (res.product as any).tax_slab_id = taxMapping[0]?.tax_slab_id || '';
+              const { productCategories, ...restProduct } = res.product as any;
+              (res as any).product = {
+                ...restProduct,
+                stock_quantity: res.inventory?.stock_quantity || 0,
+                categories: productCategories
+                  ? (productCategories as any[]).map((pc) => ({
+                      ...(pc.category || {}),
+                      is_primary: pc.is_primary,
+                    }))
+                  : [],
+                tax_slab_id: taxMapping[0]?.tax_slab_id || '',
+              };
             }
           }
-          return res;
+
+          // Map to match frontend VendorUpdateVariantPayload
+          return {
+            ...res,
+            stock_quantity: res.inventory?.stock_quantity || 0,
+            warehouse_id: res.inventory?.warehouse_id || '',
+            seo_meta: null,
+          };
         })
         .catch((error) => {
           throw new InternalServerErrorException(
@@ -701,24 +882,31 @@ export class ProductsService {
   ) {
     try {
       const companyId = await this.resolveCompanyId(domain);
-      const result = await this.db.query.products.findMany({
-        where: and(eq(products.company_id, companyId)),
-        columns: {
-          id: true,
-          created_at: true,
-        },
-        limit: filters?.limit ?? 10,
-        offset: filters?.offset ?? 0,
-        with: {
-          variants: {
-            where: eq(product_variants.status, ProductStatus.ACTIVE),
-            columns: {
-              id: true,
-              status: true,
+      const result = await this.db.query.products
+        .findMany({
+          where: and(eq(products.company_id, companyId)),
+          columns: {
+            id: true,
+            created_at: true,
+          },
+          limit: filters?.limit ?? 10,
+          offset: filters?.offset ?? 0,
+          with: {
+            variants: {
+              where: eq(product_variants.status, ProductStatus.ACTIVE),
+              columns: {
+                id: true,
+                status: true,
+              },
             },
           },
-        },
-      });
+        })
+        .catch((error) => {
+          throw new InternalServerErrorException(
+            ProductsErrorKeyEnum.FAILED_TO_FETCH_ACTIVE_PRODUCTS,
+            { cause: error },
+          );
+        });
       const response = result.map((product) => product.variants).flat();
       return response;
     } catch (error) {
@@ -742,8 +930,9 @@ export class ProductsService {
         limit,
         orderBy: (products, { desc }) => [desc(products.created_at)],
         with: {
-          category: {
-            columns: { name: true },
+          productCategories: {
+            where: eq(product_categories.is_primary, true),
+            with: { category: { columns: { name: true } } },
           },
           variants: {
             limit: 1,
@@ -780,7 +969,6 @@ export class ProductsService {
     productDto: CreateProductDto,
     vendorId: string,
     domain: string,
-    files?: ProductFiles,
   ) {
     const finalResults: {
       url: string;
@@ -788,61 +976,115 @@ export class ProductsService {
       resource_type: string;
     }[] = [];
 
-    if (files?.product?.[0]) {
-      const mainRes = await this.uploadToCloudService.uploadFile(
-        files.product[0],
-      );
+    if (productDto.product_media && productDto.product_media.length > 0) {
       finalResults.push({
-        url: mainRes.secure_url,
+        url: productDto.product_media[0],
         type: ProductImageType.MAIN,
-        resource_type: mainRes.resource_type,
+        resource_type: 'image',
       });
     }
 
-    if (files?.product_spec && files.product_spec.length > 0) {
-      const galleryRes = await this.uploadToCloudService.uploadFiles(
-        files.product_spec,
-      );
+    if (productDto.feature_media && productDto.feature_media.length > 0) {
       finalResults.push(
-        ...galleryRes.map((res) => ({
-          url: res.secure_url,
+        ...productDto.feature_media.map((url) => ({
+          url,
           type: ProductImageType.GALLERY,
-          resource_type: res.resource_type,
+          resource_type: 'image',
         })),
       );
     }
+
     try {
       const companyId = await this.resolveCompanyId(domain);
       return await this.db.transaction(async (tx) => {
-        const categoryRecord = await tx
-          .select({ id: categories.id })
-          .from(categories)
-          .where(eq(categories.id, productDto.category_id));
-        if (!categoryRecord) {
-          throw new Error('Category not found');
+        const primaryCatId =
+          productDto.primary_category_id || productDto.category_ids?.[0];
+        const allCategoryIds = Array.from(
+          new Set([
+            ...(productDto.category_ids || []),
+            ...(primaryCatId ? [primaryCatId] : []),
+          ]),
+        );
+
+        if (primaryCatId) {
+          const categoryRecord = await tx
+            .select({ id: categories.id })
+            .from(categories)
+            .where(eq(categories.id, primaryCatId))
+            .catch((error) => {
+              throw new InternalServerErrorException(
+                ProductsErrorKeyEnum.FAILED_TO_FETCH_CATEGORY,
+                { cause: error },
+              );
+            });
+          if (categoryRecord.length === 0) {
+            throw new Error('Category not found');
+          }
         }
         const productInsert = {
           name: productDto.name,
           description: productDto.description,
-          base_price: productDto.base_price.toString(),
-          discount_percent: (productDto.discount_percent || 0).toString(),
+          base_price: productDto.base_price?.toString(),
+          compare_at_price: productDto.compare_at_price
+            ? productDto.compare_at_price?.toString()
+            : null,
+          sale_starts_at: productDto.sale_starts_at
+            ? new Date(productDto.sale_starts_at)
+            : null,
+          sale_ends_at: productDto.sale_ends_at
+            ? new Date(productDto.sale_ends_at)
+            : null,
           status: productDto.status,
           features: productDto.features,
-          category_id: productDto.category_id,
           vendor_id: vendorId,
           company_id: companyId,
         };
         const [createdProduct] = await tx
           .insert(products)
           .values(productInsert)
-          .returning({ id: products.id });
+          .returning({ id: products.id })
+          .catch((error) => {
+            throw new InternalServerErrorException(
+              ProductsErrorKeyEnum.FAILED_TO_UPDATE_PRODUCT,
+              { cause: error },
+            );
+          });
+
+        if (createdProduct?.id && allCategoryIds.length > 0) {
+          const values = allCategoryIds.map((cid, idx) => ({
+            product_id: createdProduct.id,
+            category_id: cid,
+            is_primary: cid === primaryCatId,
+            sort_order: idx,
+          }));
+
+          await tx
+            .insert(product_categories)
+            .values(values)
+            .catch((error) => {
+              throw new InternalServerErrorException(
+                'Failed to assign product category',
+                { cause: error },
+              );
+            });
+        }
 
         const [variantRecords] = await tx
           .insert(product_variants)
           .values({
             variant_name: productDto.variant_name || productDto.name,
             sku: productDto.sku,
-            price: productDto.price || productDto.base_price.toString(),
+            price:
+              productDto.price?.toString() || productDto.base_price?.toString(),
+            compare_at_price: productDto.compare_at_price
+              ? productDto.compare_at_price.toString()
+              : null,
+            sale_starts_at: productDto.sale_starts_at
+              ? new Date(productDto.sale_starts_at)
+              : null,
+            sale_ends_at: productDto.sale_ends_at
+              ? new Date(productDto.sale_ends_at)
+              : null,
             attributes: productDto.attributes,
             status: productDto.status,
             product_id: createdProduct.id,
@@ -863,6 +1105,19 @@ export class ProductsService {
             );
           });
 
+        if (variantRecords?.id) {
+          await this.pricingService.recordPriceChange(
+            tx,
+            variantRecords.id,
+            null,
+            productDto.price.toString() || productDto.base_price.toString(),
+            null,
+            productDto.compare_at_price
+              ? productDto.compare_at_price.toString()
+              : null,
+          );
+        }
+
         if (finalResults.length > 0) {
           const imageInserts = finalResults.map((image, index) => ({
             variant_id: variantRecords?.id,
@@ -871,11 +1126,18 @@ export class ProductsService {
             alt_text: `${image.type} Image ${index + 1}`,
             is_primary: index === 0,
             imgType: image.type,
+            display_order: index,
           }));
           const createdImages = await tx
             .insert(product_images)
             .values(imageInserts)
-            .returning();
+            .returning()
+            .catch((error) => {
+              throw new InternalServerErrorException(
+                ProductsErrorKeyEnum.FAILED_TO_INSERT_PRODUCT_IMAGES,
+                { cause: error },
+              );
+            });
         }
         if (!productDto.warehouse_id && variantRecords?.id) {
           const defaultWarehouse = await tx
@@ -883,7 +1145,13 @@ export class ProductsService {
             .from(warehouse)
             .where(eq(warehouse.company_id, companyId))
             .limit(1)
-            .orderBy(desc(warehouse.created_at));
+            .orderBy(desc(warehouse.created_at))
+            .catch((error) => {
+              throw new InternalServerErrorException(
+                ProductsErrorKeyEnum.FAILED_TO_CREATE_PRODUCT_VARIANT,
+                { cause: error },
+              );
+            });
           const inventoryResult = await this.inventoryService.setStock(
             variantRecords.id,
             defaultWarehouse[0].id,
@@ -915,6 +1183,8 @@ export class ProductsService {
               },
             );
           });
+        await this.usageTracker.increment(companyId, 'max_products', 1);
+
         return {
           id: variantRecords?.id,
           message: 'Product created successfully',
@@ -950,7 +1220,6 @@ export class ProductsService {
     productVariantId: string,
     product: UpdateProductDto,
     imagesToDelete?: string[],
-    files?: ProductFiles,
     vendorId?: string,
   ) {
     const imageToDeleteUrl: {
@@ -969,7 +1238,10 @@ export class ProductsService {
     let resolvedVariantId: string | undefined;
 
     const variantRow = await this.db
-      .select({ product_id: product_variants.product_id, id: product_variants.id })
+      .select({
+        product_id: product_variants.product_id,
+        id: product_variants.id,
+      })
       .from(product_variants)
       .innerJoin(products, eq(product_variants.product_id, products.id))
       .where(
@@ -979,7 +1251,12 @@ export class ProductsService {
         ),
       )
       .limit(1)
-      .catch(() => []);
+      .catch((error) => {
+        throw new InternalServerErrorException(
+          ProductsErrorKeyEnum.FAILED_TO_FETCH_PRODUCT_VARIANT,
+          { cause: error },
+        );
+      });
 
     if (variantRow.length > 0) {
       resolvedProductId = variantRow[0].product_id ?? undefined;
@@ -992,11 +1269,16 @@ export class ProductsService {
           and(
             eq(products.id, productVariantId),
             eq(products.company_id, companyId),
-            vendorId ? eq(products.vendor_id, vendorId) : sql`TRUE`
+            vendorId ? eq(products.vendor_id, vendorId) : sql`TRUE`,
           ),
         )
         .limit(1)
-        .catch(() => []);
+        .catch((error) => {
+          throw new InternalServerErrorException(
+            ProductsErrorKeyEnum.FAILED_TO_FETCH_PRODUCT,
+            { cause: error },
+          );
+        });
 
       if (productRow.length > 0) {
         resolvedProductId = productRow[0].id;
@@ -1005,7 +1287,12 @@ export class ProductsService {
           .from(product_variants)
           .where(eq(product_variants.product_id, resolvedProductId))
           .limit(1)
-          .catch(() => []);
+          .catch((error) => {
+            throw new InternalServerErrorException(
+              ProductsErrorKeyEnum.FAILED_TO_FETCH_PRODUCT_VARIANT,
+              { cause: error },
+            );
+          });
         if (firstVariant.length > 0) {
           resolvedVariantId = firstVariant[0].id;
         }
@@ -1023,9 +1310,25 @@ export class ProductsService {
       name: product.name,
       description: product.description,
       features: product.features,
-      base_price: product.base_price,
-      discount_percent: product.discount_percent,
-      category_id: product.category_id,
+      base_price: product.base_price?.toString(),
+      compare_at_price:
+        product.compare_at_price !== undefined
+          ? product.compare_at_price
+            ? product.compare_at_price?.toString()
+            : null
+          : undefined,
+      sale_starts_at:
+        product.sale_starts_at !== undefined
+          ? product.sale_starts_at
+            ? new Date(product.sale_starts_at)
+            : null
+          : undefined,
+      sale_ends_at:
+        product.sale_ends_at !== undefined
+          ? product.sale_ends_at
+            ? new Date(product.sale_ends_at)
+            : null
+          : undefined,
       status: product.status,
     };
     try {
@@ -1044,7 +1347,7 @@ export class ProductsService {
               and(
                 eq(products.id, resolvedProductId),
                 eq(products.company_id, companyId),
-                vendorId ? eq(products.vendor_id, vendorId) : sql`TRUE`
+                vendorId ? eq(products.vendor_id, vendorId) : sql`TRUE`,
               ),
             )
             .catch((error) => {
@@ -1055,6 +1358,50 @@ export class ProductsService {
                 },
               );
             });
+
+          const primaryCatId =
+            product.primary_category_id || product.category_ids?.[0];
+          const hasCategories =
+            Array.isArray(product.category_ids) &&
+            product.category_ids.length > 0;
+
+          if (hasCategories && resolvedProductId) {
+            const allCategoryIds = Array.from(
+              new Set([
+                ...(product.category_ids || []),
+                ...(primaryCatId ? [primaryCatId] : []),
+              ]),
+            );
+
+            await tx
+              .delete(product_categories)
+              .where(eq(product_categories.product_id, resolvedProductId))
+              .catch((error) => {
+                throw new InternalServerErrorException(
+                  'Failed to remove old category mappings',
+                  { cause: error },
+                );
+              });
+
+            if (allCategoryIds.length > 0) {
+              const values = allCategoryIds.map((cid, idx) => ({
+                product_id: resolvedProductId,
+                category_id: cid,
+                is_primary: cid === primaryCatId,
+                sort_order: idx,
+              }));
+
+              await tx
+                .insert(product_categories)
+                .values(values)
+                .catch((error) => {
+                  throw new InternalServerErrorException(
+                    'Failed to assign product categories',
+                    { cause: error },
+                  );
+                });
+            }
+          }
 
           if (product.tax_slab_id) {
             await tx
@@ -1098,15 +1445,17 @@ export class ProductsService {
                 );
               });
             if (urls && urls.length > 0) {
-              for (const url of urls) {
-                const publicId = extractCloudinaryPublicId(url);
-                if (publicId) {
-                  await this.uploadToCloudService
-                    .deleteFile(publicId, 'image')
-                    .then(() => {})
-                    .catch((error) => {});
-                }
-              }
+              await Promise.all(
+                urls.map((url) => {
+                  const publicId = extractCloudinaryPublicId(url);
+                  if (publicId) {
+                    return this.uploadToCloudService
+                      .deleteFile(publicId, 'image')
+                      .catch(() => {});
+                  }
+                  return Promise.resolve();
+                }),
+              );
             }
             await tx
               .delete(product_images)
@@ -1123,30 +1472,18 @@ export class ProductsService {
 
           const finalResults: { url: string; type: ProductImageType }[] = [];
 
-          if (files?.product?.[0]) {
-            const mainRes = await this.uploadToCloudService.uploadFile(
-              files.product[0],
-            );
+          if (product.product_media && product.product_media.length > 0) {
             finalResults.push({
-              url: mainRes.secure_url,
+              url: product.product_media[0],
               type: ProductImageType.MAIN,
             });
           }
 
-          if (files?.product_spec && files.product_spec.length > 0) {
-            const galleryRes = await this.uploadToCloudService.uploadFiles(
-              files.product_spec,
-            );
+          if (product.feature_media && product.feature_media.length > 0) {
             finalResults.push(
-              ...galleryRes.map((res) => ({
-                url: res.secure_url,
+              ...product.feature_media.map((url) => ({
+                url,
                 type: ProductImageType.GALLERY,
-              })),
-            );
-            imageToDeleteUrl.push(
-              ...galleryRes.map((res) => ({
-                url: res.secure_url,
-                toDeleteUrl: undefined,
               })),
             );
           }
@@ -1162,27 +1499,86 @@ export class ProductsService {
                 alt_text: `${image.type} Image ${index + 1}`,
                 is_primary: image.type === ProductImageType.MAIN,
                 imgType: image.type,
+                display_order: index,
               };
             });
 
-            const createdImages = await tx
-              .insert(product_images)
-              .values(imageInserts)
-              .catch((error) => {
-                throw new InternalServerErrorException(
-                  ProductsErrorKeyEnum.FAILED_TO_INSERT_PRODUCT_IMAGES,
-                  {
-                    cause: error,
-                  },
-                );
-              });
+            const existingImages = await tx
+              .select({
+                id: product_images.id,
+                image_url: product_images.image_url,
+              })
+              .from(product_images)
+              .where(eq(product_images.variant_id, targetVariantId));
+
+            const existingUrls = new Map(
+              existingImages.map((img) => [img.image_url, img]),
+            );
+
+            const imagesToInsert = [];
+            for (const img of imageInserts) {
+              const existing = existingUrls.get(img.image_url);
+              if (existing) {
+                await tx
+                  .update(product_images)
+                  .set({
+                    display_order: img.display_order,
+                    is_primary: img.is_primary,
+                    imgType: img.imgType,
+                  })
+                  .where(eq(product_images.id, existing.id));
+              } else {
+                imagesToInsert.push(img);
+              }
+            }
+
+            if (imagesToInsert.length > 0) {
+              await tx
+                .insert(product_images)
+                .values(imagesToInsert)
+                .catch((error) => {
+                  throw new InternalServerErrorException(
+                    ProductsErrorKeyEnum.FAILED_TO_INSERT_PRODUCT_IMAGES,
+                    {
+                      cause: error,
+                    },
+                  );
+                });
+            }
           }
 
           if (targetVariantId) {
+            const [existingVariant] = await tx
+              .select({
+                price: product_variants.price,
+                compare_at_price: product_variants.compare_at_price,
+              })
+              .from(product_variants)
+              .where(eq(product_variants.id, targetVariantId))
+              .limit(1);
+
             const updateProductVariantData = {
               variant_name: product.variant_name,
               sku: product.sku,
-              price: product.base_price,
+              price: product.base_price.toString(),
+              compare_at_price:
+                product.compare_at_price !== undefined
+                  ? product.compare_at_price
+                    ? product.compare_at_price.toString()
+                    : null
+                  : undefined,
+              sale_starts_at:
+                product.sale_starts_at !== undefined
+                  ? product.sale_starts_at
+                    ? new Date(product.sale_starts_at)
+                    : null
+                  : undefined,
+              sale_ends_at:
+                product.sale_ends_at !== undefined
+                  ? product.sale_ends_at
+                    ? new Date(product.sale_ends_at)
+                    : null
+                  : undefined,
               attributes: product.attributes,
               status: product.status,
               seo_meta: null,
@@ -1208,6 +1604,25 @@ export class ProductsService {
                   },
                 );
               });
+
+            if (
+              existingVariant &&
+              (updateProductVariantData.price !== undefined ||
+                updateProductVariantData.compare_at_price !== undefined)
+            ) {
+              await this.pricingService.recordPriceChange(
+                tx,
+                targetVariantId,
+                existingVariant.price,
+                updateProductVariantData.price
+                  ? String(updateProductVariantData.price)
+                  : existingVariant.price,
+                existingVariant.compare_at_price,
+                updateProductVariantData.compare_at_price !== undefined
+                  ? updateProductVariantData.compare_at_price
+                  : existingVariant.compare_at_price,
+              );
+            }
           }
 
           if (product.warehouse_id && targetVariantId) {
@@ -1251,34 +1666,40 @@ export class ProductsService {
     }
   }
 
-  async deleteProduct(productId: string, vendorId?: string, companyId?: string) {
+  async deleteProduct(
+    productId: string,
+    vendorId?: string,
+    companyId?: string,
+  ) {
     if (!productId) {
-      return new HttpException(
+      throw new HttpException(
         ProductsErrorKeyEnum.PRODUCT_ID_IS_REQUIRED,
         HttpStatus.BAD_REQUEST,
       );
     }
     try {
-      const deletedRows = await this.db
-        .delete(products)
-        .where(and(eq(products.id, productId), vendorId ? eq(products.vendor_id, vendorId) : sql`TRUE`))
-        .returning({ id: products.id })
-        .catch((error) => {
-          throw new InternalServerErrorException(
-            ProductsErrorKeyEnum.FAILED_TO_DELETE_PRODUCT,
-            {
-              cause: error,
-            },
+      const deletedRows = await this.db.transaction(async (tx) => {
+        const rows = await tx
+          .delete(products)
+          .where(
+            and(
+              eq(products.id, productId),
+              vendorId ? eq(products.vendor_id, vendorId) : sql`TRUE`,
+            ),
+          )
+          .returning({ id: products.id });
+
+        if (companyId && rows.length > 0) {
+          await this.usageTracker.decrement(
+            companyId,
+            'max_products',
+            rows.length,
+            tx,
           );
-        });
-      if (companyId && deletedRows.length > 0) {
-        await this.usageTracker.decrement(
-          companyId,
-          'max_products',
-          deletedRows.length,
-        );
-      }
-      
+        }
+        return rows;
+      });
+
       return {
         message: 'Product deleted successfully',
         status: HttpStatus.OK,
@@ -1293,18 +1714,52 @@ export class ProductsService {
       );
     }
   }
-  async UpdateProductCategory(categoryId: string, productId: string, vendorId?: string) {
+  async UpdateProductCategory(
+    categoryId: string,
+    productId: string,
+    vendorId?: string,
+  ) {
     if (!categoryId && !productId) {
-      return new HttpException(
+      throw new HttpException(
         ProductsErrorKeyEnum.CATEGORY_ID_IS_REQUIRED,
         HttpStatus.BAD_REQUEST,
       );
     }
     try {
-      await this.db
-        .update(products)
-        .set({ category_id: categoryId })
-        .where(and(eq(products.id, productId), vendorId ? eq(products.vendor_id, vendorId) : sql`TRUE`));
+      await this.db.transaction(async (tx) => {
+        await tx
+          .update(product_categories)
+          .set({ is_primary: false })
+          .where(eq(product_categories.product_id, productId))
+          .catch((error) => {
+            throw new InternalServerErrorException(
+              'Failed to update primary category status',
+              { cause: error },
+            );
+          });
+
+        await tx
+          .insert(product_categories)
+          .values({
+            product_id: productId,
+            category_id: categoryId,
+            is_primary: true,
+            sort_order: 0,
+          })
+          .onConflictDoUpdate({
+            target: [
+              product_categories.product_id,
+              product_categories.category_id,
+            ],
+            set: { is_primary: true },
+          })
+          .catch((error) => {
+            throw new InternalServerErrorException(
+              'Failed to assign product category',
+              { cause: error },
+            );
+          });
+      });
       return {
         message: 'Product category updated successfully',
         status: HttpStatus.OK,
@@ -1319,22 +1774,44 @@ export class ProductsService {
     }
   }
 
-  async deleteSelectedProducts(productIds: string[], vendorId?: string, companyId?: string) {
+  async deleteSelectedProducts(
+    productIds: string[],
+    vendorId?: string,
+    companyId?: string,
+  ) {
     if (!productIds || productIds.length === 0) {
-      return new HttpException(
+      throw new HttpException(
         ProductsErrorKeyEnum.PRODUCT_IDS_ARE_REQUIRED,
         HttpStatus.BAD_REQUEST,
       );
     }
     try {
-      const deletedRows = await this.db.delete(products).where(and(inArray(products.id, productIds), vendorId ? eq(products.vendor_id, vendorId) : sql`TRUE`)).returning({ id: products.id });
-      if (companyId && deletedRows.length > 0) {
-        await this.usageTracker.decrement(
-          companyId,
-          'max_products',
-          deletedRows.length,
-        );
-      }
+      const deletedRows = await this.db.transaction(async (tx) => {
+        const rows = await tx
+          .delete(products)
+          .where(
+            and(
+              inArray(products.id, productIds),
+              vendorId ? eq(products.vendor_id, vendorId) : sql`TRUE`,
+            ),
+          )
+          .returning({ id: products.id })
+          .catch((error) => {
+            throw new InternalServerErrorException(
+              ProductsErrorKeyEnum.FAILED_TO_DELETE_SELECTED_PRODUCTS,
+              { cause: error },
+            );
+          });
+        if (companyId && rows.length > 0) {
+          await this.usageTracker.decrement(
+            companyId,
+            'max_products',
+            rows.length,
+            tx,
+          );
+        }
+        return rows;
+      });
 
       return {
         message: 'Selected products deleted successfully',
@@ -1353,7 +1830,7 @@ export class ProductsService {
 
   async deleteProductVariant(variantId: string, vendorId?: string) {
     if (!variantId) {
-      return new HttpException(
+      throw new HttpException(
         ProductsErrorKeyEnum.VARIANT_ID_IS_REQUIRED,
         HttpStatus.BAD_REQUEST,
       );
@@ -1361,7 +1838,26 @@ export class ProductsService {
     try {
       await this.db
         .delete(product_variants)
-        .where(and(eq(product_variants.id, variantId), vendorId ? inArray(product_variants.product_id, this.db.select({id: products.id}).from(products).where(eq(products.vendor_id, vendorId))) : sql`TRUE`));
+        .where(
+          and(
+            eq(product_variants.id, variantId),
+            vendorId
+              ? inArray(
+                  product_variants.product_id,
+                  this.db
+                    .select({ id: products.id })
+                    .from(products)
+                    .where(eq(products.vendor_id, vendorId)),
+                )
+              : sql`TRUE`,
+          ),
+        )
+        .catch((error) => {
+          throw new InternalServerErrorException(
+            ProductsErrorKeyEnum.FAILED_TO_DELETE_PRODUCT_VARIANT,
+            { cause: error },
+          );
+        });
       return {
         message: 'Product variant deleted successfully',
         status: HttpStatus.OK,
@@ -1377,7 +1873,7 @@ export class ProductsService {
   }
   async deleteSelectedProductVariants(variantIds: string[], vendorId?: string) {
     if (!variantIds || variantIds.length === 0) {
-      return new HttpException(
+      throw new HttpException(
         ProductsErrorKeyEnum.VARIANT_IDS_ARE_REQUIRED,
         HttpStatus.BAD_REQUEST,
       );
@@ -1385,7 +1881,20 @@ export class ProductsService {
     try {
       await this.db
         .delete(product_variants)
-        .where(and(inArray(product_variants.id, variantIds), vendorId ? inArray(product_variants.product_id, this.db.select({id: products.id}).from(products).where(eq(products.vendor_id, vendorId))) : sql`TRUE`));
+        .where(
+          and(
+            inArray(product_variants.id, variantIds),
+            vendorId
+              ? inArray(
+                  product_variants.product_id,
+                  this.db
+                    .select({ id: products.id })
+                    .from(products)
+                    .where(eq(products.vendor_id, vendorId)),
+                )
+              : sql`TRUE`,
+          ),
+        );
       return {
         message: 'Product variant deleted successfully',
         status: HttpStatus.OK,
@@ -1401,7 +1910,7 @@ export class ProductsService {
   }
   async deleteProductImage(imageId: string) {
     if (!imageId) {
-      return new HttpException(
+      throw new HttpException(
         ProductsErrorKeyEnum.IMAGE_ID_IS_REQUIRED,
         HttpStatus.BAD_REQUEST,
       );
@@ -1409,7 +1918,13 @@ export class ProductsService {
     try {
       await this.db
         .delete(product_images)
-        .where(eq(product_images.id, imageId));
+        .where(eq(product_images.id, imageId))
+        .catch((error) => {
+          throw new InternalServerErrorException(
+            ProductsErrorKeyEnum.FAILED_TO_DELETE_PRODUCT_IMAGE,
+            { cause: error },
+          );
+        });
       return {
         message: 'Product image deleted successfully',
         status: HttpStatus.OK,
@@ -1420,6 +1935,393 @@ export class ProductsService {
         {
           cause: error,
         },
+      );
+    }
+  }
+
+  async getRelatedProducts(
+    domain: string,
+    productId: string,
+    limit: number = 8,
+  ) {
+    try {
+      const companyId = await this.resolveCompanyId(domain);
+
+      const currentProduct = await this.db.query.product_categories
+        .findFirst({
+          where: eq(product_categories.product_id, productId),
+          columns: { category_id: true },
+        })
+        .catch((error) => {
+          throw new InternalServerErrorException(
+            ProductsErrorKeyEnum.FAILED_TO_FETCH_PRODUCT,
+            { cause: error },
+          );
+        });
+
+      if (!currentProduct || !currentProduct.category_id) {
+        return [];
+      }
+
+      const relatedProducts = await this.db.query.products
+        .findMany({
+          where: and(
+            eq(products.company_id, companyId),
+            inArray(
+              products.id,
+              this.db
+                .select({ product_id: product_categories.product_id })
+                .from(product_categories)
+                .where(
+                  eq(
+                    product_categories.category_id,
+                    currentProduct.category_id,
+                  ),
+                ),
+            ),
+            sql`${products.id} != ${productId}`,
+            eq(products.status, ProductStatus.ACTIVE),
+          ),
+          with: {
+            variants: {
+              where: eq(product_variants.status, ProductStatus.ACTIVE),
+              with: {
+                images: true,
+                inventory: {
+                  with: { warehouse: true },
+                },
+              },
+            },
+            productCategories: {
+              columns: { is_primary: true },
+              with: {
+                category: true,
+              },
+            },
+          },
+          limit,
+          orderBy: [desc(products.created_at)],
+        })
+        .catch((error) => {
+          throw new InternalServerErrorException(
+            ProductsErrorKeyEnum.FAILED_TO_FETCH_PRODUCTS,
+            { cause: error },
+          );
+        });
+
+      return relatedProducts.map((p) => this.resolveProductPricing(p));
+    } catch (error) {
+      if (
+        error instanceof HttpException ||
+        error instanceof InternalServerErrorException
+      )
+        throw error;
+      throw new InternalServerErrorException(
+        ProductsErrorKeyEnum.FAILED_TO_FETCH_PRODUCTS,
+        { cause: error },
+      );
+    }
+  }
+
+  async getRecommendedProducts(
+    domain: string,
+    productId: string,
+    limit: number = 8,
+  ) {
+    try {
+      const companyId = await this.resolveCompanyId(domain);
+
+      const recommendedProducts = await this.db.query.products
+        .findMany({
+          where: and(
+            eq(products.company_id, companyId),
+            sql`${products.id} != ${productId}`,
+            eq(products.status, ProductStatus.ACTIVE),
+          ),
+          with: {
+            variants: {
+              where: eq(product_variants.status, ProductStatus.ACTIVE),
+              with: {
+                images: true,
+                inventory: {
+                  with: { warehouse: true },
+                },
+              },
+            },
+            productCategories: {
+              columns: { is_primary: true },
+              with: {
+                category: true,
+              },
+            },
+          },
+          limit,
+          orderBy: [desc(products.created_at)],
+        })
+        .catch((error) => {
+          throw new InternalServerErrorException(
+            ProductsErrorKeyEnum.FAILED_TO_FETCH_PRODUCTS,
+            { cause: error },
+          );
+        });
+
+      return recommendedProducts.map((p) => this.resolveProductPricing(p));
+    } catch (error) {
+      if (
+        error instanceof HttpException ||
+        error instanceof InternalServerErrorException
+      )
+        throw error;
+      throw new InternalServerErrorException(
+        ProductsErrorKeyEnum.FAILED_TO_FETCH_PRODUCTS,
+        { cause: error },
+      );
+    }
+  }
+
+  async getOnSaleProducts(domain: string, limit: number = 8) {
+    try {
+      const companyId = await this.resolveCompanyId(domain);
+
+      const [dealsFilter] = await this.db
+        .select({ rules: product_filters.rules })
+        .from(product_filters)
+        .where(eq(product_filters.name, PlatformFilterName.DEALS))
+        .limit(1)
+        .catch(() => []);
+
+      const rulesSql = dealsFilter?.rules
+        ? this.filterEvaluatorService.evaluate(dealsFilter.rules as any)
+        : undefined;
+
+      const fallbackSql = and(
+        sql`${products.compare_at_price} IS NOT NULL AND CAST(${products.compare_at_price} AS NUMERIC) > CAST(${products.base_price} AS NUMERIC)`,
+        sql`(${products.sale_starts_at} IS NULL OR ${products.sale_starts_at} <= NOW())`,
+        sql`(${products.sale_ends_at} IS NULL OR ${products.sale_ends_at} >= NOW())`,
+      );
+
+      const onSaleProducts = await this.db.query.products
+        .findMany({
+          where: and(
+            eq(products.company_id, companyId),
+            eq(products.status, ProductStatus.ACTIVE),
+            rulesSql || fallbackSql,
+          ),
+          with: {
+            variants: {
+              where: eq(product_variants.status, ProductStatus.ACTIVE),
+              with: {
+                images: true,
+                inventory: {
+                  with: { warehouse: true },
+                },
+              },
+            },
+            productCategories: {
+              columns: { is_primary: true },
+              with: {
+                category: true,
+              },
+            },
+          },
+          limit,
+          orderBy: [
+            desc(
+              sql`(CAST(${products.compare_at_price} AS NUMERIC) - CAST(${products.base_price} AS NUMERIC)) / CAST(${products.compare_at_price} AS NUMERIC)`,
+            ),
+          ],
+        })
+        .catch((error) => {
+          throw new InternalServerErrorException(
+            ProductsErrorKeyEnum.FAILED_TO_FETCH_PRODUCTS,
+            { cause: error },
+          );
+        });
+
+      return onSaleProducts.map((p) => this.resolveProductPricing(p));
+    } catch (error) {
+      if (
+        error instanceof HttpException ||
+        error instanceof InternalServerErrorException
+      )
+        throw error;
+      throw new InternalServerErrorException(
+        ProductsErrorKeyEnum.FAILED_TO_FETCH_PRODUCTS,
+        { cause: error },
+      );
+    }
+  }
+
+  private resolveProductPricing(
+    product: Partial<typeof products.$inferSelect> & {
+      variants?: Partial<typeof product_variants.$inferSelect>[];
+    } & Record<string, unknown>,
+  ) {
+    if (!product) return product;
+
+    const pricing = this.pricingService.resolveVariantPrice({
+      price: product.base_price as string,
+      compare_at_price: product.compare_at_price as string | null,
+      sale_starts_at: product.sale_starts_at as Date | null,
+      sale_ends_at: product.sale_ends_at as Date | null,
+    });
+
+    const resolvedProduct = {
+      ...product,
+      base_price: pricing.price.toString(),
+      compare_at_price: pricing.compareAtPrice
+        ? pricing.compareAtPrice.toString()
+        : null,
+      discount_percent: pricing.discountPercent.toString(),
+    };
+
+    if (resolvedProduct.variants && Array.isArray(resolvedProduct.variants)) {
+      resolvedProduct.variants = resolvedProduct.variants.map(
+        (
+          variant: Partial<typeof product_variants.$inferSelect> &
+            Record<string, unknown>,
+        ) => {
+          const vPricing = this.pricingService.resolveVariantPrice({
+            price: (variant.price || '0') as string,
+            compare_at_price: variant.compare_at_price as string | null,
+            sale_starts_at: variant.sale_starts_at as Date | null,
+            sale_ends_at: variant.sale_ends_at as Date | null,
+          });
+          return {
+            ...variant,
+            price: vPricing?.price?.toString() ?? '0',
+            compare_at_price: vPricing?.compareAtPrice
+              ? vPricing.compareAtPrice.toString()
+              : null,
+            stock_quantity:
+              (variant.inventory as typeof inventory.$inferSelect)
+                ?.stock_quantity ?? 0,
+            warehouse_id:
+              (variant.inventory as typeof inventory.$inferSelect)
+                ?.warehouse_id ?? '',
+          };
+        },
+      );
+    }
+
+    const productAny = resolvedProduct as any;
+    if (
+      productAny.productCategories &&
+      Array.isArray(productAny.productCategories)
+    ) {
+      productAny.categories = (productAny.productCategories || []).map(
+        (pc: { category: any; is_primary: boolean }) => ({
+          ...(pc.category || {}),
+          is_primary: pc.is_primary,
+        }),
+      );
+      delete productAny.productCategories;
+    } else if (productAny.category) {
+      productAny.categories = [{ ...productAny.category, is_primary: true }];
+      delete productAny.category;
+    }
+
+    return productAny;
+  }
+  async getCollectionProducts(domain: string, slug: string, limit: number = 8) {
+    try {
+      const companyId = await this.resolveCompanyId(domain);
+
+      // 1. Fetch vendor_nav_links for this slug
+      const [link] = await this.db
+        .select({ config: vendor_nav_links.config })
+        .from(vendor_nav_links)
+        .innerJoin(nav_menus, eq(nav_menus.id, vendor_nav_links.menu_id))
+        .where(
+          and(
+            eq(vendor_nav_links.slug, slug),
+            eq(nav_menus.company_id, companyId),
+          ),
+        )
+        .limit(1)
+        .catch(() => []);
+
+      if (!link) {
+        throw new NotFoundException('Collection not found for this slug');
+      }
+
+      const filterId = (link.config as any)?.filter_id;
+      if (!filterId) {
+        return []; // No filter config
+      }
+
+      // 2. Fetch product_filters
+      const [filterRow] = await this.db
+        .select({ rules: product_filters.rules })
+        .from(product_filters)
+        .where(eq(product_filters.id, filterId))
+        .limit(1)
+        .catch(() => []);
+
+      if (!filterRow || !filterRow.rules) {
+        return [];
+      }
+
+      // 3. Evaluate filter rules to SQL
+      const rulesSql = this.filterEvaluatorService.evaluate(
+        filterRow.rules as any,
+      );
+
+      const conditions = [
+        eq(products.company_id, companyId),
+        eq(products.status, ProductStatus.ACTIVE),
+      ];
+
+      if (rulesSql) {
+        conditions.push(rulesSql);
+      }
+
+      const collectionProducts = await this.db.query.products
+        .findMany({
+          where: and(...conditions),
+          with: {
+            productCategories: {
+              columns: { is_primary: true },
+              with: {
+                category: true,
+              },
+            },
+            variants: {
+              columns: {
+                id: true,
+                variant_name: true,
+                price: true,
+                sku: true,
+                status: true,
+                product_id: true,
+              },
+              with: {
+                images: {
+                  limit: 1,
+                  where: (images) => eq(images.is_primary, true),
+                },
+                inventory: {
+                  columns: { stock_quantity: true, warehouse_id: true },
+                },
+              },
+            },
+          },
+          limit: limit,
+          orderBy: [desc(products.created_at)],
+        })
+        .catch((error) => {
+          throw new InternalServerErrorException(
+            ProductsErrorKeyEnum.FAILED_TO_FETCH_PRODUCTS,
+            { cause: error },
+          );
+        });
+
+      return collectionProducts.map((p) => this.resolveProductPricing(p));
+    } catch (error) {
+      if (error instanceof HttpException) throw error;
+      throw new InternalServerErrorException(
+        ProductsErrorKeyEnum.FAILED_TO_FETCH_PRODUCTS,
+        { cause: error },
       );
     }
   }

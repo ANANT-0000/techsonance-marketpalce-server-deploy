@@ -5,7 +5,8 @@ import {
   Inject,
   Injectable,
   InternalServerErrorException,
-  UnauthorizedException,
+  BadRequestException,
+  NotFoundException,
 } from '@nestjs/common';
 import {
   company,
@@ -257,14 +258,14 @@ export class UsersService {
           );
         });
       if (!userRecord) {
-        throw new UnauthorizedException(UsersErrorKeyEnum.USER_NOT_FOUND);
+        throw new NotFoundException(UsersErrorKeyEnum.USER_NOT_FOUND);
       }
       const isPasswordValid = await bcrypt.compare(
         currentPassword,
         userRecord.password_hash,
       );
       if (!isPasswordValid) {
-        throw new UnauthorizedException(
+        throw new BadRequestException(
           UsersErrorKeyEnum.CURRENT_PASSWORD_IS_INCORRECT,
         );
       }
@@ -933,17 +934,23 @@ export class UsersService {
         );
       }
       if (!userRecord.otp || userRecord.otp !== otp) {
-        throw new UnauthorizedException(UsersErrorKeyEnum.INVALID_OTP);
+        throw new BadRequestException(UsersErrorKeyEnum.INVALID_OTP);
       }
       if (!userRecord.otp_expires) {
-        throw new UnauthorizedException(UsersErrorKeyEnum.INVALID_OTP);
+        throw new BadRequestException(UsersErrorKeyEnum.INVALID_OTP);
       }
       if (new Date() > new Date(userRecord.otp_expires)) {
         await this.db
           .update(user)
           .set({ otp: null, otp_expires: null })
-          .where(eq(user.id, userRecord.id));
-        throw new UnauthorizedException(
+          .where(eq(user.id, userRecord.id))
+          .catch((error) => {
+            throw new InternalServerErrorException(
+              'Failed to clear expired OTP',
+              { cause: error },
+            );
+          });
+        throw new BadRequestException(
           UsersErrorKeyEnum.OTP_HAS_EXPIRED_PLEASE_REQUEST_A_NEW_ONE,
         );
       }
@@ -1060,7 +1067,23 @@ export class UsersService {
         );
       }
 
-      // 2. Hash new password
+      // 2. Verify current password
+      if (!currentPassword) {
+        throw new BadRequestException(
+          UsersErrorKeyEnum.CURRENT_PASSWORD_IS_INCORRECT,
+        );
+      }
+      const isPasswordValid = await bcrypt.compare(
+        currentPassword,
+        userRecord.password_hash,
+      );
+      if (!isPasswordValid) {
+        throw new BadRequestException(
+          UsersErrorKeyEnum.CURRENT_PASSWORD_IS_INCORRECT,
+        );
+      }
+
+      // 3. Hash new password
       const hashedPassword = await bcrypt.hash(newPassword, 10).catch((err) => {
         throw new InternalServerErrorException(
           UsersErrorKeyEnum.FAILED_TO_HASH_PASSWORD,
@@ -1092,7 +1115,7 @@ export class UsersService {
     } catch (error) {
       if (
         error instanceof HttpException ||
-        error instanceof UnauthorizedException ||
+        error instanceof BadRequestException ||
         error instanceof InternalServerErrorException
       ) {
         throw error;

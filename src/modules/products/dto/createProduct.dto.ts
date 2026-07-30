@@ -44,18 +44,35 @@ export class CreateProductDto {
   @Type(() => FeatureDto)
   features!: FeatureDto[];
 
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  category_ids?: string[];
+
+  @IsOptional()
   @IsString()
-  category_id!: string;
+  primary_category_id?: string;
 
   @IsOptional()
   @IsEnum(ProductStatus)
   status?: ProductStatus;
 
-  @IsNumberString()
-  base_price!: string;
+  @IsNumber()
+  @Type(() => Number)
+  base_price!: number;
 
-  @IsNumberString()
-  discount_percent!: string;
+  @IsOptional()
+  @IsNumber()
+  @Type(() => Number)
+  compare_at_price?: number;
+
+  @IsOptional()
+  @IsString()
+  sale_starts_at?: string;
+
+  @IsOptional()
+  @IsString()
+  sale_ends_at?: string;
 
   @IsNumber()
   @Type(() => Number)
@@ -69,8 +86,9 @@ export class CreateProductDto {
   sku!: string;
 
   @IsOptional()
-  @IsString()
-  price!: string;
+  @IsNumber()
+  @Type(() => Number)
+  price!: number;
 
   @IsOptional()
   @IsArray()
@@ -94,4 +112,14 @@ export class CreateProductDto {
   @IsNumber()
   @Type(() => Number)
   height_cm!: number;
+
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  product_media?: string[];
+
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  feature_media?: string[];
 }

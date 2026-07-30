@@ -8,6 +8,7 @@ import { MailModule } from '../../common/services/mail/mail.module.js';
 import { SubscriptionGuard } from './subscription.guard.js';
 import { CompanyModule } from '../company/company.module.js';
 import { AuthModule } from '../auth/auth.module.js';
+import { EntitlementsModule } from '../entitlements/entitlements.module.js';
 
 import { AdminSubscriptionController } from './admin-subscription.controller.js';
 import { PublicSubscriptionController } from './public-subscription.controller.js';
@@ -21,6 +22,7 @@ import { GatewaySyncService } from './gateway-sync.service.js';
     ConfigModule,
     forwardRef(() => CompanyModule),
     forwardRef(() => AuthModule),
+    EntitlementsModule,
   ],
   controllers: [
     SubscriptionController,

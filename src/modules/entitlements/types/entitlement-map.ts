@@ -2,6 +2,7 @@ import {
   EnforcementMode,
   FeatureValueType,
   ResetInterval,
+  SubscriptionStatus,
 } from '../../../drizzle/types/types.js';
 
 /**
@@ -88,6 +89,11 @@ export class EntitlementMap {
   private constructor(
     private readonly entitlements: Map<string, ResolvedEntitlement>,
     public readonly subscriptionState: SubscriptionUsability,
+    public readonly metadata?: {
+      status: SubscriptionStatus;
+      trial_ends_at: Date | null;
+      grace_period_ends_at: Date | null;
+    }
   ) {}
 
   /**
@@ -98,8 +104,9 @@ export class EntitlementMap {
    */
   static empty(
     subscriptionState: SubscriptionUsability = SubscriptionUsability.NONE,
+    metadata?: { status: SubscriptionStatus; trial_ends_at: Date | null; grace_period_ends_at: Date | null }
   ): EntitlementMap {
-    return new EntitlementMap(new Map(), subscriptionState);
+    return new EntitlementMap(new Map(), subscriptionState, metadata);
   }
 
   /**
@@ -126,6 +133,7 @@ export class EntitlementMap {
       };
     }>,
     subscriptionState: SubscriptionUsability,
+    metadata?: { status: SubscriptionStatus; trial_ends_at: Date | null; grace_period_ends_at: Date | null }
   ): EntitlementMap {
     const map = new Map<string, ResolvedEntitlement>();
     for (const row of rows) {
@@ -142,7 +150,7 @@ export class EntitlementMap {
           EnforcementMode.HARD,
       });
     }
-    return new EntitlementMap(map, subscriptionState);
+    return new EntitlementMap(map, subscriptionState, metadata);
   }
 
   /**
@@ -159,11 +167,28 @@ export class EntitlementMap {
    *
    * @param json — the plain object produced by `toJSON()` and retrieved from Redis.
    */
-  static fromJSON(json: ReturnType<EntitlementMap['toJSON']>): EntitlementMap {
+  static fromJSON(json: ReturnType<EntitlementMap['toJSON']> | EntitlementMap): EntitlementMap {
+    if (json instanceof EntitlementMap) {
+      return json; // Already an instance (e.g. from in-memory cache)
+    }
+    
+    // Support if json.entitlements is somehow already a Map
+    const entries = json.entitlements instanceof Map 
+      ? Array.from((json.entitlements as any).entries())
+      : Object.entries(json.entitlements);
+      
     const map = new Map<string, ResolvedEntitlement>(
-      Object.entries(json.entitlements),
+      entries as Iterable<readonly [string, ResolvedEntitlement]>
     );
-    return new EntitlementMap(map, json.subscriptionState);
+    let parsedMetadata = undefined;
+    if (json.metadata) {
+      parsedMetadata = {
+        status: json.metadata.status,
+        trial_ends_at: json.metadata.trial_ends_at ? new Date(json.metadata.trial_ends_at) : null,
+        grace_period_ends_at: json.metadata.grace_period_ends_at ? new Date(json.metadata.grace_period_ends_at) : null,
+      };
+    }
+    return new EntitlementMap(map, json.subscriptionState, parsedMetadata);
   }
 
   /**
@@ -195,6 +220,7 @@ export class EntitlementMap {
     return {
       subscriptionState: this.subscriptionState,
       entitlements: Object.fromEntries(this.entitlements),
+      metadata: this.metadata,
     };
   }
 }

@@ -13,6 +13,10 @@ import { NavbarService } from './navbar.service.js';
 import { UpsertNavMenuDto } from './dto/upsert-nav-menu.dto.js';
 import { CreateNavItemDto } from './dto/create-nav-item.dto.js';
 import { UpdateNavItemDto, ReorderNavItemsDto } from './dto/update-nav-item.dto.js';
+import {
+  CreateTemplateItemDto,
+  UpdateTemplateItemDto,
+} from './dto/template-item.dto.js';
 import { Public } from '../../common/decorators/public.decorator.js';
 
 @Controller({ version: '1', path: 'navbar' })
@@ -20,6 +24,34 @@ export class NavbarController {
   constructor(private readonly navbarService: NavbarService) {}
 
   // ─── Public storefront endpoint ───────────────────────────────────────────
+
+  @Get('templates')
+  getTemplates() {
+    return this.navbarService.getTemplates();
+  }
+
+  @Post('templates/rescan')
+  rescanTemplates() {
+    return this.navbarService.rescanTemplates();
+  }
+
+  @Post('templates')
+  createTemplateItem(@Body() dto: CreateTemplateItemDto) {
+    return this.navbarService.createTemplateItem(dto);
+  }
+
+  @Patch('templates/:id')
+  updateTemplateItem(
+    @Param('id') id: string,
+    @Body() dto: UpdateTemplateItemDto,
+  ) {
+    return this.navbarService.updateTemplateItem(id, dto);
+  }
+
+  @Delete('templates/:id')
+  deleteTemplateItem(@Param('id') id: string) {
+    return this.navbarService.deleteTemplateItem(id);
+  }
 
   /**
    * GET /v1/navbar

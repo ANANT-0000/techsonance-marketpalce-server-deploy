@@ -2,6 +2,7 @@ import {
   Inject,
   Injectable,
   InternalServerErrorException,
+  NotFoundException,
   Logger,
   forwardRef,
 } from '@nestjs/common';
@@ -52,7 +53,6 @@ export interface Subscription {
   status: string;
   plan_name: string;
   plan_display_name: string;
-  capabilities: Record<string, unknown>;
   days_remaining: number | null;
   trial_ends_at: Date | null;
   is_trial: boolean;
@@ -74,12 +74,14 @@ export class SubscriptionService {
   ) {}
   /** Returns the plan row whose plan_name = 'trial' */
   private async getTrialPlan() {
+    let dbError: any = null;
     let plan = await this.db.query.subscription_plans
       .findFirst({
         where: eq(subscription_plans.plan_name, SubscriptionStatus.TRIAL),
       })
       .catch((err) => {
         this.logger.error('Failed to fetch trial plan from database', err);
+        dbError = err;
         return null;
       });
 
@@ -89,12 +91,16 @@ export class SubscriptionService {
         .findFirst({
           where: and(
             eq(subscription_plans.is_active, true),
-            gt(subscription_plans.trial_days, 0)
+            gt(subscription_plans.trial_days, 0),
           ),
           orderBy: (plans, { desc }) => [desc(plans.trial_days)],
         })
         .catch((err) => {
-          this.logger.error('Failed to fetch fallback trial plan from database', err);
+          this.logger.error(
+            'Failed to fetch fallback trial plan from database',
+            err,
+          );
+          dbError = err;
           return null;
         });
     }
@@ -102,11 +108,32 @@ export class SubscriptionService {
     if (!plan) {
       throw new InternalServerErrorException(
         SubscriptionErrorKeyEnum.FAILED_TO_FETCH_TRIAL_PLAN,
-        { cause: new Error('No active subscription plans found to assign for trial') },
+        {
+          cause:
+            dbError ||
+            new Error('No active subscription plans found to assign for trial'),
+        },
       );
     }
     return plan;
   }
+  private async resolvePlanById(
+    planId: string | null,
+    notFoundMsg: string,
+    fetchErrorMsg: string,
+  ) {
+    if (!planId) throw new NotFoundException(notFoundMsg);
+    const plan = await this.db.query.subscription_plans
+      .findFirst({
+        where: eq(subscription_plans.id, planId),
+      })
+      .catch((err) => {
+        throw new InternalServerErrorException(fetchErrorMsg, { cause: err });
+      });
+    if (!plan) throw new NotFoundException(notFoundMsg);
+    return plan;
+  }
+
   /** Returns all trial subscriptions ending on a given calendar day */
   private async getTrialsEndingOn(targetDate: Date) {
     const dayStart = startOfDay(targetDate);
@@ -123,9 +150,12 @@ export class SubscriptionService {
         ),
       )
       .catch((error) => {
-        throw new InternalServerErrorException('Failed to fetch trial subscriptions ending on target date', {
-          cause: error,
-        });
+        throw new InternalServerErrorException(
+          'Failed to fetch trial subscriptions ending on target date',
+          {
+            cause: error,
+          },
+        );
       });
   }
 
@@ -138,17 +168,23 @@ export class SubscriptionService {
     planId?: string,
   ) {
     try {
-      await this.db.insert(subscription_events).values({
-        company_id: companyId,
-        subscription_id: subscriptionId ?? null,
-        event_type: eventType,
-        plan_id: planId ?? null,
-        metadata,
-      }).catch((error) => {
-        throw new InternalServerErrorException('Failed to log subscription event', {
-          cause: error,
+      await this.db
+        .insert(subscription_events)
+        .values({
+          company_id: companyId,
+          subscription_id: subscriptionId ?? null,
+          event_type: eventType,
+          plan_id: planId ?? null,
+          metadata,
+        })
+        .catch((error) => {
+          throw new InternalServerErrorException(
+            'Failed to log subscription event',
+            {
+              cause: error,
+            },
+          );
         });
-      });
     } catch (err) {
       // Log but never crash the calling operation
       this.logger.error(`Failed to log subscription event "${eventType}"`, err);
@@ -169,6 +205,9 @@ export class SubscriptionService {
   }
 
   private async resolveCompanyId(domainOrId: string): Promise<string> {
+    if (!domainOrId) {
+      throw new NotFoundException('Company domain or ID is required');
+    }
     if (this.isUuid(domainOrId)) {
       return domainOrId;
     }
@@ -182,35 +221,41 @@ export class SubscriptionService {
    * Called by VendorsService.approveVendor() immediately after approval.
    * Creates a trial subscription for the company.
    */
-  async startTrial(companyIdOrDomain: string, selectedPlanId?: string): Promise<void> {
+  async startTrial(
+    companyIdOrDomain: string,
+    selectedPlanId?: string,
+  ): Promise<void> {
     const companyId = await this.resolveCompanyId(companyIdOrDomain);
 
     // Check if subscription already exists for this company
-    const existing = await this.db.query.vendor_subscriptions.findFirst({
-      where: eq(vendor_subscriptions.company_id, companyId),
-    }).catch((error) => {
-      throw new InternalServerErrorException('Failed to check existing subscription status', {
-        cause: error,
+    const existing = await this.db.query.vendor_subscriptions
+      .findFirst({
+        where: eq(vendor_subscriptions.company_id, companyId),
+      })
+      .catch((error) => {
+        throw new InternalServerErrorException(
+          'Failed to check existing subscription status',
+          {
+            cause: error,
+          },
+        );
       });
-    });
     // If a pending trial exists (created during registration), activate it.
     if (existing && !existing.trial_starts_at) {
       let plan;
       if (selectedPlanId) {
-        plan = await this.db.query.subscription_plans.findFirst({
-          where: eq(subscription_plans.id, selectedPlanId),
-        }).catch((err) => {
-          throw new InternalServerErrorException('Failed to fetch selected plan', { cause: err });
-        });
-        if (!plan) throw new InternalServerErrorException('Selected plan not found for trial');
+        plan = await this.resolvePlanById(
+          selectedPlanId,
+          'Selected plan not found for trial',
+          'Failed to fetch selected plan',
+        );
       } else {
         // Fetch the plan currently assigned to this pending subscription
-        plan = await this.db.query.subscription_plans.findFirst({
-          where: eq(subscription_plans.id, existing.plan_id),
-        }).catch((err) => {
-          throw new InternalServerErrorException('Failed to fetch assigned plan', { cause: err });
-        });
-        if (!plan) throw new InternalServerErrorException('Assigned plan not found');
+        plan = await this.resolvePlanById(
+          existing.plan_id,
+          'Assigned plan not found',
+          'Failed to fetch assigned plan',
+        );
       }
 
       const now = new Date();
@@ -220,6 +265,7 @@ export class SubscriptionService {
         .update(vendor_subscriptions)
         .set({
           plan_id: plan.id,
+          status: SubscriptionStatus.TRIAL,
           trial_starts_at: now,
           trial_ends_at: trialEnd,
           current_period_start: now,
@@ -227,7 +273,10 @@ export class SubscriptionService {
         })
         .where(eq(vendor_subscriptions.id, existing.id))
         .catch((err) => {
-          this.logger.error(`Failed to activate pending trial subscription for company ${companyId}`, err);
+          this.logger.error(
+            `Failed to activate pending trial subscription for company ${companyId}`,
+            err,
+          );
           throw new InternalServerErrorException(
             SubscriptionErrorKeyEnum.FAILED_TO_START_TRIAL_SUBSCRIPTION,
             { cause: err },
@@ -243,21 +292,18 @@ export class SubscriptionService {
       return;
     } else if (existing) {
       this.logger.log(
-        `Subscription already exists and is active for company ${companyId}. Skipping trial creation.`,
+        `Subscription already exists with status '${existing.status}' for company ${companyId}. Skipping trial creation.`,
       );
       return;
     }
 
     let plan;
     if (selectedPlanId) {
-      plan = await this.db.query.subscription_plans.findFirst({
-        where: eq(subscription_plans.id, selectedPlanId),
-      }).catch((err) => {
-        throw new InternalServerErrorException('Failed to fetch selected plan for trial', { cause: err });
-      });
-      if (!plan) {
-        throw new InternalServerErrorException('Selected plan not found for trial');
-      }
+      plan = await this.resolvePlanById(
+        selectedPlanId,
+        'Selected plan not found for trial',
+        'Failed to fetch selected plan for trial',
+      );
     } else {
       plan = await this.getTrialPlan();
     }
@@ -357,7 +403,6 @@ export class SubscriptionService {
       status: sub.status,
       plan_name: sub.plan.plan_name,
       plan_display_name: sub.plan.display_name,
-      capabilities: (sub.plan.capabilities as Record<string, unknown>) ?? {},
       days_remaining: daysRemaining,
       trial_ends_at: sub.trial_ends_at,
       is_trial: isTrial,
@@ -382,9 +427,12 @@ export class SubscriptionService {
             .where(and(baseWhere, eq(subscription_plans.company_id, companyId)))
             .orderBy(asc(subscription_plans.display_order))
             .catch((error) => {
-              throw new InternalServerErrorException('Failed to fetch available subscription plans for company', {
-                cause: error,
-              });
+              throw new InternalServerErrorException(
+                'Failed to fetch available subscription plans for company',
+                {
+                  cause: error,
+                },
+              );
             });
 
           if (plan.length > 0) return plan;
@@ -402,9 +450,12 @@ export class SubscriptionService {
       .where(baseWhere)
       .orderBy(asc(subscription_plans.display_order))
       .catch((error) => {
-        throw new InternalServerErrorException('Failed to fetch available subscription plans', {
-          cause: error,
-        });
+        throw new InternalServerErrorException(
+          'Failed to fetch available subscription plans',
+          {
+            cause: error,
+          },
+        );
       });
     return plan;
   }
@@ -434,9 +485,12 @@ export class SubscriptionService {
       .where(eq(vendor_subscriptions.company_id, companyId))
       .returning()
       .catch((error) => {
-        throw new InternalServerErrorException('Failed to upgrade subscription plan', {
-          cause: error,
-        });
+        throw new InternalServerErrorException(
+          'Failed to upgrade subscription plan',
+          {
+            cause: error,
+          },
+        );
       });
 
     if (!updated) {
@@ -476,9 +530,12 @@ export class SubscriptionService {
       )
       .returning()
       .catch((error) => {
-        throw new InternalServerErrorException('Failed to update expired trial subscriptions', {
-          cause: error,
-        });
+        throw new InternalServerErrorException(
+          'Failed to update expired trial subscriptions',
+          {
+            cause: error,
+          },
+        );
       });
 
     for (const sub of expired) {
@@ -515,9 +572,12 @@ export class SubscriptionService {
       )
       .returning()
       .catch((error) => {
-        throw new InternalServerErrorException('Failed to finalize expired grace period subscriptions', {
-          cause: error,
-        });
+        throw new InternalServerErrorException(
+          'Failed to finalize expired grace period subscriptions',
+          {
+            cause: error,
+          },
+        );
       });
 
     for (const sub of finalized) {
@@ -525,23 +585,5 @@ export class SubscriptionService {
     }
 
     return finalized.map((s) => s.company_id);
-  }
-
-  /**
-   * Checks whether a company is allowed to use a specific feature.
-   * Returns true/false — used by the guard for soft gating.
-   */
-  async canUseFeature(companyId: string, featureKey: string): Promise<boolean> {
-    const status = await this.getSubscriptionStatus(companyId);
-    if (!status) return false;
-    if (status.is_expired) return false;
-
-    // Grace period gets read-only access — no feature creation
-    if (status.in_grace_period && featureKey !== 'read') return false;
-
-    const cap = status.capabilities[featureKey];
-    if (cap === undefined) return true; // not restricted
-    if (typeof cap === 'boolean') return cap;
-    return true;
   }
 }

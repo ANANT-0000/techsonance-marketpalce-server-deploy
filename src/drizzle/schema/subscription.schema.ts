@@ -3,7 +3,6 @@ import { relations, sql } from 'drizzle-orm';
 import { company } from './main.schema.js';
 import {
   EnforcementMode,
-  FeatureType,
   FeatureValueType,
   JobStatus,
   PlanStatus,
@@ -17,7 +16,6 @@ import {
   planStatusEnum,
   priceIntervalEnum,
   syncStatusEnum,
-  featureTypeEnum,
   jobStatusEnum,
   featureValueTypeEnum,
   resetIntervalEnum,
@@ -37,9 +35,6 @@ export const subscription_plans = pg.pgTable('subscription_plans', {
     .decimal('annual_total', { precision: 10, scale: 2 })
     .default('0'), // total charged upfront for an annual subscription
   trial_days: pg.integer('trial_days').default(14),
-  capabilities: pg.jsonb('capabilities').notNull().default('{}'),
-  // { max_products: 50, max_orders_per_month: 500, storage_gb: 5,
-  //   can_use_promotions: true, can_use_custom_domain: false }
   is_active: pg.boolean('is_active').default(true),
   description: pg.text('description'),
   display_order: pg.integer('display_order').default(0),
@@ -233,7 +228,7 @@ export const cms_plan_features = pg.pgTable('cms_plan_features', {
     .notNull()
     .references(() => cms_plans.id, { onDelete: 'cascade' }),
   feature_key: pg.text('feature_key').notNull(),
-  type: featureTypeEnum('type').notNull().default(FeatureType.BOOLEAN),
+  type: featureValueTypeEnum('type').notNull().default(FeatureValueType.BOOLEAN),
   value: pg.text('value').notNull(),
   created_at: pg.timestamp('created_at').notNull().defaultNow(),
 });

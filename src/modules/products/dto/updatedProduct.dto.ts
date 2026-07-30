@@ -27,11 +27,11 @@ export class ProductImgDto {
 }
 class Attributes {
   @IsString()
-  @Transform(({ value }: { value: string }) => value.trim())
+  @Transform(({ value }: { value?: string }) => typeof value === 'string' ? value.trim() : value)
   name!: string;
 
   @IsString()
-  @Transform(({ value }: { value: string }) => value.trim())
+  @Transform(({ value }: { value?: string }) => typeof value === 'string' ? value.trim() : value)
   value!: string;
 }
 export class UpdateProductDto {
@@ -46,8 +46,14 @@ export class UpdateProductDto {
   @Type(() => FeatureDto)
   features!: FeatureDto[];
 
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  category_ids?: string[];
+
+  @IsOptional()
   @IsString()
-  category_id!: string;
+  primary_category_id?: string;
 
   @IsOptional()
   @IsEnum(ProductStatus)
@@ -57,36 +63,49 @@ export class UpdateProductDto {
   @IsString()
   tax_slab_id?: string;
 
-  @IsNumberString()
-  base_price!: string;
+  @IsNumber()
+  @Type(() => Number)
+  base_price!: number;
 
-  @IsNumberString()
-  discount_percent!: string;
+  @IsOptional()
+  @IsNumber()
+  @Type(() => Number)
+  compare_at_price?: number;
+
+  @IsOptional()
+  @IsString()
+  sale_starts_at?: string;
+
+  @IsOptional()
+  @IsString()
+  sale_ends_at?: string;
 
   @IsNumber()
   @Type(() => Number)
   stock_quantity!: number;
 
   @IsString()
-  @Transform(({ value }: { value: string }) => value.trim())
+  @Transform(({ value }: { value?: string }) => typeof value === 'string' ? value.trim() : value)
   variant_name!: string;
 
   @IsString()
-  @Transform(({ value }: { value: string }) => value.trim())
+  @Transform(({ value }: { value?: string }) => typeof value === 'string' ? value.trim() : value)
   variant_id!: string;
   @IsString()
-  @Transform(({ value }: { value: string }) => value.trim())
+  @Transform(({ value }: { value?: string }) => typeof value === 'string' ? value.trim() : value)
   warehouse_id!: string;
 
   @IsString()
   sku!: string;
 
   @IsOptional()
-  @IsString()
-  price!: string;
+  @IsNumber()
+  @Type(() => Number)
+  price!: number;
 
   @IsArray()
   @ValidateNested({ each: true })
+  @Type(() => Attributes)
   attributes!: Attributes[];
 
   @IsOptional()
@@ -111,4 +130,14 @@ export class UpdateProductDto {
   @IsNumber()
   @Type(() => Number)
   height_cm!: number;
+
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  product_media?: string[];
+
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  feature_media?: string[];
 }

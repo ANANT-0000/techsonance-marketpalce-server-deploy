@@ -4,8 +4,10 @@ import { CartController } from './cart.controller.js';
 import { DrizzleModule } from '../../drizzle/drizzle.module.js';
 import { CompanyModule } from '../company/company.module.js';
 
+import { PricingModule } from '../pricing/pricing.module.js';
+
 @Module({
-  imports: [DrizzleModule, CompanyModule],
+  imports: [DrizzleModule, CompanyModule, PricingModule],
   controllers: [CartController],
   providers: [CartService],
 })

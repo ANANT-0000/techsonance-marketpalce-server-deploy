@@ -39,7 +39,6 @@ import {
   PlanStatus,
   PriceInterval,
   SyncStatus,
-  FeatureType,
   JobStatus,
   FeatureValueType,
   ResetInterval,
@@ -66,6 +65,11 @@ export enum NavMenuPosition {
 export enum NavMenuLogoAlignment {
   LEFT = 'left',
   CENTER = 'center',
+}
+export enum NavMenuLinksAlignment {
+  LEFT = 'left',
+  CENTER = 'center',
+  RIGHT = 'right',
 }
 export enum NavMenuType {
   SIMPLE = 'simple',
@@ -176,10 +180,14 @@ export const subscriptionStatusEnum = pg.pgEnum(
   SubscriptionStatus,
 );
 
-export const featureValueTypeEnum = pg.pgEnum(
-  'feature_value_type',
-  FeatureValueType,
-);
+export const featureValueTypeEnum = pg.pgEnum('feature_value_type', [
+  FeatureValueType.BOOLEAN,
+  FeatureValueType.COUNTER,
+  FeatureValueType.RATE,
+  FeatureValueType.GAUGE,
+  FeatureValueType.TEXT,
+  FeatureValueType.NUMBER,
+]);
 export const enforcementModeEnum = pg.pgEnum(
   'enforcement_mode',
   EnforcementMode,
@@ -247,11 +255,7 @@ export const syncStatusEnum = pg.pgEnum('sync_status_enum', [
   SyncStatus.SYNCED,
   SyncStatus.ERROR,
 ]);
-export const featureTypeEnum = pg.pgEnum('feature_type_enum', [
-  FeatureType.BOOLEAN,
-  FeatureType.NUMBER,
-  FeatureType.TEXT,
-]);
+
 export const jobStatusEnum = pg.pgEnum('job_status_enum', [
   JobStatus.PENDING,
   JobStatus.PROCESSING,

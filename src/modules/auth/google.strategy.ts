@@ -10,7 +10,7 @@ export class GoogleStrategy extends PassportStrategy(Strategy, 'google') {
       clientID: process.env.GOOGLE_CLIENT_ID!,
       clientSecret: process.env.GOOGLE_CLIENT_SECRET!,
       //   callbackURL: 'http://localhost:8000/api/v1/auth/google/callback',
-      callbackURL: `${process.env.BASE_API_URL}/api/v1/auth/google/callback`, // <-- MUST BE EXACTLY 'callbackURL'
+      callbackURL: `${process.env.REDIRECT_URI}/api/v1/auth/google/callback`, // <-- MUST BE EXACTLY 'callbackURL'
       scope: ['email', 'profile'],
       passReqToCallback: true, // Enable access to request object
     });
@@ -44,7 +44,7 @@ export class GoogleStrategy extends PassportStrategy(Strategy, 'google') {
       }
       done(null, user);
     } catch (error) {
-            done(error, false);
+      done(error, false);
     }
   }
 }

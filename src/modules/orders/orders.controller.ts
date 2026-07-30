@@ -81,6 +81,7 @@ export class OrdersController {
   ) {
     return this.ordersService.getUserOrderDetails(orderId, domain);
   }
+  @SkipSubscription()
   @Get('order-count/:userId')
   @Roles(Role.CUSTOMER, Role.ADMIN, Role.VENDOR)
   async getOrdersCount(

@@ -4,7 +4,7 @@ import {
   Inject,
   Injectable,
   InternalServerErrorException,
-  UnauthorizedException,
+  BadRequestException,
 } from '@nestjs/common';
 
 import { JwtService } from '@nestjs/jwt';
@@ -359,11 +359,11 @@ export class AuthService {
           .update(user)
           .set({ otp_attempts: newAttempts })
           .where(eq(user.id, userRecord.id));
-        throw new UnauthorizedException(AuthErrorKeyEnum.INVALID_OTP);
+        throw new BadRequestException(AuthErrorKeyEnum.INVALID_OTP);
       }
     }
     if (!userRecord.otp_expires) {
-      throw new UnauthorizedException(AuthErrorKeyEnum.INVALID_OTP);
+      throw new BadRequestException(AuthErrorKeyEnum.INVALID_OTP);
     }
 
     if (new Date() > new Date(userRecord.otp_expires)) {
@@ -371,7 +371,7 @@ export class AuthService {
         .update(user)
         .set({ otp: null, otp_expires: null, otp_attempts: 0 })
         .where(eq(user.id, userRecord.id));
-      throw new UnauthorizedException(
+      throw new BadRequestException(
         AuthErrorKeyEnum.OTP_HAS_EXPIRED_PLEASE_REQUEST_A_NEW_ONE,
       );
     }
@@ -510,7 +510,7 @@ export class AuthService {
               { cause: e },
             );
           });
-        throw new UnauthorizedException(AuthErrorKeyEnum.INVALID_OTP);
+        throw new BadRequestException(AuthErrorKeyEnum.INVALID_OTP);
       }
     }
 
@@ -528,7 +528,7 @@ export class AuthService {
             { cause: e },
           );
         });
-      throw new UnauthorizedException(
+      throw new BadRequestException(
         AuthErrorKeyEnum.OTP_HAS_EXPIRED_PLEASE_REQUEST_A_NEW_ONE,
       );
     }

@@ -1,4 +1,5 @@
 import * as pg from 'drizzle-orm/pg-core';
+import { sql } from 'drizzle-orm';
 import { company } from './main.schema.js';
 import {
   EntityStatusEnum,
@@ -59,6 +60,33 @@ export const categories = pg.pgTable(
     pg.uniqueIndex('uq_categories_company_slug').on(t.company_id, t.slug),
   ],
 );
+
+export const product_categories = pg.pgTable(
+  'product_categories',
+  {
+    id: pg.uuid('id').primaryKey().defaultRandom(),
+    product_id: pg
+      .uuid('product_id')
+      .references(() => products.id, { onDelete: 'cascade' })
+      .notNull(),
+    category_id: pg
+      .uuid('category_id')
+      .references(() => categories.id, { onDelete: 'cascade' })
+      .notNull(),
+    is_primary: pg.boolean('is_primary').notNull().default(false),
+    sort_order: pg.integer('sort_order').notNull().default(0),
+    created_at: pg.timestamp('created_at').notNull().defaultNow(),
+  },
+  (table) => [
+    pg.uniqueIndex('uq_product_category').on(table.product_id, table.category_id),
+    pg.uniqueIndex('uq_product_primary_category')
+      .on(table.product_id)
+      .where(sql`${table.is_primary} = true`),
+    pg.index('idx_product_categories_cat_prod').on(table.category_id, table.product_id),
+    pg.index('idx_product_categories_prod_cat').on(table.product_id, table.category_id),
+  ],
+);
+
 export const coupons = pg.pgTable('coupons', {
   id: pg.uuid('id').primaryKey().defaultRandom(),
   company_id: pg
@@ -139,9 +167,9 @@ export const products = pg.pgTable(
     description: pg.text('description').notNull(),
     features: pg.jsonb('features').notNull(),
     base_price: pg.decimal('base_price', { precision: 10, scale: 2 }).notNull(),
-    discount_percent: pg
-      .decimal('discount_percent', { precision: 10, scale: 2 })
-      .notNull(),
+    compare_at_price: pg.decimal('compare_at_price', { precision: 10, scale: 2 }),
+    sale_starts_at: pg.timestamp('sale_starts_at'),
+    sale_ends_at: pg.timestamp('sale_ends_at'),
     status: ProductStatusEnum().notNull().default(ProductStatus.INACTIVE),
     created_at: pg.timestamp('created_at').notNull().defaultNow(),
     updated_at: pg
@@ -159,14 +187,10 @@ export const products = pg.pgTable(
     vendor_id: pg
       .uuid('vendor_id')
       .references(() => vendor.id, { onDelete: 'cascade' }),
-    category_id: pg
-      .uuid('category_id')
-      .references(() => categories.id, { onDelete: 'no action' }),
   },
   (table) => [
     pg.index('idx_products_company_id').on(table.company_id),
     pg.index('idx_products_vendor_id').on(table.vendor_id),
-    pg.index('idx_products_category_id').on(table.category_id),
     pg.index('idx_products_name').on(table.name),
     pg.index('idx_products_status').on(table.status),
   ],
@@ -276,6 +300,9 @@ export const product_variants = pg.pgTable(
     variant_name: pg.text('variant_name').notNull(),
     sku: pg.text('sku').unique().notNull(),
     price: pg.decimal('price', { precision: 10, scale: 2 }).notNull(),
+    compare_at_price: pg.decimal('compare_at_price', { precision: 10, scale: 2 }),
+    sale_starts_at: pg.timestamp('sale_starts_at'),
+    sale_ends_at: pg.timestamp('sale_ends_at'),
     attributes: pg.jsonb('attributes').notNull(),
     status: ProductStatusEnum().notNull().default(ProductStatus.INACTIVE),
     created_at: pg.timestamp('created_at').notNull().defaultNow(),
@@ -314,6 +341,7 @@ export const product_images = pg.pgTable('product_images', {
   alt_text: pg.text('alt_text'),
   imgType: productImageTypeEnum(),
   is_primary: pg.boolean('is_primary').notNull().default(false),
+  display_order: pg.integer('display_order').notNull().default(0),
   created_at: pg.timestamp('created_at').notNull().defaultNow(),
   updated_at: pg
     .timestamp('updated_at')
@@ -394,6 +422,20 @@ export const wishlist_items = pg.pgTable(
     ),
   ],
 );
+
+export const product_price_history = pg.pgTable('product_price_history', {
+  id: pg.uuid('id').primaryKey().defaultRandom(),
+  product_variant_id: pg
+    .uuid('product_variant_id')
+    .references(() => product_variants.id, { onDelete: 'cascade' })
+    .notNull(),
+  old_price: pg.decimal('old_price', { precision: 10, scale: 2 }),
+  new_price: pg.decimal('new_price', { precision: 10, scale: 2 }).notNull(),
+  old_compare_at_price: pg.decimal('old_compare_at_price', { precision: 10, scale: 2 }),
+  new_compare_at_price: pg.decimal('new_compare_at_price', { precision: 10, scale: 2 }),
+  changed_by: pg.uuid('changed_by').references(() => user.id),
+  created_at: pg.timestamp('created_at').notNull().defaultNow(),
+});
 
 export const payments = pg.pgTable(
   'payments',

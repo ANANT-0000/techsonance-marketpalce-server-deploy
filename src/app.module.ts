@@ -118,6 +118,7 @@ export enum RATELIMIT_LIMIT {
           Logger.log('✅ Successfully connected to Upstash Redis via HTTP REST API', 'RedisCache');
         } catch (error) {
           Logger.error('❌ Failed to connect to Upstash Redis REST API:', error instanceof Error ? error.message : String(error), 'RedisCache');
+          throw new Error(`Redis connection failed: ${error}`);
         }
 
         const store = createUpstashStore(redisClient);

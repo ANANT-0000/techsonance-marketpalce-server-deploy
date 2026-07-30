@@ -230,6 +230,7 @@ export class UsageTrackerService {
     companyId: string,
     featureKey: string,
     amount = 1,
+    tx?: DrizzleService,
   ): Promise<void> {
     const feature = await this.getFeatureDefinition(featureKey);
 
@@ -244,7 +245,8 @@ export class UsageTrackerService {
       return;
     }
 
-    await this.db
+    const db = tx ?? this.db;
+    await db
       .update(feature_usage)
       .set({
         // GREATEST avoids relying on the DB to reject an already-wrong write;

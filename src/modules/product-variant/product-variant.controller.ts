@@ -22,6 +22,8 @@ import { RoleGuard } from '../../guards/role.guard.js';
 import { Role } from '../../enums/role.enum.js';
 import { Roles } from '../../common/decorators/roles.decorator.js';
 import { VendorActiveGuard } from '../../guards/vendor-status.guard.js';
+import { CreateProductVariantDto } from './dto/create-product-variant.dto.js';
+import { UpdateProductVariantDto } from './dto/update-product-variant.dto.js';
 
 @Controller({
   version: '1',
@@ -31,24 +33,14 @@ export class ProductVariantController {
   constructor(private readonly productVariantService: ProductVariantService) {}
 
   @Post()
-  @UploadToCloud([
-    { name: 'product', maxCount: 1 },
-    { name: 'product_spec', maxCount: 10 },
-  ])
   @HttpCode(HttpStatus.CREATED)
   @UseGuards(RoleGuard, VendorActiveGuard)
   @Roles(Role.ADMIN, Role.VENDOR)
   create(
-    @Body('variant_data', ParseJsonPipe) createProductVariantDto: any,
+    @Body('variant_data') createProductVariantDto: CreateProductVariantDto,
     @Headers('company-domain') domain: string,
-    @UploadedFiles()
-    files: ProductFiles,
   ) {
-    return this.productVariantService.create(
-      createProductVariantDto,
-      domain,
-      files,
-    );
+    return this.productVariantService.create(createProductVariantDto, domain);
   }
   // Add this new route
   @Get('stock-manager')
@@ -85,29 +77,16 @@ export class ProductVariantController {
     return this.productVariantService.findVariantDetailsById(id);
   }
   @Patch(':id')
-  @UploadToCloud([
-    { name: 'product', maxCount: 1 },
-    { name: 'product_spec', maxCount: 10 },
-  ])
   @HttpCode(HttpStatus.OK)
   @UseGuards(RoleGuard, VendorActiveGuard)
   @Roles(Role.ADMIN, Role.VENDOR)
   async update(
     @Param('id') id: string,
-    // @Body() body: any,
-    @Body(ParseJsonPipe) dto: any,
+    @Body('variant_data') dto: UpdateProductVariantDto,
     @Headers('company-domain') domain: string,
-    @UploadedFiles() files: ProductFiles,
     @Body('imagesToDelete') imagesToDelete?: string[],
   ) {
-    // ('Received update request :', body);
-    return this.productVariantService.update(
-      id,
-      dto,
-      imagesToDelete,
-      files,
-      domain,
-    );
+    return this.productVariantService.update(id, dto, imagesToDelete, domain);
   }
   @Patch('update-status/:id')
   @UseGuards(RoleGuard, VendorActiveGuard)

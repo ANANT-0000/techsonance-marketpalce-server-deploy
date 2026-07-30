@@ -6,7 +6,7 @@ import {
   Logger,
   InternalServerErrorException,
 } from '@nestjs/common';
-import { eq, and, ne } from 'drizzle-orm';
+import { eq, and, ne, inArray, sql } from 'drizzle-orm';
 import { DRIZZLE, type DrizzleService } from '../../drizzle/drizzle.module.js';
 import {
   cms_plans,
@@ -28,11 +28,11 @@ import {
   JobStatus,
   SyncStatus,
   PriceInterval,
-  FeatureType,
   EnforcementMode,
   FeatureValueType,
 } from '../../drizzle/types/types.js';
 import { PlanPayloadDto } from './dto/plan.dto.js';
+import { EntitlementResolverService } from '../entitlements/entitlement-resolver.service.js';
 import * as crypto from 'crypto';
 import { Client } from '@upstash/qstash';
 
@@ -40,7 +40,10 @@ import { Client } from '@upstash/qstash';
 export class CmsSubscriptionService {
   private readonly qstashClient: Client;
   private readonly logger = new Logger(CmsSubscriptionService.name);
-  constructor(@Inject(DRIZZLE) private db: DrizzleService) {
+  constructor(
+    @Inject(DRIZZLE) private db: DrizzleService,
+    private readonly entitlementResolverService: EntitlementResolverService,
+  ) {
     // Ideally from ConfigService, simplified for brevity
     this.qstashClient = new Client({
       token: process.env.QSTASH_TOKEN || 'mock-token',
@@ -321,7 +324,7 @@ export class CmsSubscriptionService {
               payload.features.map((f) => ({
                 plan_id: draft.id,
                 feature_key: f.feature_key,
-                type: f.type as FeatureType,
+                type: f.type as FeatureValueType,
                 value: String(f.value),
               })),
             )
@@ -370,7 +373,7 @@ export class CmsSubscriptionService {
     let livePlanId: string | null = null;
     let idempotencyKey: string | null = null;
 
-    const live = await this.db
+    const result = await this.db
       .transaction(async (tx) => {
         const draft = await tx.query.cms_plans
           .findFirst({
@@ -395,10 +398,28 @@ export class CmsSubscriptionService {
           );
         }
 
+        // 1a. Validate all feature keys against feature_definitions
+        const featureKeys = draft.features.map((f) => f.feature_key);
+        let featureDefs: any[] = [];
+        if (featureKeys.length > 0) {
+          featureDefs = await tx.query.feature_definitions.findMany({
+            where: inArray(feature_definitions.feature_key, featureKeys),
+          });
+        }
+        const defMap = new Map(featureDefs.map((d) => [d.feature_key, d]));
+        const missingKeys = draft.features
+          .filter((f) => !defMap.has(f.feature_key))
+          .map((f) => f.feature_key);
+        if (missingKeys.length > 0) {
+          throw new ConflictException(
+            `Cannot publish plan. Unknown feature keys: ${missingKeys.join(', ')}`,
+          );
+        }
+
         // Rename existing archived plans to avoid unique constraint index conflicts
         await tx
           .update(cms_plans)
-          .set({ plan_key: `${planKey}-archived-${Date.now()}` })
+          .set({ plan_key: sql`${cms_plans.plan_key} || '-archived-' || ${cms_plans.id}::text` })
           .where(
             and(
               eq(cms_plans.plan_key, planKey),
@@ -466,17 +487,6 @@ export class CmsSubscriptionService {
           }
         });
 
-        const capabilities: Record<string, unknown> = {};
-        draft.features.forEach((f) => {
-          if (f.type === FeatureType.BOOLEAN) {
-            capabilities[f.feature_key] = f.value === 'true';
-          } else if (f.type === FeatureType.NUMBER) {
-            capabilities[f.feature_key] = Number(f.value);
-          } else {
-            capabilities[f.feature_key] = f.value;
-          }
-        });
-
         const existingSubPlan = await tx.query.subscription_plans
           .findFirst({
             where: eq(subscription_plans.plan_name, planKey),
@@ -490,6 +500,8 @@ export class CmsSubscriptionService {
             );
           });
 
+        let subPlanId: string;
+
         if (existingSubPlan) {
           await tx
             .update(subscription_plans)
@@ -498,7 +510,6 @@ export class CmsSubscriptionService {
               price_monthly: priceMonthly,
               price_annual: priceAnnual,
               annual_total: annualTotal,
-              capabilities,
               description: draft.description ?? null,
               is_active: true,
             })
@@ -511,8 +522,9 @@ export class CmsSubscriptionService {
                 },
               );
             });
+          subPlanId = existingSubPlan.id;
         } else {
-          await tx
+          const [inserted] = await tx
             .insert(subscription_plans)
             .values({
               plan_name: planKey,
@@ -520,17 +532,60 @@ export class CmsSubscriptionService {
               price_monthly: priceMonthly,
               price_annual: priceAnnual,
               annual_total: annualTotal,
-              capabilities,
               description: draft.description ?? null,
               is_active: true,
               display_order: 99, // default to end
             })
+            .returning()
             .catch((error) => {
               throw new InternalServerErrorException(
                 'Failed to create active subscription plan',
                 {
                   cause: error,
                 },
+              );
+            });
+          subPlanId = inserted.id;
+        }
+
+        // 1b. Upsert into plan_feature_limits
+        if (draft.features.length > 0) {
+          const limitsToInsert = draft.features.map((f) => {
+            const def = defMap.get(f.feature_key);
+            const isUnlimited = f.value === 'unlimited';
+            const isBoolean = def.value_type === FeatureValueType.BOOLEAN;
+            const isEnabled = isBoolean ? f.value === 'true' : true;
+            const limitValue =
+              isBoolean || isUnlimited ? null : Number(f.value);
+
+            return {
+              plan_id: subPlanId,
+              feature_id: def.id,
+              is_enabled: isEnabled,
+              is_unlimited: isUnlimited,
+              limit_value: limitValue,
+            };
+          });
+
+          await tx
+            .insert(plan_feature_limits)
+            .values(limitsToInsert)
+            .onConflictDoUpdate({
+              target: [
+                plan_feature_limits.plan_id,
+                plan_feature_limits.feature_id,
+              ],
+              set: {
+                is_enabled: sql`EXCLUDED.is_enabled`,
+                is_unlimited: sql`EXCLUDED.is_unlimited`,
+                limit_value: sql`EXCLUDED.limit_value`,
+                updated_at: new Date(),
+              },
+            })
+            .catch((error) => {
+              throw new InternalServerErrorException(
+                'Failed to upsert plan feature limits',
+                { cause: error },
               );
             });
         }
@@ -549,6 +604,7 @@ export class CmsSubscriptionService {
             idempotency_key: idempotencyKey,
             status: JobStatus.PENDING,
           })
+          .onConflictDoNothing()
           .catch((error) => {
             throw new InternalServerErrorException(
               'Failed to schedule gateway sync job',
@@ -559,7 +615,7 @@ export class CmsSubscriptionService {
           });
 
         livePlanId = live.id;
-        return live;
+        return { live, subPlanId };
       })
       .catch((error) => {
         throw new InternalServerErrorException(
@@ -587,11 +643,15 @@ export class CmsSubscriptionService {
       }
     }
 
-    return live;
+    if (result.subPlanId) {
+      await this.entitlementResolverService.invalidateByPlan(result.subPlanId);
+    }
+
+    return result.live;
   }
 
   async unpublishPlan(planKey: string, adminId: string) {
-    return await this.db
+    const result = await this.db
       .transaction(async (tx) => {
         const livePlan = await tx.query.cms_plans
           .findFirst({
@@ -636,7 +696,7 @@ export class CmsSubscriptionService {
           // Rename existing archived plans to avoid unique index conflict
           await tx
             .update(cms_plans)
-            .set({ plan_key: `${planKey}-archived-${Date.now()}` })
+            .set({ plan_key: sql`${cms_plans.plan_key} || '-archived-' || ${cms_plans.id}::text` })
             .where(
               and(
                 eq(cms_plans.plan_key, planKey),
@@ -695,7 +755,12 @@ export class CmsSubscriptionService {
             );
           });
 
-        return { success: true };
+        const subPlan = await tx.query.subscription_plans.findFirst({
+          where: eq(subscription_plans.plan_name, planKey),
+          columns: { id: true },
+        });
+
+        return { success: true, subPlanId: subPlan?.id };
       })
       .catch((error) => {
         throw new InternalServerErrorException(
@@ -705,6 +770,12 @@ export class CmsSubscriptionService {
           },
         );
       });
+
+    if (result.subPlanId) {
+      await this.entitlementResolverService.invalidateByPlan(result.subPlanId);
+    }
+
+    return { success: result.success };
   }
 
   async getAdminSubscriptions() {
@@ -801,6 +872,8 @@ export class CmsSubscriptionService {
           },
         );
       });
+
+    await this.entitlementResolverService.invalidate(updated.company_id);
 
     return updated;
   }

@@ -4,7 +4,8 @@ import {
   HttpException,
   HttpStatus,
   Injectable,
-  UnauthorizedException,
+  ForbiddenException,
+  Logger,
 } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
 import { AccessCheckService } from '../access-check.service.js';
@@ -16,6 +17,8 @@ import { AccessDecision } from '../types/access-decision.js';
 
 @Injectable()
 export class FeatureAccessGuard implements CanActivate {
+  private readonly logger = new Logger(FeatureAccessGuard.name);
+
   constructor(
     private readonly reflector: Reflector,
     private readonly accessCheck: AccessCheckService,
@@ -32,16 +35,24 @@ export class FeatureAccessGuard implements CanActivate {
     const res = context.switchToHttp().getResponse();
 
     // Expects JwtAuthGuard/RoleGuard to have already run and attached req.user
-    const companyId: string | undefined = req.user?.companyId;
+    this.logger.debug(`Evaluating feature access for key: "${meta.featureKey}". Request user object: ${JSON.stringify(req.user)}`);
+
+    const companyId: string | undefined = req.user?.companyId || req.user?.company_id;
     if (!companyId) {
-      throw new UnauthorizedException('No authenticated company context for feature check.');
+      this.logger.warn(`Blocked feature access to "${meta.featureKey}": No authenticated company context (companyId is missing from req.user).`);
+      throw new ForbiddenException('No authenticated company context for feature check.');
     }
 
     const decision: AccessDecision = meta.consume
       ? await this.accessCheck.checkAndConsume(companyId, meta.featureKey, meta.amount)
       : await this.accessCheck.check(companyId, meta.featureKey);
 
-    if (decision.allowed) return true;
+    if (decision.allowed) {
+      this.logger.debug(`Allowed feature access to "${meta.featureKey}" for company "${companyId}".`);
+      return true;
+    }
+
+    this.logger.warn(`Blocked feature access to "${meta.featureKey}" for company "${companyId}". Reason: ${decision.reason}`);
 
     res?.setHeader?.('X-Feature-Key', meta.featureKey);
     if (decision.limit !== undefined) res?.setHeader?.('X-Feature-Limit', String(decision.limit));

@@ -4,7 +4,7 @@ import {
   Inject,
   Injectable,
   InternalServerErrorException,
-  UnauthorizedException,
+  BadGatewayException,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { type Cache } from 'cache-manager';
@@ -209,7 +209,7 @@ export class ShipRocketService {
    * @param companyId Optional company identifier.
    * @returns The created order response from Shiprocket.
    * @throws InternalServerErrorException if the order creation fails.
-   * @throws UnauthorizedException if authentication fails after token refresh.
+   * @throws BadGatewayException if authentication fails after token refresh.
    */
   async createDraftOrder(
     payload: ShiprocketCreateOrderPayload,
@@ -251,7 +251,7 @@ export class ShipRocketService {
             })
             .json<ShiprocketCreateOrderResponse>();
         } catch (retryError: any) {
-          throw new UnauthorizedException(
+          throw new BadGatewayException(
             'Shiprocket authentication failed after token refresh. Check your credentials.',
           );
         }
@@ -273,7 +273,7 @@ export class ShipRocketService {
    * @param companyId Optional company identifier.
    * @returns The AWB generation response.
    * @throws InternalServerErrorException if AWB generation fails.
-   * @throws UnauthorizedException if authentication fails.
+   * @throws BadGatewayException if authentication fails.
    */
   async generateAWB(
     shipmentId: number,
@@ -322,7 +322,7 @@ export class ShipRocketService {
             })
             .json<ShiprocketGenerateAWBforShipmentResponse>();
         } catch (retryError: any) {
-          throw new UnauthorizedException(
+          throw new BadGatewayException(
             'Shiprocket authentication failed after token refresh. Check your credentials.',
           );
         }
@@ -462,7 +462,7 @@ export class ShipRocketService {
     } catch (error: any) {
       const errorBody = safeErrorBody(error);
       if (error?.response?.statusCode === 401) {
-        throw new UnauthorizedException(
+        throw new BadGatewayException(
           `Shiprocket authentication failed: ${errorBody}`,
           { cause: error },
         );
@@ -568,7 +568,7 @@ export class ShipRocketService {
             })
             .json<ShiprocketReturnOrderResponse>();
         } catch {
-          throw new UnauthorizedException(
+          throw new BadGatewayException(
             'Shiprocket authentication failed after token refresh. Check your credentials.',
           );
         }
@@ -624,7 +624,7 @@ export class ShipRocketService {
             })
             .json<ShipRocketRequestForShipmentPickupResponse>();
         } catch {
-          throw new UnauthorizedException(
+          throw new BadGatewayException(
             'Shiprocket authentication failed after token refresh. Check your credentials.',
           );
         }
@@ -680,7 +680,7 @@ export class ShipRocketService {
             })
             .json<ShipRocketCancelShipmentResponse>();
         } catch {
-          throw new UnauthorizedException(
+          throw new BadGatewayException(
             'Shiprocket authentication failed after token refresh. Check your credentials.',
           );
         }

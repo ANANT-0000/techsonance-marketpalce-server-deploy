@@ -9,24 +9,25 @@ import {
 } from 'class-validator';
 import { Transform } from 'class-transformer';
 import { ProductStatus } from '../../../drizzle/types/types.js';
+import { Type } from 'class-transformer';
 
 export class UpdateProductVariantDto {
   @IsOptional()
   @IsString()
-  @Transform(({ value }: { value: string }) => value.trim())
+  @Transform(({ value }: { value?: string }) => typeof value === 'string' ? value.trim() : value)
   variant_id?: string;
 
   @IsString()
-  @Transform(({ value }: { value: string }) => value.trim())
+  @Transform(({ value }: { value?: string }) => typeof value === 'string' ? value.trim() : value)
   variant_name!: string;
 
   @IsString()
-  @Transform(({ value }: { value: string }) => value.trim())
+  @Transform(({ value }: { value?: string }) => typeof value === 'string' ? value.trim() : value)
   sku!: string;
 
-  @IsString()
-  @Transform(({ value }: { value: string }) => value.trim())
-  price!: string;
+  @IsNumber()
+  @Type(() => Number)
+  price!: number;
 
   @IsArray()
   attributes!: Record<string, any>;
@@ -38,13 +39,26 @@ export class UpdateProductVariantDto {
   stock_quantity!: number;
 
   @IsOptional()
+  @IsNumber()
+  @Type(() => Number)
+  compare_at_price?: number;
+
+  @IsOptional()
   @IsString()
-  @Transform(({ value }: { value: string }) => value.trim())
+  sale_starts_at?: string;
+
+  @IsOptional()
+  @IsString()
+  sale_ends_at?: string;
+
+  @IsOptional()
+  @IsString()
+  @Transform(({ value }: { value?: string }) => typeof value === 'string' ? value.trim() : value)
   seo_meta!: string | null;
 
   @IsOptional()
   @IsString()
-  @Transform(({ value }: { value: string }) => value.trim())
+  @Transform(({ value }: { value?: string }) => typeof value === 'string' ? value.trim() : value)
   warehouse_id!: string | null;
 
   @IsString()
@@ -61,4 +75,14 @@ export class UpdateProductVariantDto {
 
   @IsNumber()
   height_cm!: number;
+
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  product_media?: string[];
+
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  feature_media?: string[];
 }

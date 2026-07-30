@@ -10,6 +10,7 @@ import {
   NavItemTypeEnum,
   NavLayoutTypeEnum,
   NavMenuLogoAlignment,
+  NavMenuLinksAlignment,
   NavMenuPosition,
 } from './enums.schema.js';
 
@@ -78,6 +79,7 @@ export interface NavMenuSettings {
   logo_alt?: string; // Image alt text (max 120 chars)
   logo_href?: string; // Wrapping link target, default '/'
   logo_alignment?: NavMenuLogoAlignment;
+  links_alignment?: NavMenuLinksAlignment;
 
   // Behavior
   position?: NavMenuPosition;
@@ -93,6 +95,28 @@ export interface NavMenuSettings {
   show_account?: boolean;
   show_wishlist?: boolean;
   show_cart?: boolean;
+
+  // Announcement Bar
+  announcement_visible?: boolean;
+  announcement_items_left?: AnnouncementItem[];
+  announcement_items_right?: AnnouncementItem[];
+  announcement_bg_color?: string;
+  announcement_text_color?: string;
+  announcement_text_size?: string;
+  announcement_mobile_alignment?: string;
+}
+
+export type AnnouncementItemType = "text" | "link" | "feature";
+export type DeviceVisibility = "desktop" | "mobile";
+
+export interface AnnouncementItem {
+  id: string;
+  type: AnnouncementItemType;
+  label: string;
+  target_route?: string;
+  feature_key?: string;
+  visible_on?: DeviceVisibility[];
+  is_highlighted?: boolean;
 }
 
 /**
@@ -197,66 +221,52 @@ export const nav_menus = pg.pgTable(
 );
 
 // ─────────────────────────────────────────────────────────────────────────────
-// TABLE 2: nav_items  (9 columns + JSONB meta)
+// TABLE 2: nav_items (Global Catalog)
+// ─────────────────────────────────────────────────────────────────────────────
+export const nav_items = pg.pgTable('nav_items', {
+  id: pg.uuid('id').primaryKey().defaultRandom(),
+  kind: pg.varchar('kind', { length: 50 }).notNull(), // 'system_route' | 'dynamic_template'
+  key: pg.varchar('key', { length: 100 }).notNull().unique(), // e.g., 'store', 'filtered_collection'
+  label: pg.varchar('label', { length: 120 }).notNull(),
+  path: pg.varchar('path', { length: 255 }), // e.g. '/store' (for system routes)
+  template_key: pg.varchar('template_key', { length: 100 }), // e.g. 'category_link', 'custom_link', 'filtered_collection'
+  config_schema: pg.jsonb('config_schema').default({}), // Describes what must be configured
+  created_at: pg.timestamp('created_at').notNull().defaultNow(),
+  updated_at: pg
+    .timestamp('updated_at')
+    .notNull()
+    .defaultNow()
+    .$onUpdate(() => new Date()),
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// TABLE 3: vendor_nav_links
 //
-// Self-referential parent_id models the two-level L1 → L2 tree:
-//   L1 item: parent_id IS NULL   — rendered as a top-level nav link
-//   L2 item: parent_id = <L1 id> — rendered as a mega-menu column
-//
-// Only the columns that are used in WHERE / ORDER BY / JOIN are relational.
-// Everything else (column headings, promo blocks, display modes) lives in
-// the `meta` JSONB so it stays future-proof without migrations.
+// Links vendors' menus to global nav_items and stores configuration.
 // ─────────────────────────────────────────────────────────────────────────────
 
-export const nav_items = pg.pgTable(
-  'nav_items',
+export const vendor_nav_links = pg.pgTable(
+  'vendor_nav_links',
   {
     id: pg.uuid('id').primaryKey().defaultRandom(),
-
-    /**
-     * FK to nav_menus.
-     * CASCADE: deleting a menu purges all its items.
-     * Indexed as part of composite indexes below — never needs a standalone
-     * single-column index.
-     */
     menu_id: pg
       .uuid('menu_id')
       .notNull()
       .references(() => nav_menus.id, { onDelete: 'cascade' }),
 
-    /**
-     * Self-referential FK.
-     * NULL  → L1 item (top-level link in the navbar bar)
-     * <id>  → L2 item (mega-menu column) under the referenced L1
-     *
-     * CASCADE: deleting an L1 item automatically removes all its L2 columns.
-     */
     parent_id: pg
       .uuid('parent_id')
-      .references((): AnyPgColumn => nav_items.id, { onDelete: 'cascade' }),
+      .references((): AnyPgColumn => vendor_nav_links.id, { onDelete: 'cascade' }),
 
-    /**
-     * Display label.
-     * varchar(120) — compact enough for index pages, generous for any label.
-     * Used by the frontend to render both L1 nav links and L2 column headings.
-     */
-    label: pg.varchar('label', { length: 120 }).notNull(),
-
-    /**
-     * Target URL for this item.
-     * text (unbounded) — CDN and category hrefs can be long.
-     * For category items this is auto-populated server-side on write.
-     */
-    href: pg.text('href').notNull().default('/'),
-
-    /**
-     * Enum-typed: 'custom_link' | 'category'.
-     * Used in the admin UI to filter and display the correct form fields.
-     * Native pg enum → DB-level validation, fast equality comparisons.
-     */
-    item_type: NavItemTypeEnum('item_type')
+    nav_item_id: pg
+      .uuid('nav_item_id')
       .notNull()
-      .default(NavItemType.CUSTOM_LINK),
+      .references(() => nav_items.id, { onDelete: 'cascade' }),
+
+    slug: pg.varchar('slug', { length: 150 }),
+    config: pg.jsonb('config').default({}),
+
+    label: pg.varchar('label', { length: 120 }).notNull(),
 
     /**
      * FK to categories.
@@ -276,36 +286,9 @@ export const nav_items = pg.pgTable(
      * Always false for L2 items (service enforces this).
      */
     has_mega_menu: pg.boolean('has_mega_menu').notNull().default(false),
-
-    /**
-     * Rendering order within the same parent (L1 order in bar, L2 order
-     * within a mega-menu panel).
-     * smallint: range -32 768..32 767 — far more than any menu needs.
-     * Saves 2 bytes vs. integer; produces narrower B-tree pages.
-     */
     sort_order: pg.smallint('sort_order').notNull().default(0),
-
-    /**
-     * All type-specific, sparse configuration in one blob.
-     * L1 fields: display_type, show_category_icons, parent_category_id
-     * L2 fields: col_type, col_title, promo_*, icon_url
-     *
-     * None of these are ever filtered or sorted in SQL, so flat columns
-     * would only add migration overhead.
-     *
-     * Type: NavItemMeta (see interface above).
-     */
     meta: pg.jsonb('meta').$type<NavItemMeta>().notNull().default({}),
 
-    /**
-     * Root category FK — required when layout_type is DIRECTORY or GRID.
-     * NULL when layout_type is NONE (standard link / legacy mega-menu).
-     *
-     * SET NULL on category deletion: the nav item gracefully degrades and
-     * the CMS shows a warning to the vendor. No backend warning is logged
-     * because ON DELETE SET NULL is an intentional, valid business state.
-     * Indexed for fast reverse-lookup when categories are renamed/deleted.
-     */
     root_category_id: pg
       .uuid('root_category_id')
       .references(() => categories.id, { onDelete: 'set null' }),
@@ -313,8 +296,6 @@ export const nav_items = pg.pgTable(
     layout_type: NavLayoutTypeEnum('layout_type')
       .notNull()
       .default(NavLayoutType.NONE),
-
-    target_route: pg.varchar('target_route', { length: 60 }),
 
     created_at: pg.timestamp('created_at').notNull().defaultNow(),
     updated_at: pg
@@ -324,46 +305,10 @@ export const nav_items = pg.pgTable(
       .$onUpdate(() => new Date()),
   },
   (t) => [
-    /**
-     * PRIMARY READ PATH — all items for a menu, ordered for rendering.
-     * Covers: WHERE menu_id = ? ORDER BY sort_order
-     * Including sort_order in the index lets Postgres skip a separate sort.
-     */
-    pg.index('idx_nav_items_menu_sort').on(t.menu_id, t.sort_order),
-
-    /**
-     * HIERARCHY SPLIT — fetch L1 items (parent_id IS NULL) or
-     * L2 siblings (parent_id = <id>) for a given menu.
-     * Covers: WHERE menu_id = ? AND parent_id IS NULL / = ?
-     */
-    pg.index('idx_nav_items_menu_parent').on(t.menu_id, t.parent_id),
-
-    /**
-     * PARTIAL INDEX (L1 only) — smallest possible index for L1-only scans.
-     * Postgres auto-selects this when the predicate matches parent_id IS NULL.
-     * Excludes all L2 rows → fewer pages to scan → faster cache utilisation.
-     */
-    pg
-      .index('idx_nav_items_l1_only')
-      .on(t.menu_id)
-      .where(sql`${t.parent_id} IS NULL`),
-
-    /**
-     * CATEGORY FK INDEX — fast reverse-lookup when a category is renamed or
-     * deleted so the service can locate and update/nullify affected items.
-     */
-    pg.index('idx_nav_items_category_id').on(t.category_id),
-
-    /**
-     * ROOT CATEGORY FK INDEX — fast reverse-lookup when the root category
-     * of a DIRECTORY/GRID layout is deleted (ON DELETE SET NULL fires here).
-     */
-    pg.index('idx_nav_items_root_category_id').on(t.root_category_id),
-
-    /**
-     * Database-level CHECK constraint enforcing root_category_id requirements
-     * based on layout_type selection.
-     */
+    pg.index('idx_vendor_nav_links_menu_sort').on(t.menu_id, t.sort_order),
+    pg.index('idx_vendor_nav_links_menu_parent').on(t.menu_id, t.parent_id),
+    pg.index('idx_vendor_nav_links_l1_only').on(t.menu_id).where(sql`${t.parent_id} IS NULL`),
+    pg.index('idx_vendor_nav_links_root_category_id').on(t.root_category_id),
     pg.check(
       'layout_root_check',
       sql.raw(

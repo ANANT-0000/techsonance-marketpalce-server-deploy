@@ -4,8 +4,8 @@ import {
   IsNumber,
   IsObject,
   IsOptional,
-  isString,
   IsString,
+  IsArray,
 } from 'class-validator';
 import { ProductStatus } from '../../../drizzle/types/types.js';
 
@@ -17,15 +17,28 @@ export class CreateProductVariantDto {
   @IsString()
   @Transform(({ value }: { value: string }) => value.trim())
   sku!: string;
-  @IsString()
-  @Transform(({ value }: { value: string }) => value.trim())
-  price!: string;
+  @IsNumber()
+  @Type(() => Number)
+  price!: number;
   @IsObject()
   attributes!: Record<string, any>;
   @IsEnum(ProductStatus)
   status!: ProductStatus;
   @IsNumber()
   stock_quantity!: number;
+
+  @IsOptional()
+  @IsNumber()
+  @Type(() => Number)
+  compare_at_price?: number;
+
+  @IsOptional()
+  @IsString()
+  sale_starts_at?: string;
+
+  @IsOptional()
+  @IsString()
+  sale_ends_at?: string;
 
   @IsOptional()
   @IsString()
@@ -51,4 +64,14 @@ export class CreateProductVariantDto {
 
   @IsNumber()
   height_cm!: number;
+
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  product_media?: string[];
+
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  feature_media?: string[];
 }

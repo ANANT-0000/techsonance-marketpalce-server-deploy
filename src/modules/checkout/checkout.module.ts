@@ -10,6 +10,7 @@ import { ShipRocketModule } from '../ship-rocket/ship-rocket.module.js';
 import { ShippingModule } from '../shipping/shipping.module.js';
 import { PaymentModule } from '../vendors/payment/payment.module.js';
 import { CacheModule } from '@nestjs/cache-manager';
+import { PricingModule } from '../pricing/pricing.module.js';
 
 @Module({
   imports: [
@@ -22,6 +23,7 @@ import { CacheModule } from '@nestjs/cache-manager';
     ShipRocketModule,
     ShippingModule,
     PaymentModule,
+    PricingModule,
   ],
   controllers: [CheckoutController],
   providers: [CheckoutService],

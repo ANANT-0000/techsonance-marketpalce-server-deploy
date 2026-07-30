@@ -123,7 +123,6 @@ export class InventoryService {
                 product: {
                   columns: {
                     id: true,
-                    category_id: true,
                   },
                 },
                 images: {

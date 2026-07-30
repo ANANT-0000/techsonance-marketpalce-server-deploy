@@ -1,8 +1,14 @@
 // ../../modules/auth/jwt-auth.guard.ts
-import { ExecutionContext, Injectable, Logger, UnauthorizedException } from '@nestjs/common';
+import {
+  ExecutionContext,
+  Injectable,
+  Logger,
+  UnauthorizedException,
+} from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
 import { AuthGuard } from '@nestjs/passport';
 import { IS_PUBLIC_KEY } from '../../common/decorators/public.decorator.js';
+import { ALLOW_CLEANUP_KEY } from '../../common/decorators/allow-cleanup.decorator.js';
 
 export const JWT_GUARD = 'jwt';
 
@@ -22,6 +28,18 @@ export class JwtAuthGuard extends AuthGuard(JWT_GUARD) {
     ]);
     if (isPublic) return true;
 
+    // Check if route allows cleanup bypass
+    const allowCleanup = this.reflector.getAllAndOverride<boolean>(
+      ALLOW_CLEANUP_KEY,
+      [context.getHandler(), context.getClass()],
+    );
+    const request = context.switchToHttp().getRequest();
+    const cleanupToken = request.headers['cleanup-token'];
+
+    if (allowCleanup && request.headers['cleanup-token'] === 'true') {
+      return true;
+    }
+
     // Run normal JWT validation
     return super.canActivate(context) as Promise<boolean>;
   }
@@ -31,7 +49,10 @@ export class JwtAuthGuard extends AuthGuard(JWT_GUARD) {
       this.logger.warn(
         `JwtAuthGuard block: Token missing, invalid, or expired. Error: ${err?.message || 'N/A'}, Info: ${info?.message || 'N/A'}`,
       );
-      throw err || new UnauthorizedException('Invalid or missing authentication token');
+      throw (
+        err ||
+        new UnauthorizedException('Invalid or missing authentication token')
+      );
     }
     return user;
   }

@@ -277,6 +277,8 @@ export enum FeatureValueType {
   COUNTER = 'counter',
   RATE = 'rate',
   GAUGE = 'gauge',
+  TEXT = 'text',
+  NUMBER = 'number',
 }
 
 export enum ResetInterval {
@@ -516,15 +518,59 @@ export enum SyncStatus {
   ERROR = 'error',
 }
 
-export enum FeatureType {
-  BOOLEAN = 'boolean',
-  NUMBER = 'number',
-  TEXT = 'text',
-}
-
 export enum JobStatus {
   PENDING = 'pending',
   PROCESSING = 'processing',
   COMPLETED = 'completed',
   FAILED = 'failed',
+}
+
+export enum FilterOwnerType {
+  PLATFORM = 'platform',
+  VENDOR = 'vendor',
+}
+
+export enum FilterRuleType {
+  CATEGORY = 'category',
+  PRICE = 'price',
+  CREATED_AT = 'created_at',
+  DISCOUNT = 'discount',
+  SEARCH = 'search',
+  ON_SALE = 'on_sale', // Kept for backwards compatibility if needed, but going forward we use DISCOUNT
+}
+
+export enum FilterRuleOperator {
+  IN = 'in',
+  EQ = 'eq',
+  LT = 'lt',
+  LTE = 'lte',
+  GT = 'gt',
+  GTE = 'gte',
+  CONTAINS = 'contains',
+  WITHIN_DAYS = 'within_days',
+  OLDER_THAN_DAYS = 'older_than_days',
+}
+
+export interface FilterRuleNode {
+  type: 'group' | 'rule';
+  operator?: 'AND' | 'OR'; // used if type is 'group'
+  children?: FilterRuleNode[]; // used if type is 'group'
+  field?: FilterRuleType | string; // used if type is 'rule'
+  condition?: FilterRuleOperator; // used if type is 'rule'
+  value?: any; // used if type is 'rule'
+}
+
+export enum PlatformFilterName {
+  DEALS = 'Deals',
+}
+
+export enum NavTemplateKey {
+  FILTERED_COLLECTION = 'filtered_collection',
+  CATEGORY_LINK = 'category_link',
+  CUSTOM_LINK = 'custom_link',
+}
+
+export enum NavItemKind {
+  SYSTEM_ROUTE = 'system_route',
+  DYNAMIC_TEMPLATE = 'dynamic_template',
 }

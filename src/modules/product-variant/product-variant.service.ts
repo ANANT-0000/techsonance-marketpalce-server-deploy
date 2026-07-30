@@ -7,6 +7,7 @@ import {
   Injectable,
   InternalServerErrorException,
 } from '@nestjs/common';
+import { PricingService } from '../pricing/pricing.service.js';
 import { CreateProductVariantDto } from './dto/create-product-variant.dto.js';
 import { DRIZZLE, type DrizzleService } from '../../drizzle/drizzle.module.js';
 import { and, eq, inArray } from 'drizzle-orm';
@@ -25,6 +26,7 @@ import { CompanyService } from '../company/company.service.js';
 import { InventoryService } from '../inventory/inventory.service.js';
 import { domainExtractor } from '../../common/filters/domainExtractor.filter.js';
 import { ProductVariantErrorKeyEnum } from './constants/product-variant.enums.js';
+import { extractCloudinaryPublicId } from '../../common/filters/extractCloudinaryPublicId.filter.js';
 @Injectable()
 export class ProductVariantService {
   constructor(
@@ -32,6 +34,7 @@ export class ProductVariantService {
     private readonly uploadToCloudService: UploadToCloudService,
     private inventoryService: InventoryService,
     private readonly companyService: CompanyService,
+    private readonly pricingService: PricingService,
   ) {}
 
   private async resolveCompanyId(domain: string): Promise<string> {
@@ -42,7 +45,6 @@ export class ProductVariantService {
   async create(
     createProductVariantDto: CreateProductVariantDto,
     domain: string,
-    files: ProductFiles,
   ) {
     if (!createProductVariantDto.product_id) {
       throw new InternalServerErrorException(
@@ -70,11 +72,20 @@ export class ProductVariantService {
     const variantData = {
       variant_name: createProductVariantDto.variant_name,
       sku: createProductVariantDto.sku,
-      price: createProductVariantDto.price,
+      price: createProductVariantDto.price.toString(),
       attributes: createProductVariantDto.attributes,
       status: createProductVariantDto.status,
       seo_meta: createProductVariantDto.seo_meta ?? null,
       product_id: productId.id,
+      compare_at_price: createProductVariantDto.compare_at_price
+        ? String(createProductVariantDto.compare_at_price)
+        : null,
+      sale_starts_at: createProductVariantDto.sale_starts_at
+        ? new Date(createProductVariantDto.sale_starts_at)
+        : null,
+      sale_ends_at: createProductVariantDto.sale_ends_at
+        ? new Date(createProductVariantDto.sale_ends_at)
+        : null,
       weight_kg: createProductVariantDto.weight_kg,
       length_cm: createProductVariantDto.length_cm,
       width_cm: createProductVariantDto.width_cm,
@@ -97,25 +108,35 @@ export class ProductVariantService {
         if (!variantRecord) {
           throw new Error('Failed to create product variant');
         }
+
+        await this.pricingService.recordPriceChange(
+          tx,
+          variantRecord.id,
+          null,
+          String(variantData.price),
+          null,
+          variantData.compare_at_price ?? null,
+        );
+
         const finalResults: { url: string; type: ProductImageType }[] = [];
 
-        if (files?.product?.[0]) {
-          const mainRes = await this.uploadToCloudService.uploadFile(
-            files.product[0],
-          );
+        if (
+          createProductVariantDto.product_media &&
+          createProductVariantDto.product_media.length > 0
+        ) {
           finalResults.push({
-            url: mainRes.secure_url,
+            url: createProductVariantDto.product_media[0],
             type: ProductImageType.MAIN,
           });
         }
 
-        if (files?.product_spec && files.product_spec?.length > 0) {
-          const galleryRes = await this.uploadToCloudService.uploadFiles(
-            files.product_spec,
-          );
+        if (
+          createProductVariantDto.feature_media &&
+          createProductVariantDto.feature_media.length > 0
+        ) {
           finalResults.push(
-            ...galleryRes.map((res) => ({
-              url: res.secure_url,
+            ...createProductVariantDto.feature_media.map((url) => ({
+              url,
               type: ProductImageType.GALLERY,
             })),
           );
@@ -123,7 +144,10 @@ export class ProductVariantService {
 
         const copySpecImages: { image_url: string; alt_text: string | null }[] =
           [];
-        if (!files?.product_spec || files.product_spec.length === 0) {
+        if (
+          !createProductVariantDto.feature_media ||
+          createProductVariantDto.feature_media.length === 0
+        ) {
           const existingSpecImages = await tx
             .select({
               image_url: product_images.image_url,
@@ -147,9 +171,13 @@ export class ProductVariantService {
             }
           }
         }
-        
-        const copyMainImages: { image_url: string; alt_text: string | null }[] = [];
-        if (!files?.product || files.product.length === 0) {
+
+        const copyMainImages: { image_url: string; alt_text: string | null }[] =
+          [];
+        if (
+          !createProductVariantDto.product_media ||
+          createProductVariantDto.product_media.length === 0
+        ) {
           const existingMainImages = await tx
             .select({
               image_url: product_images.image_url,
@@ -188,6 +216,7 @@ export class ProductVariantService {
             alt_text: `${image.type} Image ${index + 1}`,
             is_primary: image.type === ProductImageType.MAIN,
             imgType: image.type,
+            display_order: index,
           };
         });
 
@@ -200,6 +229,7 @@ export class ProductVariantService {
               alt_text: img.alt_text || `MAIN Image Copy ${index + 1}`,
               is_primary: true,
               imgType: ProductImageType.MAIN,
+              display_order: imageInserts.length,
             });
           });
         }
@@ -213,6 +243,7 @@ export class ProductVariantService {
               alt_text: img.alt_text || `GALLERY Image Copy ${index + 1}`,
               is_primary: false,
               imgType: ProductImageType.GALLERY,
+              display_order: imageInserts.length,
             });
           });
         }
@@ -259,10 +290,25 @@ export class ProductVariantService {
       const productVariants = await this.db.query.product_variants.findMany({
         where: (product_variants) => eq(product_variants.product_id, productId),
         with: {
-          images: true,
+          images: {
+            orderBy: (images, { asc }) => [asc(images.display_order)],
+          },
+          inventory: {
+            columns: {
+              stock_quantity: true,
+              warehouse_id: true,
+            },
+          },
         },
       });
-      return productVariants;
+      return productVariants.map((variant) => {
+        const parsedPrice = Number(variant.price);
+        return {
+          ...variant,
+          price: isNaN(parsedPrice) ? 0 : parsedPrice,
+          stock_quantity: variant.inventory?.stock_quantity ?? 0,
+        };
+      });
     } catch (error) {
       throw new InternalServerErrorException(
         ProductVariantErrorKeyEnum.FAILED_TO_FETCH_PRODUCT_VARIANTS_BY_PRODUCT_ID,
@@ -326,7 +372,9 @@ export class ProductVariantService {
         where: (product_variants) =>
           inArray(product_variants.product_id, productIds),
         with: {
-          images: true,
+          images: {
+            orderBy: (images, { asc }) => [asc(images.display_order)],
+          },
           inventory: {
             columns: {
               stock_quantity: true,
@@ -348,7 +396,9 @@ export class ProductVariantService {
         where: (product_variants) => eq(product_variants.id, id),
         with: {
           product: true,
-          images: true,
+          images: {
+            orderBy: (images, { asc }) => [asc(images.display_order)],
+          },
           inventory: {
             columns: {
               stock_quantity: true,
@@ -360,7 +410,23 @@ export class ProductVariantService {
       if (!productVariant) {
         throw new Error(`Product variant with ID ${id} not found`);
       }
-      return productVariant;
+
+      const { product, inventory, ...restVariant } = productVariant;
+
+      return {
+        ...restVariant,
+        stock_quantity: inventory?.stock_quantity ?? 0,
+        warehouse_id: inventory?.warehouse_id ?? '',
+        seo_meta: null,
+        product: product
+          ? {
+              ...product,
+              stock_quantity: inventory?.stock_quantity ?? 0,
+              categories: [], // Assuming categories is omitted in findOne product relation
+            }
+          : null,
+        inventory: inventory ?? { stock_quantity: 0, warehouse_id: '' },
+      };
     } catch (error) {
       throw new InternalServerErrorException(
         ProductVariantErrorKeyEnum.FAILED_TO_FETCH_PRODUCT_VARIANT,
@@ -372,7 +438,6 @@ export class ProductVariantService {
     id: string,
     updateProductVariantDto: UpdateProductVariantDto,
     imagesToDelete?: string[],
-    files?: ProductFiles,
     domain?: string,
   ) {
     const updateData: Partial<any> = {
@@ -382,6 +447,24 @@ export class ProductVariantService {
       attributes: updateProductVariantDto.attributes,
       status: updateProductVariantDto.status,
       seo_meta: updateProductVariantDto.seo_meta ?? null,
+      compare_at_price:
+        updateProductVariantDto.compare_at_price !== undefined
+          ? updateProductVariantDto.compare_at_price
+            ? String(updateProductVariantDto.compare_at_price)
+            : null
+          : undefined,
+      sale_starts_at:
+        updateProductVariantDto.sale_starts_at !== undefined
+          ? updateProductVariantDto.sale_starts_at
+            ? new Date(updateProductVariantDto.sale_starts_at)
+            : null
+          : undefined,
+      sale_ends_at:
+        updateProductVariantDto.sale_ends_at !== undefined
+          ? updateProductVariantDto.sale_ends_at
+            ? new Date(updateProductVariantDto.sale_ends_at)
+            : null
+          : undefined,
       weight_kg: updateProductVariantDto.weight_kg,
       length_cm: updateProductVariantDto.length_cm,
       width_cm: updateProductVariantDto.width_cm,
@@ -402,6 +485,8 @@ export class ProductVariantService {
             .select({
               id: product_variants.id,
               product_id: product_variants.product_id,
+              price: product_variants.price,
+              compare_at_price: product_variants.compare_at_price,
             })
             .from(product_variants)
             .where(eq(product_variants.id, id))
@@ -418,11 +503,59 @@ export class ProductVariantService {
             .update(product_variants)
             .set(updateData)
             .where(eq(product_variants.id, id));
+
+          if (
+            updateData.price !== undefined ||
+            updateData.compare_at_price !== undefined
+          ) {
+            await this.pricingService.recordPriceChange(
+              tx,
+              id,
+              existingVariant.price,
+              updateData.price
+                ? String(updateData.price)
+                : existingVariant.price,
+              existingVariant.compare_at_price,
+              updateData.compare_at_price !== undefined
+                ? updateData.compare_at_price
+                : existingVariant.compare_at_price,
+            );
+          }
+
           const parsedImagesToDelete =
             typeof imagesToDelete === 'string'
               ? JSON.parse(imagesToDelete)
               : imagesToDelete;
           if (parsedImagesToDelete && parsedImagesToDelete.length > 0) {
+            const urls = await tx
+              .select({ image_url: product_images.image_url })
+              .from(product_images)
+              .where(
+                and(
+                  eq(product_images.variant_id, id),
+                  inArray(product_images.id, parsedImagesToDelete),
+                ),
+              )
+              .then((res) => res.map((item) => item.image_url))
+              .catch((error) => {
+                throw new InternalServerErrorException(
+                  ProductVariantErrorKeyEnum.FAILED_TO_UPDATE_PRODUCT_VARIANT,
+                  { cause: error },
+                );
+              });
+
+            if (urls && urls.length > 0) {
+              for (const url of urls) {
+                const publicId = extractCloudinaryPublicId(url);
+                if (publicId) {
+                  await this.uploadToCloudService
+                    .deleteFile(publicId, 'image')
+                    .then(() => {})
+                    .catch(() => {});
+                }
+              }
+            }
+
             await tx
               .delete(product_images)
               .where(
@@ -435,23 +568,23 @@ export class ProductVariantService {
 
           const finalResults: { url: string; type: ProductImageType }[] = [];
 
-          if (files?.product?.[0]) {
-            const mainRes = await this.uploadToCloudService.uploadFile(
-              files.product[0],
-            );
+          if (
+            updateProductVariantDto.product_media &&
+            updateProductVariantDto.product_media.length > 0
+          ) {
             finalResults.push({
-              url: mainRes.secure_url,
+              url: updateProductVariantDto.product_media[0],
               type: ProductImageType.MAIN,
             });
           }
 
-          if (files?.product_spec && files.product_spec.length > 0) {
-            const galleryRes = await this.uploadToCloudService.uploadFiles(
-              files.product_spec,
-            );
+          if (
+            updateProductVariantDto.feature_media &&
+            updateProductVariantDto.feature_media.length > 0
+          ) {
             finalResults.push(
-              ...galleryRes.map((res) => ({
-                url: res.secure_url,
+              ...updateProductVariantDto.feature_media.map((url) => ({
+                url,
                 type: ProductImageType.GALLERY,
               })),
             );
@@ -471,10 +604,42 @@ export class ProductVariantService {
                 alt_text: `${image.type} Image ${index + 1}`,
                 is_primary: image.type === ProductImageType.MAIN,
                 imgType: image.type,
+                display_order: index,
               };
             });
 
-            await tx.insert(product_images).values(imageInserts);
+            const existingImages = await tx
+              .select({
+                id: product_images.id,
+                image_url: product_images.image_url,
+              })
+              .from(product_images)
+              .where(eq(product_images.variant_id, id));
+
+            const existingUrls = new Map(
+              existingImages.map((img) => [img.image_url, img]),
+            );
+
+            const imagesToInsert = [];
+            for (const img of imageInserts) {
+              const existing = existingUrls.get(img.image_url);
+              if (existing) {
+                await tx
+                  .update(product_images)
+                  .set({
+                    display_order: img.display_order,
+                    is_primary: img.is_primary,
+                    imgType: img.imgType,
+                  })
+                  .where(eq(product_images.id, existing.id));
+              } else {
+                imagesToInsert.push(img);
+              }
+            }
+
+            if (imagesToInsert.length > 0) {
+              await tx.insert(product_images).values(imagesToInsert);
+            }
           }
           if (updateProductVariantDto.warehouse_id && existingVariant?.id) {
             await this.inventoryService.setStock(
@@ -657,10 +822,7 @@ export class ProductVariantService {
       .from(product_variants)
       .innerJoin(products, eq(product_variants.product_id, products.id))
       .where(
-        and(
-          eq(product_variants.id, id),
-          eq(products.company_id, companyId),
-        ),
+        and(eq(product_variants.id, id), eq(products.company_id, companyId)),
       )
       .limit(1)
       .catch(() => {
@@ -676,6 +838,27 @@ export class ProductVariantService {
     }
 
     try {
+      const urls = await this.db
+        .select({ image_url: product_images.image_url })
+        .from(product_images)
+        .where(eq(product_images.variant_id, id))
+        .then((res) => res.map((item) => item.image_url))
+        .catch(() => [] as string[]);
+
+      if (urls.length > 0) {
+        await Promise.all(
+          urls.map((url) => {
+            const publicId = extractCloudinaryPublicId(url);
+            if (publicId) {
+              return this.uploadToCloudService
+                .deleteFile(publicId, 'image')
+                .catch(() => {});
+            }
+            return Promise.resolve();
+          }),
+        );
+      }
+
       const result = await this.db
         .delete(product_variants)
         .where(eq(product_variants.id, id));

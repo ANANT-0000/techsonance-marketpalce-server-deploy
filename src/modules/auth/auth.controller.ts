@@ -44,22 +44,7 @@ export class AuthController {
   test() {
     return 'Auth controller is working';
   }
-  @Public()
-  @Throttle({ short: { limit: 5, ttl: 60_000 } })
-  @Post('login')
-  @HttpCode(HttpStatus.OK)
-  async adminLogin(
-    @Body() body: { email: string; password: string },
-    @Res({ passthrough: true }) res: express.Response,
-  ): Promise<Record<string, unknown>> {
-    const result = await this.adminService.adminLogin(
-      body.email,
-      body.password,
-    );
-    if (result.access_token)
-      this.authService.setAuthCookie(res, result.access_token as string);
-    return result;
-  }
+
   /**
    * Step 1: Initiate Google OAuth flow
    * The frontend redirects here with the domain parameter
@@ -167,13 +152,7 @@ export class AuthController {
   async resendVendorTempPassword(@Body() body: { email: string }) {
     return await this.vendorService.resendTempPassword(body.email);
   }
-  // @Public()
-  // @Throttle({ short: { limit: 10, ttl: 60_000 } })
-  // @Post('vendor/check-generated-password')
-  // @HttpCode(HttpStatus.OK)
-  // async checkVendorGeneratedPassword(@Body() body: { email: string }) {
-  //   return await this.vendorService.checkGeneratedPassword(body.email);
-  // }
+
   @Public()
   @Throttle({ short: { limit: 5, ttl: 60_000 } })
   @Post('register-user')

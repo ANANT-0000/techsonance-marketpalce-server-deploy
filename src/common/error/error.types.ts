@@ -10,6 +10,7 @@ export enum InternalErrorCode {
   UNAUTHORIZED = "UNAUTHORIZED",
   FORBIDDEN = "FORBIDDEN",
   UNKNOWN_SYSTEM_ERROR = "UNKNOWN_SYSTEM_ERROR",
+  PAYLOAD_TOO_LARGE = "PAYLOAD_TOO_LARGE",
 }
 
 export enum ClientActionCode {
