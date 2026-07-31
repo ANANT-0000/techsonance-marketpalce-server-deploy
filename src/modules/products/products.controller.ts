@@ -27,6 +27,7 @@ import { RoleGuard } from '../../guards/role.guard.js';
 import { Roles } from '../../common/decorators/roles.decorator.js';
 import { Role } from '../../enums/role.enum.js';
 import { GetProductsQueryDto } from './dto/get-products-query.dto.js';
+import { GetDynamicProductsDto } from './dto/get-dynamic-products.dto.js';
 import { Public } from '../../common/decorators/public.decorator.js';
 import { SkipSubscription } from '../../common/decorators/skip-subscription.decorator.js';
 import { FeatureAccessGuard } from '../entitlements/guards/feature-access.guard.js';
@@ -72,6 +73,15 @@ export class ProductsController {
     @Query() query: GetProductsQueryDto,
   ) {
     return await this.productsService.getAllProducts(domain, query);
+  }
+
+  @Public()
+  @Get('dynamic')
+  async getDynamicProducts(
+    @Headers('company-domain') domain: string,
+    @Query() query: GetDynamicProductsDto,
+  ) {
+    return await this.productsService.getDynamicProducts(domain, query);
   }
 
   @Public()

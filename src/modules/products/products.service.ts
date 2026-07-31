@@ -51,6 +51,12 @@ import {
 } from '../../drizzle/schema/index.js';
 import { domainExtractor } from '../../common/filters/domainExtractor.filter.js';
 import { GetProductsQueryDto, SortBy } from './dto/get-products-query.dto.js';
+import {
+  GetDynamicProductsDto,
+  Highlights,
+  PriceCollation,
+  Timeframe,
+} from './dto/get-dynamic-products.dto.js';
 import { extractCloudinaryPublicId } from '../../common/filters/extractCloudinaryPublicId.filter.js';
 import { ProductsErrorKeyEnum } from './constants/products.enums.js';
 import { UsageTrackerService } from '../entitlements/usage-tracker.service.js';
@@ -514,6 +520,324 @@ export class ProductsService {
         {
           cause: error,
         },
+      );
+    }
+  }
+
+  async getDynamicProducts(domain: string, query: GetDynamicProductsDto) {
+    try {
+      const companyId = await this.resolveCompanyId(domain);
+      const {
+        offset = 0,
+        limit = 10,
+        search,
+        category,
+        min_price,
+        max_price,
+        sort_by = SortBy.NEWEST,
+        timeframe,
+        highlight,
+        price,
+        discount,
+      } = query;
+
+      // ── Build WHERE conditions ──────────────────────────────────────────────
+      const conditions: SQL[] = [
+        eq(products.company_id, companyId),
+        eq(products.status, ProductStatus.ACTIVE),
+      ];
+
+      // search logic
+      if (
+        search &&
+        search.trim() !== '' &&
+        search !== 'null' &&
+        search !== 'undefined'
+      ) {
+        const term = `%${search.trim()}%`;
+        const matchingVariants = await this.db
+          .select({ product_id: product_variants.product_id })
+          .from(product_variants)
+          .where(ilike(product_variants.sku, term));
+        const matchingProductIds = matchingVariants
+          .map((v) => v.product_id)
+          .filter((id): id is string => !!id);
+
+        const searchConditions = [
+          ilike(products.name, term),
+          ilike(products.description, term),
+        ];
+
+        if (matchingProductIds.length > 0) {
+          searchConditions.push(inArray(products.id, matchingProductIds));
+        }
+
+        const searchCondition = or(...searchConditions);
+        if (searchCondition) {
+          conditions.push(searchCondition);
+        }
+      }
+
+      // category logic
+      if (
+        category &&
+        category.trim() !== '' &&
+        category !== 'null' &&
+        category !== 'undefined'
+      ) {
+        const targetCategoryIds = await this.getCategoryAndDescendantIds(
+          companyId,
+          category,
+        );
+        if (targetCategoryIds.length > 0) {
+          conditions.push(
+            inArray(
+              products.id,
+              this.db
+                .select({ product_id: product_categories.product_id })
+                .from(product_categories)
+                .where(
+                  inArray(product_categories.category_id, targetCategoryIds),
+                ),
+            ),
+          );
+        } else {
+          conditions.push(sql`1 = 0`);
+        }
+      }
+
+      // Base Price Logic
+      if (min_price !== undefined && min_price > 0) {
+        conditions.push(
+          gte(sql`CAST(${products.base_price} AS NUMERIC)`, min_price),
+        );
+      }
+
+      if (max_price !== undefined && max_price > 0) {
+        conditions.push(
+          lte(sql`CAST(${products.base_price} AS NUMERIC)`, max_price),
+        );
+      }
+
+      // ── Highlight filter ─────────────────────────────────────────────────────
+      // Each highlight type adds its own WHERE conditions AND a custom ORDER BY.
+      // The flag prevents the timeframe block below from double-constraining dates
+      // when the highlight already narrows the `created_at` window.
+      let highlightHandlesTimeframe = false;
+
+      if (highlight) {
+        // Reusable fragment: product currently has a lower sale price vs. original.
+        const hasActiveSaleSql = sql`(
+          ${products.compare_at_price} IS NOT NULL
+          AND CAST(${products.compare_at_price} AS NUMERIC) > 0
+          AND CAST(${products.compare_at_price} AS NUMERIC) > CAST(${products.base_price} AS NUMERIC)
+        )`;
+
+        switch (highlight) {
+          case Highlights.TRENDING: {
+            // Recent (30 days) products that are currently on sale — most promoted first.
+            conditions.push(
+              sql`${products.created_at} >= NOW() - INTERVAL '30 days'`,
+              hasActiveSaleSql,
+            );
+            highlightHandlesTimeframe = true;
+            break;
+          }
+          case Highlights.NEW_ARRIVALS: {
+            // Added within the last 14 days, sorted newest first.
+            conditions.push(
+              sql`${products.created_at} >= NOW() - INTERVAL '14 days'`,
+            );
+            highlightHandlesTimeframe = true;
+            break;
+          }
+          case Highlights.BESTSELLER: {
+            // Proxy: products with an active compare_at_price — vendor is promoting them.
+            // Sorted by highest absolute savings amount so best deals surface first.
+            conditions.push(hasActiveSaleSql);
+            break;
+          }
+          case Highlights.FEATURED: {
+            // No extra filter — vendor manages featured status externally.
+            break;
+          }
+        }
+      }
+
+      // ── Timeframe filter ─────────────────────────────────────────────────────
+      // Skipped when the active highlight already applied a date constraint.
+      if (timeframe && !highlightHandlesTimeframe) {
+        const TIMEFRAME_DAYS: Record<Timeframe, number> = {
+          [Timeframe.LAST_7_DAYS]: 7,
+          [Timeframe.LAST_14_DAYS]: 14,
+          [Timeframe.LAST_30_DAYS]: 30,
+          [Timeframe.LAST_90_DAYS]: 90,
+        };
+        const days = TIMEFRAME_DAYS[timeframe];
+        if (days > 0) {
+          conditions.push(
+            sql`${products.created_at} >= NOW() - INTERVAL '${sql.raw(String(days))} days'`,
+          );
+        }
+      }
+
+      // ── Discount filter ──────────────────────────────────────────────────────
+      if (discount !== undefined && discount > 0) {
+        conditions.push(
+          sql`(
+            ${products.compare_at_price} IS NOT NULL
+            AND CAST(${products.compare_at_price} AS NUMERIC) > 0
+            AND (
+              (CAST(${products.compare_at_price} AS NUMERIC) - CAST(${products.base_price} AS NUMERIC))
+              / CAST(${products.compare_at_price} AS NUMERIC)
+              * 100
+            ) >= ${discount}
+          )`,
+        );
+      }
+
+      // ── Price collation filter ───────────────────────────────────────────────
+      if (price) {
+        const PRICE_CONDITIONS: Record<PriceCollation, SQL> = {
+          [PriceCollation.UNDER_500]: sql`CAST(${products.base_price} AS NUMERIC) < 500`,
+          [PriceCollation.UNDER_1000]: sql`CAST(${products.base_price} AS NUMERIC) < 1000`,
+          [PriceCollation.FROM_1000_TO_5000]: sql`CAST(${products.base_price} AS NUMERIC) BETWEEN 1000 AND 5000`,
+          [PriceCollation.PREMIUM]: sql`CAST(${products.base_price} AS NUMERIC) > 5000`,
+        };
+        conditions.push(PRICE_CONDITIONS[price]);
+      }
+
+      const whereClause = and(...conditions);
+
+      // ── Total count (for pagination) ─────────────────────────────────────────
+      const [{ total }] = await this.db
+        .select({ total: count() })
+        .from(products)
+        .where(whereClause)
+        .catch((error) => {
+          throw new InternalServerErrorException(
+            ProductsErrorKeyEnum.FAILED_TO_COUNT_PRODUCTS,
+            { cause: error },
+          );
+        });
+
+      // ── Sorting ──────────────────────────────────────────────────────────────
+      // When a `highlight` is active it overrides `sort_by` to guarantee semantically
+      // consistent results — the vendor picks a label, the system handles the ordering.
+      let orderByClause: SQL = desc(products.created_at);
+
+      if (highlight) {
+        switch (highlight) {
+          case Highlights.TRENDING:
+            // Highest discount percentage first — most aggressively promoted items
+            orderByClause = desc(
+              sql`(
+                (CAST(${products.compare_at_price} AS NUMERIC) - CAST(${products.base_price} AS NUMERIC))
+                / CAST(${products.compare_at_price} AS NUMERIC)
+                * 100
+              )`,
+            );
+            break;
+          case Highlights.NEW_ARRIVALS:
+            orderByClause = desc(products.created_at);
+            break;
+          case Highlights.BESTSELLER:
+            // Highest absolute savings first — most attractive deal for the customer
+            orderByClause = desc(
+              sql`(CAST(${products.compare_at_price} AS NUMERIC) - CAST(${products.base_price} AS NUMERIC))`,
+            );
+            break;
+          case Highlights.FEATURED:
+            orderByClause = desc(products.created_at);
+            break;
+        }
+      } else {
+        switch (sort_by) {
+          case SortBy.PRICE_ASC:
+            orderByClause = asc(sql`CAST(${products.base_price} AS NUMERIC)`);
+            break;
+          case SortBy.PRICE_DESC:
+            orderByClause = desc(sql`CAST(${products.base_price} AS NUMERIC)`);
+            break;
+          case SortBy.NAME_ASC:
+            orderByClause = asc(products.name);
+            break;
+          case SortBy.DISCOUNT:
+            orderByClause = desc(
+              sql`CASE
+                WHEN CAST(${products.compare_at_price} AS NUMERIC) > 0
+                THEN (CAST(${products.compare_at_price} AS NUMERIC) - CAST(${products.base_price} AS NUMERIC))
+                     / CAST(${products.compare_at_price} AS NUMERIC)
+                ELSE 0
+              END`,
+            );
+            break;
+          case SortBy.NEWEST:
+          default:
+            orderByClause = desc(products.created_at);
+            break;
+        }
+      }
+
+      // ── Hydrate with relations ───────────────────────────────────────────────
+      const productList = await this.db.query.products
+        .findMany({
+          where: whereClause,
+          limit: limit,
+          offset: offset,
+          orderBy: orderByClause,
+          with: {
+            productCategories: {
+              columns: { is_primary: true },
+              with: {
+                category: true,
+              },
+            },
+            variants: {
+              columns: {
+                id: true,
+                variant_name: true,
+                price: true,
+                sku: true,
+                status: true,
+                product_id: true,
+              },
+              with: {
+                images: {
+                  limit: 1,
+                  where: (images) => eq(images.is_primary, true),
+                },
+                inventory: {
+                  columns: { stock_quantity: true, warehouse_id: true },
+                },
+              },
+            },
+          },
+        })
+        .catch((error) => {
+          throw new InternalServerErrorException(
+            ProductsErrorKeyEnum.FAILED_TO_FETCH_PRODUCTS,
+            { cause: error },
+          );
+        });
+
+      return {
+        products: productList.map((p) => this.resolveProductPricing(p)),
+        total: Number(total),
+        offset,
+        limit,
+        totalPages: Math.ceil(Number(total) / limit),
+      };
+    } catch (error) {
+      if (
+        error instanceof HttpException ||
+        error instanceof InternalServerErrorException
+      ) {
+        throw error;
+      }
+      throw new InternalServerErrorException(
+        ProductsErrorKeyEnum.FAILED_TO_FETCH_PRODUCTS,
+        { cause: error },
       );
     }
   }
